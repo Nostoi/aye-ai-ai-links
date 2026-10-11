@@ -13,10 +13,9 @@ The design of record is `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 **At the start of every session:**
 
 1. Read `ROADMAP.md`. It names the current phase and the decisions made since the spec.
-2. List the open issues for the current phase's milestone, passing the title from `ROADMAP.md` unchanged (a wrong title returns nothing, with no error). Check the title first with `gh api repos/Nostoi/aye-ai-ai-links/milestones --jq '.[].title'`:
-   `gh issue list -R Nostoi/aye-ai-ai-links --milestone "<exact milestone title>" --state open --json number,title,assignees`
-3. If the milestone is verified and has no open issues, the phase is done: set `ROADMAP.md`'s current phase and phase table to the next phase and add a dated decision-log entry.
-4. Otherwise, assignment is the only marker that an issue is in progress. Resume an assigned issue first; its latest comment says what is left. If none is assigned, take the lowest-numbered unassigned issue unless it is blocked, and assign it (`gh issue edit <n> --add-assignee @me`). If GitHub is unreachable, say so and work from `ROADMAP.md` alone.
+2. Run `gh api "repos/Nostoi/aye-ai-ai-links/milestones?state=all" --jq '.[] | "\(.title) | open \(.open_issues) | closed \(.closed_issues)"'` and find the line titled exactly as `ROADMAP.md`'s current phase. None: `ROADMAP.md` is wrong; fix it from this list.
+3. Open 0, closed >0: phase done. Advance `ROADMAP.md`'s phase and phase table, add a dated decision-log entry, repeat from step 2. Open 0, closed 0: no tasks filed; split its headline into issues or ask the owner.
+4. Else run `gh issue list -R Nostoi/aye-ai-ai-links --milestone "<title>" --state open --json number,title,assignees` and work the owner-named issue, else the assigned one, else the lowest-numbered unblocked unassigned one and assign it (`gh issue edit <n> --add-assignee @me`). One session at a time unless the owner assigns parallel sessions their issues. If GitHub is unreachable, say so and work from `ROADMAP.md` alone.
 
 **During the session**, keep the issue you're working on current: tick its checklist, comment on decisions and blockers.
 

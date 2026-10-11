@@ -12,6 +12,10 @@ export function extractSnapshot(html: string, finalUrl: string): Snapshot {
   const doc = document as unknown as Document;
   if (!doc.documentElement) return { title: null, description: null, imageUrl: null, text: null };
   const metadata = extractMetadata(doc, finalUrl);
-  flattenTemplates(doc);
-  return { ...metadata, text: articleText(doc) };
+  try {
+    flattenTemplates(doc);
+    return { ...metadata, text: articleText(doc) };
+  } catch {
+    return { ...metadata, text: null };
+  }
 }

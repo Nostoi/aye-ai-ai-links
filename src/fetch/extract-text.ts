@@ -59,7 +59,8 @@ export function flattenTemplates(doc: Document): void {
     if (shadows.length === 0) break;
     for (const t of shadows) {
       for (const bad of [...t.querySelectorAll("style, script")]) bad.remove();
-      t.replaceWith(...t.childNodes);
+      while (t.firstChild) t.before(t.firstChild);
+      t.remove();
     }
   }
   for (const t of [...doc.querySelectorAll("template")]) t.remove();
@@ -67,24 +68,30 @@ export function flattenTemplates(doc: Document): void {
 
 export function flatten(root: Node): string {
   let out = "";
-  const visit = (node: Node) => {
+  const stack: (Node | null)[] = [root];
+  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+    if (node === null) {
+      out += "\n";
+      continue;
+    }
     if (node.nodeType === TEXT) {
       out += (node.textContent ?? "").replace(/\s+/g, " ");
-      return;
+      continue;
     }
-    if (node.nodeType !== ELEMENT) return;
+    if (node.nodeType !== ELEMENT) continue;
     const tag = (node as Element).tagName;
-    if (SKIPPED.has(tag)) return;
+    if (SKIPPED.has(tag)) continue;
     if (tag === "BR") {
       out += "\n";
-      return;
+      continue;
     }
-    const block = BLOCKS.has(tag);
-    if (block) out += "\n";
-    for (const child of node.childNodes) visit(child);
-    if (block) out += "\n";
-  };
-  visit(root);
+    if (BLOCKS.has(tag)) {
+      out += "\n";
+      stack.push(null);
+    }
+    const children = node.childNodes;
+    for (let i = children.length - 1; i >= 0; i--) stack.push(children[i] as Node);
+  }
   return out
     .replace(/ {2,}/g, " ")
     .replace(/ ?\n\s*/g, "\n")

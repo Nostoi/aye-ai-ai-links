@@ -9,10 +9,22 @@ function clean(value: string | null | undefined): string | null {
   return v ? v : null;
 }
 
-function metaContents(doc: Document, key: string): (string | null)[] {
+function urlValue(value: string | null | undefined): string | null {
+  const v = value?.replace(/[\t\n\r]/g, "").trim();
+  return v ? v : null;
+}
+
+const HTML_NS = "http://www.w3.org/1999/xhtml";
+
+function metaContents(
+  doc: Document,
+  key: string,
+  read: (v: string | null) => string | null = clean,
+): (string | null)[] {
+  const is = (attr: string | null) => attr?.toLowerCase() === key;
   return [...doc.querySelectorAll("meta")]
-    .filter((m) => m.getAttribute("property") === key || m.getAttribute("name") === key)
-    .map((m) => clean(m.getAttribute("content")));
+    .filter((m) => is(m.getAttribute("property")) || is(m.getAttribute("name")))
+    .map((m) => read(m.getAttribute("content")));
 }
 
 function firstUsable<T>(candidates: Iterable<string | null>, accept: (v: string) => T | null) {
@@ -33,14 +45,14 @@ function parseUrl(value: string, base: string): URL | null {
 }
 
 function documentBase(doc: Document, finalUrl: string): string {
-  const href = clean(doc.querySelector("base[href]")?.getAttribute("href"));
+  const href = urlValue(doc.querySelector("base[href]")?.getAttribute("href"));
   return (href && parseUrl(href, finalUrl)?.href) || finalUrl;
 }
 
 function imageUrl(doc: Document, finalUrl: string): string | null {
   const base = documentBase(doc, finalUrl);
   return firstUsable(
-    [...metaContents(doc, "og:image"), ...metaContents(doc, "twitter:image")],
+    [...metaContents(doc, "og:image", urlValue), ...metaContents(doc, "twitter:image", urlValue)],
     (v) => {
       const u = parseUrl(v, base);
       const ok = u && (u.protocol === "http:" || u.protocol === "https:");
@@ -57,8 +69,9 @@ export type Metadata = {
 
 export function extractMetadata(doc: Document, finalUrl: string): Metadata {
   const text = (v: string) => v;
+  const htmlTitle = [...doc.querySelectorAll("title")].find((t) => t.namespaceURI === HTML_NS);
   const title = firstUsable(
-    [...metaContents(doc, "og:title"), clean(doc.querySelector("title")?.textContent)],
+    [...metaContents(doc, "og:title"), clean(htmlTitle?.textContent)],
     text,
   );
   const description = firstUsable(

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import { Readability } from "@mozilla/readability";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractSnapshot } from "./extract.js";
@@ -96,6 +97,23 @@ describe("metadata fallbacks", () => {
     });
   });
 
+  it.each(["Description", "DESCRIPTION"])("matches meta name=%s without regard to case", (name) => {
+    const s = extractSnapshot(page("", `<meta name="${name}" content="d">`), URL0);
+    expect(s.description).toBe("d");
+  });
+
+  it("matches meta property without regard to case", () => {
+    const s = extractSnapshot(page("", `<meta property="OG:Title" content="T">`), URL0);
+    expect(s.title).toBe("T");
+  });
+
+  it("takes the title from an HTML <title>, never an SVG one", () => {
+    const svg = "<svg><title>SVGT</title></svg>";
+    expect(extractSnapshot(`<html><body>${svg}</body></html>`, URL0).title).toBeNull();
+    const withHtml = `<html><head><title>HTMLT</title></head><body>${svg}</body></html>`;
+    expect(extractSnapshot(withHtml, URL0).title).toBe("HTMLT");
+  });
+
   it("returns null for every field that has no usable source", () => {
     const s = extractSnapshot("<html><body></body></html>", URL0);
     expect(s).toMatchObject({ title: null, description: null, imageUrl: null });
@@ -121,6 +139,14 @@ describe("image urls", () => {
     expect(extractSnapshot(html, URL0).imageUrl).toBe("https://example.com/assets/a.png");
   });
 
+  it("drops a newline inside a url the way the url parser does", () => {
+    expect(extractSnapshot(withImage("https://ex.com/a\nb.png"), URL0).imageUrl).toBe(
+      "https://ex.com/ab.png",
+    );
+    const html = page("", `<base href="/as\nsets/"><meta property="og:image" content="a.png">`);
+    expect(extractSnapshot(html, URL0).imageUrl).toBe("https://example.com/assets/a.png");
+  });
+
   it("ignores an unparseable <base href>", () => {
     const html = page("", `<base href="http://[bad"><meta property="og:image" content="a.png">`);
     expect(extractSnapshot(html, URL0).imageUrl).toBe("https://example.com/post/a.png");
@@ -133,6 +159,7 @@ describe("image urls", () => {
     "file:///etc/passwd",
     "http://user:pw@example.com/a.png",
     "https://user@example.com/a.png",
+    "https://:pw@example.com/a.png",
     "http://[bad",
   ])("falls through past %s to the next source", (bad) => {
     const html = withImage(bad, `<meta name="twitter:image" content="/ok.png">`);
@@ -275,6 +302,53 @@ describe("degenerate input", () => {
       title: null,
       description: null,
       imageUrl: null,
+      text: null,
+    });
+  });
+});
+
+describe("extraction never throws and keeps the metadata", () => {
+  const NULLS = { title: null, description: null, imageUrl: null, text: null };
+
+  it.each([
+    "<template>x</template>",
+    '<template shadowrootmode="open"></template>',
+    "<!doctype html><template></template>",
+    '<template shadowrootmode="open">hello</template>',
+  ])("returns the all-null snapshot for %j", (html) => {
+    expect(extractSnapshot(html, URL0)).toEqual(NULLS);
+  });
+
+  it("survives <span> nested 5,000 deep and keeps the title", () => {
+    const deep = `${"<span>".repeat(5_000)}x${"</span>".repeat(5_000)}`;
+    const s = extractSnapshot(
+      `<title>t</title><body><article><p>${BODY}</p>${deep}</article></body>`,
+      URL0,
+    );
+    expect(s.title).toBe("t");
+    expect(s.text).toContain("Home batteries store solar energy");
+  });
+
+  it("survives a shadow root with 100,000 children", () => {
+    const html = `<title>t</title><meta property="og:image" content="/og.png"><body><div><template shadowrootmode="open">${"<i></i>".repeat(100_000)}<p>${BODY}</p></template></div></body>`;
+    const s = extractSnapshot(html, URL0);
+    expect(s.title).toBe("t");
+    expect(s.imageUrl).toBe("https://example.com/og.png");
+    expect(s.text).toContain("Home batteries store solar energy");
+  });
+
+  it("returns text null with the metadata when the text step throws", () => {
+    vi.spyOn(Readability.prototype, "parse").mockImplementation(() => {
+      throw new Error("readability failed");
+    });
+    const s = extractSnapshot(
+      `<title>t</title><meta property="og:image" content="/og.png"><body><article><p>${BODY}</p></article></body>`,
+      URL0,
+    );
+    expect(s).toEqual({
+      title: "t",
+      description: null,
+      imageUrl: "https://example.com/og.png",
       text: null,
     });
   });

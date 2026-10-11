@@ -189,6 +189,18 @@ describe("FtsSearch query handling", () => {
     expect([...(await s.find("sleep\u0000thing"))].sort()).toEqual([sleep, thing].sort());
   });
 
+  it("matches non-ASCII letters", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "日本 notes" });
+    expect(await s.find("日本")).toEqual([id]);
+  });
+
+  it("lists links for a query made only of control characters", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "quokka" });
+    expect(await s.find("\u0000")).toEqual([id]);
+  });
+
   it("returns [] for a query with no searchable word, but lists for a blank one", async () => {
     const s = setup();
     const older = await s.save("a", { title: "quokka" });
@@ -259,11 +271,37 @@ describe("FtsSearch index upkeep", () => {
     expect(s.db.prepare("SELECT count(*) AS n FROM link_search").get()).toEqual({ n: 0 });
   });
 
-  it("keeps tag names in position order", async () => {
+  it("keeps tag names in position order, not tag-creation order", async () => {
     const s = setup();
-    await s.save("a", { tags: ["beta", "alpha"] });
-    const row = s.db.prepare("SELECT tags FROM link_search").get();
+    await s.save("a", { tags: ["alpha", "beta"] });
+    const id = await s.save("a", { tags: ["beta", "alpha"] });
+    const row = s.db.prepare("SELECT tags FROM link_search WHERE rowid = ?").get(Number(id));
     expect(row).toEqual({ tags: "beta alpha" });
+  });
+
+  it("forgets a tag when the link loses all its tags", async () => {
+    const s = setup();
+    const id = await s.save("a", { tags: ["wombat"] });
+    await updateLink(s.deps, "a", id, { tags: [] });
+    expect(await s.find("wombat")).toEqual([]);
+  });
+
+  it("forgets only the dropped tag when a link keeps another", async () => {
+    const s = setup();
+    const id = await s.save("a", { tags: ["wombat", "numbat"] });
+    await updateLink(s.deps, "a", id, { tags: [{ name: "numbat", source: "stated" }] });
+    expect(await s.find("wombat")).toEqual([]);
+    expect(await s.find("numbat")).toEqual([id]);
+  });
+
+  it("moves a tag to another link when link_tags.link_id changes", async () => {
+    const s = setup();
+    const from = await s.save("a", { tags: ["wombat"] });
+    const to = await s.save("a", { title: "plain" });
+    s.db
+      .prepare("UPDATE link_tags SET link_id = ? WHERE link_id = ?")
+      .run(Number(to), Number(from));
+    expect(await s.find("wombat")).toEqual([to]);
   });
 });
 

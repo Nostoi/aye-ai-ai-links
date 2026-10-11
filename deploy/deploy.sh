@@ -107,13 +107,15 @@ set_aside() {
 }
 
 give_up() {
-  local stop_note="The service is stopped." note
+  local stop_note="The service is stopped." note moved=none
   if [ "$1" = stop ] || ! stop_and_wait; then stop_note="Stopping the service is unconfirmed."; fi
+  if [ -e "$plist" ]; then moved="$home/$label.plist.disabled"; mv -f "$plist" "$moved" || moved="nowhere; it is still $plist"; fi
   note="deploy of $sha failed and its rollback did not finish ($(date))
 failed step: $1
 previous release: ${previous:-none}
 backup: ${backup:-none}
-failed database: ${failed_db:-none}"
+failed database: ${failed_db:-none}
+plist moved to: $moved"
   printf '%s\n' "$note" > "$pending" || echo "Could not write $pending." >&2
   echo "The deploy failed and the rollback failed at: $1. $stop_note" >&2
   echo "Fix the install by hand, then delete $pending; deploys refuse to run until then." >&2
@@ -122,12 +124,12 @@ failed database: ${failed_db:-none}"
 }
 
 rollback() {
-  local failed_db="" live_uv="-" backup_uv kept=""
+  local failed_db="" live_uv="-" kept=""
   [ "$BASH_SUBSHELL" = 0 ] || exit 1
   [ "$rolling_back" = 0 ] || return 0
   rolling_back=1
   trap - ERR
-  trap : INT TERM HUP
+  trap '' INT TERM HUP
   set +e
   stop_and_wait || give_up stop
   if [ "$switched" = 0 ]; then
@@ -142,7 +144,6 @@ rollback() {
   fi
   if [ -n "$backup" ]; then
     [ -f "$backup" ] || give_up "read the backup"
-    backup_uv="$(sqlite3 "$backup" 'pragma user_version')" || give_up "read the backup"
     if [ -f "$db" ]; then live_uv="$(sqlite3 "$db" 'pragma user_version')" || give_up "read the database"; fi
     if [ "$live_uv" != "$backup_uv" ]; then
       set_aside || give_up "rename the database"
@@ -183,6 +184,7 @@ previous="$(readlink "$home/current" || true)"
 sed -e "s#@NODE@#$node_path#g" -e "s#@HOME@#$HOME#g" "$release/deploy/$label.plist" > "$plist.new"
 
 backup=""
+backup_uv=""
 switched=0
 rolling_back=0
 trap rollback ERR INT TERM HUP
@@ -196,6 +198,7 @@ fi
 if [ -f "$db" ]; then
   backup="$home/data/backups/links-$(date +%Y%m%d-%H%M%S).db"
   sqlite3 "$db" ".backup \"$backup\""
+  backup_uv="$(sqlite3 "$backup" 'pragma user_version')"
 fi
 
 switched=1

@@ -1,6 +1,6 @@
 import type { Database } from "better-sqlite3";
 import type { LinkStore } from "../core/store.js";
-import type { Labelled, Link, LinkPatch, LinkTag, NewLink, OwnerId } from "../core/types.js";
+import type { Labelled, Link, LinkPatch, LinkTag, NewLink, OwnerId, Tag } from "../core/types.js";
 
 export class StoreError extends Error {
   constructor(
@@ -27,6 +27,8 @@ type LinkRow = {
   snoozed_until: number | null;
   state: Link["state"];
 };
+
+type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 
 function toMs(d: Date | null): number | null {
   if (d === null) return null;
@@ -75,6 +77,16 @@ export class SqliteStore implements LinkStore {
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const n = parseId(id);
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();
+  }
+
+  async listTags(owner: OwnerId) {
+    const rows = this.db
+      .prepare(
+        `SELECT key, name, kind, color, pinned, description, project_status AS projectStatus
+         FROM tags WHERE owner_id = ? ORDER BY key`,
+      )
+      .all(owner) as TagRow[];
+    return rows.map((r): Tag => ({ ...r, pinned: r.pinned === 1 }));
   }
 
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {

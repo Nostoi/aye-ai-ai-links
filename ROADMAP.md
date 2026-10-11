@@ -22,6 +22,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** MCP door (#5).
+  - **`save_link` returns the owner's existing tags and active projects**, so agents reuse tags (owner). A project counts as active unless it is marked done.
+  - **`save_link` has no `note` field (owner).** The agent turns what the owner said into a `stated` why, which changes spec §5.
+  - **Spec §11 checks:**
+    - MCP SDK v2 servers do have an `instructions` field (`@modelcontextprotocol/server` 2.3.1).
+    - OpenAI's MCP guide says ChatGPT respects `readOnlyHint` and treats tools without it as writes needing confirmation. Behaviour in the app is still for the phase 1b spike.
 - **2026-10-11:** Keyword search (#4). An FTS5 table (`link_search`) over title, summary, why and tag names, kept current by database triggers inside the store's own transactions. Search words are OR-ed and ranked with bm25, so a half-wrong memory still finds links. Archived links are included in results. Stated limits: all owners share one index, so another owner's links can change the order of yours but never which links you get back (revisit before multi-user hosting, phase 3); results are current links, so a link edited after ranking can come back with text that no longer matches; with stemming, prefixes match stems (`runn` finds nothing, `run` and `running` do), which phase 4's search-as-you-type must revisit.
 - **2026-10-11:** SQLite store (#3). Plain SQL on better-sqlite3, with migrations tracked by `PRAGMA user_version`. Link and tag ids are integers, shown as decimal strings; dates are stored as epoch milliseconds. The tag catalog is per owner, and link–tag rows carry composite foreign keys so they cannot cross owners. Owners are created by `SqliteStore.ensureUser`, outside `LinkStore`. Profile-notes and focus-log tables wait for phase 2 (owner). PR B landed at ~600 lines, over the ceiling, so that its tests stay with the code (owner).
 - **2026-10-10:** Duplicate links (owner, #2). Two URLs are the same link after ignoring scheme/host case, default port, tracking parameters, trailing slashes and `#` anchors; `#/` and `#!` app routes, query order, http vs https and `www.` still count. URLs with credentials are refused. Saving an existing link returns it unchanged, except that a why is filled in if the link has none. Details: #2.

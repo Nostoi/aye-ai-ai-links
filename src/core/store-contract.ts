@@ -45,6 +45,7 @@ function racing(inner: LinkStore): LinkStore {
     get: (owner, id) => inner.get(owner, id),
     update: (owner, id, patch) => inner.update(owner, id, patch),
     fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
+    listTags: (owner) => inner.listTags(owner),
   };
 }
 
@@ -357,6 +358,72 @@ export function describeStoreContract(
           },
         ]);
         expect(await h.catalog(A)).toEqual([projectTag]);
+      });
+    });
+
+    describe("listTags", () => {
+      const topic = (key: string, name = key): Tag => ({
+        key,
+        name,
+        kind: "topic",
+        color: null,
+        pinned: false,
+        description: null,
+        projectStatus: null,
+      });
+      const attach = (owner: string, n: number, ...names: string[]) =>
+        saveLink(deps(), owner, {
+          url: `https://ex.com/${n}`,
+          savedBy: "agent",
+          tags: names.map((name) => ({ name, source: "stated" as const })),
+        });
+
+      it("lists tags created by attaching, with the first-saved name and topic defaults", async () => {
+        await attach(A, 1, "Sleep");
+        await attach(A, 2, "sleep", "Naps");
+        expect(await h.store.listTags(A)).toEqual([topic("naps", "Naps"), topic("sleep", "Sleep")]);
+      });
+
+      it("returns seeded tags with every field intact", async () => {
+        const seeded: Tag = {
+          key: "sleep",
+          name: "Sleep",
+          kind: "project",
+          color: "blue",
+          pinned: true,
+          description: "d",
+          projectStatus: "done",
+        };
+        await h.seedTag(A, seeded);
+        expect(await h.store.listTags(A)).toEqual([seeded]);
+      });
+
+      it("orders by key, not by creation", async () => {
+        await attach(A, 1, "Zeta", "Mid");
+        await attach(A, 2, "Alpha");
+        expect((await h.catalog(A)).map((t) => t.key)).toEqual(["zeta", "mid", "alpha"]);
+        expect((await h.store.listTags(A)).map((t) => t.key)).toEqual(["alpha", "mid", "zeta"]);
+      });
+
+      it("orders non-ASCII keys by code point", async () => {
+        await attach(A, 1, "😀", "ｆ");
+        expect((await h.store.listTags(A)).map((t) => t.key)).toEqual(["ｆ", "😀"]);
+      });
+
+      it("never shows another owner's tags and is unchanged by their writes", async () => {
+        await attach(A, 1, "Shared");
+        const before = await h.store.listTags(A);
+        await attach(B, 2, "shared", "Only B");
+        await h.seedTag(B, { ...topic("zzz"), kind: "project", projectStatus: "active" });
+        expect(await h.store.listTags(A)).toEqual(before);
+        expect(before).toEqual([topic("shared", "Shared")]);
+        expect((await h.store.listTags(B)).map((t) => t.key)).toEqual(["only b", "shared", "zzz"]);
+      });
+
+      it("gives an owner with no tags an empty list", async () => {
+        await attach(B, 1, "x");
+        expect(await h.store.listTags(A)).toEqual([]);
+        expect(await h.store.listTags("no-such-owner")).toEqual([]);
       });
     });
 

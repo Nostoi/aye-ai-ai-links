@@ -1,4 +1,4 @@
-import type { Labelled, Link, LinkPatch, NewLink, OwnerId } from "./types.js";
+import type { Labelled, Link, LinkPatch, NewLink, OwnerId, Tag } from "./types.js";
 
 /**
  * Persistence contract used by core. Any implementation must meet all of it.
@@ -43,4 +43,10 @@ export interface LinkStore {
    * as it is after the call, or null when absent or foreign.
    */
   fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled): Promise<Link | null>;
+
+  /**
+   * The owner's whole tag catalog, ordered by key. Another owner's tags never
+   * appear; an owner with no tags (or an unknown one) yields [], never an error.
+   */
+  listTags(owner: OwnerId): Promise<Tag[]>;
 }

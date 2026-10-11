@@ -1,10 +1,9 @@
 import { createAgentKey, listAgentKeys, revokeAgentKey } from "../auth/agent-keys.js";
+import { databasePath, type Env } from "../config.js";
 import { openDatabase } from "../store/database.js";
 import { SqliteKeyStore } from "../store/key-store.js";
 
 const USAGE = "Usage: keys <create <agent> | list | revoke <agent>>";
-
-type Env = Record<string, string | undefined>;
 
 /** Manage agent keys. Returns the exit status; the key is printed once, on create. */
 export function run(
@@ -19,15 +18,10 @@ export function run(
     err(USAGE);
     return 1;
   }
-  const path = env.AYE_DB;
-  if (!path || path === ":memory:") {
-    err("Set AYE_DB to the path of the database file (not :memory:).");
-    return 1;
-  }
   const owner = env.AYE_OWNER || "owner";
   const ownerName = env.AYE_OWNER_NAME || "Owner";
   try {
-    const db = openDatabase(path);
+    const db = openDatabase(databasePath(env));
     try {
       const keys = new SqliteKeyStore(db);
       if (command === "create") {

@@ -1,6 +1,16 @@
 import type { Database } from "better-sqlite3";
 
-/** Ordered and append-only: entry N takes the schema from version N-1 to N. */
+/**
+ * Ordered and append-only: entry N takes the schema from version N-1 to N.
+ *
+ * `migrate()` runs with foreign keys off and checks them before it commits, so a
+ * migration may rebuild a table (SQLite's 12-step procedure, steps 3-9). Two rules:
+ * - Cascades do not run during a migration. One that removes parent rows must delete
+ *   their child rows itself, or the foreign-key check refuses it.
+ * - A rebuild of `links`, `tags` or `link_tags` must drop the 7 `link_search_*`
+ *   triggers before the DROP and recreate them after the RENAME (frozen SQL, never
+ *   `searchIndex()`), and refresh `link_search` if the rebuild changes searchable text.
+ */
 export const MIGRATIONS: string[] = [
   `
   CREATE TABLE users (
@@ -112,17 +122,45 @@ function searchIndex(): string {
 
 export const LATEST_VERSION = MIGRATIONS.length;
 
-/** Bring the database up to date in one transaction; refuse one from a newer version. */
+/**
+ * Bring the database up to date in one transaction; refuse one from a newer version.
+ * Foreign keys must be on when called and are on again afterwards; they are off while
+ * migrations run, and any violation left at the end rolls the whole upgrade back.
+ */
 export function migrate(db: Database, migrations: string[] = MIGRATIONS): void {
-  db.transaction(() => {
-    const current = db.pragma("user_version", { simple: true }) as number;
-    if (current > migrations.length) {
-      throw new Error(
-        `Database schema version ${current} is newer than this code (${migrations.length}); upgrade the app.`,
-      );
+  if (db.inTransaction) {
+    throw new Error(
+      "migrate() cannot run inside a transaction: foreign keys cannot be turned off there. Call it outside any transaction.",
+    );
+  }
+  if (db.pragma("foreign_keys", { simple: true }) !== 1) {
+    throw new Error(
+      "migrate() needs foreign keys on to start: open the database with openDatabase(), or run PRAGMA foreign_keys = ON first.",
+    );
+  }
+  db.pragma("foreign_keys = OFF");
+  try {
+    if (db.pragma("foreign_keys", { simple: true }) !== 0) {
+      throw new Error("migrate() could not turn foreign keys off, so it did not start.");
     }
-    if (current === migrations.length) return;
-    for (const sql of migrations.slice(current)) db.exec(sql);
-    db.pragma(`user_version = ${migrations.length}`);
-  }).immediate();
+    db.transaction(() => {
+      const current = db.pragma("user_version", { simple: true }) as number;
+      if (current > migrations.length) {
+        throw new Error(
+          `Database schema version ${current} is newer than this code (${migrations.length}); upgrade the app.`,
+        );
+      }
+      if (current === migrations.length) return;
+      for (const sql of migrations.slice(current)) db.exec(sql);
+      const violations = db.pragma("foreign_key_check") as unknown[];
+      if (violations.length > 0) {
+        throw new Error(
+          `Migration left ${violations.length} foreign key violation(s) and was rolled back. Delete child rows explicitly when removing parents. First: ${JSON.stringify(violations[0])}`,
+        );
+      }
+      db.pragma(`user_version = ${migrations.length}`);
+    }).immediate();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
 }

@@ -7,7 +7,7 @@ import { saveLink, updateLink } from "../core/links.js";
 import { describeStoreContract, type StoreHarness } from "../core/store-contract.js";
 import type { NewLink, Tag } from "../core/types.js";
 import { openDatabase } from "./database.js";
-import { LATEST_VERSION, migrate } from "./migrations.js";
+import { LATEST_VERSION, MIGRATIONS, migrate } from "./migrations.js";
 import { SqliteStore } from "./sqlite-store.js";
 
 type Db = Database.Database;
@@ -163,6 +163,117 @@ describe("migrate", () => {
     const db = track(new Database(":memory:"));
     migrate(db, ["CREATE TABLE a (x)", "CREATE TABLE b (x)"]);
     expect(db.pragma("user_version", { simple: true })).toBe(2);
+  });
+
+  describe("table rebuilds and foreign keys", () => {
+    const version = (db: Db) => db.pragma("user_version", { simple: true });
+    const foreignKeys = (db: Db) => db.pragma("foreign_keys", { simple: true });
+    const count = (db: Db, table: string) =>
+      (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+    const found = (db: Db, word: string) =>
+      db
+        .prepare("SELECT rowid FROM link_search WHERE link_search MATCH ?")
+        .all(word)
+        .map((r) => (r as { rowid: number }).rowid);
+
+    async function seeded() {
+      const s = setup();
+      await s.h.addOwner("a");
+      await saveLink(s.deps, "a", {
+        url: "https://ex.com/1",
+        savedBy: "x",
+        title: "quokka",
+        tags: [
+          { name: "Wombat", source: "stated" },
+          { name: "Numbat", source: "inferred" },
+        ],
+      });
+      await saveLink(s.deps, "a", { url: "https://ex.com/2", savedBy: "x", tags: tag("Bilby") });
+      return s;
+    }
+
+    /** Test-only migration: SQLite's 12-step rebuild of `table`, keeping the search triggers. */
+    function rebuild(db: Db, table: string): string {
+      const triggers = db
+        .prepare(
+          "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'link_search_%'",
+        )
+        .all() as { name: string; sql: string }[];
+      const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE name = ?").get(table) as {
+        sql: string;
+      };
+      return `
+        ${triggers.map((t) => `DROP TRIGGER ${t.name};`).join("\n")}
+        ${sql.replace(`CREATE TABLE ${table}`, `CREATE TABLE ${table}_new`)};
+        INSERT INTO ${table}_new SELECT * FROM ${table};
+        DROP TABLE ${table};
+        ALTER TABLE ${table}_new RENAME TO ${table};
+        ${triggers.map((t) => `${t.sql};`).join("\n")}`;
+    }
+
+    it("a rebuild of links keeps link_tags", async () => {
+      const { db, h } = await seeded();
+      const before = await h.all("a");
+      migrate(db, [...MIGRATIONS, rebuild(db, "links")]);
+      expect(version(db)).toBe(LATEST_VERSION + 1);
+      expect(count(db, "link_tags")).toBe(3);
+      expect(await h.all("a")).toEqual(before);
+      expect(foreignKeys(db)).toBe(1);
+    });
+
+    it("a tag renamed after a rebuild is found by its new name", async () => {
+      const { db } = await seeded();
+      migrate(db, [...MIGRATIONS, rebuild(db, "links")]);
+      db.prepare("UPDATE tags SET name = 'Platypus' WHERE key = 'wombat'").run();
+      expect(found(db, "platypus")).toHaveLength(1);
+      expect(found(db, "wombat")).toEqual([]);
+    });
+
+    it("a rebuild of tags succeeds and keeps the rows", async () => {
+      const { db, h } = await seeded();
+      const before = await h.all("a");
+      migrate(db, [...MIGRATIONS, rebuild(db, "tags")]);
+      expect(version(db)).toBe(LATEST_VERSION + 1);
+      expect(count(db, "link_tags")).toBe(3);
+      expect(await h.all("a")).toEqual(before);
+    });
+
+    it("is refused inside a transaction, with foreign keys on or off", async () => {
+      const { db } = await seeded();
+      const attempt = [...MIGRATIONS, rebuild(db, "links")];
+      for (const start of ["ON", "OFF"]) {
+        db.pragma(`foreign_keys = ${start}`);
+        expect(() => db.transaction(() => migrate(db, attempt))()).toThrow(/inside a transaction/);
+        expect(count(db, "link_tags")).toBe(3);
+        expect(version(db)).toBe(LATEST_VERSION);
+      }
+    });
+
+    it("is refused when foreign keys are off, and leaves them off", async () => {
+      const { db } = await seeded();
+      db.pragma("foreign_keys = OFF");
+      expect(() => migrate(db, [...MIGRATIONS, rebuild(db, "links")])).toThrow(/foreign_keys = ON/);
+      expect(count(db, "link_tags")).toBe(3);
+      expect(version(db)).toBe(LATEST_VERSION);
+      expect(foreignKeys(db)).toBe(0);
+    });
+
+    it("rolls back a migration that leaves an orphan, and turns foreign keys back on", async () => {
+      const { db } = await seeded();
+      const orphan = "DELETE FROM links WHERE id = 1;";
+      expect(() => migrate(db, [...MIGRATIONS, orphan])).toThrow(/foreign key/i);
+      expect(count(db, "links")).toBe(2);
+      expect(count(db, "link_tags")).toBe(3);
+      expect(version(db)).toBe(LATEST_VERSION);
+      expect(foreignKeys(db)).toBe(1);
+    });
+
+    it("turns foreign keys back on after a migration with an SQL error", async () => {
+      const { db } = await seeded();
+      expect(() => migrate(db, [...MIGRATIONS, "SELECT * FROM nope"])).toThrow();
+      expect(version(db)).toBe(LATEST_VERSION);
+      expect(foreignKeys(db)).toBe(1);
+    });
   });
 });
 

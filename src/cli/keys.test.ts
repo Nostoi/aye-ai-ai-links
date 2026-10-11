@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { join, resolve } from "node:path";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { hashKey } from "../auth/agent-keys.js";
 import { run } from "./keys.js";
 
@@ -91,5 +92,24 @@ describe("keys CLI", () => {
       expect(r.code, argv.join(" ")).toBe(1);
       expect(r.err).toMatch(/Usage/);
     }
+  });
+
+  describe("as a script", () => {
+    const root = resolve(import.meta.dirname, "../..");
+
+    beforeAll(() => {
+      execFileSync("npm", ["run", "build"], { cwd: root, stdio: "pipe" });
+    }, 60_000);
+
+    it("runs when started through a symlinked path", () => {
+      const dir = mkdtempSync(join(tmpdir(), "aye-link-"));
+      dirs.push(dir);
+      symlinkSync(join(root, "dist"), join(dir, "dist"));
+      const stdout = execFileSync("node", [join(dir, "dist/cli/keys.js"), "create", "codex"], {
+        env: { ...process.env, AYE_DB: join(dir, "test.db") },
+        encoding: "utf8",
+      });
+      expect(stdout).toMatch(/^aak_[A-Za-z0-9_-]+\n$/);
+    });
   });
 });

@@ -48,4 +48,37 @@ describe("decodeHtml", () => {
     const bytes = Buffer.from('<meta charset="not-a-charset"><p>café</p>');
     expect(decodeHtml(bytes, "text/html")).toContain("café");
   });
+
+  describe("windows-1252 and the labels that mean it", () => {
+    const labels = ["iso-8859-1", "latin1", "windows-1252", "us-ascii"];
+    const bytes = Buffer.concat([
+      Buffer.from("<p>"),
+      Buffer.from([0x80, 0x93, 0x94, 0x96, 0x99, 0x81]),
+      Buffer.from("</p>"),
+    ]);
+
+    it.each(labels)("maps 0x80-0x9F to the WHATWG table for header label %s", (label) => {
+      expect(decodeHtml(bytes, `text/html; charset=${label}`)).toBe(
+        "<p>\u20ac\u201c\u201d\u2013\u2122\u0081</p>",
+      );
+    });
+
+    it.each(labels)("maps 0x80-0x9F to the WHATWG table for <meta> label %s", (label) => {
+      const page = Buffer.concat([Buffer.from(`<meta charset="${label}">`), bytes]);
+      expect(decodeHtml(page, "text/html")).toContain("\u20ac\u201c\u201d\u2013\u2122\u0081");
+    });
+
+    it("leaves bytes above 0x9F as in ISO-8859-1", () => {
+      expect(decodeHtml(Buffer.from([0xe9, 0xff]), "text/html; charset=windows-1252")).toBe(
+        "\u00e9\u00ff",
+      );
+    });
+  });
+
+  describe("a UTF-16 label in <meta>", () => {
+    it.each(["utf-16", "utf-16le", "utf-16be"])("reads the page as UTF-8 for %s", (label) => {
+      const page = Buffer.from(`<meta charset="${label}"><p>caf\u00e9</p>`);
+      expect(decodeHtml(page, "text/html")).toBe(`<meta charset="${label}"><p>caf\u00e9</p>`);
+    });
+  });
 });

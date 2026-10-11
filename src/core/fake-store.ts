@@ -85,6 +85,10 @@ export class FakeStore implements LinkStore {
     return this.view(owner, found);
   }
 
+  async listTags(owner: OwnerId) {
+    return this.catalog(owner).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  }
+
   seedTag(owner: OwnerId, tag: Tag): void {
     this.catalogOf(owner).set(tag.key, structuredClone(tag));
   }

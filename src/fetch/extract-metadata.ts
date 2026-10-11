@@ -2,6 +2,7 @@ import { capCodePoints } from "./cap.js";
 
 const TITLE_MAX = 500;
 const DESCRIPTION_MAX = 1_000;
+const IMAGE_URL_MAX = 2_048;
 
 function clean(value: string | null | undefined): string | null {
   const v = value?.replace(/\s+/g, " ").trim();
@@ -43,7 +44,7 @@ function imageUrl(doc: Document, finalUrl: string): string | null {
     (v) => {
       const u = parseUrl(v, base);
       const ok = u && (u.protocol === "http:" || u.protocol === "https:");
-      return ok && !u.username && !u.password ? u.href : null;
+      return ok && !u.username && !u.password && u.href.length <= IMAGE_URL_MAX ? u.href : null;
     },
   );
 }

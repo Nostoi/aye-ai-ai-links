@@ -11,6 +11,7 @@ export type Snapshot = Metadata & {
 export function extractSnapshot(html: string, finalUrl: string): Snapshot {
   const { document } = parseHTML(html);
   const doc = document as unknown as Document;
+  if (!doc.documentElement) return { title: null, description: null, imageUrl: null, text: null };
   const metadata = extractMetadata(doc, finalUrl);
   if (!isParsable(doc)) return { ...metadata, text: null, textSkipped: "too_complex" };
   flattenTemplates(doc);

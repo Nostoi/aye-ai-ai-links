@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import http from "node:http";
-import https from "node:https";
 import net from "node:net";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -144,6 +143,20 @@ describe("image urls", () => {
     expect(extractSnapshot(withImage("javascript:alert(1)"), URL0).imageUrl).toBeNull();
   });
 
+  it("caps an image url at 2,048 characters and falls through rather than truncating", () => {
+    const long = `https://example.com/${"a".repeat(2_040)}`;
+    const ok = `https://example.com/${"a".repeat(2_028)}`;
+    expect(ok).toHaveLength(2_048);
+    expect(extractSnapshot(withImage(ok), URL0).imageUrl).toBe(ok);
+    const html = withImage(long, `<meta name="twitter:image" content="/ok.png">`);
+    expect(extractSnapshot(html, URL0).imageUrl).toBe("https://example.com/ok.png");
+    expect(extractSnapshot(withImage(long), URL0).imageUrl).toBeNull();
+  });
+
+  it("measures the resolved url, so a long relative path is capped too", () => {
+    expect(extractSnapshot(withImage("a".repeat(5_000)), URL0).imageUrl).toBeNull();
+  });
+
   it("keeps private-address images; the consumer must guard them", () => {
     expect(extractSnapshot(withImage("http://127.0.0.1:3002/a.png"), URL0).imageUrl).toBe(
       "http://127.0.0.1:3002/a.png",
@@ -263,6 +276,16 @@ describe("bounded parsing", () => {
       `${"<div>".repeat(n)}<p>${BODY}</p>${"</div>".repeat(n)}`,
       `<meta property="og:title" content="Deep">`,
     );
+  const nested = (depth: number, copies: number) =>
+    page(
+      `${`${"<div>".repeat(depth)}<p>x, y, z, words</p>${"</div>".repeat(depth)}`.repeat(copies)}`,
+    );
+  const quickly = (html: string) => {
+    const t0 = performance.now();
+    const s = extractSnapshot(html, URL0);
+    expect(performance.now() - t0).toBeLessThan(1_000);
+    return s;
+  };
 
   it("skips text for a page nested 800 deep, quickly, and keeps the metadata", () => {
     const t0 = performance.now();
@@ -273,47 +296,114 @@ describe("bounded parsing", () => {
     expect(s.title).toBe("Deep");
   });
 
-  it("skips text above 30,000 elements", () => {
-    const s = extractSnapshot(page(`<article>${"<span>x</span>".repeat(30_001)}</article>`), URL0);
+  it("skips text above 15,000 elements", () => {
+    const s = quickly(page(`<article>${"<span>x</span>".repeat(15_001)}</article>`));
     expect(s.text).toBeNull();
     expect(s.textSkipped).toBe("too_complex");
   });
+
+  it("skips 29,990 flat links, which stall Readability for seconds", () => {
+    const s = quickly(page(`<div>${'<a href="/x">w</a> '.repeat(29_990)}</div>`));
+    expect(s.textSkipped).toBe("too_complex");
+  });
+
+  it.each([
+    [190, 50],
+    [100, 290],
+    [50, 550],
+    [190, 150],
+    [190, 13],
+    [100, 24],
+  ])(
+    "skips %i-deep nesting repeated %i times, where depth times elements is too costly",
+    (d, m) => {
+      const s = quickly(nested(d, m));
+      expect(s.text).toBeNull();
+      expect(s.textSkipped).toBe("too_complex");
+    },
+  );
 
   it("still extracts a page nested 150 deep", () => {
     const s = extractSnapshot(deep(150), URL0);
     expect(s.textSkipped).toBeUndefined();
     expect(s.text).toContain("Home batteries");
   });
+
+  it("extracts a Wikipedia-sized page: 7,639 elements, depth 27, depth-squared sum 1.84M (measured on a saved copy)", () => {
+    const wrap = "<div>".repeat(14);
+    const para = `<p>${PARA}${'<a href="/w">link</a> <b>bold</b> '.repeat(4)}</p>`;
+    const html = page(`${wrap}${`<section>${para}</section>`.repeat(700)}${"</div>".repeat(14)}`);
+    const s = extractSnapshot(html, URL0);
+    expect(s.textSkipped).toBeUndefined();
+    expect(s.text).toContain("Home batteries");
+  });
+});
+
+describe("degenerate input", () => {
+  it.each(["", "   ", "hello world"])("returns an empty snapshot for %j", (html) => {
+    expect(extractSnapshot(html, URL0)).toEqual({
+      title: null,
+      description: null,
+      imageUrl: null,
+      text: null,
+    });
+  });
 });
 
 describe("no page code runs and nothing loads", () => {
-  it("does no I/O and runs no script or handler", () => {
-    const calls: string[] = [];
-    const rec = (name: string) => () => {
-      calls.push(name);
-      throw new Error(`${name} called`);
-    };
-    vi.spyOn(globalThis, "fetch").mockImplementation(rec("fetch") as never);
-    vi.spyOn(http, "request").mockImplementation(rec("http.request") as never);
-    vi.spyOn(https, "request").mockImplementation(rec("https.request") as never);
-    vi.spyOn(net, "connect").mockImplementation(rec("net.connect") as never);
-
-    const html = page(
+  const html = (extra: string) =>
+    page(
       `<script>globalThis.scriptRan = 1</script>
        <img src="http://127.0.0.1:3002/admin" onerror="globalThis.onerrorRan = 1">
        <iframe src="http://127.0.0.1:3002/frame"></iframe>
        <link rel="stylesheet" href="http://127.0.0.1:3002/x.css">
        <article><p>${BODY}</p><img src="http://127.0.0.1:3002/a.png"></article>`,
-      `<meta property="og:image" content="http://127.0.0.1:3002/og.png">`,
+      `<meta property="og:image" content="http://127.0.0.1:3002/og.png">${extra}`,
     );
-    const s = extractSnapshot(html, URL0);
 
-    expect(s.text).toContain("Home batteries");
-    expect(s.imageUrl).toBe("http://127.0.0.1:3002/og.png");
+  async function observe(run: () => void) {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((async () => {
+      calls.push("fetch");
+      return new Response("");
+    }) as never);
+    vi.spyOn(net.Socket.prototype, "connect").mockImplementation(function (this: net.Socket) {
+      calls.push("socket.connect");
+      return this;
+    } as never);
+    run();
+    await new Promise((r) => setTimeout(r, 50));
+    return calls;
+  }
+
+  it("opens no socket, calls no fetch, even after timers drain, and runs no script or handler", async () => {
+    let snapshot: ReturnType<typeof extractSnapshot> | undefined;
+    const calls = await observe(() => {
+      snapshot = extractSnapshot(html(""), URL0);
+    });
+
+    expect(snapshot?.text).toContain("Home batteries");
+    expect(snapshot?.imageUrl).toBe("http://127.0.0.1:3002/og.png");
     expect(calls).toEqual([]);
     const g = globalThis as Record<string, unknown>;
     expect(g.scriptRan).toBeUndefined();
     expect(g.onerrorRan).toBeUndefined();
+  });
+
+  it("would notice a request made through http.get", async () => {
+    const calls = await observe(() => {
+      const req = http.get("http://127.0.0.1:3002/og.png", () => {});
+      req.on("error", () => {});
+      req.destroy();
+    });
+    expect(calls).toContain("socket.connect");
+  });
+
+  it("would notice a fetch deferred to a timer", async () => {
+    const calls = await observe(() => {
+      setTimeout(() => void fetch("http://127.0.0.1:3002/og.png"), 0);
+    });
+    expect(calls).toContain("fetch");
   });
 });
 

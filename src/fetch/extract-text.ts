@@ -3,7 +3,9 @@ import { capCodePoints } from "./cap.js";
 
 const TEXT_MAX = 100_000;
 const MAX_DEPTH = 200;
-const MAX_ELEMENTS = 30_000;
+const MAX_ELEMENTS = 15_000;
+const MAX_DEPTH_SQUARES = 6_000_000;
+const MAX_SIBLING_SQUARES = 25_000_000;
 
 const ELEMENT = 1;
 const TEXT = 3;
@@ -24,19 +26,57 @@ const BLOCKS = new Set([
   "PRE",
   "SECTION",
   "ARTICLE",
+  "DT",
+  "DD",
+  "DL",
+  "UL",
+  "OL",
+  "SUMMARY",
+  "DETAILS",
+  "HR",
+  "HEADER",
+  "FOOTER",
+  "MAIN",
+  "NAV",
+  "ASIDE",
+  "ADDRESS",
+  "FIGURE",
+  "FIGCAPTION",
+  "TABLE",
+  "THEAD",
+  "TBODY",
+  "TFOOT",
+  "CAPTION",
+  "FORM",
+  "FIELDSET",
+  "LEGEND",
 ]);
 const SKIPPED = new Set(["SCRIPT", "STYLE"]);
 
 /** One linear pass, no recursion: false when the tree is too deep or too large to hand to Readability. */
 export function isParsable(root: Node): boolean {
   let elements = 0;
+  let depthSquares = 0;
+  let siblingSquares = 0;
   const stack: { node: Node; depth: number }[] = [{ node: root, depth: 0 }];
   for (let item = stack.pop(); item; item = stack.pop()) {
+    const depth = item.depth + 1;
+    let children = 0;
     for (const child of item.node.childNodes) {
       if (child.nodeType !== ELEMENT) continue;
-      elements += 1;
-      if (elements > MAX_ELEMENTS || item.depth + 1 > MAX_DEPTH) return false;
-      stack.push({ node: child, depth: item.depth + 1 });
+      children += 1;
+      depthSquares += depth * depth;
+      stack.push({ node: child, depth });
+    }
+    elements += children;
+    siblingSquares += children * children;
+    if (
+      elements > MAX_ELEMENTS ||
+      depth > MAX_DEPTH ||
+      depthSquares > MAX_DEPTH_SQUARES ||
+      siblingSquares > MAX_SIBLING_SQUARES
+    ) {
+      return false;
     }
   }
   return true;
@@ -58,7 +98,7 @@ export function flattenTemplates(doc: Document): void {
   for (const t of [...doc.querySelectorAll("template")]) t.remove();
 }
 
-function flatten(root: Node): string {
+export function flatten(root: Node): string {
   let out = "";
   const visit = (node: Node) => {
     if (node.nodeType === TEXT) {

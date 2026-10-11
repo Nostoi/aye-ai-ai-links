@@ -386,7 +386,16 @@ export function describeStoreContract(
           const theirs = await saveLink(deps(), B, { url: "https://ex.com/b", savedBy: "b", tags });
           const absent = theirs.link.id.replace(/\d+$/, (n) => String(Number(n) + 1000));
           expect(absent).not.toBe(theirs.link.id);
-          const ids = [theirs.link.id, absent, "zzz", "01", "-1", "", "9007199254740993"];
+          const ids = [
+            theirs.link.id,
+            absent,
+            "zzz",
+            "01",
+            "-1",
+            "",
+            "9007199254740993",
+            "9223372036854775808",
+          ];
           expect(ids).not.toContain(mine.link.id);
           const before = structuredClone(await snapshot());
           for (const id of ids) {

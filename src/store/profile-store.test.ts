@@ -1,0 +1,96 @@
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  A,
+  changes,
+  describeProfileStoreContract,
+  type ProfileHarness,
+} from "../core/profile-store-contract.js";
+import { openDatabase } from "./database.js";
+import { LATEST_VERSION, MIGRATIONS, migrate } from "./migrations.js";
+import { SqliteProfileStore } from "./profile-store.js";
+import { SqliteStore } from "./sqlite-store.js";
+
+type Db = ReturnType<typeof openDatabase>;
+
+const open: Db[] = [];
+afterEach(() => {
+  for (const db of open.splice(0)) if (db.open) db.close();
+});
+
+function fresh(): { db: Db; harness: ProfileHarness; store: SqliteProfileStore } {
+  const db = openDatabase(":memory:");
+  open.push(db);
+  const store = new SqliteProfileStore(db);
+  const users = new SqliteStore(db);
+  return { db, store, harness: { store, addOwner: (o) => users.ensureUser(o, o) } };
+}
+
+describeProfileStoreContract("SqliteProfileStore", () => fresh().harness);
+
+const AT = new Date("2026-01-01T00:00:00Z");
+const ctx = { writtenBy: "x", at: AT, focusLimit: 10 };
+const count = (db: Db, table: string) =>
+  (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+
+describe("SqliteProfileStore only", () => {
+  it("refuses an unknown owner on add and writes nothing", async () => {
+    const { db, store } = fresh();
+    await expect(
+      store.apply(
+        "ghost",
+        changes({
+          addNotes: [{ text: "n", source: "stated" }],
+          addFocus: [{ text: "f", source: "stated" }],
+        }),
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "unknown_owner" });
+    expect(count(db, "profile_notes")).toBe(0);
+    expect(count(db, "focus_log")).toBe(0);
+  });
+
+  it("rolls back earlier adds when a later add fails on an unknown owner", async () => {
+    const { db, store } = fresh();
+    await expect(
+      store.apply("ghost", changes({ addFocus: [{ text: "f", source: "stated" }] }), ctx),
+    ).rejects.toMatchObject({ code: "unknown_owner" });
+    expect(count(db, "focus_log")).toBe(0);
+  });
+
+  it("has CHECKs for a source outside the set and for empty text", () => {
+    const { db } = fresh();
+    new SqliteStore(db).ensureUser(A, A);
+    const note = (text: string, source: string) =>
+      db
+        .prepare(
+          "INSERT INTO profile_notes (owner_id, text, source, written_by, updated_at) VALUES (?, ?, ?, 'x', 0)",
+        )
+        .run(A, text, source);
+    const focus = (text: string, source: string) =>
+      db
+        .prepare(
+          "INSERT INTO focus_log (owner_id, text, source, written_by, created_at) VALUES (?, ?, ?, 'x', 0)",
+        )
+        .run(A, text, source);
+    expect(() => note("ok", "guessed")).toThrow(/CHECK/);
+    expect(() => note("", "stated")).toThrow(/CHECK/);
+    expect(() => focus("ok", "guessed")).toThrow(/CHECK/);
+    expect(() => focus("", "stated")).toThrow(/CHECK/);
+    expect(() => note("ok", "stated")).not.toThrow();
+    expect(() => focus("ok", "inferred")).not.toThrow();
+  });
+
+  it("adds both tables with a migration that leaves older data and the version consistent", () => {
+    const { db } = fresh();
+    expect(db.pragma("user_version", { simple: true })).toBe(LATEST_VERSION);
+    expect(LATEST_VERSION).toBe(MIGRATIONS.length);
+    migrate(db);
+    expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
+    const tables = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('profile_notes','focus_log')",
+      )
+      .all();
+    expect(tables).toHaveLength(2);
+  });
+});

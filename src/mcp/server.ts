@@ -4,13 +4,20 @@ import type { Caller } from "../auth/caller.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLink, saveLink, updateLink } from "../core/links.js";
+import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
+import type { ProfileStore } from "../core/profile-store.js";
 import type { LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { LinkStore } from "../core/store.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
 
-export type McpDeps = { store: LinkStore; search: LinkSearch; now: () => Date };
+export type McpDeps = {
+  store: LinkStore;
+  search: LinkSearch;
+  profile: ProfileStore;
+  now: () => Date;
+};
 
 const TIMESTAMP_SHAPE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -58,6 +65,17 @@ const searchLinksInput = z.object({
   limit: z.number().optional(),
 });
 const getLinkInput = z.object({ id: z.string() });
+// A strict empty object advertises additionalProperties: false, the schema MCP recommends for a tool with no parameters.
+const getProfileInput = z.strictObject({});
+const labelledText = z.object({ text: z.string(), source });
+const addProfileInput = z.object({
+  addNotes: z.array(labelledText).optional(),
+  addFocus: z.array(labelledText).optional(),
+});
+const editProfileInput = z.object({
+  editNotes: z.array(z.object({ id: z.string(), text: z.string(), source })).optional(),
+  removeNotes: z.array(z.string()).optional(),
+});
 
 const toDate = (s: string | undefined) => (s === undefined ? undefined : new Date(s));
 
@@ -120,7 +138,11 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
     (args) =>
       guarded(async () => {
         const saved = await saveLink(deps, owner, { ...args, savedBy });
-        return { ...saved, filingContext: await filingContext(deps, owner) };
+        return {
+          ...saved,
+          filingContext: await filingContext(deps, owner),
+          profile: await profileContext(deps, owner),
+        };
       }),
   );
 
@@ -182,6 +204,51 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
       },
     },
     ({ id }) => guarded(async () => ({ link: await getLink(deps, owner, id) })),
+  );
+
+  server.registerTool(
+    "get_profile",
+    {
+      description: guidance.GET_PROFILE,
+      inputSchema: getProfileInput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    () => guarded(() => getProfile(deps, owner)),
+  );
+
+  server.registerTool(
+    "add_profile",
+    {
+      description: guidance.ADD_PROFILE,
+      inputSchema: addProfileInput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args) => guarded(() => addProfile(deps, owner, savedBy, args)),
+  );
+
+  server.registerTool(
+    "edit_profile",
+    {
+      description: guidance.EDIT_PROFILE,
+      inputSchema: editProfileInput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    (args) => guarded(() => editProfile(deps, owner, savedBy, args)),
   );
 
   return server;

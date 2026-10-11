@@ -4,6 +4,7 @@ import { createApp } from "../app.js";
 import type { Caller, Identify } from "../auth/caller.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLink, saveLink, updateLink } from "../core/links.js";
+import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import { searchLinks } from "../core/search-links.js";
 import { createDeps } from "../deps.js";
 import { openDatabase } from "../store/database.js";
@@ -149,11 +150,14 @@ describe("MCP door over HTTP", () => {
     expect(res.body.result.instructions).toContain("inferred");
   });
 
-  it("lists the four tools with their annotations and string dates", async () => {
+  it("lists the seven tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
+      "add_profile",
+      "edit_profile",
       "get_link",
+      "get_profile",
       "save_link",
       "search_links",
       "update_link",
@@ -168,6 +172,10 @@ describe("MCP door over HTTP", () => {
     expect(tools.get_link.annotations).toEqual(hints(true, false, true));
     expect(tools.save_link.annotations).toEqual(hints(false, false, true));
     expect(tools.update_link.annotations).toEqual(hints(false, true, false));
+    expect(tools.get_profile.annotations).toEqual(hints(true, false, true));
+    expect(tools.add_profile.annotations).toEqual(hints(false, false, false));
+    expect(tools.edit_profile.annotations).toEqual(hints(false, true, false));
+    expect(tools.get_profile.inputSchema.additionalProperties).toBe(false);
     expect(tools.search_links.inputSchema.properties.savedFrom.type).toBe("string");
     expect(JSON.stringify(tools.update_link.inputSchema.properties.snoozedUntil)).toContain(
       '"string"',
@@ -218,6 +226,7 @@ describe("MCP door over HTTP", () => {
       },
       created: true,
       filingContext: { tags: [launch, reading], activeProjects: [launch] },
+      profile: { notes: [], recentFocus: [] },
     };
     expect(res.body.result.structuredContent).toEqual(expected);
     expect(JSON.parse(res.body.result.content[0].text)).toEqual(res.body.result.structuredContent);
@@ -233,7 +242,11 @@ describe("MCP door over HTTP", () => {
     const viaDoor = await call(app, "key-a", "save_link", input);
     const saved = await saveLink(direct, A.owner, { ...input, savedBy: A.savedBy });
     expect(viaDoor.body.result.structuredContent).toEqual(
-      wire({ ...saved, filingContext: await filingContext(direct, A.owner) }),
+      wire({
+        ...saved,
+        filingContext: await filingContext(direct, A.owner),
+        profile: await profileContext(direct, A.owner),
+      }),
     );
 
     const patch = {
@@ -498,5 +511,174 @@ describe("MCP door over HTTP", () => {
     expect(res.status).toBe(200);
     expect(res.body.result.structuredContent.link.url).toBe("https://example.com/modern");
     expect(res.body.result.structuredContent.link.savedBy).toBe("claude-code");
+  });
+
+  describe("profile tools", () => {
+    const noteTexts = (r: Rpc) => r.body.result.structuredContent.notes.map((n: Json) => n.text);
+    const profileOf = (key: string) => call(app, key, "get_profile", {});
+
+    it("every profile tool equals the direct core call with the same clock", async () => {
+      const add = {
+        addNotes: [
+          { text: "likes long reads", source: "inferred" as const },
+          { text: "plans a battery install", source: "stated" as const },
+        ],
+        addFocus: [{ text: "heat pumps", source: "asked" as const }],
+      };
+      const viaDoor = await call(app, "key-a", "add_profile", add);
+      const direct1 = await addProfile(direct, A.owner, A.savedBy, add);
+      expect(viaDoor.body.result.structuredContent).toEqual(wire(direct1));
+      expect(Object.keys(viaDoor.body.result.structuredContent).sort()).toEqual([
+        "addedFocusIds",
+        "addedNoteIds",
+        "notes",
+        "recentFocus",
+      ]);
+
+      const edit = {
+        editNotes: [{ id: "1", text: "maybe likes long reads", source: "inferred" as const }],
+        removeNotes: ["2"],
+      };
+      const edited = await call(app, "key-a", "edit_profile", edit);
+      const direct2 = await editProfile(direct, A.owner, A.savedBy, edit);
+      expect(edited.body.result.structuredContent).toEqual(wire(direct2));
+      expect(Object.keys(edited.body.result.structuredContent).sort()).toEqual([
+        "notes",
+        "recentFocus",
+      ]);
+
+      const got = await profileOf("key-a");
+      expect(got.body.result.structuredContent).toEqual(wire(await getProfile(direct, A.owner)));
+      expect(Object.keys(got.body.result.structuredContent).sort()).toEqual([
+        "activeProjects",
+        "notes",
+        "recentFocus",
+      ]);
+    });
+
+    it("returns inferred notes and focus with their label over the wire", async () => {
+      await call(app, "key-a", "add_profile", {
+        addNotes: [{ text: "guess", source: "inferred" }],
+        addFocus: [{ text: "focus guess", source: "inferred" }],
+      });
+      const got = await profileOf("key-a");
+      expect(got.body.result.structuredContent.notes[0]).toMatchObject({
+        text: "guess",
+        source: "inferred",
+        writtenBy: "claude-code",
+      });
+      expect(got.body.result.structuredContent.recentFocus[0]).toMatchObject({
+        text: "focus guess",
+        source: "inferred",
+      });
+    });
+
+    it("lists active projects in get_profile, and puts only notes and focus in save_link's profile", async () => {
+      await call(app, "key-a", "save_link", {
+        url: "https://example.com/p1",
+        tags: [{ name: "Launch", source: "stated", kind: "project" }],
+      });
+      await call(app, "key-a", "add_profile", { addNotes: [{ text: "n", source: "stated" }] });
+      const got = await profileOf("key-a");
+      expect(got.body.result.structuredContent.activeProjects.map((t: Json) => t.key)).toEqual([
+        "launch",
+      ]);
+      const saved = await call(app, "key-a", "save_link", { url: "https://example.com/p2" });
+      const profile = saved.body.result.structuredContent.profile;
+      expect(Object.keys(profile).sort()).toEqual(["notes", "recentFocus"]);
+      expect(profile.notes.map((n: Json) => n.text)).toEqual(["n"]);
+    });
+
+    it("takes the writer from the key and ignores owner and writtenBy arguments", async () => {
+      const res = await call(app, "key-a", "add_profile", {
+        addNotes: [{ text: "mine", source: "stated" }],
+        writtenBy: "evil",
+        owner: B.owner,
+      });
+      expect(res.body.result.structuredContent.notes[0].writtenBy).toBe("claude-code");
+      expect(noteTexts(await profileOf("key-b"))).toEqual([]);
+      expect(noteTexts(await profileOf("key-a"))).toEqual(["mine"]);
+    });
+
+    it("refuses a stray argument to get_profile instead of serving another owner", async () => {
+      await call(app, "key-b", "add_profile", { addNotes: [{ text: "secret", source: "stated" }] });
+      const res = await call(app, "key-a", "get_profile", { owner: B.owner });
+      expect(res.body.result.isError).toBe(true);
+      expect(JSON.stringify(res.body)).not.toContain("secret");
+    });
+
+    it("keeps owners apart on edit and remove", async () => {
+      await call(app, "key-b", "add_profile", { addNotes: [{ text: "b-only", source: "stated" }] });
+      const edit = await call(app, "key-a", "edit_profile", {
+        editNotes: [{ id: "1", text: "hijack", source: "stated" }],
+      });
+      const remove = await call(app, "key-a", "edit_profile", { removeNotes: ["1"] });
+      for (const r of [edit, remove]) {
+        expect(r.body.result.isError).toBe(true);
+        expect(r.body.result.content[0].text).toContain("No profile note");
+      }
+      expect(noteTexts(await profileOf("key-b"))).toEqual(["b-only"]);
+    });
+
+    it("refuses an inferred edit of a stated note and leaves it as it was", async () => {
+      await call(app, "key-a", "add_profile", { addNotes: [{ text: "fact", source: "stated" }] });
+      const res = await call(app, "key-a", "edit_profile", {
+        editNotes: [{ id: "1", text: "guess", source: "inferred" }],
+      });
+      expect(res.body.result.isError).toBe(true);
+      expect(res.body.result.content[0].text).toContain("add_profile");
+      const got = await profileOf("key-a");
+      expect(got.body.result.structuredContent.notes[0]).toMatchObject({
+        text: "fact",
+        source: "stated",
+      });
+    });
+
+    it("refuses over-long text with a message naming the cap, and writes nothing", async () => {
+      const note = await call(app, "key-a", "add_profile", {
+        addNotes: [{ text: "x".repeat(1001), source: "stated" }],
+      });
+      const focus = await call(app, "key-a", "add_profile", {
+        addFocus: [{ text: "x".repeat(501), source: "stated" }],
+      });
+      expect(note.body.result.content[0].text).toContain("1000");
+      expect(focus.body.result.content[0].text).toContain("500");
+      expect(note.body.result.isError && focus.body.result.isError).toBe(true);
+      const got = await profileOf("key-a");
+      expect(got.body.result.structuredContent.notes).toEqual([]);
+      expect(got.body.result.structuredContent.recentFocus).toEqual([]);
+    });
+
+    it("refuses a bad source before writing anything", async () => {
+      const res = await call(app, "key-a", "add_profile", {
+        addNotes: [{ text: "n", source: "guessed" }],
+      });
+      expect(res.body.result?.isError ?? Boolean(res.body.error)).toBe(true);
+      expect(noteTexts(await profileOf("key-a"))).toEqual([]);
+    });
+
+    it("reports a committed add as success even when every later read fails, so a retry cannot duplicate it", async () => {
+      const failing = {
+        apply: deps.profile.apply.bind(deps.profile),
+        listNotes: async () => {
+          throw new Error("read after write");
+        },
+        recentFocus: async () => {
+          throw new Error("read after write");
+        },
+      };
+      const broken = appFor({ deps: { ...deps, profile: failing }, identify });
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const res = await call(broken, "key-a", "add_profile", {
+          addNotes: [{ text: "once", source: "stated" }],
+        });
+        expect(res.body.result.isError).toBeUndefined();
+        expect(res.body.result.structuredContent.notes.map((n: Json) => n.text)).toEqual(["once"]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(noteTexts(await profileOf("key-a"))).toEqual(["once"]);
+    });
   });
 });

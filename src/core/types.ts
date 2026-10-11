@@ -42,3 +42,21 @@ export type NewLink = Omit<Link, "id">;
 export type LinkPatch = Partial<
   Pick<Link, "summary" | "why" | "tags" | "state" | "snoozedUntil" | "lastOpenedAt">
 >;
+
+/** A note about the owner. `source` says how the writer learned it. */
+export type ProfileNote = {
+  id: string;
+  text: string;
+  source: Source;
+  writtenBy: string;
+  updatedAt: Date;
+};
+
+/** What the owner is working on now, dated and labelled like a note. */
+export type FocusEntry = {
+  id: string;
+  text: string;
+  source: Source;
+  writtenBy: string;
+  createdAt: Date;
+};

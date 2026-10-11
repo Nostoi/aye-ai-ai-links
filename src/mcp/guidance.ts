@@ -10,7 +10,9 @@ Saving:
 
 Dates are full ISO-8601 timestamps with an offset or Z, such as 2026-10-01T09:30:00Z.
 
-Searching: use a few words you expect the link to contain. A blank query lists the newest links.`;
+Searching: use a few words you expect the link to contain. A blank query lists the newest links.
+
+Profile: get_profile (or save_link's profile) has notes about the owner and what they are working on. Read it before you infer a why or tags. Label what you add with the same stated, asked or inferred rule, and present inferred notes to the owner as guesses. When the owner says what they are working on, add a focus entry with add_profile. Change or remove a note with edit_profile only when the owner asks or confirms.`;
 
 export const SAVE_LINK = `Save a link to the owner's library.
 
@@ -33,3 +35,15 @@ export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 Use a few words you remember from the link. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back.`;
 
 export const GET_LINK = `Get one saved link by its id, with its why, tags and state. Use search_links to find an id.`;
+
+export const GET_PROFILE = `Get what is known about the owner: their notes, the projects still active, and what they have been working on lately. Call it before you infer a why or tags.
+
+Every note and focus entry has a source: stated (the owner said it), asked (you asked and they answered) or inferred (a guess). Present inferred ones to the owner as guesses, not facts. Notes have ids for edit_profile.`;
+
+export const ADD_PROFILE = `Record something about the owner: a note about them, or a focus entry for what they are working on now. Adds only; it never changes or removes anything.
+
+Give each as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context. A note is at most 1000 characters and a focus entry at most 500; longer text is refused, not cut. Send several in one call. The result is the profile after the write, with the new ids.`;
+
+export const EDIT_PROFILE = `Change or remove existing profile notes. Use it only when the owner asks for the change or confirms it. To record something new, use add_profile.
+
+editNotes REPLACES a note's text and source, so send both. A note the owner stated can only be edited with source "stated"; to add your own guess, call add_profile instead. removeNotes deletes notes permanently by id: remove a stated note only on the owner's instruction. Call get_profile for the ids. All changes in one call apply together or not at all.`;

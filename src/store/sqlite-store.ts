@@ -40,7 +40,7 @@ function toMs(d: Date | null): number | null {
 const fromMs = (ms: number | null): Date | null => (ms === null ? null : new Date(ms));
 
 /** Canonical decimal ids in 1..MAX_SAFE_INTEGER; anything else was never issued. */
-function parseId(id: string): number | null {
+export function parseId(id: string): number | null {
   if (!/^[1-9][0-9]*$/.test(id)) return null;
   const n = Number(id);
   return Number.isSafeInteger(n) ? n : null;

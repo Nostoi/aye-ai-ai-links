@@ -22,6 +22,17 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Profile notes and focus log (#33).
+  - **Tools (owner), a change to spec §5.** `get_profile` reads. `add_profile` adds notes and focus entries and is non-destructive. `edit_profile` edits and removes notes and is destructive. Spec §5 named a single `update_profile`; the split keeps routine adds from being gated as destructive. `save_link` also returns `profile` (notes and recent focus; the active projects stay in `filingContext`).
+  - **Labels (owner).** Notes and focus entries both carry a source (`stated`, `asked`, `inferred`) and the writer from the agent key. This follows AGENTS.md "Label guesses" and goes beyond spec §4, which gave focus entries no source.
+  - **A stated note is protected (owner).** `edit_profile` refuses to change a `stated` note unless the new source is also `stated`, and tells the agent to add its own guess with `add_profile`. Removing a stated note needs the owner's instruction, which the tool description says; core cannot check it.
+  - **Length caps (owner's defaults, can be changed).** 1,000 characters per note and 500 per focus entry. Longer text is refused, never truncated.
+  - **Recent focus** is the newest 10 entries (`RECENT_FOCUS` in `core/profile.ts`). #34 owns what a digest picks from them.
+  - **Ids and writes.** Note ids are never reused after a delete. A write returns the profile as it stood inside its own transaction, with the new ids, and does no second read. A failed edit or remove id changes nothing in that call.
+  - **Two agents editing one note:** the last write wins, which is acceptable for a single owner. The stated-note check reads the note just before the write, so two racing edits can slip past it; that is accepted for the same reason.
+  - **Older builds lock out.** The migration adds two tables (`profile_notes`, `focus_log`) and rebuilds none, but older builds refuse a database with a newer schema, as with agent keys (#6), so the server and the CLI are deployed from one build (#7, #27).
+  - **Output schemas** come from #39, which lands first; these tools follow its pattern.
+  - Sources: `docs/specs/2026-10-11-profile-tool-sources.md`.
 - **2026-10-11:** Tailnet service (#7).
   - **Shape.** A per-user LaunchAgent (`com.aye-links`) runs `dist/server.js` on `127.0.0.1:3002`, and `tailscale serve --https=8444` publishes it on the tailnet. It runs while the account is logged in; sleep settings are the owner's.
   - **Deploys.** `deploy/deploy.sh <ref>` builds and tests each commit in `~/.aye-links/releases/<sha>`. Only on success does it stop the service, back up the database, switch the `~/.aye-links/current` symlink and bootstrap the plist again. A failed build leaves the running install untouched. The key CLI runs from `current`, so one build serves both.

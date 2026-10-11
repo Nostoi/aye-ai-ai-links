@@ -1,0 +1,39 @@
+export type Source = "stated" | "asked" | "inferred";
+export type Labelled = { text: string; source: Source };
+export type OwnerId = string;
+
+/** key is the identity (lower-cased name); name is for display. */
+export type LinkTag = { key: string; name: string; source: Source };
+
+export type Link = {
+  id: string;
+  url: string;
+  urlKey: string;
+  title: string | null;
+  summary: string | null;
+  why: Labelled | null;
+  tags: LinkTag[];
+  savedAt: Date;
+  savedBy: string;
+  lastOpenedAt: Date | null;
+  lastSurfacedAt: Date | null;
+  snoozedUntil: Date | null;
+  state: "active" | "archived";
+};
+
+export type Tag = {
+  key: string;
+  name: string;
+  kind: "topic" | "project";
+  color: string | null;
+  pinned: boolean;
+  description: string | null;
+  projectStatus: "active" | "done" | null;
+};
+
+export type NewLink = Omit<Link, "id">;
+
+/** Fields a patch may set; an absent (undefined) field is left untouched. */
+export type LinkPatch = Partial<
+  Pick<Link, "summary" | "why" | "tags" | "state" | "snoozedUntil" | "lastOpenedAt">
+>;

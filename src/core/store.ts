@@ -13,6 +13,8 @@ import type { Labelled, Link, LinkPatch, NewLink, OwnerId } from "./types.js";
  *   they were attached.
  * - Atomicity: each method that takes several steps (insert with tags, update
  *   with tags, read-back) either completes whole or changes nothing.
+ * - Owners: the owner must exist (how is store-specific); saving for one that does not fails
+ *   with an Error whose `code` is "unknown_owner".
  * - Ids: a store may issue any id format. An id it never issued (any string,
  *   including empty, malformed or out of range) yields null, never an error.
  */

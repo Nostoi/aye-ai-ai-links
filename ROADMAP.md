@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** SQLite store (#3). Plain SQL on better-sqlite3, with migrations tracked by `PRAGMA user_version`. Link and tag ids are integers, shown as decimal strings; dates are stored as epoch milliseconds. The tag catalog is per owner, and link–tag rows carry composite foreign keys so they cannot cross owners. Owners are created by `SqliteStore.ensureUser`, outside `LinkStore`. Profile-notes and focus-log tables wait for phase 2 (owner). PR B landed at ~600 lines, over the ceiling, so that its tests stay with the code (owner).
 - **2026-10-10:** Duplicate links (owner, #2). Two URLs are the same link after ignoring scheme/host case, default port, tracking parameters, trailing slashes and `#` anchors; `#/` and `#!` app routes, query order, http vs https and `www.` still count. URLs with credentials are refused. Saving an existing link returns it unchanged, except that a why is filled in if the link has none. Details: #2.
 - **2026-10-10:** Tags (#2). Tag names match ignoring case and extra spaces; a tag keeps the casing it was first saved with. When one save names a tag twice, the stronger source wins (stated, then asked, then inferred). Blank tag names are refused.
 - **2026-10-10:** Ruleset "main: require green CI" requires the `check` status on `main`, with no bypass. This supersedes the next entry's note that a direct push to `main` skipping the hook goes unchecked.

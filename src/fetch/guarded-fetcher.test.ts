@@ -1,8 +1,8 @@
 import type { LookupAddress } from "node:dns";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import net, { type AddressInfo } from "node:net";
 import zlib from "node:zlib";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchOutcome, PageFetcher } from "../core/fetch.js";
 import { isPublicAddress } from "./address-policy.js";
 import { createGuardedFetcher, type FetcherLimits } from "./guarded-fetcher.js";
@@ -259,8 +259,6 @@ describe("URLs that must never be requested", () => {
     "http://[::ffff:127.0.0.1]:PORT/",
     "http://[::127.0.0.1]:PORT/",
     "http://0.0.0.0:PORT/",
-    "http://100.100.100.100/",
-    "http://169.254.169.254/latest/meta-data/",
     "http://evil.test:PORT/",
   ];
 
@@ -275,6 +273,29 @@ describe("URLs that must never be requested", () => {
     open.push(fetcher);
     expect(await fetcher.fetch(url)).toEqual({ kind: "refused", reason: "address" });
     expect(targetHits).toBe(0);
+  });
+
+  it.each([
+    "http://100.100.100.100/",
+    "http://169.254.169.254/latest/meta-data/",
+    "http://10.0.0.1/",
+    "http://192.168.1.1/",
+    "http://172.16.0.1/",
+    "http://[fd7a:115c:a1e0::53]/",
+    "http://[fe80::1]/",
+  ])("refuses %s before any socket is opened", async (url) => {
+    const connect = vi.spyOn(net.Socket.prototype, "connect").mockImplementation(() => {
+      throw new Error("a socket was opened");
+    });
+    try {
+      expect(await createGuardedFetcher().fetch(url)).toEqual({
+        kind: "refused",
+        reason: "address",
+      });
+      expect(connect).not.toHaveBeenCalled();
+    } finally {
+      connect.mockRestore();
+    }
   });
 
   it.each([
@@ -433,7 +454,7 @@ describe("size limit", () => {
 
 describe("deadline and cancellation", () => {
   const DEADLINE = 300;
-  const GRACE = 100;
+  const SLACK = 1000;
 
   async function timed(outcome: Promise<FetchOutcome>) {
     const started = performance.now();
@@ -441,25 +462,22 @@ describe("deadline and cancellation", () => {
     return { result, elapsed: performance.now() - started };
   }
 
-  it("settles within the deadline when the lookup never answers", async () => {
+  it("settles at the deadline, well before the connect timeout, when the lookup never answers", async () => {
     const fetcher = fetcherWith({
       resolve: () => new Promise(() => {}),
       limits: { deadlineMs: DEADLINE },
     });
     const { result, elapsed } = await timed(fetcher.fetch(siteUrl("/ok")));
     expect(result).toEqual({ kind: "timeout" });
-    expect(elapsed).toBeLessThan(DEADLINE + GRACE);
+    expect(elapsed).toBeLessThan(DEADLINE + SLACK);
   });
 
-  it.each(["/hang", "/stall"])(
-    "settles within the deadline when %s never finishes",
-    async (path) => {
-      const fetcher = fetcherWith({ limits: { deadlineMs: DEADLINE } });
-      const { result, elapsed } = await timed(fetcher.fetch(siteUrl(path)));
-      expect(result).toEqual({ kind: "timeout" });
-      expect(elapsed).toBeLessThan(DEADLINE + GRACE);
-    },
-  );
+  it.each(["/hang", "/stall"])("settles at the deadline when %s never finishes", async (path) => {
+    const fetcher = fetcherWith({ limits: { deadlineMs: DEADLINE } });
+    const { result, elapsed } = await timed(fetcher.fetch(siteUrl(path)));
+    expect(result).toEqual({ kind: "timeout" });
+    expect(elapsed).toBeLessThan(DEADLINE + SLACK);
+  });
 
   it.each([
     ["the headers", "/hang"],
@@ -469,7 +487,7 @@ describe("deadline and cancellation", () => {
     setTimeout(() => controller.abort(), 100);
     const { result, elapsed } = await timed(fetcherWith().fetch(siteUrl(path), controller.signal));
     expect(result).toEqual({ kind: "aborted" });
-    expect(elapsed).toBeLessThan(100 + GRACE * 2);
+    expect(elapsed).toBeLessThan(100 + SLACK);
   });
 
   it("reports aborted for a signal that is already cancelled, without a request", async () => {

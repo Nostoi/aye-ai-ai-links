@@ -111,6 +111,79 @@ describe("saveLink", () => {
   });
 });
 
+describe("saveLink conditional why", () => {
+  it("does not overwrite a why set concurrently between insert and fill", async () => {
+    class RacingStore extends FakeStore {
+      override async insertIfAbsent(...args: Parameters<FakeStore["insertIfAbsent"]>) {
+        const result = await super.insertIfAbsent(...args);
+        if (!result.created) {
+          await this.update(args[0], result.link.id, {
+            why: { text: "concurrent", source: "stated" },
+          });
+        }
+        return result;
+      }
+    }
+    store = new RacingStore();
+    await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "agent" });
+    await saveLink(deps(), A, {
+      url: "https://ex.com/a",
+      savedBy: "agent",
+      why: { text: "mine", source: "asked" },
+    });
+    expect(store.all(A)[0]?.why).toEqual({ text: "concurrent", source: "stated" });
+  });
+});
+
+describe("runtime input checks", () => {
+  const bogus = "bogus" as never;
+
+  it("saveLink rejects a bad why or tag source and stores nothing", async () => {
+    const url = "https://ex.com/a";
+    const badWhy = saveLink(deps(), A, {
+      url,
+      savedBy: "agent",
+      why: { text: "w", source: bogus },
+    });
+    expect(await code(badWhy)).toBe("invalid_input");
+    const badTag = saveLink(deps(), A, {
+      url,
+      savedBy: "agent",
+      tags: [{ name: "t", source: bogus }],
+    });
+    expect(await code(badTag)).toBe("invalid_input");
+    expect(store.all(A)).toHaveLength(0);
+  });
+
+  it("updateLink rejects a bad state, why source or tag source and changes nothing", async () => {
+    const { link } = await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "agent" });
+    const before = structuredClone(store.all(A));
+    const patches = [
+      { state: bogus },
+      { why: { text: "w", source: bogus } },
+      { tags: [{ name: "t", source: bogus }] },
+    ];
+    for (const patch of patches) {
+      expect(await code(updateLink(deps(), A, link.id, patch))).toBe("invalid_input");
+    }
+    expect(store.all(A)).toEqual(before);
+  });
+
+  it("updateLink ignores keys outside the allowed update fields", async () => {
+    const { link } = await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "agent" });
+    const forbidden = {
+      id: "zzz",
+      urlKey: "evil",
+      savedBy: "web",
+      url: "http://x",
+      savedAt: clock,
+    };
+    const updated = await updateLink(deps(), A, link.id, { summary: "s", ...forbidden } as never);
+    expect(updated.summary).toBe("s");
+    expect(store.all(A)).toEqual([{ ...link, summary: "s" }]);
+  });
+});
+
 describe("getLink", () => {
   it("throws not_found for an unknown id", async () => {
     expect(await code(getLink(deps(), A, "nope"))).toBe("not_found");

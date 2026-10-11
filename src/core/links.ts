@@ -19,6 +19,26 @@ export type SaveLinkInput = {
 
 export type UpdateLinkInput = Omit<LinkPatch, "tags"> & { tags?: TagInput };
 
+const SOURCES: readonly string[] = ["stated", "asked", "inferred"];
+const STATES: readonly string[] = ["active", "archived"];
+
+function invalid(message: string): CoreError {
+  return new CoreError("invalid_input", message);
+}
+
+function checkSources(why: Labelled | null | undefined, tags: TagInput | undefined): void {
+  if (why && !SOURCES.includes(why.source)) {
+    throw invalid(`The why source "${why.source}" is not valid. Use stated, asked or inferred.`);
+  }
+  for (const t of tags ?? []) {
+    if (!SOURCES.includes(t.source)) {
+      throw invalid(
+        `The source "${t.source}" on tag "${t.name}" is not valid. Use stated, asked or inferred.`,
+      );
+    }
+  }
+}
+
 /** Trim the why text; empty text means the why is missing. */
 function cleanWhy(why: Labelled | null | undefined): Labelled | null {
   const text = why?.text.trim();
@@ -31,6 +51,7 @@ export async function saveLink(
   input: SaveLinkInput,
 ): Promise<{ link: Link; created: boolean }> {
   const key = urlKey(input.url);
+  checkSources(input.why, input.tags);
   const tags = normalizeTags(input.tags ?? []);
   const why = cleanWhy(input.why);
   const result = await store.insertIfAbsent(owner, {
@@ -64,8 +85,16 @@ export async function updateLink(
   id: string,
   input: UpdateLinkInput,
 ): Promise<Link> {
-  const { tags, why, ...rest } = input;
-  const patch: LinkPatch = { ...rest };
+  const { tags, why, summary, state, snoozedUntil, lastOpenedAt } = input;
+  if (state !== undefined && !STATES.includes(state)) {
+    throw invalid(`The state "${state}" is not valid. Use active or archived.`);
+  }
+  checkSources(why, tags);
+  const patch: LinkPatch = {};
+  if (summary !== undefined) patch.summary = summary;
+  if (state !== undefined) patch.state = state;
+  if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
+  if (lastOpenedAt !== undefined) patch.lastOpenedAt = lastOpenedAt;
   if (tags !== undefined) patch.tags = normalizeTags(tags);
   if (why !== undefined) patch.why = cleanWhy(why);
   const link = await store.update(owner, id, patch);

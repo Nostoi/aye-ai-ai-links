@@ -42,20 +42,40 @@ if [ ! -e "$release/.ready" ]; then
   fi
 fi
 
-db="$(node --env-file="$env_file" -e 'console.log(process.env.AYE_DB ?? "")')"
-port="$(node --env-file="$env_file" -e 'console.log(process.env.AYE_PORT ?? "3002")')"
+read_env() { env -i "$node_path" --env-file="$env_file" -e "console.log(process.env.$1 ?? \"$2\")"; }
+service_pid() { { launchctl print "$domain/$label" 2>/dev/null || true; } | sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\)$/\1/p' | head -n 1; }
+
+db="$(read_env AYE_DB "")"
+port="$(read_env AYE_PORT 3002)"
 [ -n "$db" ] || { echo "AYE_DB is not set in $env_file." >&2; exit 1; }
+
+own_pid="$(service_pid)"
+for pid in $(lsof -iTCP:"$port" -sTCP:LISTEN -t || true); do
+  if [ "$pid" != "$own_pid" ]; then
+    echo "Process $pid is already listening on port $port and it is not the $label service. Nothing was changed." >&2
+    exit 1
+  fi
+done
+
+previous="$(readlink "$home/current" || true)"
+sed -e "s#@NODE@#$node_path#g" -e "s#@HOME@#$HOME#g" "$source_repo/deploy/$label.plist" > "$plist.new"
+
+switched=0
+
+launchctl bootout "$domain/$label" 2>/dev/null || true
+trap '
+  if [ "$switched" = 0 ] && [ -f "$plist" ] && launchctl bootstrap "$domain" "$plist"; then
+    echo "The deploy failed before anything was switched. The previous release (${previous:-none}) is running again." >&2
+  else
+    echo "The service is stopped. Restart it with: launchctl bootstrap $domain \"$plist\" (previous release: ${previous:-none})" >&2
+  fi
+' ERR
 
 if [ -f "$db" ]; then
   sqlite3 "$db" ".backup \"$home/data/backups/links-$(date +%Y%m%d-%H%M%S).db\""
 fi
 
-previous="$(readlink "$home/current" || true)"
-sed -e "s#@NODE@#$node_path#g" -e "s#@HOME@#$HOME#g" "$source_repo/deploy/$label.plist" > "$plist.new"
-
-launchctl bootout "$domain/$label" 2>/dev/null || true
-trap 'echo "The service is stopped. Restart it with: launchctl bootstrap $domain \"$plist\" (previous release: ${previous:-none})" >&2' ERR
-
+switched=1
 mv -f "$plist.new" "$plist"
 ln -sfn "$release" "$home/current.new"
 mv -fh "$home/current.new" "$home/current"
@@ -63,14 +83,14 @@ launchctl bootstrap "$domain" "$plist"
 trap - ERR
 
 for _ in $(seq 30); do
-  status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$port/mcp" || true)"
-  if [ "$status" = "401" ]; then
+  pid="$(service_pid)"
+  if [ -n "$pid" ] && [ -n "$(lsof -a -p "$pid" -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)" ]; then
     echo "Deployed $sha."
     exit 0
   fi
   sleep 0.5
 done
 
-echo "Deployed $sha but it did not answer on 127.0.0.1:$port within 15 s. Previous release: ${previous:-none}." >&2
+echo "Deployed $sha but the service is not listening on 127.0.0.1:$port after 15 s. Previous release: ${previous:-none}." >&2
 echo "Roll back: ln -sfn \"${previous:-<previous release>}\" \"$home/current.new\" && mv -fh \"$home/current.new\" \"$home/current\"; launchctl bootout $domain/$label; launchctl bootstrap $domain \"$plist\"" >&2
 exit 1

@@ -2,7 +2,7 @@
 
 **Goal:** save links by talking to any AI, find them again from a vague memory, get nudged back to the ones that matter now, and see them on a calm, visual page. Full design: `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 
-**Current phase:** Phase 1 · Save & find (this is the exact milestone title)
+**Current phase:** Phase 1 · Save & find
 
 Tasks live in GitHub issues under each phase's milestone: https://github.com/Nostoi/aye-ai-ai-links/milestones
 

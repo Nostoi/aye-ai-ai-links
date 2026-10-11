@@ -22,6 +22,15 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Agent keys (#6).
+  - **Keys.** A key is `aak_` plus 32 random bytes. Only its SHA-256 digest is stored (migration 3, `agent_keys`), and each owner and agent has one live key.
+  - **Each request looks its key up again**, so a revoked key is refused from the next request that starts after the revocation.
+  - **Where the code lives.** Key storage is in `store/key-store.ts`, owner-scoped except for the lookup by hash. Generation, hashing and bearer parsing are in `auth/`.
+  - **Owner record.** Creating a key creates its owner. The default owner id is `owner`, and phase 3's login must link the logged-in user to it, or the existing links won't show (#11).
+  - **The CLI** (`npm run keys -- create|list|revoke`) runs from a `tsc` build in `dist/`. A failed build writes nothing.
+  - **Older builds lock out.** After migration 3, older builds refuse the database, so the server and the CLI are deployed from one build (#7).
+  - **MCP authorization.** Static keys depart from the MCP authorization spec's SHOULD for HTTP servers. Phase 3 decides whether agent keys become OAuth tokens or stay a separate path.
+
 - **2026-10-11:** MCP door (#5).
   - **`save_link` returns the owner's existing tags and active projects**, so agents reuse tags (owner). A project counts as active unless it is marked done.
   - **`save_link` has no `note` field (owner).** The agent turns what the owner said into a `stated` why, which changes spec §5.

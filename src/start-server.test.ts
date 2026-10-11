@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -140,6 +141,51 @@ describe("startServer", () => {
     await inFlight;
     await stopping;
     expect(rows()).toHaveLength(1);
+  });
+
+  it("closes a keep-alive connection as soon as its last response is sent", async () => {
+    const entered = gate();
+    const release = gate();
+    const { port, stop } = await start((deps) => {
+      const store = Object.create(deps.store);
+      store.insertIfAbsent = async (...args: Parameters<AppDeps["store"]["insertIfAbsent"]>) => {
+        entered.open();
+        await release.opened;
+        return deps.store.insertIfAbsent(...args);
+      };
+      return { ...deps, store };
+    });
+    const agent = new http.Agent({ keepAlive: true, keepAliveMsecs: 60_000 });
+    const status = new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          port,
+          host: "127.0.0.1",
+          method: "POST",
+          path: "/mcp",
+          agent,
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${key}`,
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify(SAVE));
+    });
+    await entered.opened;
+    const stopping = stop();
+    release.open();
+    expect(await status).toBe(200);
+    const sent = Date.now();
+    await stopping;
+    agent.destroy();
+    expect(Date.now() - sent).toBeLessThan(1000);
   });
 
   it("gives up on a request that outlasts the drain and still stops", async () => {

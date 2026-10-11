@@ -1,10 +1,12 @@
 import type { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../app.js";
 import { createAgentKey, keyIdentify, revokeAgentKey } from "../auth/agent-keys.js";
 import { createDeps } from "../deps.js";
 import { openDatabase } from "../store/database.js";
 import { SqliteKeyStore } from "../store/key-store.js";
-import { mcpApp } from "./http.js";
+
+const appFor = (options: Parameters<typeof createApp>[0]) => createApp(options).app;
 
 type Json = {
   result: {
@@ -51,7 +53,7 @@ describe("MCP door with real agent keys", () => {
       ownerName: "Alice",
       agent: "claude-code",
     });
-    app = mcpApp({ deps: createDeps(db), identify: keyIdentify(keys) });
+    app = appFor({ deps: createDeps(db), identify: keyIdentify(keys) });
   });
 
   const save = (key: string | null, extra: object = {}) =>

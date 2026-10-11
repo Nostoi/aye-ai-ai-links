@@ -22,6 +22,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Tailnet service (#7).
+  - **Shape.** A per-user LaunchAgent (`com.aye-links`) runs `dist/server.js` on `127.0.0.1:3002`, and `tailscale serve --https=8444` publishes it on the tailnet. It runs while the account is logged in; sleep settings are the owner's.
+  - **Deploys.** `deploy/deploy.sh <ref>` builds and tests each commit in `~/.aye-links/releases/<sha>`. Only on success does it stop the service, back up the database, switch the `~/.aye-links/current` symlink and bootstrap the plist again. A failed build leaves the running install untouched. The key CLI runs from `current`, so one build serves both.
+  - **Rate limit.** 120 requests a minute per identified caller (`owner/agent`); a request without a valid key is not limited and always gets 401. It runs inside the `/mcp` mount, after the Host and Origin checks and after the key check, so an exhausted bucket never hides a 403, and failed key guesses cannot use up an agent's allowance. Over the limit gets 429 with `Retry-After` and JSON-RPC code -32000. MCP 2026-07-28 `schema.ts` ("MCP error codes") leaves -32000 to -32019 to implementations and keeps -32002 reserved for resource not found. The SDK uses -32000 for its own HTTP rejections.
+  - **Shutdown.** On SIGTERM or SIGINT the server stops accepting connections, waits up to 10 s for in-flight requests, then closes the MCP handler and the database. The plist's `ExitTimeOut` is 20 s.
+  - **Unverified until the real-client check:** the `Origin` that Claude Code and Codex send, and whether both accept the stateless 2025 serving.
+
 - **2026-10-11:** Agent keys (#6).
   - **Keys.** A key is `aak_` plus 32 random bytes. Only its SHA-256 digest is stored (migration 3, `agent_keys`), and each owner and agent has one live key.
   - **Each request looks its key up again**, so a revoked key is refused from the next request that starts after the revocation.

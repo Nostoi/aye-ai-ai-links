@@ -32,7 +32,13 @@ function exec(argv: string[], vars: Record<string, string | undefined>) {
 
 describe("keys CLI", () => {
   it("refuses a missing AYE_DB and an in-memory one", () => {
-    for (const vars of [{}, { AYE_DB: "" }, { AYE_DB: ":memory:" }]) {
+    for (const vars of [
+      {},
+      { AYE_DB: "" },
+      { AYE_DB: ":memory:" },
+      { AYE_DB: "relative.db" },
+      { AYE_DB: "~/links.db" },
+    ]) {
       const r = exec(["list"], vars);
       expect(r.code).toBe(1);
       expect(r.err).toMatch(/AYE_DB/);

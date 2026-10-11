@@ -84,6 +84,9 @@ describe("MCP door with real agent keys", () => {
     expect(res.body.result.structuredContent.link.savedBy).toBe("codex");
     expect(await idsFor("mark")).toHaveLength(1);
     expect(await idsFor("alice")).toEqual([]);
+    const theirs = await save(aliceKey);
+    expect(theirs.body.result.structuredContent.link.savedBy).toBe("claude-code");
+    expect(await idsFor("alice")).toHaveLength(1);
   });
 
   it("ignores spoofed owner and savedBy arguments", async () => {

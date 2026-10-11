@@ -101,6 +101,13 @@ export async function updateLink(
   if (state !== undefined && !isState(state)) {
     throw invalid(`The state "${state}" is not valid. Use active or archived.`);
   }
+  if (
+    snoozedUntil !== undefined &&
+    snoozedUntil !== null &&
+    (!(snoozedUntil instanceof Date) || Number.isNaN(snoozedUntil.getTime()))
+  ) {
+    throw invalid("snoozedUntil is not a valid date. Pass a date, or null to clear the snooze.");
+  }
   checkSources(why, tags);
   const patch: LinkPatch = {};
   if (summary !== undefined) patch.summary = summary;

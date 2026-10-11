@@ -61,6 +61,18 @@ export const MIGRATIONS: string[] = [
   );
   `,
   searchIndex(),
+  `
+  CREATE TABLE agent_keys (
+    id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL,
+    revoked_at INTEGER
+  );
+
+  CREATE UNIQUE INDEX agent_keys_live_name ON agent_keys (owner_id, name) WHERE revoked_at IS NULL;
+  `,
 ];
 
 /**

@@ -17,7 +17,8 @@ const TIMESTAMP_SHAPE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]
 /** The written year-month-day must be a real calendar day; Date.parse would roll 02-30 to 03-02. */
 function isRealCalendarDay(s: string): boolean {
   const [y, m, d] = s.slice(0, 10).split("-").map(Number) as [number, number, number];
-  const day = new Date(Date.UTC(y, m - 1, d));
+  const day = new Date(0);
+  day.setUTCFullYear(y, m - 1, d);
   return day.getUTCFullYear() === y && day.getUTCMonth() === m - 1 && day.getUTCDate() === d;
 }
 

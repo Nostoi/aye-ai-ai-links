@@ -361,13 +361,13 @@ describe("MCP door over HTTP", () => {
     },
   );
 
-  it("accepts a real leap day", async () => {
-    const res = await call(app, "key-a", "search_links", {
-      query: "",
-      savedFrom: "2024-02-29T00:00:00Z",
-    });
-    expect(res.body.result.isError).toBeUndefined();
-  });
+  it.each(["2024-02-29T00:00:00Z", "0001-01-01T00:00:00Z", "0099-12-31T23:59:59Z"])(
+    "accepts the real date %s",
+    async (savedFrom) => {
+      const res = await call(app, "key-a", "search_links", { query: "", savedFrom });
+      expect(res.body.result.isError).toBeUndefined();
+    },
+  );
 
   it("logs an unexpected error but shows the agent nothing internal", async () => {
     const boom = new Error("secret-internal-detail");

@@ -13,11 +13,11 @@ The design of record is `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 **At the start of every session:**
 
 1. Read `ROADMAP.md`. It names the current phase and the decisions made since the spec.
-2. Run `gh api "repos/Nostoi/aye-ai-ai-links/milestones?state=all" --jq '.[] | "\(.title) | open \(.open_issues) | closed \(.closed_issues)"'` and find the line titled exactly as `ROADMAP.md`'s current phase. None: `ROADMAP.md` is wrong; fix it from this list.
+2. Run `gh api "repos/Nostoi/aye-ai-ai-links/milestones?state=all" --jq '.[] | "\(.number) | \(.title) | open \(.open_issues) | closed \(.closed_issues)"'` and find the line whose title is exactly `ROADMAP.md`'s current phase. None: `ROADMAP.md` is wrong; fix it from this list.
 3. Open 0, closed >0: phase done. Advance `ROADMAP.md`'s phase and phase table, add a dated decision-log entry, repeat from step 2. Open 0, closed 0: no tasks filed; split its headline into issues or ask the owner.
-4. Else run `gh issue list -R Nostoi/aye-ai-ai-links --milestone "<title>" --state open --json number,title,assignees` and work the owner-named issue, else the assigned one, else the lowest-numbered unblocked unassigned one and assign it (`gh issue edit <n> --add-assignee @me`). One session at a time unless the owner assigns parallel sessions their issues. If GitHub is unreachable, say so and work from `ROADMAP.md` alone.
+4. Else run `gh api "repos/Nostoi/aye-ai-ai-links/issues?milestone=<number>&state=open&sort=created&direction=asc" --jq '.[] | select(.pull_request == null) | "#\(.number) \(.title) | assignees: \([.assignees[].login] | join(","))"'` (`<number>` is that line's first field) and work the owner-named issue, else the assigned one, else the lowest-numbered unblocked unassigned one and assign it (`gh api -X POST repos/Nostoi/aye-ai-ai-links/issues/<n>/assignees -f 'assignees[]=Nostoi'`). One session at a time unless the owner assigns parallel sessions their issues. If GitHub is unreachable, say so and work from `ROADMAP.md` alone.
 
-**During the session**, keep the issue you're working on current: tick its checklist, comment on decisions and blockers.
+**During the session**, keep the issue you're working on current: tick its checklist, comment on decisions and blockers. Use only `gh api` (REST) for GitHub, never `gh issue` or `gh pr`: they use GraphQL, which cloud sessions block with a 403.
 
 **Before stopping:**
 

@@ -405,6 +405,11 @@ export function describeStoreContract(
         expect((await h.store.listTags(A)).map((t) => t.key)).toEqual(["alpha", "mid", "zeta"]);
       });
 
+      it("orders non-ASCII keys by code point", async () => {
+        await attach(A, 1, "😀", "ｆ");
+        expect((await h.store.listTags(A)).map((t) => t.key)).toEqual(["ｆ", "😀"]);
+      });
+
       it("never shows another owner's tags and is unchanged by their writes", async () => {
         await attach(A, 1, "Shared");
         const before = await h.store.listTags(A);

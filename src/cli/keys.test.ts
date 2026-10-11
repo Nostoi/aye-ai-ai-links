@@ -1,7 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { hashKey } from "../auth/agent-keys.js";
 import { run } from "./keys.js";
@@ -105,11 +106,22 @@ describe("keys CLI", () => {
       const dir = mkdtempSync(join(tmpdir(), "aye-link-"));
       dirs.push(dir);
       symlinkSync(join(root, "dist"), join(dir, "dist"));
-      const stdout = execFileSync("node", [join(dir, "dist/cli/keys.js"), "create", "codex"], {
+      const stdout = execFileSync("node", [join(dir, "dist/cli/keys-main.js"), "create", "codex"], {
         env: { ...process.env, AYE_DB: join(dir, "test.db") },
         encoding: "utf8",
       });
       expect(stdout).toMatch(/^aak_[A-Za-z0-9_-]+\n$/);
+    });
+
+    it("does nothing, without crashing, when imported by a process whose argv[1] is not a file", () => {
+      const target = pathToFileURL(join(root, "dist/cli/keys.js")).href;
+      const result = spawnSync("node", ["-"], {
+        input: `await import(${JSON.stringify(target)});`,
+        encoding: "utf8",
+      });
+      expect(result.stderr).not.toMatch(/ENOENT/);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("");
     });
   });
 });

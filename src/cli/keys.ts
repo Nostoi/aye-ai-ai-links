@@ -1,5 +1,3 @@
-import { realpathSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { createAgentKey, listAgentKeys, revokeAgentKey } from "../auth/agent-keys.js";
 import { openDatabase } from "../store/database.js";
 import { SqliteKeyStore } from "../store/key-store.js";
@@ -51,11 +49,4 @@ export function run(
     err(error instanceof Error ? error.message : String(error));
     return 1;
   }
-}
-
-if (
-  process.argv[1] &&
-  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
-) {
-  process.exitCode = run(process.argv.slice(2), process.env, console.log, console.error);
 }

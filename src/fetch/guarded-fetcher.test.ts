@@ -257,8 +257,6 @@ describe("URLs that must never be requested", () => {
     "http://2130706433:PORT/",
     "http://0x7f.1:PORT/",
     "http://[::ffff:127.0.0.1]:PORT/",
-    "http://[::127.0.0.1]:PORT/",
-    "http://0.0.0.0:PORT/",
     "http://evil.test:PORT/",
   ];
 
@@ -283,6 +281,8 @@ describe("URLs that must never be requested", () => {
     "http://172.16.0.1/",
     "http://[fd7a:115c:a1e0::53]/",
     "http://[fe80::1]/",
+    "http://[::127.0.0.1]/",
+    "http://0.0.0.0/",
   ])("refuses %s before any socket is opened", async (url) => {
     const connect = vi.spyOn(net.Socket.prototype, "connect").mockImplementation(() => {
       throw new Error("a socket was opened");

@@ -68,6 +68,16 @@ describe("decodeHtml", () => {
       expect(decodeHtml(page, "text/html")).toContain("\u20ac\u201c\u201d\u2013\u2122\u0081");
     });
 
+    it("decodes a 5 MB page quickly", () => {
+      const page = Buffer.alloc(5 * 1024 * 1024, 0x93);
+      const started = performance.now();
+      const text = decodeHtml(page, "text/html; charset=windows-1252");
+      const elapsed = performance.now() - started;
+      expect(text.length).toBe(page.length);
+      expect(text.startsWith("““")).toBe(true);
+      expect(elapsed).toBeLessThan(150);
+    });
+
     it("leaves bytes above 0x9F as in ISO-8859-1", () => {
       expect(decodeHtml(Buffer.from([0xe9, 0xff]), "text/html; charset=windows-1252")).toBe(
         "\u00e9\u00ff",

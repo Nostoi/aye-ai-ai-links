@@ -25,10 +25,12 @@ function utf8IfUtf16(decoder: TextDecoder | undefined): TextDecoder | undefined 
 const WINDOWS_1252_C1 = "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f" + "\u0090‘’“”•–—˜™š›œ\u009džŸ";
 
 function decodeWindows1252(bytes: Uint8Array): string {
-  return Array.from(Buffer.from(bytes).toString("latin1"), (ch) => {
-    const code = ch.charCodeAt(0);
-    return code >= 0x80 && code <= 0x9f ? (WINDOWS_1252_C1[code - 0x80] ?? ch) : ch;
-  }).join("");
+  const units = new Uint16Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i] as number;
+    units[i] = byte >= 0x80 && byte <= 0x9f ? WINDOWS_1252_C1.charCodeAt(byte - 0x80) : byte;
+  }
+  return Buffer.from(units.buffer).toString("utf16le");
 }
 
 /**

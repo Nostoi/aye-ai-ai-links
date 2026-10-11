@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+
 export type Env = Record<string, string | undefined>;
 
 const DEFAULT_PORT = 3002;
@@ -5,8 +7,8 @@ const DEFAULT_PORT = 3002;
 /** The database file shared by the server and the key CLI. An in-memory one would lose every key. */
 export function databasePath(env: Env): string {
   const path = env.AYE_DB;
-  if (!path || path === ":memory:") {
-    throw new Error("Set AYE_DB to the path of the database file (not :memory:).");
+  if (!path || !isAbsolute(path)) {
+    throw new Error("Set AYE_DB to the absolute path of the database file (not :memory:).");
   }
   return path;
 }

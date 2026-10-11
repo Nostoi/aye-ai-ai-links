@@ -2,9 +2,16 @@ import { describe, expect, it } from "vitest";
 import { databasePath, serverConfig } from "./config.js";
 
 describe("databasePath", () => {
-  it.each([{}, { AYE_DB: "" }, { AYE_DB: ":memory:" }])("refuses %j", (env) => {
+  it.each([
+    {},
+    { AYE_DB: "" },
+    { AYE_DB: ":memory:" },
+    { AYE_DB: "links.db" },
+    { AYE_DB: "./data/links.db" },
+    { AYE_DB: "~/links.db" },
+  ])("refuses %j", (env) => {
     expect(() => databasePath(env)).toThrow(
-      "Set AYE_DB to the path of the database file (not :memory:).",
+      "Set AYE_DB to the absolute path of the database file (not :memory:).",
     );
   });
 

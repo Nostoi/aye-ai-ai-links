@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en-GB"><head><meta charSet="utf-8"/><title>Node.js — Node.js 22 is now available!</title><meta name="description" content="Node.js® is a free, open-source, cross-platform JavaScript runtime environment that lets developers create servers, web apps, command line tools and scripts."/><meta property="og:title" content="Node.js — Node.js 22 is now available!"/><meta property="og:description" content="Node.js® is a free, open-source, cross-platform JavaScript runtime environment that lets developers create servers, web apps, command line tools and scripts."/><meta property="og:image" content="https://nodejs.org/en/next-data/og/announcements/Node.js%20%E2%80%94%20Node.js%2022%20is%20now%20available!"/></head><body><main id="main" tabindex="-1"><h1>Node.js 22 is now available!</h1><section><div class="index-module__mLkwoq__avatarGroup index-module__mLkwoq__medium"><span class="index-module__j-1Igq__avatar index-module__j-1Igq__medium cursor-pointer" data-state="closed"><a href="https://github.com/nodejs" target="_blank" class="index-module__j-1Igq__wrapper"><span class="index-module__j-1Igq__item index-module__j-1Igq__medium">TNJP</span></a></span></div><p>The Node.js Project</p></section><div class="index-module__pL4wLa__root index-module__pL4wLa__announcements"><div class="index-module__pL4wLa__container" aria-hidden="true">Node.js 22 is now available!</div></div><p>We&#x27;re excited to announce the release of Node.js 22!
+Highlights include require()ing ES modules, a WebSocket client, updates of the V8 JavaScript engine, and more!</p>
+<p>Node.js 22 will enter long-term support (LTS) in October, but until then, it will be the &quot;Current&quot; release for the next six months.
+We encourage you to explore the new features and benefits offered by this latest release and evaluate their potential impact on your applications.</p>
+<p>The project continues to make progress across a number of areas, with many new features and fixes flowing into existing LTS releases.
+For that reason, the changes outlined in the <a href="https://github.com/nodejs/node/releases/tag/v22.0.0">changelog</a> for Node.js 22 only represent a small subset of the features and
+work since the last major release. This blog post will add some additional context on the larger body of work in relation to those changes.</p>
+<p>You can read more about our release policy at <a href="https://github.com/nodejs/release">https://github.com/nodejs/release</a>.</p>
+<p>To download Node.js 22.0.0, visit: <a href="/en/download/current/">https://nodejs.org/download/current/</a>. You can find the release post at <a href="/en/blog/release/v22.0.0">https://nodejs.org/blog/release/v22.0.0</a>,
+which contains the full list of commits included in this release.</p>
+<h3 id="notable-changes"><a href="#notable-changes">Notable Changes</a></h3>
+<h4 id="v8-update-to-124"><a href="#v8-update-to-124">V8 Update to 12.4</a></h4>
+<p>The V8 release 12.4 includes new features like WebAssembly Garbage Collection, <a href="https://tc39.es/proposal-array-from-async/">Array.fromAsync</a>, <a href="https://tc39.es/proposal-set-methods/">Set methods</a> and <a href="https://tc39.es/proposal-iterator-helpers/">iterator helpers</a>.</p>
+<p>Contributed by Michaël Zasso in <a href="https://github.com/nodejs/node/pull/52465">#52465</a></p>
+<h4 id="maglev"><a href="#maglev">Maglev</a></h4>
+<p>V8&#x27;s Maglev Compiler is now enabled by default on supported architectures (<a href="https://v8.dev/blog/maglev">https://v8.dev/blog/maglev</a>).
+Maglev improves performance for short-lived CLI programs.</p>
+<p>Contributed by Keyhan Vakil in <a href="https://github.com/nodejs/node/pull/51360">#51360</a></p>
+<h4 id="support-requireing-synchronous-esm-graphs"><a href="#support-requireing-synchronous-esm-graphs">Support require()ing synchronous ESM graphs</a></h4>
+<p>This release adds <code>require()</code> support for synchronous ESM graphs under
+the flag <code>--experimental-require-module</code>.</p>
+<p>If <code>--experimental-require-module</code> is enabled, and the ECMAScript
+module being loaded by <code>require()</code> meets the following requirements:</p></main></body></html>

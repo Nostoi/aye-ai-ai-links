@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { saveLink, updateLink } from "../core/links.js";
 import { describeStoreContract, type StoreHarness } from "../core/store-contract.js";
 import type { NewLink, Tag } from "../core/types.js";
@@ -71,6 +71,21 @@ function setup(path = ":memory:") {
   const h = harnessFor(db);
   return { db, h, deps: { store: h.store, now: () => NOW } };
 }
+
+const baseLink = (): NewLink => ({
+  url: "https://ex.com/a",
+  urlKey: "ex.com/a",
+  title: null,
+  summary: null,
+  why: null,
+  tags: [{ key: "t", name: "t", source: "stated" }],
+  savedAt: NOW,
+  savedBy: "x",
+  lastOpenedAt: null,
+  lastSurfacedAt: null,
+  snoozedUntil: null,
+  state: "active",
+});
 
 function tempDb(): string {
   const dir = mkdtempSync(join(tmpdir(), "links-store-"));
@@ -156,27 +171,58 @@ describe("SqliteStore constraints", () => {
     expect(setup().db.pragma("foreign_keys", { simple: true })).toBe(1);
   });
 
+  it("turns foreign keys on itself, not by relying on the build default", () => {
+    const proto = Database.prototype;
+    const pragma = proto.pragma;
+    const transaction = proto.transaction;
+    const seen = new WeakSet<Db>();
+    const defaultOff = (db: Db) => {
+      if (seen.has(db)) return;
+      seen.add(db);
+      pragma.call(db, "foreign_keys = OFF");
+    };
+    const spies = [
+      vi.spyOn(proto, "pragma").mockImplementation(function (this: Db, ...a: [string]) {
+        defaultOff(this);
+        return pragma.apply(this, a);
+      }),
+      vi.spyOn(proto, "transaction").mockImplementation(function (
+        this: Db,
+        fn: (...a: unknown[]) => unknown,
+      ) {
+        defaultOff(this);
+        return transaction.call(this, fn);
+      }),
+    ];
+    try {
+      expect(setup().db.pragma("foreign_keys", { simple: true })).toBe(1);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+
   it("refuses an unknown owner and writes nothing", async () => {
     const { db, h } = setup();
-    const link: NewLink = {
-      url: "https://ex.com/a",
-      urlKey: "ex.com/a",
-      title: null,
-      summary: null,
-      why: null,
-      tags: [{ key: "t", name: "t", source: "stated" }],
-      savedAt: NOW,
-      savedBy: "x",
-      lastOpenedAt: null,
-      lastSurfacedAt: null,
-      snoozedUntil: null,
-      state: "active",
-    };
+    const link = baseLink();
     const err = await rejection(h.store.insertIfAbsent("ghost", link));
     expect(err.code).toBe("unknown_owner");
     for (const table of ["links", "tags", "link_tags"]) {
       expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()).toEqual({ n: 0 });
     }
+  });
+
+  it("rethrows other database errors unchanged and writes nothing", async () => {
+    const { db, h } = setup();
+    await h.addOwner("a");
+    const link = { ...baseLink(), savedBy: null as unknown as string };
+    const err = await rejection(h.store.insertIfAbsent("a", link));
+    expect(err.code).not.toBe("unknown_owner");
+    expect(err.message).toMatch(/NOT NULL/);
+    const bad = await rejection(
+      h.store.insertIfAbsent("a", { ...baseLink(), savedAt: new Date(NaN) }),
+    );
+    expect(bad).toBeInstanceOf(RangeError);
+    expect(db.prepare("SELECT count(*) AS n FROM links").get()).toEqual({ n: 0 });
   });
 
   describe("link_tags", () => {

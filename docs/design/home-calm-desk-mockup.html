@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Home screen v2</title>
+<style>
+  :root{--bg:#F6F4EF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--card:#FFFFFF;
+        --teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--amber:#E8A33D}
+  *{box-sizing:border-box}
+  body{margin:0;background:#E9E6DF;font-family:ui-rounded,"SF Pro Rounded",system-ui,sans-serif;color:var(--ink)}
+  .intro{max-width:980px;margin:32px auto 8px;padding:0 24px}
+  .intro h1{font-size:26px;margin:0 0 6px}
+  .intro p{color:var(--soft);font-size:15px;line-height:1.5;margin:4px 0}
+  .principles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0 6px}
+  .pr{background:#fff;border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.45}
+  .pr b{display:block;font-size:14.5px;margin-bottom:3px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0 0;font-size:13px;color:var(--soft)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+
+  .choice{max-width:980px;margin:28px auto;padding:0 24px;cursor:pointer}
+  .choice-head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .choice-head .L{font-weight:800;font-size:20px;background:var(--ink);color:#fff;border-radius:10px;padding:2px 11px}
+  .choice-head h2{margin:0;font-size:20px}
+  .choice-head p{margin:0;color:var(--soft);font-size:14px}
+  .choice.selected .screen{outline:4px solid var(--blue);outline-offset:4px}
+
+  .screen{background:var(--bg);border-radius:22px;padding:56px 64px 64px;box-shadow:0 10px 40px #0001}
+  .ask{font-size:30px;font-weight:700;letter-spacing:-.3px;margin:0 0 18px;text-align:center}
+  .search{max-width:620px;margin:0 auto 10px;background:#fff;border-radius:999px;padding:18px 26px;font-size:17px;color:#9A968F;box-shadow:0 2px 10px #0000000d;display:flex;justify-content:space-between}
+  .search kbd{font-family:inherit;font-size:13px;background:var(--bg);border-radius:6px;padding:2px 8px;color:var(--soft)}
+  .hint{text-align:center;color:#A8A39B;font-size:13.5px;margin-bottom:56px}
+  .label{font-size:12.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--soft);font-weight:700;margin:0 0 16px}
+
+  /* A — Calm desk */
+  .now{display:grid;grid-template-columns:1.6fr 1fr;gap:22px;margin-bottom:64px}
+  .hero{background:var(--card);border-radius:20px;overflow:hidden;box-shadow:0 4px 18px #0000000f;border-top:6px solid var(--teal)}
+  .hero img{width:100%;height:220px;object-fit:cover;display:block}
+  .hero .b{padding:22px 26px 24px}
+  .reason{display:inline-flex;gap:6px;align-items:center;background:#FFF3DC;color:#8A5A0B;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;margin-bottom:12px}
+  .hero h3{font-size:22px;margin:0 0 8px;line-height:1.25}
+  .hero .why{font-size:15.5px;color:var(--soft);line-height:1.5;margin:0 0 18px}
+  .acts{display:flex;gap:10px}
+  .act{border-radius:999px;padding:9px 18px;font-size:14px;font-weight:600;border:1.5px solid var(--line);background:#fff}
+  .act.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .side{display:flex;flex-direction:column;gap:22px}
+  .smallc{background:var(--card);border-radius:18px;overflow:hidden;display:flex;box-shadow:0 2px 10px #0000000b}
+  .smallc img{width:110px;object-fit:cover}
+  .smallc .b{padding:16px 18px}
+  .smallc h4{margin:0 0 6px;font-size:15.5px;line-height:1.3}
+  .smallc p{margin:0;font-size:13.5px;color:var(--soft);line-height:1.4}
+  .needs{border-left:6px solid var(--amber)}
+  .spaces{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+  .space{background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 2px 10px #0000000b}
+  .mosaic{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;height:120px;gap:2px}
+  .mosaic img{width:100%;height:100%;object-fit:cover;display:block}
+  .mosaic img:first-child{grid-row:span 2}
+  .space .b{padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+  .space .n{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+  .space .c{color:var(--soft);font-size:13px}
+
+  /* B — Spaces first */
+  .bigspaces{display:grid;grid-template-columns:repeat(2,1fr);gap:28px;margin-bottom:56px}
+  .bs{background:var(--card);border-radius:24px;overflow:hidden;box-shadow:0 4px 18px #0000000f}
+  .bs .cover{height:170px;position:relative}
+  .bs .cover img{width:100%;height:100%;object-fit:cover;display:block}
+  .bs .tint{position:absolute;inset:0;mix-blend-mode:multiply;opacity:.35}
+  .bs .b{padding:20px 24px 22px}
+  .bs h3{margin:0 0 6px;font-size:21px;display:flex;align-items:center;gap:10px}
+  .bs .meta{color:var(--soft);font-size:14px;margin-bottom:12px}
+  .bs .nudge{font-size:14px;background:#FFF3DC;color:#8A5A0B;border-radius:12px;padding:8px 12px;font-weight:600}
+  .bs .quiet{font-size:14px;color:#A8A39B}
+  .gentle{max-width:620px;margin:0 auto;text-align:center;background:#fff;border-radius:18px;padding:18px 24px;font-size:15px;line-height:1.5;box-shadow:0 2px 10px #0000000b}
+  .gentle b{color:var(--teal)}
+  .dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+</style></head>
+<body>
+
+<div class="intro">
+  <h1>Take two — built from ADHD-friendly design rules</h1>
+  <p>Before the screens, here are the rules I used. Tell me if any of these are wrong for <i>you</i> — they matter more than any one layout.</p>
+  <div class="principles">
+    <div class="pr"><b>1 · Room to breathe</b>Lots of empty space, big text, few things per screen. Space is what lets your eye rest and land.</div>
+    <div class="pr"><b>2 · Size = importance</b>The one thing worth your attention is the biggest thing. Everything else gets visibly smaller and quieter.</div>
+    <div class="pr"><b>3 · Color means one thing each</b>Each <i>space</i> (pinned tag/project) owns a color everywhere. <b style="display:inline;color:#8A5A0B">Amber only ever means "this needs you."</b> Everything else stays neutral.</div>
+    <div class="pr"><b>4 · Pictures to jog memory</b>Real page images, big. You often remember "the one with the red chart," not the title.</div>
+    <div class="pr"><b>5 · Ask, don't make you dig</b>The page opens on a question in plain words. Search understands vague memories.</div>
+    <div class="pr"><b>6 · No guilt counters</b>No "214 unread." Small, finishable nudges: one link, three buttons, done.</div>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--teal)"></i>Home batteries</span>
+    <span><i class="sw" style="background:var(--clay)"></i>Kitchen remodel</span>
+    <span><i class="sw" style="background:var(--violet)"></i>ADHD</span>
+    <span><i class="sw" style="background:var(--blue)"></i>TypeScript</span>
+    <span><i class="sw" style="background:var(--amber)"></i>Needs you</span>
+  </div>
+</div>
+
+<!-- A -->
+<div class="choice" data-choice="a" onclick="toggleSelect(this)">
+  <div class="choice-head"><span class="L">A</span><h2>Calm desk</h2><p>Question → one thing worth revisiting → your spaces. Scroll for more.</p></div>
+  <div class="screen">
+    <p class="ask">What are you trying to remember?</p>
+    <div class="search">That article about batteries and the tax credit… <kbd>/</kbd></div>
+    <p class="hint">Describe it however you remember it — when, why, what it looked like.</p>
+
+    <p class="label">Worth a look today</p>
+    <div class="now">
+      <div class="hero">
+        <img src="https://picsum.photos/seed/aye-battery/800/440" alt="">
+        <div class="b">
+          <span class="reason">● You logged “home batteries” as your focus yesterday</span>
+          <h3>Powerwall vs. Enphase — the full comparison</h3>
+          <p class="why">You saved this on <b>March 12</b> “to compare before the installer quote.” It's been waiting 7 months.</p>
+          <div class="acts"><span class="act primary">Open it</span><span class="act">Not now</span><span class="act">I'm done with it</span></div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="smallc needs"><img src="https://picsum.photos/seed/aye-kitchen/220/220" alt=""><div class="b"><h4>Quartz vs. butcher block</h4><p>Why did you save this? <b style="color:#8A5A0B">Tap to tell me</b></p></div></div>
+        <div class="smallc" style="border-left:6px solid var(--violet)"><img src="https://picsum.photos/seed/aye-focus/220/220" alt=""><div class="b"><h4>Body doubling, explained</h4><p>Saved Feb 3 · “try for deep work”</p></div></div>
+      </div>
+    </div>
+
+    <p class="label">Your spaces</p>
+    <div class="spaces">
+      <div class="space"><div class="mosaic"><img src="https://picsum.photos/seed/aye-b1/300/240"><img src="https://picsum.photos/seed/aye-b2/150/120"><img src="https://picsum.photos/seed/aye-b3/150/120"></div><div class="b"><span class="n"><i class="dot" style="background:var(--teal)"></i>Home batteries</span><span class="c">12</span></div></div>
+      <div class="space"><div class="mosaic"><img src="https://picsum.photos/seed/aye-k1/300/240"><img src="https://picsum.photos/seed/aye-k2/150/120"><img src="https://picsum.photos/seed/aye-k3/150/120"></div><div class="b"><span class="n"><i class="dot" style="background:var(--clay)"></i>Kitchen</span><span class="c">8</span></div></div>
+      <div class="space"><div class="mosaic"><img src="https://picsum.photos/seed/aye-a1/300/240"><img src="https://picsum.photos/seed/aye-a2/150/120"><img src="https://picsum.photos/seed/aye-a3/150/120"></div><div class="b"><span class="n"><i class="dot" style="background:var(--violet)"></i>ADHD</span><span class="c">21</span></div></div>
+      <div class="space"><div class="mosaic"><img src="https://picsum.photos/seed/aye-t1/300/240"><img src="https://picsum.photos/seed/aye-t2/150/120"><img src="https://picsum.photos/seed/aye-t3/150/120"></div><div class="b"><span class="n"><i class="dot" style="background:var(--blue)"></i>TypeScript</span><span class="c">17</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- B -->
+<div class="choice" data-choice="b" onclick="toggleSelect(this)">
+  <div class="choice-head"><span class="L">B</span><h2>Spaces first</h2><p>Your projects as big picture tiles — you go to a place, like rooms in a house.</p></div>
+  <div class="screen">
+    <p class="ask">What are you trying to remember?</p>
+    <div class="search">Search, or just describe it… <kbd>/</kbd></div>
+    <p class="hint">&nbsp;</p>
+
+    <div class="bigspaces">
+      <div class="bs"><div class="cover"><img src="https://picsum.photos/seed/aye-b1/700/340"><div class="tint" style="background:var(--teal)"></div></div>
+        <div class="b"><h3><i class="dot" style="background:var(--teal)"></i>Home batteries</h3><div class="meta">12 links · active project · last saved 2 days ago</div><div class="nudge">● 1 link from March fits what you're doing now</div></div></div>
+      <div class="bs"><div class="cover"><img src="https://picsum.photos/seed/aye-k1/700/340"><div class="tint" style="background:var(--clay)"></div></div>
+        <div class="b"><h3><i class="dot" style="background:var(--clay)"></i>Kitchen remodel</h3><div class="meta">8 links · active project</div><div class="nudge">● 1 link is missing its “why”</div></div></div>
+      <div class="bs"><div class="cover"><img src="https://picsum.photos/seed/aye-a1/700/340"><div class="tint" style="background:var(--violet)"></div></div>
+        <div class="b"><h3><i class="dot" style="background:var(--violet)"></i>ADHD</h3><div class="meta">21 links · topic</div><div class="quiet">All caught up</div></div></div>
+      <div class="bs"><div class="cover"><img src="https://picsum.photos/seed/aye-t1/700/340"><div class="tint" style="background:var(--blue)"></div></div>
+        <div class="b"><h3><i class="dot" style="background:var(--blue)"></i>TypeScript</h3><div class="meta">17 links · topic</div><div class="quiet">All caught up</div></div></div>
+    </div>
+
+    <div class="gentle">Everything else lives in <b>All links</b>, newest first, with pictures. Nothing gets lost — it's just not shouting at you.</div>
+  </div>
+</div>
+
+<div class="intro" style="margin-bottom:60px"><p>Photos are random placeholders — the real app shows each page's own image. Dark mode would come too.</p></div>
+</body></html>

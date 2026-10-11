@@ -52,6 +52,7 @@ describe("createApp rate limiting", () => {
     const third = await t.send("key-a");
     expect(third.status).toBe(429);
     expect(third.headers.get("retry-after")).toBe("60");
+    expect(((await third.json()) as { error: { code: number } }).error.code).toBe(-32000);
   });
 
   it("still answers a foreign Origin with 403 once the bucket is used up", async () => {
@@ -62,20 +63,22 @@ describe("createApp rate limiting", () => {
   });
 
   it("still answers a foreign Host with 403 once the bucket is used up", async () => {
-    await t.send(null);
-    await t.send(null);
-    expect((await t.send(null)).status).toBe(429);
+    await t.send("key-a");
+    await t.send("key-a");
+    expect((await t.send("key-a")).status).toBe(429);
     expect((await t.send("key-a", { host: "evil.example" })).status).toBe(403);
   });
 
-  it("keeps anonymous requests from using up a keyed caller's allowance", async () => {
-    for (let i = 0; i < 5; i++) await t.send("not-a-key");
-    expect((await t.send("not-a-key")).status).toBe(429);
-    expect((await t.send("key-a")).status).toBe(200);
+  it("answers a request without a valid key with 401 however many arrive", async () => {
+    for (let i = 0; i < 5; i++) expect((await t.send("not-a-key")).status).toBe(401);
+    expect((await t.send(null)).status).toBe(401);
   });
 
-  it("answers an anonymous request under the limit with 401", async () => {
-    expect((await t.send("not-a-key")).status).toBe(401);
+  it("keeps requests without a valid key from using up a keyed caller's allowance", async () => {
+    for (let i = 0; i < 5; i++) await t.send("not-a-key");
+    expect((await t.send("key-a")).status).toBe(200);
+    expect((await t.send("key-a")).status).toBe(200);
+    expect((await t.send("key-a")).status).toBe(429);
   });
 
   it("counts one agent's requests apart from another's", async () => {

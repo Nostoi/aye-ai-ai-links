@@ -58,7 +58,7 @@ for pid in $(lsof -iTCP:"$port" -sTCP:LISTEN -t || true); do
 done
 
 previous="$(readlink "$home/current" || true)"
-sed -e "s#@NODE@#$node_path#g" -e "s#@HOME@#$HOME#g" "$source_repo/deploy/$label.plist" > "$plist.new"
+sed -e "s#@NODE@#$node_path#g" -e "s#@HOME@#$HOME#g" "$release/deploy/$label.plist" > "$plist.new"
 
 switched=0
 

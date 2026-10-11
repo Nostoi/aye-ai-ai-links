@@ -13,15 +13,6 @@ function callerFrom(authInfo: { clientId: string; extra?: Record<string, unknown
   return { owner, savedBy: authInfo?.clientId ?? "" } satisfies Caller;
 }
 
-/** Every request `identify` rejects shares this bucket, so guessing keys cannot use up an agent's allowance. */
-const ANONYMOUS = "anonymous";
-
-/**
- * The MCP door, served at `/` so a parent mounts it with `route("/mcp", ...)`. Order: Host and
- * Origin checks, `identify`, the rate limit (per caller, or the anonymous bucket), then the
- * handler. A request `identify` rejects gets 401 and never reaches the MCP handler, which
- * verifies nothing itself: it trusts the authInfo given here. `close` stops the handler.
- */
 export function mcpApp({
   deps,
   identify,
@@ -40,18 +31,6 @@ export function mcpApp({
 
   app.all("/", async (c) => {
     const caller = await identify(c.req.raw);
-    const verdict = limiter(caller ? `${caller.owner}/${caller.savedBy}` : ANONYMOUS);
-    if (!verdict.allowed) {
-      return c.json(
-        {
-          jsonrpc: "2.0",
-          error: { code: -32002, message: "Too many requests. Slow down and retry." },
-          id: null,
-        },
-        429,
-        { "Retry-After": String(verdict.retryAfterSeconds) },
-      );
-    }
     if (!caller) {
       return c.json(
         {
@@ -61,6 +40,18 @@ export function mcpApp({
         },
         401,
         { "WWW-Authenticate": "Bearer" },
+      );
+    }
+    const verdict = limiter(`${caller.owner}/${caller.savedBy}`);
+    if (!verdict.allowed) {
+      return c.json(
+        {
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Too many requests. Slow down and retry." },
+          id: null,
+        },
+        429,
+        { "Retry-After": String(verdict.retryAfterSeconds) },
       );
     }
     return handler.fetch(c.req.raw, {

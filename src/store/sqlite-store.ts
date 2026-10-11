@@ -171,7 +171,7 @@ export class SqliteStore implements LinkStore {
 
   private attachTags(owner: OwnerId, linkId: number, tags: LinkTag[]): void {
     const create = this.db.prepare(
-      `INSERT INTO tags (owner_id, key, name, kind, pinned) VALUES (?, ?, ?, 'topic', 0)
+      `INSERT INTO tags (owner_id, key, name, kind, pinned) VALUES (?, ?, ?, ?, 0)
        ON CONFLICT (owner_id, key) DO NOTHING`,
     );
     const attach = this.db.prepare(
@@ -179,7 +179,7 @@ export class SqliteStore implements LinkStore {
        SELECT ?, ?, id, ?, ? FROM tags WHERE owner_id = ? AND key = ?`,
     );
     tags.forEach((t, position) => {
-      create.run(owner, t.key, t.name);
+      create.run(owner, t.key, t.name, t.kind);
       attach.run(owner, linkId, t.source, position, owner, t.key);
     });
   }
@@ -197,7 +197,7 @@ export class SqliteStore implements LinkStore {
     if (!row) return null;
     const tags = this.db
       .prepare(
-        `SELECT t.key AS key, t.name AS name, lt.source AS source
+        `SELECT t.key AS key, t.name AS name, lt.source AS source, t.kind AS kind
          FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id
          WHERE lt.link_id = ? AND lt.owner_id = ? ORDER BY lt.position`,
       )

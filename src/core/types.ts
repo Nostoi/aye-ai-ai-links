@@ -1,12 +1,14 @@
 export const SOURCES = ["stated", "asked", "inferred"] as const;
 export type Source = (typeof SOURCES)[number];
+export const TAG_KINDS = ["topic", "project"] as const;
+export type TagKind = (typeof TAG_KINDS)[number];
 export const STATES = ["active", "archived"] as const;
 export type LinkState = (typeof STATES)[number];
 export type Labelled = { text: string; source: Source };
 export type OwnerId = string;
 
 /** key is the identity (lower-cased name); name is for display. */
-export type LinkTag = { key: string; name: string; source: Source };
+export type LinkTag = { key: string; name: string; source: Source; kind: TagKind };
 
 export type Link = {
   id: string;
@@ -27,7 +29,7 @@ export type Link = {
 export type Tag = {
   key: string;
   name: string;
-  kind: "topic" | "project";
+  kind: TagKind;
   color: string | null;
   pinned: boolean;
   description: string | null;

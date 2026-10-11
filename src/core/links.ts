@@ -10,12 +10,14 @@ import {
   SOURCES,
   type Source,
   STATES,
+  TAG_KINDS,
+  type TagKind,
 } from "./types.js";
 import { urlKey } from "./url-key.js";
 
 export type Deps = { store: LinkStore; now: () => Date };
 
-type TagInput = { name: string; source: Source }[];
+type TagInput = { name: string; source: Source; kind?: TagKind }[];
 
 export type SaveLinkInput = {
   url: string;
@@ -32,6 +34,7 @@ export type UpdateLinkInput = Omit<LinkPatch, "tags" | "lastOpenedAt"> & {
 };
 
 const isSource = (s: string): s is Source => (SOURCES as readonly string[]).includes(s);
+const isKind = (k: string): k is TagKind => (TAG_KINDS as readonly string[]).includes(k);
 const isState = (s: string): s is LinkState => (STATES as readonly string[]).includes(s);
 
 function invalid(message: string): CoreError {
@@ -47,6 +50,9 @@ function checkSources(why: Labelled | null | undefined, tags: TagInput | undefin
       throw invalid(
         `The source "${t.source}" on tag "${t.name}" is not valid. Use stated, asked or inferred.`,
       );
+    }
+    if (t.kind !== undefined && !isKind(t.kind)) {
+      throw invalid(`The kind "${t.kind}" on tag "${t.name}" is not valid. Use topic or project.`);
     }
   }
 }

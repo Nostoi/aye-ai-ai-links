@@ -1,7 +1,9 @@
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
+import { filingContext } from "../core/filing-context.js";
 import { saveLink, updateLink } from "../core/links.js";
 import type { SearchFilters } from "../core/search.js";
+import { searchLinks } from "../core/search-links.js";
 import { openDatabase } from "../store/database.js";
 import { MIGRATIONS, migrate } from "../store/migrations.js";
 import { SqliteStore } from "../store/sqlite-store.js";
@@ -147,6 +149,21 @@ describe("FtsSearch filters", () => {
     expect(await s.find("quokka", { projectKey: "alpha" })).toEqual([]);
     expect(await s.find("", { projectKey: "alpha" })).toEqual([]);
     expect(await s.find("quokka", { tagKey: "alpha" })).toEqual([topicLink]);
+  });
+
+  it("finds a link by a project an agent created while saving, and lists it as active", async () => {
+    const s = setup();
+    const { link } = await saveLink(s.deps, "a", {
+      url: "https://ex.com/p",
+      savedBy: "t",
+      tags: [{ name: "Home Batteries", source: "stated", kind: "project" }],
+    });
+    await s.save("a", { title: "other", tags: ["home batteries topic"] });
+    const deps = { store: s.deps.store, search: s.search };
+    const found = await searchLinks(deps, "a", { query: "", project: "home batteries" });
+    expect(found.map((l) => l.id)).toEqual([link.id]);
+    const ctx = await filingContext(s.deps, "a");
+    expect(ctx.activeProjects.map((t) => t.key)).toEqual(["home batteries"]);
   });
 
   it("treats date bounds as inclusive instants", async () => {

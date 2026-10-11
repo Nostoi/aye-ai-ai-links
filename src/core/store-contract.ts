@@ -182,7 +182,14 @@ export function describeStoreContract(
           tags: [{ name: "t", source: bogus }],
         });
         expect(await code(badTag)).toBe("invalid_input");
+        const badKind = saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [{ name: "t", source: "stated", kind: bogus }],
+        });
+        expect(await code(badKind)).toBe("invalid_input");
         expect(await h.all(A)).toHaveLength(0);
+        expect(await h.catalog(A)).toEqual([]);
       });
 
       it("updateLink rejects a bad state, why source or tag source and changes nothing", async () => {
@@ -192,11 +199,13 @@ export function describeStoreContract(
           { state: bogus },
           { why: { text: "w", source: bogus } },
           { tags: [{ name: "t", source: bogus }] },
+          { tags: [{ name: "t", source: "stated" as const, kind: bogus }] },
         ];
         for (const patch of patches) {
           expect(await code(updateLink(deps(), A, link.id, patch))).toBe("invalid_input");
         }
         expect(await h.all(A)).toEqual(before);
+        expect(await h.catalog(A)).toEqual([]);
       });
 
       it("updateLink ignores keys outside the allowed update fields", async () => {
@@ -253,7 +262,9 @@ export function describeStoreContract(
           tags: [{ name: "sleep", source: "asked" }],
         });
         expect(one.link.tags[0]?.name).toBe("Sleep");
-        expect(two.link.tags).toEqual([{ key: "sleep", name: "Sleep", source: "asked" }]);
+        expect(two.link.tags).toEqual([
+          { key: "sleep", name: "Sleep", source: "asked", kind: "topic" },
+        ]);
         expect((await getLink(deps(), A, two.link.id)).tags[0]?.name).toBe("Sleep");
         expect((await h.all(A))[1]?.tags[0]?.name).toBe("Sleep");
         expect((await h.catalog(A)).map((t) => t.name)).toEqual(["Sleep"]);
@@ -275,6 +286,56 @@ export function describeStoreContract(
         expect((await h.catalog(A)).map((t) => t.key)).toEqual(["x"]);
       });
 
+      it("creates a new tag with the requested kind, and topic by default", async () => {
+        const { link } = await saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [
+            { name: "Home Batteries", source: "stated", kind: "project" },
+            { name: "solar", source: "stated", kind: "topic" },
+            { name: "wind", source: "stated" },
+          ],
+        });
+        const kinds = (tags: { key: string; kind: string }[]) => tags.map((t) => [t.key, t.kind]);
+        const expected = [
+          ["home batteries", "project"],
+          ["solar", "topic"],
+          ["wind", "topic"],
+        ];
+        expect(kinds(link.tags)).toEqual(expected);
+        expect(kinds(await h.store.listTags(A))).toEqual([...expected].sort());
+      });
+
+      it("update creates new tags with their requested kind too", async () => {
+        const { link } = await saveLink(deps(), A, { url, savedBy: "agent" });
+        const updated = await updateLink(deps(), A, link.id, {
+          tags: [{ name: "Kitchen", source: "asked", kind: "project" }],
+        });
+        expect(updated.tags.map((t) => t.kind)).toEqual(["project"]);
+        expect((await h.store.listTags(A)).map((t) => t.kind)).toEqual(["project"]);
+      });
+
+      it("attaching an existing tag with another kind changes neither catalog nor LinkTag", async () => {
+        await saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [{ name: "Sleep", source: "stated" }],
+        });
+        const second = await saveLink(deps(), A, {
+          url: "https://ex.com/b",
+          savedBy: "agent",
+          tags: [{ name: "sleep", source: "stated", kind: "project" }],
+        });
+        expect(second.link.tags.map((t) => t.kind)).toEqual(["topic"]);
+        expect((await h.store.listTags(A)).map((t) => t.kind)).toEqual(["topic"]);
+        const { link } = await saveLink(deps(), A, { url: "https://ex.com/c", savedBy: "agent" });
+        const updated = await updateLink(deps(), A, link.id, {
+          tags: [{ name: "SLEEP", source: "stated", kind: "project" }],
+        });
+        expect(updated.tags.map((t) => t.kind)).toEqual(["topic"]);
+        expect((await h.store.listTags(A)).map((t) => t.kind)).toEqual(["topic"]);
+      });
+
       it("re-tagging via update keeps an existing tag's metadata and catalog name", async () => {
         await h.seedTag(A, projectTag);
         const { link } = await saveLink(deps(), A, { url, savedBy: "agent" });
@@ -285,8 +346,8 @@ export function describeStoreContract(
           ],
         });
         expect(updated.tags).toEqual([
-          { key: "sleep", name: "Sleep", source: "inferred" },
-          { key: "fresh", name: "fresh", source: "stated" },
+          { key: "sleep", name: "Sleep", source: "inferred", kind: "project" },
+          { key: "fresh", name: "fresh", source: "stated", kind: "topic" },
         ]);
         expect(await h.catalog(A)).toEqual([
           projectTag,
@@ -345,7 +406,9 @@ export function describeStoreContract(
           savedBy: "agent",
           tags: tag("sleep"),
         });
-        expect(link.tags).toEqual([{ key: "sleep", name: "sleep", source: "stated" }]);
+        expect(link.tags).toEqual([
+          { key: "sleep", name: "sleep", source: "stated", kind: "topic" },
+        ]);
         expect(await h.catalog(B)).toEqual([
           {
             key: "sleep",
@@ -431,7 +494,9 @@ export function describeStoreContract(
       const patch = {
         summary: "changed",
         state: "archived" as const,
-        tags: [{ key: "newtag", name: "NewTag", source: "stated" as const }],
+        tags: [
+          { key: "newtag", name: "NewTag", source: "stated" as const, kind: "topic" as const },
+        ],
       };
       const why: Labelled = { text: "filled", source: "stated" };
       const calls = {
@@ -483,7 +548,9 @@ export function describeStoreContract(
         const updated = await updateLink(deps(), A, link.id, {
           tags: [{ name: " New  Tag ", source: "inferred" }],
         });
-        expect(updated.tags).toEqual([{ key: "new tag", name: "New Tag", source: "inferred" }]);
+        expect(updated.tags).toEqual([
+          { key: "new tag", name: "New Tag", source: "inferred", kind: "topic" },
+        ]);
         expect((await h.all(A))[0]?.tags).toEqual(updated.tags);
       });
 

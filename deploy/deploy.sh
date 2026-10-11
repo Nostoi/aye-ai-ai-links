@@ -58,44 +58,46 @@ stop_and_wait() {
   return 1
 }
 
-switch_to() { ln -sfn "$1" "$home/current.new" && mv -fh "$home/current.new" "$home/current"; }
+point_to() { ln -sfn "$2" "$1.new" && mv -fh "$1.new" "$1"; }
 
-# Keeps what current and known-good point to, the 10 newest backups, and every failed-* file.
 prune() {
-  local keep_current keep_good r backups
+  local keep_current keep_good keep_pair r f backups
   keep_current="$(readlink "$home/current" || true)"
   keep_good="$(readlink "$home/known-good" || true)"
+  keep_pair="$(readlink "$home/known-good.db" || true)"
   for r in "$home"/releases/*; do
     [ -e "$r" ] || continue
     [ "$r" = "$keep_current" ] || [ "$r" = "$keep_good" ] || rm -rf "$r"
   done
   backups=("$home"/data/backups/links-*.db)
   if [ -e "${backups[0]}" ] && [ "${#backups[@]}" -gt 10 ]; then
-    rm -f -- "${backups[@]:0:${#backups[@]}-10}"
+    for f in "${backups[@]:0:${#backups[@]}-10}"; do
+      [ "$f" = "$keep_pair" ] || rm -f -- "$f" "$f-wal" "$f-shm"
+    done
   fi
 }
 
 # Stops the service, then prints how to get back to known-good. The schema is compared only once
 # nothing can still write to the database.
 recover() {
-  local known_good switch_cmd="" restore_cmd failed_db
-  touch "$release/.failed"
+  local known_good paired switch_cmd="" restore_cmd failed_db
   known_good="$(readlink "$home/known-good" || true)"
+  paired="$(readlink "$home/known-good.db" || true)"
   if [ -n "$known_good" ]; then
-    switch_cmd="ln -sfn \"$known_good\" \"$home/current.new\" && mv -fh \"$home/current.new\" \"$home/current\" && launchctl bootstrap $domain \"$plist\""
+    switch_cmd="sed -e \"s#@NODE@#$node_path#g\" -e \"s#@HOME@#$HOME#g\" \"$known_good/deploy/$label.plist\" > \"$plist\" && ln -sfn \"$known_good\" \"$home/current.new\" && mv -fh \"$home/current.new\" \"$home/current\" && launchctl bootstrap $domain \"$plist\""
   else
     echo "There is no known-good release to go back to." >&2
   fi
   if ! stop_and_wait; then
     echo "A process using $env_file is still running after 25 s; nothing was restarted. Once 'pgrep -f -- --env-file=$env_file' prints nothing, run the commands below." >&2
   fi
-  if [ -n "$backup" ] && [ -f "$db" ] &&
-    [ "$(sqlite3 "$db" 'pragma user_version')" != "$(sqlite3 "$backup" 'pragma user_version')" ]; then
+  if [ -n "$paired" ] && [ -f "$paired" ] && [ -f "$db" ] &&
+    [ "$(sqlite3 "$db" 'pragma user_version')" != "$(sqlite3 "$paired" 'pragma user_version')" ]; then
     failed_db="$home/data/backups/failed-$(date +%Y%m%d-%H%M%S).db"
-    restore_cmd="sqlite3 \"$db\" '.backup \"$failed_db\"' && sqlite3 \"$db\" '.restore \"$backup\"'"
+    restore_cmd="sqlite3 \"$db\" '.backup \"$failed_db\"' && sqlite3 \"$db\" '.restore \"$paired\"'"
     echo "The failed release changed the database schema and older releases refuse it. Save the failed database, restore the backup, switch back and start:" >&2
     echo "  $restore_cmd${switch_cmd:+ && $switch_cmd}" >&2
-    echo "This undoes every change since $backup, including key revocations and new links; run the revocations again afterwards." >&2
+    echo "This undoes every change since $paired, including key revocations and new links; run the revocations again afterwards." >&2
   elif [ -n "$switch_cmd" ]; then
     echo "Switch back and start the service:" >&2
     echo "  $switch_cmd" >&2
@@ -141,12 +143,10 @@ fi
 
 switched=1
 mv -f "$plist.new" "$plist"
-switch_to "$release"
-# The release being replaced served until now, so recovery can go back to it. One that failed to
-# start is never promoted, and a retry of the same release leaves known-good alone.
-if [ -n "$previous" ] && [ "$previous" != "$release" ] && [ -d "$previous" ] && [ ! -e "$previous/.failed" ]; then
-  ln -sfn "$previous" "$home/known-good.new"
-  mv -fh "$home/known-good.new" "$home/known-good"
+point_to "$home/current" "$release"
+if [ -n "$previous" ] && [ "$previous" != "$release" ] && [ -e "$previous/.served" ]; then
+  point_to "$home/known-good" "$previous"
+  if [ -n "$backup" ]; then point_to "$home/known-good.db" "$backup"; else rm -f "$home/known-good.db"; fi
 fi
 launchctl bootstrap "$domain" "$plist"
 trap - ERR
@@ -154,7 +154,7 @@ trap - ERR
 for _ in $(seq 30); do
   pid="$(service_pid)"
   if [ -n "$pid" ] && [ -n "$(lsof -a -p "$pid" -iTCP:"$port" -sTCP:LISTEN -t 2> /dev/null || true)" ]; then
-    rm -f "$release/.failed"
+    touch "$release/.served"
     prune
     echo "Deployed $sha."
     exit 0

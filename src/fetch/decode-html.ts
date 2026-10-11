@@ -1,5 +1,5 @@
-const HEADER_CHARSET = /charset\s*=\s*["']?\s*([^\s"';]+)/i;
-const META_CHARSET = /<meta\s[^>]*?charset\s*=\s*["']?\s*([^\s"'>;/]+)/i;
+const HEADER_CHARSET = /charset\s*=\s*["']?([^\s"';]+)/i;
+const META_CHARSET = /<meta\s[^>]*?charset\s*=\s*["']?([^\s"'>;/]+)/i;
 const META_SCAN_BYTES = 1024;
 
 function bomLabel(bytes: Uint8Array): string | undefined {

@@ -12,6 +12,12 @@ describe("decodeHtml", () => {
     expect(decodeHtml(latin1("<p>café</p>"), "text/html; charset=ISO-8859-1")).toBe("<p>café</p>");
   });
 
+  it("reads a header padded with 16,000 spaces after charset= in linear time", () => {
+    const started = performance.now();
+    decodeHtml(Buffer.from("<p>x"), `text/html; charset=${" ".repeat(16_000)}`);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
   it("takes the charset from <meta charset> when the header has none", () => {
     const bytes = latin1('<meta charset="iso-8859-2"><p>\xb1</p>');
     expect(decodeHtml(bytes, "text/html")).toContain("ą");

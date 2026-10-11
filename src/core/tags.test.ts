@@ -23,13 +23,20 @@ describe("normalizeTags", () => {
     ]);
   });
 
-  it("lets project win over topic on duplicate keys, in any order, keeping the first name", () => {
-    const topic = { name: "Solar", source: "stated" as const, kind: "topic" as const };
-    const project = { name: "SOLAR", source: "inferred" as const, kind: "project" as const };
-    const wins = (name: string) => [{ key: "solar", name, source: "stated", kind: "project" }];
-    expect(normalizeTags([topic, project])).toEqual(wins("Solar"));
-    expect(normalizeTags([project, topic])).toEqual(wins("SOLAR"));
-    expect(normalizeTags([project, { name: "solar", source: "stated" }])).toEqual(wins("SOLAR"));
+  it("takes the kind from the strongest source on duplicate keys, the first on a tie", () => {
+    const statedTopic = { name: "Solar", source: "stated" as const, kind: "topic" as const };
+    const inferredProject = {
+      name: "SOLAR",
+      source: "inferred" as const,
+      kind: "project" as const,
+    };
+    const statedProject = { name: "solar", source: "stated" as const, kind: "project" as const };
+    const tag = (name: string, kind: string) => [{ key: "solar", name, source: "stated", kind }];
+    expect(normalizeTags([statedTopic, inferredProject])).toEqual(tag("Solar", "topic"));
+    expect(normalizeTags([inferredProject, statedTopic])).toEqual(tag("SOLAR", "topic"));
+    expect(normalizeTags([inferredProject, statedProject])).toEqual(tag("SOLAR", "project"));
+    expect(normalizeTags([statedTopic, statedProject])).toEqual(tag("Solar", "topic"));
+    expect(normalizeTags([statedProject, statedTopic])).toEqual(tag("solar", "project"));
   });
 
   it("rejects a blank name as invalid_input", () => {

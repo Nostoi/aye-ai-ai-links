@@ -17,10 +17,6 @@ function cleanName(raw: string): string {
 /** The identity of a tag name: trimmed, whitespace collapsed, lower-cased. Blank names are refused. */
 export const tagKey = (name: string): string => cleanName(name).toLowerCase();
 
-/**
- * Clean names, derive keys, and merge duplicates: first name, strongest source,
- * and "project" over "topic". A missing kind is "topic".
- */
 export function normalizeTags(
   input: { name: string; source: Source; kind?: TagKind }[],
 ): LinkTag[] {
@@ -30,9 +26,9 @@ export function normalizeTags(
     const key = tagKey(name);
     const existing = byKey.get(key);
     if (!existing) byKey.set(key, { key, name, source, kind });
-    else {
-      if (strength[source] > strength[existing.source]) existing.source = source;
-      if (kind === "project") existing.kind = kind;
+    else if (strength[source] > strength[existing.source]) {
+      existing.source = source;
+      existing.kind = kind;
     }
   }
   return [...byKey.values()];

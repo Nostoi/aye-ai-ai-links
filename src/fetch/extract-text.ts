@@ -2,10 +2,6 @@ import { Readability } from "@mozilla/readability";
 import { capCodePoints } from "./cap.js";
 
 const TEXT_MAX = 100_000;
-const MAX_DEPTH = 200;
-const MAX_ELEMENTS = 15_000;
-const MAX_DEPTH_SQUARES = 6_000_000;
-const MAX_SIBLING_SQUARES = 25_000_000;
 
 const ELEMENT = 1;
 const TEXT = 3;
@@ -53,35 +49,6 @@ const BLOCKS = new Set([
 ]);
 const SKIPPED = new Set(["SCRIPT", "STYLE"]);
 
-/** One linear pass, no recursion: false when the tree is too deep or too large to hand to Readability. */
-export function isParsable(root: Node): boolean {
-  let elements = 0;
-  let depthSquares = 0;
-  let siblingSquares = 0;
-  const stack: { node: Node; depth: number }[] = [{ node: root, depth: 0 }];
-  for (let item = stack.pop(); item; item = stack.pop()) {
-    const depth = item.depth + 1;
-    let children = 0;
-    for (const child of item.node.childNodes) {
-      if (child.nodeType !== ELEMENT) continue;
-      children += 1;
-      depthSquares += depth * depth;
-      stack.push({ node: child, depth });
-    }
-    elements += children;
-    siblingSquares += children * children;
-    if (
-      elements > MAX_ELEMENTS ||
-      depth > MAX_DEPTH ||
-      depthSquares > MAX_DEPTH_SQUARES ||
-      siblingSquares > MAX_SIBLING_SQUARES
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 /**
  * A declarative shadow root keeps its content minus style and script; every other template goes.
  * Selectors cannot see inside a template until it is unwrapped, so peel level by level.
@@ -124,7 +91,7 @@ export function flatten(root: Node): string {
     .trim();
 }
 
-/** Readability's article text, or null when it finds no article. Callers run isParsable first. */
+/** Readability's article text, or null when it finds no article. */
 export function articleText(doc: Document): string | null {
   const article = new Readability(doc, {
     serializer: (el) => el as unknown as string,

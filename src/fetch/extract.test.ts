@@ -168,7 +168,6 @@ describe("text", () => {
   it("returns article text, and null for a page with no article", () => {
     const s = extractSnapshot(article(""), URL0);
     expect(s.text).toContain("Home batteries store solar energy");
-    expect(s.textSkipped).toBeUndefined();
     expect(extractSnapshot("<html><body></body></html>", URL0).text).toBeNull();
   });
 
@@ -267,75 +266,6 @@ describe("caps", () => {
     const text = extractSnapshot(article(""), URL0).text ?? "";
     expect(text.length).toBeLessThan(100_000);
     expect(text).toContain(PARA.trim());
-  });
-});
-
-describe("bounded parsing", () => {
-  const deep = (n: number) =>
-    page(
-      `${"<div>".repeat(n)}<p>${BODY}</p>${"</div>".repeat(n)}`,
-      `<meta property="og:title" content="Deep">`,
-    );
-  const nested = (depth: number, copies: number) =>
-    page(
-      `${`${"<div>".repeat(depth)}<p>x, y, z, words</p>${"</div>".repeat(depth)}`.repeat(copies)}`,
-    );
-  const quickly = (html: string) => {
-    const t0 = performance.now();
-    const s = extractSnapshot(html, URL0);
-    expect(performance.now() - t0).toBeLessThan(1_000);
-    return s;
-  };
-
-  it("skips text for a page nested 800 deep, quickly, and keeps the metadata", () => {
-    const t0 = performance.now();
-    const s = extractSnapshot(deep(800), URL0);
-    expect(performance.now() - t0).toBeLessThan(200);
-    expect(s.text).toBeNull();
-    expect(s.textSkipped).toBe("too_complex");
-    expect(s.title).toBe("Deep");
-  });
-
-  it("skips text above 15,000 elements", () => {
-    const s = quickly(page(`<article>${"<span>x</span>".repeat(15_001)}</article>`));
-    expect(s.text).toBeNull();
-    expect(s.textSkipped).toBe("too_complex");
-  });
-
-  it("skips 29,990 flat links, which stall Readability for seconds", () => {
-    const s = quickly(page(`<div>${'<a href="/x">w</a> '.repeat(29_990)}</div>`));
-    expect(s.textSkipped).toBe("too_complex");
-  });
-
-  it.each([
-    [190, 50],
-    [100, 290],
-    [50, 550],
-    [190, 150],
-    [190, 13],
-    [100, 24],
-  ])(
-    "skips %i-deep nesting repeated %i times, where depth times elements is too costly",
-    (d, m) => {
-      const s = quickly(nested(d, m));
-      expect(s.text).toBeNull();
-      expect(s.textSkipped).toBe("too_complex");
-    },
-  );
-
-  it("still extracts a page nested 150 deep", () => {
-    const s = extractSnapshot(deep(150), URL0);
-    expect(s.textSkipped).toBeUndefined();
-    expect(s.text).toContain("Home batteries");
-  });
-
-  it("extracts a Wikipedia-sized page: 7,639 elements, depth 27, depth-squared sum 1.84M (measured on a saved copy)", () => {
-    const wrap = "<div>".repeat(14);
-    const para = `<p>${PARA}${'<a href="/w">link</a> <b>bold</b> '.repeat(4)}</p>`;
-    const html = page(`${wrap}${`<section>${para}</section>`.repeat(700)}${"</div>".repeat(14)}`);
-    const s = extractSnapshot(html, URL0);
-    expect(s.textSkipped).toBeUndefined();
-    expect(s.text).toContain("Home batteries");
   });
 });
 

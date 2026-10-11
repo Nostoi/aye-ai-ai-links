@@ -1,12 +1,14 @@
 import type { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createApp } from "../app.js";
 import type { Caller, Identify } from "../auth/caller.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLink, saveLink, updateLink } from "../core/links.js";
 import { searchLinks } from "../core/search-links.js";
 import { createDeps } from "../deps.js";
 import { openDatabase } from "../store/database.js";
-import { mcpApp } from "./http.js";
+
+const appFor = (options: Parameters<typeof createApp>[0]) => createApp(options).app;
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
 const A: Caller = { owner: "owner-a", savedBy: "claude-code" };
@@ -84,7 +86,7 @@ describe("MCP door over HTTP", () => {
   beforeEach(() => {
     ({ db, deps } = freshDeps());
     ({ deps: direct } = freshDeps());
-    app = mcpApp({ deps, identify });
+    app = appFor({ deps, identify });
   });
 
   it("answers a 2025-style initialize with the agent instructions", async () => {
@@ -310,7 +312,7 @@ describe("MCP door over HTTP", () => {
   });
 
   it("tells an operator when the owner record is missing", async () => {
-    const ghost = mcpApp({ deps, identify: async () => ({ owner: "ghost", savedBy: "x" }) });
+    const ghost = appFor({ deps, identify: async () => ({ owner: "ghost", savedBy: "x" }) });
     const res = await call(ghost, "any", "save_link", { url: "https://example.com/g" });
     expect(res.body.result.isError).toBe(true);
     expect(res.body.result.content[0].text).toContain("owner record");
@@ -371,7 +373,7 @@ describe("MCP door over HTTP", () => {
 
   it("logs an unexpected error but shows the agent nothing internal", async () => {
     const boom = new Error("secret-internal-detail");
-    const broken = mcpApp({
+    const broken = appFor({
       deps: {
         ...deps,
         search: {
@@ -437,7 +439,7 @@ describe("MCP door over HTTP", () => {
   });
 
   it("refuses to serve a request whose caller has no owner", async () => {
-    const blank = mcpApp({ deps, identify: async () => ({ owner: "", savedBy: "x" }) });
+    const blank = appFor({ deps, identify: async () => ({ owner: "", savedBy: "x" }) });
     const res = await call(blank, "any", "save_link", { url: "https://example.com/blank" });
     expect(JSON.stringify(res.body)).not.toContain("owner record");
     expect(res.body.result?.structuredContent).toBeUndefined();
@@ -450,7 +452,7 @@ describe("MCP door over HTTP", () => {
   ])(
     "refuses a foreign Origin with 403 and writes nothing (%s)",
     async (_n, allowedHosts, host) => {
-      const guarded = mcpApp({ deps, identify, ...(allowedHosts && { allowedHosts }) });
+      const guarded = appFor({ deps, identify, ...(allowedHosts && { allowedHosts }) });
       const body = {
         jsonrpc: "2.0",
         id: 1,
@@ -469,7 +471,7 @@ describe("MCP door over HTTP", () => {
   it("refuses a foreign Host unless allowedHosts lists it", async () => {
     const body = { jsonrpc: "2.0", id: 5, method: "tools/list" };
     expect((await post(app, "key-a", body, { host: "links.example.ts.net" })).status).toBe(403);
-    const open = mcpApp({ deps, identify, allowedHosts: ["links.example.ts.net"] });
+    const open = appFor({ deps, identify, allowedHosts: ["links.example.ts.net"] });
     expect((await post(open, "key-a", body, { host: "links.example.ts.net" })).status).toBe(200);
     expect((await post(open, "key-a", body, { host: "localhost" })).status).toBe(403);
   });

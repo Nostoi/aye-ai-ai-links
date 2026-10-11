@@ -1,16 +1,13 @@
 export type RateDecision = { allowed: true } | { allowed: false; retryAfterSeconds: number };
 export type RateLimiter = (key: string) => RateDecision;
+export type RateLimitOptions = { limit?: number; windowMs?: number; now?: () => number };
 
 /** A fixed-window counter per key. Callers keep the key set small; windows are not swept. */
 export function createRateLimiter({
   limit = 120,
   windowMs = 60_000,
   now = Date.now,
-}: {
-  limit?: number;
-  windowMs?: number;
-  now?: () => number;
-}): RateLimiter {
+}: RateLimitOptions = {}): RateLimiter {
   const windows = new Map<string, { start: number; count: number }>();
   return (key) => {
     const t = now();

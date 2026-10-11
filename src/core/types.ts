@@ -1,4 +1,7 @@
-export type Source = "stated" | "asked" | "inferred";
+export const SOURCES = ["stated", "asked", "inferred"] as const;
+export type Source = (typeof SOURCES)[number];
+export const STATES = ["active", "archived"] as const;
+export type LinkState = (typeof STATES)[number];
 export type Labelled = { text: string; source: Source };
 export type OwnerId = string;
 
@@ -18,7 +21,7 @@ export type Link = {
   lastOpenedAt: Date | null;
   lastSurfacedAt: Date | null;
   snoozedUntil: Date | null;
-  state: "active" | "archived";
+  state: LinkState;
 };
 
 export type Tag = {

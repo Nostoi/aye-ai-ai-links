@@ -16,12 +16,17 @@ export class FakeStore implements LinkStore {
     return m;
   }
 
-  private ensureTags(owner: OwnerId, tags: Link["tags"]): void {
-    let catalog = this.tags.get(owner);
-    if (!catalog) {
-      catalog = new Map();
-      this.tags.set(owner, catalog);
+  private catalogOf(owner: OwnerId): Map<string, Tag> {
+    let m = this.tags.get(owner);
+    if (!m) {
+      m = new Map();
+      this.tags.set(owner, m);
     }
+    return m;
+  }
+
+  private ensureTags(owner: OwnerId, tags: Link["tags"]): void {
+    const catalog = this.catalogOf(owner);
     for (const t of tags) {
       if (!catalog.has(t.key)) {
         catalog.set(t.key, {
@@ -37,22 +42,29 @@ export class FakeStore implements LinkStore {
     }
   }
 
+  private view(owner: OwnerId, link: Link): Link {
+    const catalog = this.catalogOf(owner);
+    const out = structuredClone(link);
+    for (const t of out.tags) t.name = catalog.get(t.key)?.name ?? t.name;
+    return out;
+  }
+
   async insertIfAbsent(owner: OwnerId, link: NewLink) {
     const mine = this.owned(owner);
     for (const existing of mine.values()) {
       if (existing.urlKey === link.urlKey) {
-        return { link: structuredClone(existing), created: false };
+        return { link: this.view(owner, existing), created: false };
       }
     }
     this.ensureTags(owner, link.tags);
     const stored: Link = { ...structuredClone(link), id: `link-${this.nextId++}` };
     mine.set(stored.id, stored);
-    return { link: structuredClone(stored), created: true };
+    return { link: this.view(owner, stored), created: true };
   }
 
   async get(owner: OwnerId, id: string) {
     const found = this.owned(owner).get(id);
-    return found ? structuredClone(found) : null;
+    return found ? this.view(owner, found) : null;
   }
 
   async update(owner: OwnerId, id: string, patch: LinkPatch) {
@@ -63,18 +75,26 @@ export class FakeStore implements LinkStore {
       if (v !== undefined) (found as Record<string, unknown>)[k] = v;
     }
     if (fields.tags) this.ensureTags(owner, fields.tags);
-    return structuredClone(found);
+    return this.view(owner, found);
   }
 
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
     if (found.why === null) found.why = { ...why };
-    return structuredClone(found);
+    return this.view(owner, found);
+  }
+
+  seedTag(owner: OwnerId, tag: Tag): void {
+    this.catalogOf(owner).set(tag.key, structuredClone(tag));
+  }
+
+  catalog(owner: OwnerId): Tag[] {
+    return [...this.catalogOf(owner).values()].map((t) => structuredClone(t));
   }
 
   /** Test inspection: all of an owner's links. */
   all(owner: OwnerId): Link[] {
-    return [...this.owned(owner).values()].map((l) => structuredClone(l));
+    return [...this.owned(owner).values()].map((l) => this.view(owner, l));
   }
 }

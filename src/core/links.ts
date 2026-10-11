@@ -1,7 +1,16 @@
 import { CoreError } from "./errors.js";
 import type { LinkStore } from "./store.js";
 import { normalizeTags } from "./tags.js";
-import type { Labelled, Link, LinkPatch, OwnerId, Source } from "./types.js";
+import {
+  type Labelled,
+  type Link,
+  type LinkPatch,
+  type LinkState,
+  type OwnerId,
+  SOURCES,
+  type Source,
+  STATES,
+} from "./types.js";
 import { urlKey } from "./url-key.js";
 
 export type Deps = { store: LinkStore; now: () => Date };
@@ -17,21 +26,24 @@ export type SaveLinkInput = {
   savedBy: string;
 };
 
-export type UpdateLinkInput = Omit<LinkPatch, "tags"> & { tags?: TagInput };
+export type UpdateLinkInput = Omit<LinkPatch, "tags" | "lastOpenedAt"> & {
+  tags?: TagInput;
+  opened?: true;
+};
 
-const SOURCES: readonly string[] = ["stated", "asked", "inferred"];
-const STATES: readonly string[] = ["active", "archived"];
+const isSource = (s: string): s is Source => (SOURCES as readonly string[]).includes(s);
+const isState = (s: string): s is LinkState => (STATES as readonly string[]).includes(s);
 
 function invalid(message: string): CoreError {
   return new CoreError("invalid_input", message);
 }
 
 function checkSources(why: Labelled | null | undefined, tags: TagInput | undefined): void {
-  if (why && !SOURCES.includes(why.source)) {
+  if (why && !isSource(why.source)) {
     throw invalid(`The why source "${why.source}" is not valid. Use stated, asked or inferred.`);
   }
   for (const t of tags ?? []) {
-    if (!SOURCES.includes(t.source)) {
+    if (!isSource(t.source)) {
       throw invalid(
         `The source "${t.source}" on tag "${t.name}" is not valid. Use stated, asked or inferred.`,
       );
@@ -80,13 +92,13 @@ export async function getLink({ store }: Deps, owner: OwnerId, id: string): Prom
 }
 
 export async function updateLink(
-  { store }: Deps,
+  { store, now }: Deps,
   owner: OwnerId,
   id: string,
   input: UpdateLinkInput,
 ): Promise<Link> {
-  const { tags, why, summary, state, snoozedUntil, lastOpenedAt } = input;
-  if (state !== undefined && !STATES.includes(state)) {
+  const { tags, why, summary, state, snoozedUntil, opened } = input;
+  if (state !== undefined && !isState(state)) {
     throw invalid(`The state "${state}" is not valid. Use active or archived.`);
   }
   checkSources(why, tags);
@@ -94,7 +106,7 @@ export async function updateLink(
   if (summary !== undefined) patch.summary = summary;
   if (state !== undefined) patch.state = state;
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
-  if (lastOpenedAt !== undefined) patch.lastOpenedAt = lastOpenedAt;
+  if (opened === true) patch.lastOpenedAt = now();
   if (tags !== undefined) patch.tags = normalizeTags(tags);
   if (why !== undefined) patch.why = cleanWhy(why);
   const link = await store.update(owner, id, patch);

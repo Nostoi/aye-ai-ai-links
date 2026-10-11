@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
 import { FakeStore } from "./fake-store.js";
 import { getLink, saveLink, updateLink } from "./links.js";
-import type { Labelled } from "./types.js";
+import type { Labelled, Tag } from "./types.js";
 
 let store: FakeStore;
 let clock: Date;
@@ -196,6 +196,76 @@ describe("getLink", () => {
   });
 });
 
+describe("tag catalog", () => {
+  const url = "https://ex.com/a";
+  const projectTag: Tag = {
+    key: "sleep",
+    name: "Sleep",
+    kind: "project",
+    color: "blue",
+    pinned: true,
+    description: "d",
+    projectStatus: "active",
+  };
+
+  it("returns the first-seen name for every link, whatever casing it was saved with", async () => {
+    const one = await saveLink(deps(), A, {
+      url,
+      savedBy: "agent",
+      tags: [{ name: "Sleep", source: "stated" }],
+    });
+    const two = await saveLink(deps(), A, {
+      url: "https://ex.com/b",
+      savedBy: "agent",
+      tags: [{ name: "sleep", source: "asked" }],
+    });
+    expect(one.link.tags[0]?.name).toBe("Sleep");
+    expect(two.link.tags).toEqual([{ key: "sleep", name: "Sleep", source: "asked" }]);
+    expect((await getLink(deps(), A, two.link.id)).tags[0]?.name).toBe("Sleep");
+    expect(store.all(A)[1]?.tags[0]?.name).toBe("Sleep");
+    expect(store.catalog(A).map((t) => t.name)).toEqual(["Sleep"]);
+  });
+
+  it("a duplicate save creates no catalog entry and leaves the link's tags alone", async () => {
+    await saveLink(deps(), A, { url, savedBy: "agent", tags: [{ name: "x", source: "stated" }] });
+    const { link, created } = await saveLink(deps(), A, {
+      url: `${url}/`,
+      savedBy: "agent",
+      tags: [{ name: "brand new", source: "stated" }],
+    });
+    expect(created).toBe(false);
+    expect(link.tags.map((t) => t.key)).toEqual(["x"]);
+    expect(store.catalog(A).map((t) => t.key)).toEqual(["x"]);
+  });
+
+  it("re-tagging via update keeps an existing tag's metadata and catalog name", async () => {
+    store.seedTag(A, projectTag);
+    const { link } = await saveLink(deps(), A, { url, savedBy: "agent" });
+    const updated = await updateLink(deps(), A, link.id, {
+      tags: [
+        { name: "SLEEP", source: "inferred" },
+        { name: "fresh", source: "stated" },
+      ],
+    });
+    expect(updated.tags).toEqual([
+      { key: "sleep", name: "Sleep", source: "inferred" },
+      { key: "fresh", name: "fresh", source: "stated" },
+    ]);
+    expect(store.catalog(A)).toEqual([
+      projectTag,
+      {
+        key: "fresh",
+        name: "fresh",
+        kind: "topic",
+        color: null,
+        pinned: false,
+        description: null,
+        projectStatus: null,
+      },
+    ]);
+  });
+});
+
 describe("updateLink", () => {
   it("replaces the tag set, normalized", async () => {
     const { link } = await saveLink(deps(), A, {
@@ -239,9 +309,23 @@ describe("updateLink", () => {
     const updated = await updateLink(deps(), A, link.id, {
       state: "archived",
       snoozedUntil: snooze,
-      lastOpenedAt: clock,
     });
-    expect(updated).toMatchObject({ state: "archived", snoozedUntil: snooze, lastOpenedAt: clock });
+    expect(updated).toMatchObject({ state: "archived", snoozedUntil: snooze, lastOpenedAt: null });
+  });
+
+  it("stamps lastOpenedAt from the injected clock when opened is set", async () => {
+    const { link } = await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "agent" });
+    clock = new Date("2026-05-05T12:00:00Z");
+    const updated = await updateLink(deps(), A, link.id, { opened: true });
+    expect(updated.lastOpenedAt).toEqual(new Date("2026-05-05T12:00:00Z"));
+    expect(store.all(A)[0]?.lastOpenedAt).toEqual(new Date("2026-05-05T12:00:00Z"));
+  });
+
+  it("does not accept a caller-supplied lastOpenedAt", async () => {
+    const { link } = await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "agent" });
+    const forged = { lastOpenedAt: new Date("1999-01-01T00:00:00Z") } as never;
+    const updated = await updateLink(deps(), A, link.id, forged);
+    expect(updated.lastOpenedAt).toBeNull();
   });
 
   it("throws not_found for another owner and leaves the link unchanged", async () => {

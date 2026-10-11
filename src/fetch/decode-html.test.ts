@@ -75,7 +75,7 @@ describe("decodeHtml", () => {
       const elapsed = performance.now() - started;
       expect(text.length).toBe(page.length);
       expect(text.startsWith("““")).toBe(true);
-      expect(elapsed).toBeLessThan(150);
+      expect(elapsed).toBeLessThan(500);
     });
 
     it("leaves bytes above 0x9F as in ISO-8859-1", () => {

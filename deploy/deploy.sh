@@ -142,6 +142,12 @@ fi
 switched=1
 mv -f "$plist.new" "$plist"
 switch_to "$release"
+# The release being replaced served until now, so recovery can go back to it. One that failed to
+# start is never promoted, and a retry of the same release leaves known-good alone.
+if [ -n "$previous" ] && [ "$previous" != "$release" ] && [ -d "$previous" ] && [ ! -e "$previous/.failed" ]; then
+  ln -sfn "$previous" "$home/known-good.new"
+  mv -fh "$home/known-good.new" "$home/known-good"
+fi
 launchctl bootstrap "$domain" "$plist"
 trap - ERR
 
@@ -149,11 +155,6 @@ for _ in $(seq 30); do
   pid="$(service_pid)"
   if [ -n "$pid" ] && [ -n "$(lsof -a -p "$pid" -iTCP:"$port" -sTCP:LISTEN -t 2> /dev/null || true)" ]; then
     rm -f "$release/.failed"
-    # A release that never served is not promoted, so known-good stays a release that did.
-    if [ -n "$previous" ] && [ "$previous" != "$release" ] && [ -d "$previous" ] && [ ! -e "$previous/.failed" ]; then
-      ln -sfn "$previous" "$home/known-good.new"
-      mv -fh "$home/known-good.new" "$home/known-good"
-    fi
     prune
     echo "Deployed $sha."
     exit 0

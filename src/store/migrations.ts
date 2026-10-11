@@ -60,7 +60,43 @@ export const MIGRATIONS: string[] = [
     CHECK (source IN ('stated', 'asked', 'inferred'))
   );
   `,
+  searchIndex(),
 ];
+
+/**
+ * Keyword index: one `link_search` row per link (rowid = links.id), rebuilt by
+ * triggers from whichever links the changed row touches. Additive: no table is rebuilt.
+ */
+function searchIndex(): string {
+  const insert = (ids: string) => `
+    INSERT INTO link_search (rowid, owner_id, title, summary, why, tags)
+    SELECT l.id, l.owner_id, coalesce(l.title, ''), coalesce(l.summary, ''), coalesce(l.why_text, ''),
+      coalesce((SELECT group_concat(name, ' ') FROM
+        (SELECT t.name AS name FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id
+         WHERE lt.link_id = l.id ORDER BY lt.position)), '')
+    FROM links l WHERE l.id IN (${ids});`;
+  const refresh = (ids: string) => `
+    DELETE FROM link_search WHERE rowid IN (${ids});${insert(ids)}`;
+  const trigger = (name: string, event: string, ids: string) =>
+    `CREATE TRIGGER ${name} AFTER ${event} BEGIN${refresh(ids)}\nEND;`;
+  const tagLinks = "SELECT link_id FROM link_tags WHERE tag_id = NEW.id";
+  return `
+  CREATE VIRTUAL TABLE link_search USING fts5(
+    owner_id UNINDEXED, title, summary, why, tags,
+    tokenize = 'porter unicode61 remove_diacritics 2'
+  );
+  ${insert("SELECT id FROM links")}
+  ${trigger("link_search_links_ins", "INSERT ON links", "SELECT NEW.id")}
+  ${trigger("link_search_links_upd", "UPDATE ON links", "SELECT NEW.id")}
+  CREATE TRIGGER link_search_links_del AFTER DELETE ON links BEGIN
+    DELETE FROM link_search WHERE rowid = OLD.id;
+  END;
+  ${trigger("link_search_lt_ins", "INSERT ON link_tags", "SELECT NEW.link_id")}
+  ${trigger("link_search_lt_upd", "UPDATE ON link_tags", "SELECT OLD.link_id UNION SELECT NEW.link_id")}
+  ${trigger("link_search_lt_del", "DELETE ON link_tags", "SELECT OLD.link_id")}
+  ${trigger("link_search_tags_upd", "UPDATE OF name ON tags", tagLinks)}
+  `;
+}
 
 export const LATEST_VERSION = MIGRATIONS.length;
 

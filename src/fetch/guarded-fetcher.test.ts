@@ -248,22 +248,25 @@ describe("a page on an allowed address", () => {
 });
 
 describe("URLs that must never be requested", () => {
+  // PORT is the target server's port, known only once the servers are listening.
   const forbidden = [
-    () => `http://127.0.0.1:${targetPort}/`,
-    () => `http://localhost:${targetPort}/`,
-    () => `http://[::1]:${targetPort}/`,
-    () => `http://127.1:${targetPort}/`,
-    () => `http://2130706433:${targetPort}/`,
-    () => `http://0x7f.1:${targetPort}/`,
-    () => `http://[::ffff:127.0.0.1]:${targetPort}/`,
-    () => `http://[::127.0.0.1]:${targetPort}/`,
-    () => `http://0.0.0.0:${targetPort}/`,
-    () => "http://100.100.100.100/",
-    () => "http://169.254.169.254/latest/meta-data/",
-    () => `http://evil.test:${targetPort}/`,
+    "http://127.0.0.1:PORT/",
+    "http://localhost:PORT/",
+    "http://[::1]:PORT/",
+    "http://127.1:PORT/",
+    "http://2130706433:PORT/",
+    "http://0x7f.1:PORT/",
+    "http://[::ffff:127.0.0.1]:PORT/",
+    "http://[::127.0.0.1]:PORT/",
+    "http://0.0.0.0:PORT/",
+    "http://100.100.100.100/",
+    "http://169.254.169.254/latest/meta-data/",
+    "http://evil.test:PORT/",
   ];
 
-  it.each(forbidden.map((make) => [make()]))("refuses %s", async (url) => {
+  it.each(forbidden)("refuses %s", async (template) => {
+    expect(targetPort).toBeGreaterThan(0);
+    const url = template.replace("PORT", String(targetPort));
     // The default policy, not the test one: nothing here may be allowed.
     const fetcher = createGuardedFetcher({
       resolve: (h) =>
@@ -416,9 +419,9 @@ describe("size limit", () => {
     const maxBytes = 1_000_000;
     expect(bomb.length).toBeLessThan(maxBytes);
     expect(BOMB_BYTES).toBeGreaterThan(maxBytes);
-    expect(await fetcherWith({ limits: { maxBytes } }).fetch(siteUrl("/bomb"))).toEqual({
-      kind: "too_large",
-    });
+    // Only the kind is compared: a failure must not print a 20 MB page.
+    const outcome = await fetcherWith({ limits: { maxBytes } }).fetch(siteUrl("/bomb"));
+    expect(outcome.kind).toBe("too_large");
   });
 
   it("allows a body of exactly maxBytes and refuses one byte more", async () => {

@@ -13,4 +13,5 @@ data/
 # Local tool state
 .superpowers/
 .remember/
+.claude/reviews/
 .DS_Store

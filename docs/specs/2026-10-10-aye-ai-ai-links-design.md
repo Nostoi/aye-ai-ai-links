@@ -1,7 +1,7 @@
 # Aye-AI-AI Links — design
 
 - **Date:** 2026-10-10
-- **Status:** awaiting owner review
+- **Status:** approved by the owner, 2026-10-10
 - **Scope:** whole project, phases 0–4. This is a dated design record. Live state (current phase, decisions made later) lives in `ROADMAP.md`; working rules live in `AGENTS.md`.
 
 ## 1. Problem and goal
@@ -186,9 +186,9 @@ Light and dark mode. The page also covers profile editing, tag management (pin, 
 The ChatGPT spike answers:
 
 1. Can a developer-mode connector with a write tool be added in the owner's Business workspace?
-2. Does that need a workspace admin?
-3. Does it work in the ChatGPT phone app?
-4. Does a no-auth connector allow write tools?
+2. Does it work in the ChatGPT phone app?
+3. Does a no-auth connector allow write tools?
+4. Do read-only tool annotations skip the write confirmation?
 
 ## 11. Unverified premises
 
@@ -197,7 +197,7 @@ These were checked against current docs on 2026-10-10 but are not settled. Each 
 | Premise | Status | Check that settles it | Blocks |
 |---|---|---|---|
 | ChatGPT Business allows developer-mode connectors with write tools | Official page says yes for Business on web | ChatGPT spike | 3 |
-| Business developer mode needs no admin, or the owner is the admin | Unknown | ChatGPT spike | 3 |
+| Business developer mode can be enabled | Resolved: the owner is the workspace admin (stated 2026-10-10) | — | — |
 | ChatGPT custom connectors work in the mobile app | Unconfirmed | ChatGPT spike | 3 |
 | Read-only tool annotations (`readOnlyHint`) suppress ChatGPT's write confirmation | Unverified | Apps SDK docs, then the spike | 1 |
 | Claude connectors added on the web work in the Claude mobile app | Secondary source only | Test after phase 3 | 3 |

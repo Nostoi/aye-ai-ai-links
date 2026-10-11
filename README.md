@@ -38,7 +38,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and Tailscale Se
    AYE_ALLOWED_HOSTS=<your-mac>.<tailnet>.ts.net
    ```
 
-2. Deploy a commit. This builds and tests it under `~/.aye-links/releases/<sha>`, then stops the service, backs up the database, switches `~/.aye-links/current` and starts the service. A failed build or test leaves the running install alone. A failed start prints recovery steps; only the current and last known-good releases and the 10 newest backups are kept.
+2. Deploy a commit. This builds and tests it under `~/.aye-links/releases/<sha>`, then stops the service, backs up the database, switches `~/.aye-links/current` and starts the service. A failed build or test leaves the running install alone. A failed or interrupted deploy rolls back by itself to the previous release, restoring the backup if the schema changed; writes the failed release accepted are kept in `~/.aye-links/data/backups/failed-*.db` and are not merged back. If the rollback fails, the service stays stopped and `~/.aye-links/recovery-pending` says what to fix; deploys refuse to run until you delete it. Only the current and previous releases and the 10 newest backups are kept.
 
    ```sh
    deploy/deploy.sh main

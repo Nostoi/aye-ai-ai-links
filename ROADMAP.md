@@ -24,9 +24,9 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 
 - **2026-10-11:** Phase 1 done; deploy hardening (#27).
   - **Phase 1 done.** Claude Code and Codex both save, search and get links through `https://<mac>.ts.net:8444/mcp` with their own keys. Neither sends a foreign Origin, and both work with the stateless 2025 serving. The evidence is #7's closing comment.
-  - **Stopping waits.** Real `launchctl bootout` returns before the process exits, so `deploy.sh` now waits for every process using `aye.env` to stop before the backup, a restore or a start. If one will not stop within 25 s, nothing is started (#27).
-  - **Recovery uses a known-good release** (`~/.aye-links/known-good`), the last release that served. When a failed release changed the schema, the printed rollback restores the backup first and keeps the failed database in `data/backups/failed-*.db`. That undoes later changes, including key revocations.
-  - **Pruning.** After a good deploy only the `current` and `known-good` releases and the 10 newest backups are kept; `failed-*` files are never removed.
+  - **Stopping waits.** Real `launchctl bootout` returns before the process exits, so `deploy.sh` now waits for every process using `aye.env` to stop before the backup, a restore or a start. If one will not stop within 25 s, or `pgrep` fails, nothing is started (#27).
+  - **Automatic rollback.** A failed or interrupted deploy stops the new release, restores this deploy's backup if the schema changed, and starts the previous release again. Writes accepted by the rolled-back release are kept in `data/backups/failed-*.db` and are not merged back. If any rollback step fails, the service is left stopped and `~/.aye-links/recovery-pending` records what happened; deploys refuse to run until the owner fixes things and deletes it.
+  - **Pruning.** After a good deploy only the `current` and previous releases and the 10 newest backups are kept; `failed-*` files are never removed.
 
 - **2026-10-11:** Tailnet service (#7).
   - **Shape.** A per-user LaunchAgent (`com.aye-links`) runs `dist/server.js` on `127.0.0.1:3002`, and `tailscale serve --https=8444` publishes it on the tailnet. It runs while the account is logged in; sleep settings are the owner's.

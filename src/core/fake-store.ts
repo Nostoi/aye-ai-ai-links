@@ -32,7 +32,7 @@ export class FakeStore implements LinkStore {
         catalog.set(t.key, {
           key: t.key,
           name: t.name,
-          kind: "topic",
+          kind: t.kind,
           color: null,
           pinned: false,
           description: null,
@@ -45,7 +45,11 @@ export class FakeStore implements LinkStore {
   private view(owner: OwnerId, link: Link): Link {
     const catalog = this.catalogOf(owner);
     const out = structuredClone(link);
-    for (const t of out.tags) t.name = catalog.get(t.key)?.name ?? t.name;
+    for (const t of out.tags) {
+      const entry = catalog.get(t.key);
+      t.name = entry?.name ?? t.name;
+      t.kind = entry?.kind ?? t.kind;
+    }
     return out;
   }
 

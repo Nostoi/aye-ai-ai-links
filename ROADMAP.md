@@ -24,6 +24,8 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 
 - **2026-10-11:** MCP door (#5).
   - **`save_link` returns the owner's existing tags and active projects**, so agents reuse tags (owner). A project counts as active unless it is marked done.
+  - **Agents can create projects (owner).** A tag input may say `kind: project`. It applies only when the tag is new; an existing tag keeps its kind, and the returned link shows the kind the tag actually has. Changing an existing tag's kind will come in two places (owner): phase 4's web tag management and an agent tool (#23).
+  - When one save names a tag twice, the kind comes from the mention with the strongest source, or the first mention on a tie. This keeps a guessed project from being recorded as stated.
   - **`save_link` has no `note` field (owner).** The agent turns what the owner said into a `stated` why, which changes spec §5.
   - **Spec §11 checks:**
     - MCP SDK v2 servers do have an `instructions` field (`@modelcontextprotocol/server` 2.3.1).

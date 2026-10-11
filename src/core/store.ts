@@ -6,10 +6,10 @@ import type { Labelled, Link, LinkPatch, NewLink, OwnerId, Tag } from "./types.j
  * - Owner scoping: every method takes the owner first and never reads or
  *   changes another owner's links or tags.
  * - Tags: identity is `key`, per owner. A key the owner has not used before is
- *   created with the attached name as its name and kind "topic". Attaching an
- *   existing tag never changes its name, kind, colour, pin or project fields.
- *   Every returned LinkTag.name is the catalog's name for its key, not the name
- *   passed in; each LinkTag keeps its own source. Tags come back in the order
+ *   created with the attached name and kind. Attaching an existing tag never
+ *   changes its name, kind, colour, pin or project fields. Every returned
+ *   LinkTag.name and .kind is the catalog's for its key, not the one passed in;
+ *   each LinkTag keeps its own source. Tags come back in the order
  *   they were attached.
  * - Atomicity: each method that takes several steps (insert with tags, update
  *   with tags, read-back) either completes whole or changes nothing.

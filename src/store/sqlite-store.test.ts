@@ -78,7 +78,7 @@ const baseLink = (): NewLink => ({
   title: null,
   summary: null,
   why: null,
-  tags: [{ key: "t", name: "t", source: "stated" }],
+  tags: [{ key: "t", name: "t", source: "stated", kind: "topic" }],
   savedAt: NOW,
   savedBy: "x",
   lastOpenedAt: null,

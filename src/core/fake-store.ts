@@ -1,5 +1,14 @@
 import type { LinkStore } from "./store.js";
-import type { Labelled, Link, LinkPatch, NewLink, OwnerId, Tag } from "./types.js";
+import type {
+  Labelled,
+  Link,
+  LinkPatch,
+  NewLink,
+  OwnerId,
+  Tag,
+  TagKind,
+  TagPatch,
+} from "./types.js";
 
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
 export class FakeStore implements LinkStore {
@@ -93,6 +102,14 @@ export class FakeStore implements LinkStore {
     return this.catalog(owner).sort((a, b) =>
       Buffer.compare(Buffer.from(a.key), Buffer.from(b.key)),
     );
+  }
+
+  async updateTag(owner: OwnerId, key: string, patch: TagPatch, expectedKind: TagKind) {
+    const entry = this.catalogOf(owner).get(key);
+    if (!entry || entry.kind !== expectedKind) return null;
+    if (patch.kind !== undefined) entry.kind = patch.kind;
+    if (patch.projectStatus !== undefined) entry.projectStatus = patch.projectStatus;
+    return structuredClone(entry);
   }
 
   seedTag(owner: OwnerId, tag: Tag): void {

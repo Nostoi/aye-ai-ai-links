@@ -6,7 +6,12 @@ import { openDatabase } from "./store/database.js";
 
 const A: Caller = { owner: "owner-a", savedBy: "claude-code" };
 const B: Caller = { owner: "owner-b", savedBy: "codex" };
-const KEYS: Record<string, Caller> = { "key-a": A, "key-b": B };
+const KEYS: Record<string, Caller> = {
+  "key-a": A,
+  "key-b": B,
+  "key-a-codex": { owner: A.owner, savedBy: B.savedBy },
+  "key-b-claude": { owner: B.owner, savedBy: A.savedBy },
+};
 const identify: Identify = async (request) => {
   const key = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
   return KEYS[key] ?? null;
@@ -86,6 +91,8 @@ describe("createApp rate limiting", () => {
     await t.send("key-a");
     expect((await t.send("key-a")).status).toBe(429);
     expect((await t.send("key-b")).status).toBe(200);
+    expect((await t.send("key-a-codex")).status).toBe(200);
+    expect((await t.send("key-b-claude")).status).toBe(200);
   });
 
   it("writes nothing for a request it throttles", async () => {

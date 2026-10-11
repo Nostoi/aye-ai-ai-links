@@ -13,9 +13,9 @@ The design of record is `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 **At the start of every session:**
 
 1. Read `ROADMAP.md`. It names the current phase and the decisions made since the spec.
-2. List the open issues for the current phase's milestone:
-   `gh issue list -R Nostoi/aye-ai-ai-links --milestone "<current milestone>"`
-3. Pick up the issue in progress, or the next one. If GitHub is unreachable, say so and work from `ROADMAP.md` alone.
+2. List the open issues for the current phase's milestone, passing the title from `ROADMAP.md` unchanged (a wrong title returns nothing, with no error):
+   `gh issue list -R Nostoi/aye-ai-ai-links --milestone "<exact milestone title>" --state open --json number,title,assignees`
+3. Take the lowest-numbered open issue nobody has started, unless it is blocked. Claim it by assigning yourself (`gh issue edit <n> --add-assignee @me`) or commenting that you started, so a second session skips it. If GitHub is unreachable, say so and work from `ROADMAP.md` alone.
 
 **During the session**, keep the issue you're working on current: tick its checklist, comment on decisions and blockers.
 
@@ -90,7 +90,7 @@ Use Node 22 (`nvm use` reads `.nvmrc`).
 
 ## Working rules
 
-- **Branch per issue**, pull request into `main`, and `npm run check` passing before push.
+- **Branch per issue**, pull request into `main`, and `npm run check` passing before push. Merge only when CI is green.
 - **Folder `AGENTS.md` files** are added only when a folder has rules that don't apply elsewhere (e.g. `src/web/` design rules, `src/mcp/` tool-description style). Keep them short. Update them in the same change that changes the rule.
 - **AGENTS.md only.** Do not add `CLAUDE.md` or `CLAUDE.local.md` anywhere in the repo. Claude Code reads `AGENTS.md` only when no `CLAUDE.md` or `CLAUDE.local.md` exists in the working directory or above it (Claude Code v2.1.277+). To confirm, an interactive session shows a line such as `no CLAUDE.md found; AGENTS.md loaded: <path>`. A `CLAUDE.md` in a folder above the clone also blocks it.
 - **Secrets** go in `.env` (git-ignored), never in the repo.

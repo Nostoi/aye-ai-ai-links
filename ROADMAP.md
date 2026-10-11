@@ -2,7 +2,7 @@
 
 **Goal:** save links by talking to any AI, find them again from a vague memory, get nudged back to the ones that matter now, and see them on a calm, visual page. Full design: `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 
-**Current phase:** 0 · Setup
+**Current phase:** Phase 1 · Save & find (this is the exact milestone title)
 
 Tasks live in GitHub issues under each phase's milestone: https://github.com/Nostoi/aye-ai-ai-links/milestones
 
@@ -10,12 +10,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 | Phase | Outcome | Status |
 |---|---|---|
-| 0 · Setup | Repo, README, AGENTS.md, this roadmap, `npm run check`, pre-push hook, CI | in progress |
-| 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | not started |
-| 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | not started |
-| 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | not started |
-| 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then Tailscale Funnel on. ChatGPT and Claude apps connect | not started |
-| 4 · Calm desk | The web page (layout A). Repo goes public afterwards | not started |
+| Phase 0 · Setup | Repo, README, AGENTS.md, this roadmap, `npm run check`, pre-push hook, CI | done |
+| Phase 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | not started |
+| Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | not started |
+| Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | not started |
+| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then Tailscale Funnel on. ChatGPT and Claude apps connect | not started |
+| Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | not started |
 | Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
 
 ## Decision log

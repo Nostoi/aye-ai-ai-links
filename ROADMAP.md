@@ -23,6 +23,8 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
 - **2026-10-10:** Duplicate links (owner, #2). Two URLs are the same link after ignoring scheme/host case, default port, tracking parameters, trailing slashes and `#` anchors; `#/` and `#!` app routes, query order, http vs https and `www.` still count. URLs with credentials are refused. Saving an existing link returns it unchanged, except that a why is filled in if the link has none. Details: #2.
+- **2026-10-10:** Tags (#2). Tag names match ignoring case and extra spaces; a tag keeps the casing it was first saved with. When one save names a tag twice, the stronger source wins (stated, then asked, then inferred). Blank tag names are refused.
+- **2026-10-10:** Ruleset "main: require green CI" requires the `check` status on `main`, with no bypass. This supersedes the next entry's note that a direct push to `main` skipping the hook goes unchecked.
 - **2026-10-10:** Phase 0 tooling is npm, TypeScript strict, Biome, Vitest, and a native git hook via `core.hooksPath`. CI runs `npm run check` on pull requests only, so a direct push to `main` that skips the hook goes unchecked; work goes through pull requests.
 - **2026-10-10:** The ~400-line pull request ceiling is waived for the phase 0 pull request (owner).
 - **2026-10-10:** The phase 1b ChatGPT spike may briefly expose a **throwaway toy server** (no real data, one dummy write tool) through Funnel, then turn Funnel off. This is the only exception to "no Funnel before auth", which still applies in full to the real app (spec §8, §10).

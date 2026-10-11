@@ -152,6 +152,11 @@ export function migrate(db: Database, migrations: string[] = MIGRATIONS): void {
       }
       if (current === migrations.length) return;
       for (const sql of migrations.slice(current)) db.exec(sql);
+      if (!db.inTransaction) {
+        throw new Error(
+          "A migration ended the transaction itself, so its later statements were committed with foreign keys off and cannot be rolled back. Migrations must not contain BEGIN, COMMIT or ROLLBACK.",
+        );
+      }
       const violations = db.pragma("foreign_key_check") as unknown[];
       if (violations.length > 0) {
         throw new Error(

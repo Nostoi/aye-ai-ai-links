@@ -260,12 +260,21 @@ describe("migrate", () => {
 
     it("rolls back a migration that leaves an orphan, and turns foreign keys back on", async () => {
       const { db } = await seeded();
-      const orphan = "DELETE FROM links WHERE id = 1;";
-      expect(() => migrate(db, [...MIGRATIONS, orphan])).toThrow(/foreign key/i);
+      const orphan = "DELETE FROM links WHERE id = 2;";
+      expect(() => migrate(db, [...MIGRATIONS, orphan])).toThrow(/1 foreign key violation/);
       expect(count(db, "links")).toBe(2);
       expect(count(db, "link_tags")).toBe(3);
       expect(version(db)).toBe(LATEST_VERSION);
       expect(foreignKeys(db)).toBe(1);
+    });
+
+    it("refuses to report a rollback when a migration ends the transaction itself", async () => {
+      const { db } = await seeded();
+      const early = "CREATE TABLE z(x); COMMIT; DELETE FROM links WHERE id = 1;";
+      expect(() => migrate(db, [...MIGRATIONS, early])).toThrow(/ended the transaction/);
+      expect(version(db)).toBe(LATEST_VERSION);
+      expect(foreignKeys(db)).toBe(1);
+      expect(db.inTransaction).toBe(false);
     });
 
     it("turns foreign keys back on after a migration with an SQL error", async () => {

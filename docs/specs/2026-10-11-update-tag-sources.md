@@ -32,12 +32,12 @@ Dated 2026-10-11, for #23. Each decision below cites the documentation it rests 
 **Decision:** plain sentences, the when-to-use rule first, and no repetition of the server instructions. It discloses that turning a project into a topic and back clears "done".
 
 - The spec: "A human-readable description of the tool. This can be used by clients to improve the LLM's understanding of available tools. It can be thought of like a "hint" to the model." Source: `Tool.description` in `schema.ts`, same commit, L1974-1979.
-- OpenAI: "A description that explains when to use it." and "Keep the most important details in the first 512 characters." Source: https://developers.openai.com/plugins/build/mcp-server.md.
+- OpenAI: "A description that explains when to use it." Source: https://developers.openai.com/plugins/build/mcp-server.md.
 - Claude Code: "Claude Code truncates each tool description and each server's instructions at 2,048 characters by default. Keep them concise, and put critical details near the start." Source: https://code.claude.com/docs/en/mcp ("Tool search for MCP server authors").
 
 ## Results and errors
 
-**Decision:** the result is `{tag}`, as `structuredContent` plus the same JSON as text. There is no output schema, as for the four existing tools. An unknown tag, a blank name, a bad kind and a lost race come back as `isError: true` with core's message.
+**Decision:** the result is `{tag}`, as `structuredContent` plus the same JSON as text. There is no output schema, as for the four existing tools. An unknown tag, a blank name and a lost race come back as `isError: true` with core's message. A missing argument or a kind other than `topic` or `project` is refused by the SDK's input validation first, so it comes back as `isError: true` with the SDK's message.
 
 - "For backwards compatibility, a tool that returns structured content SHOULD also return the serialized JSON in a TextContent block." Source: https://modelcontextprotocol.io/specification/2026-07-28/server/tools ("Structured Content").
 - Tool execution errors cover "Input validation errors (e.g., date in wrong format, value out of range)" and "Business logic errors", and "Clients **SHOULD** provide tool execution errors to language models to enable self-correction." Source: same page ("Error Handling").

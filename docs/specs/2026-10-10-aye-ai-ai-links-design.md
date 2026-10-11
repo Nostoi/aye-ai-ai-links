@@ -1,7 +1,7 @@
 # Aye-AI-AI Links — design
 
 - **Date:** 2026-10-10
-- **Status:** awaiting owner review
+- **Status:** approved by the owner, 2026-10-10
 - **Scope:** whole project, phases 0–4. This is a dated design record. Live state (current phase, decisions made later) lives in `ROADMAP.md`; working rules live in `AGENTS.md`.
 
 ## 1. Problem and goal

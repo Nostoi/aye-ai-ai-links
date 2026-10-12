@@ -3,8 +3,8 @@ import type { FocusEntry, Labelled, OwnerId, ProfileNote, Source } from "./types
 /** Already cleaned by core: trimmed, non-blank, within the caps, with valid sources. */
 export type ProfileChanges = {
   addNotes: Labelled[];
-  editNotes: { id: string; text: string; source: Source }[];
-  removeNotes: string[];
+  editNotes: { id: string; text: string; source: Source; expectedSource: Source }[];
+  removeNotes: { id: string; expectedSource: Source }[];
   addFocus: Labelled[];
 };
 
@@ -15,6 +15,11 @@ export type ProfileWrite = {
   addedNoteIds: string[];
   addedFocusIds: string[];
 };
+
+export type ProfileApplyResult =
+  | ({ ok: true } & ProfileWrite)
+  | { ok: false; unknownId: string }
+  | { ok: false; conflictId: string };
 
 /**
  * Persistence contract for the owner's profile notes and focus log. Any
@@ -47,5 +52,5 @@ export interface ProfileStore {
     owner: OwnerId,
     changes: ProfileChanges,
     context: { writtenBy: string; at: Date; focusLimit: number },
-  ): Promise<({ ok: true } & ProfileWrite) | { ok: false; unknownId: string }>;
+  ): Promise<ProfileApplyResult>;
 }

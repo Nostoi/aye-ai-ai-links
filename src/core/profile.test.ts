@@ -309,5 +309,76 @@ describe("profile use cases", () => {
       const r = await editProfile(deps, A, W, {});
       expect(r.notes.map((n) => n.text)).toEqual(["n"]);
     });
+
+    describe("when the note's source changes between the read and the write", () => {
+      /** A store whose first `flips` reads are each followed by a write that lands before core's apply. */
+      function racing(flips: number, change: (id: string, seen: Source) => Source) {
+        let reads = 0;
+        let applies = 0;
+        const stub: ProfileStore = {
+          recentFocus: (o, l) => profile.recentFocus(o, l),
+          listNotes: async (o) => {
+            const seen = await profile.listNotes(o);
+            if (reads++ < flips) {
+              const n = seen[0] as (typeof seen)[number];
+              await profile.apply(
+                o,
+                {
+                  addNotes: [],
+                  addFocus: [],
+                  removeNotes: [],
+                  editNotes: [
+                    {
+                      id: n.id,
+                      text: n.text,
+                      source: change(n.id, n.source),
+                      expectedSource: n.source,
+                    },
+                  ],
+                },
+                { writtenBy: "owner", at: NOW, focusLimit: RECENT_FOCUS },
+              );
+            }
+            return seen;
+          },
+          apply: (...args) => {
+            applies++;
+            return profile.apply(...args);
+          },
+        };
+        return { stub, counts: () => ({ reads, applies }) };
+      }
+
+      it("refuses an inferred edit of a note that became stated, and keeps the stated note", async () => {
+        const id = await addNote("lives in York", "inferred");
+        const { stub } = racing(1, () => "stated");
+        const err = await code(
+          editProfile({ ...deps, profile: stub }, A, "codex", {
+            editNotes: [{ id, text: "lives in York, guessed", source: "inferred" }],
+          }),
+        );
+        expect(err?.code).toBe("invalid_input");
+        expect(err?.message).toMatch(/add_profile/);
+        expect(await notes()).toEqual([
+          { id, text: "lives in York", source: "stated", writtenBy: "owner", updatedAt: NOW },
+        ]);
+      });
+
+      it("answers conflict, naming get_profile, when the second attempt conflicts too", async () => {
+        const id = await addNote("lives in York", "inferred");
+        const { stub, counts } = racing(2, (_id, seen) =>
+          seen === "inferred" ? "asked" : "inferred",
+        );
+        const err = await code(
+          editProfile({ ...deps, profile: stub }, A, "codex", {
+            editNotes: [{ id, text: "lives in York, guessed", source: "inferred" }],
+          }),
+        );
+        expect(err?.code).toBe("conflict");
+        expect(err?.message).toContain("get_profile");
+        expect(counts()).toEqual({ reads: 2, applies: 2 });
+        expect((await notes())[0]?.text).toBe("lives in York");
+      });
+    });
   });
 });

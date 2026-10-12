@@ -85,6 +85,12 @@ const noChanges = (): ProfileChanges => ({
   addFocus: [],
 });
 
+const notFound = (id: string) =>
+  new CoreError(
+    "not_found",
+    `No profile note with id "${id}". Call get_profile to see the note ids. Nothing was changed.`,
+  );
+
 /** The result comes from the write itself: a read after a committed write could fail and look like a failed write. */
 async function write(
   deps: ProfileDeps,
@@ -98,9 +104,10 @@ async function write(
     focusLimit: RECENT_FOCUS,
   });
   if (!result.ok) {
+    if ("unknownId" in result) throw notFound(result.unknownId);
     throw new CoreError(
-      "not_found",
-      `No profile note with id "${result.unknownId}". Call get_profile to see the note ids. Nothing was changed.`,
+      "conflict",
+      `Note "${result.conflictId}" was changed by someone else while this ran. Nothing was changed. Call get_profile to see the notes as they are now, then try again if the change still applies.`,
     );
   }
   return result;
@@ -125,27 +132,39 @@ export async function editProfile(
   writtenBy: string,
   input: { editNotes?: { id: string; text: string; source: Source }[]; removeNotes?: string[] },
 ): Promise<Profile> {
-  const changes = noChanges();
-  changes.editNotes = (input.editNotes ?? []).map((e) => ({
+  const edits = (input.editNotes ?? []).map((e) => ({
     id: e.id,
     ...labelled(e, MAX_NOTE_CHARS, "profile note"),
   }));
-  changes.removeNotes = input.removeNotes ?? [];
-  const ids = [...changes.editNotes.map((e) => e.id), ...changes.removeNotes];
+  const removes = input.removeNotes ?? [];
+  const ids = [...edits.map((e) => e.id), ...removes];
   if (new Set(ids).size !== ids.length) {
     throw invalid("Edit or remove each note once per call. An id appears more than once.");
   }
-  const guesses = changes.editNotes.filter((e) => e.source !== "stated");
-  if (guesses.length > 0) {
-    const current = await deps.profile.listNotes(owner);
-    for (const e of guesses) {
-      if (current.find((n) => n.id === e.id)?.source === "stated") {
+  for (let attempt = 0; ; attempt++) {
+    const read = new Map((await deps.profile.listNotes(owner)).map((n) => [n.id, n.source]));
+    const sourceOf = (id: string): Source => {
+      const source = read.get(id);
+      if (source === undefined) throw notFound(id);
+      return source;
+    };
+    const changes: ProfileChanges = {
+      ...noChanges(),
+      editNotes: edits.map((e) => ({ ...e, expectedSource: sourceOf(e.id) })),
+      removeNotes: removes.map((id) => ({ id, expectedSource: sourceOf(id) })),
+    };
+    for (const e of changes.editNotes) {
+      if (e.source !== "stated" && e.expectedSource === "stated") {
         throw invalid(
           `Note "${e.id}" is stated by the owner, so it can only be edited with source "stated". Leave it as it is and call add_profile with your own note, labelled ${e.source}.`,
         );
       }
     }
+    try {
+      const { notes, recentFocus: focus } = await write(deps, owner, writtenBy, changes);
+      return { notes, recentFocus: focus };
+    } catch (e) {
+      if (attempt > 0 || !(e instanceof CoreError && e.code === "conflict")) throw e;
+    }
   }
-  const { notes, recentFocus: focus } = await write(deps, owner, writtenBy, changes);
-  return { notes, recentFocus: focus };
 }

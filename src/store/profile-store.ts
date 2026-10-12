@@ -1,5 +1,10 @@
 import type { Database } from "better-sqlite3";
-import type { ProfileChanges, ProfileStore, ProfileWrite } from "../core/profile-store.js";
+import type {
+  ProfileApplyResult,
+  ProfileChanges,
+  ProfileStore,
+  ProfileWrite,
+} from "../core/profile-store.js";
 import type { FocusEntry, OwnerId, ProfileNote, Source } from "../core/types.js";
 import { parseId, StoreError } from "./sqlite-store.js";
 
@@ -16,6 +21,13 @@ type FocusRow = {
 class UnknownNote extends Error {
   constructor(readonly unknownId: string) {
     super(`No profile note with id "${unknownId}".`);
+  }
+}
+
+/** Thrown inside the transaction so the rollback undoes the writes made before it. */
+class SourceChanged extends Error {
+  constructor(readonly conflictId: string) {
+    super(`Profile note "${conflictId}" changed source since it was read.`);
   }
 }
 
@@ -57,7 +69,7 @@ export class SqliteProfileStore implements ProfileStore {
     owner: OwnerId,
     changes: ProfileChanges,
     context: { writtenBy: string; at: Date; focusLimit: number },
-  ): Promise<({ ok: true } & ProfileWrite) | { ok: false; unknownId: string }> {
+  ): Promise<ProfileApplyResult> {
     try {
       const written = this.db
         .transaction(() => this.applySync(owner, changes, context))
@@ -65,6 +77,7 @@ export class SqliteProfileStore implements ProfileStore {
       return { ok: true, ...written };
     } catch (e) {
       if (e instanceof UnknownNote) return { ok: false, unknownId: e.unknownId };
+      if (e instanceof SourceChanged) return { ok: false, conflictId: e.conflictId };
       if ((e as { code?: string }).code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
         throw new StoreError(
           "unknown_owner",
@@ -82,18 +95,29 @@ export class SqliteProfileStore implements ProfileStore {
   ): ProfileWrite {
     const when = ms(at);
     const edit = this.db.prepare(
-      "UPDATE profile_notes SET text = ?, source = ?, written_by = ?, updated_at = ? WHERE id = ? AND owner_id = ?",
+      "UPDATE profile_notes SET text = ?, source = ?, written_by = ?, updated_at = ? WHERE id = ? AND owner_id = ? AND source = ?",
     );
+    const remove = this.db.prepare(
+      "DELETE FROM profile_notes WHERE id = ? AND owner_id = ? AND source = ?",
+    );
+    const exists = this.db.prepare("SELECT 1 FROM profile_notes WHERE id = ? AND owner_id = ?");
+    /** A guarded write matched no row: the note is absent, or its source moved. */
+    const miss = (raw: string, id: number | null): Error =>
+      id !== null && exists.get(id, owner) ? new SourceChanged(raw) : new UnknownNote(raw);
     for (const e of changes.editNotes) {
       const id = parseId(e.id);
-      if (id === null || edit.run(e.text, e.source, writtenBy, when, id, owner).changes === 0) {
-        throw new UnknownNote(e.id);
+      if (
+        id === null ||
+        edit.run(e.text, e.source, writtenBy, when, id, owner, e.expectedSource).changes === 0
+      ) {
+        throw miss(e.id, id);
       }
     }
-    const remove = this.db.prepare("DELETE FROM profile_notes WHERE id = ? AND owner_id = ?");
-    for (const raw of changes.removeNotes) {
-      const id = parseId(raw);
-      if (id === null || remove.run(id, owner).changes === 0) throw new UnknownNote(raw);
+    for (const r of changes.removeNotes) {
+      const id = parseId(r.id);
+      if (id === null || remove.run(id, owner, r.expectedSource).changes === 0) {
+        throw miss(r.id, id);
+      }
     }
     const addNote = this.db.prepare(
       "INSERT INTO profile_notes (owner_id, text, source, written_by, updated_at) VALUES (?, ?, ?, ?, ?)",

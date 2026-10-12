@@ -1,4 +1,4 @@
-import type { ProfileChanges, ProfileStore, ProfileWrite } from "./profile-store.js";
+import type { ProfileApplyResult, ProfileChanges, ProfileStore } from "./profile-store.js";
 import type { FocusEntry, OwnerId, ProfileNote } from "./types.js";
 
 /** In-memory ProfileStore for tests; honours the same contracts as the real store. */
@@ -32,17 +32,19 @@ export class FakeProfileStore implements ProfileStore {
     owner: OwnerId,
     changes: ProfileChanges,
     { writtenBy, at, focusLimit }: { writtenBy: string; at: Date; focusLimit: number },
-  ): Promise<({ ok: true } & ProfileWrite) | { ok: false; unknownId: string }> {
+  ): Promise<ProfileApplyResult> {
     const mine = this.notesOf(owner);
     // Check every id first, so a failure writes nothing.
-    for (const id of [...changes.editNotes.map((e) => e.id), ...changes.removeNotes]) {
-      if (!mine.some((n) => n.id === id)) return { ok: false, unknownId: id };
+    for (const { id, expectedSource } of [...changes.editNotes, ...changes.removeNotes]) {
+      const note = mine.find((n) => n.id === id);
+      if (!note) return { ok: false, unknownId: id };
+      if (note.source !== expectedSource) return { ok: false, conflictId: id };
     }
     for (const e of changes.editNotes) {
       const note = mine.find((n) => n.id === e.id) as ProfileNote;
       Object.assign(note, { text: e.text, source: e.source, writtenBy, updatedAt: new Date(at) });
     }
-    const kept = mine.filter((n) => !changes.removeNotes.includes(n.id));
+    const kept = mine.filter((n) => !changes.removeNotes.some((r) => r.id === n.id));
     const addedNoteIds: string[] = [];
     for (const n of changes.addNotes) {
       const id = String(this.nextNoteId++);

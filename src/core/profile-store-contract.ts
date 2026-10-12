@@ -48,7 +48,7 @@ export function describeProfileStoreContract(
       at?: Date,
     ) {
       const r = await apply(owner, c, writtenBy, at);
-      if (!r.ok) throw new Error(`expected ok, got unknown id ${r.unknownId}`);
+      if (!r.ok) throw new Error(`expected ok, got ${JSON.stringify(r)}`);
       return r;
     }
 
@@ -153,7 +153,11 @@ export function describeProfileStoreContract(
       const id = added.addedNoteIds[0] as string;
       const r = await applyOk(
         A,
-        { editNotes: [{ id, text: "maybe wants a heat pump", source: "inferred" }] },
+        {
+          editNotes: [
+            { id, text: "maybe wants a heat pump", source: "inferred", expectedSource: "stated" },
+          ],
+        },
         "codex",
         T2,
       );
@@ -176,7 +180,9 @@ export function describeProfileStoreContract(
           { text: "drop", source: "stated" },
         ],
       });
-      const r = await applyOk(A, { removeNotes: [added.addedNoteIds[1] as string] });
+      const r = await applyOk(A, {
+        removeNotes: [{ id: added.addedNoteIds[1] as string, expectedSource: "stated" }],
+      });
       expect(r.notes.map((n) => n.text)).toEqual(["keep"]);
     });
 
@@ -184,12 +190,12 @@ export function describeProfileStoreContract(
       const first = await applyOk(A, { addNotes: [{ text: "one", source: "stated" }] });
       const second = await applyOk(A, { addNotes: [{ text: "two", source: "stated" }] });
       const highest = second.addedNoteIds[0] as string;
-      await applyOk(A, { removeNotes: [highest] });
+      await applyOk(A, { removeNotes: [{ id: highest, expectedSource: "stated" }] });
       const third = await applyOk(A, { addNotes: [{ text: "three", source: "stated" }] });
       expect(third.addedNoteIds[0]).not.toBe(highest);
       expect(third.addedNoteIds[0]).not.toBe(first.addedNoteIds[0]);
       const late = await apply(A, {
-        editNotes: [{ id: highest, text: "late edit", source: "stated" }],
+        editNotes: [{ id: highest, text: "late edit", source: "stated", expectedSource: "stated" }],
       });
       expect(late).toEqual({ ok: false, unknownId: highest });
       expect((await store.listNotes(A)).map((n) => n.text)).toEqual(["one", "three"]);
@@ -205,12 +211,20 @@ export function describeProfileStoreContract(
       const x = b.addedNoteIds[0] as string;
       const before = await store.listNotes(B);
       expect(
-        await apply(A, { editNotes: [{ id: x, text: "hijack", source: "inferred" }] }, "evil", T2),
+        await apply(
+          A,
+          { editNotes: [{ id: x, text: "hijack", source: "inferred", expectedSource: "stated" }] },
+          "evil",
+          T2,
+        ),
       ).toEqual({
         ok: false,
         unknownId: x,
       });
-      expect(await apply(A, { removeNotes: [x] })).toEqual({ ok: false, unknownId: x });
+      expect(await apply(A, { removeNotes: [{ id: x, expectedSource: "stated" }] })).toEqual({
+        ok: false,
+        unknownId: x,
+      });
       expect(await store.listNotes(B)).toEqual(before);
       expect(await store.listNotes(A)).toEqual([]);
     });
@@ -223,8 +237,8 @@ export function describeProfileStoreContract(
         A,
         {
           addNotes: [{ text: "new", source: "stated" }],
-          editNotes: [{ id: n1, text: "changed", source: "stated" }],
-          removeNotes: ["999"],
+          editNotes: [{ id: n1, text: "changed", source: "stated", expectedSource: "stated" }],
+          removeNotes: [{ id: "999", expectedSource: "stated" }],
           addFocus: [{ text: "f", source: "stated" }],
         },
         "codex",
@@ -246,10 +260,10 @@ export function describeProfileStoreContract(
       const before = await store.listNotes(A);
       const result = await apply(A, {
         editNotes: [
-          { id: n1, text: "changed", source: "stated" },
-          { id: "999", text: "x", source: "stated" },
+          { id: n1, text: "changed", source: "stated", expectedSource: "stated" },
+          { id: "999", text: "x", source: "stated", expectedSource: "stated" },
         ],
-        removeNotes: [n2],
+        removeNotes: [{ id: n2, expectedSource: "stated" }],
       });
       expect(result).toEqual({ ok: false, unknownId: "999" });
       expect(await store.listNotes(A)).toEqual(before);
@@ -258,8 +272,15 @@ export function describeProfileStoreContract(
     it.each(["", "abc", "0", "01", "-1", "1.5", "99999999999999999999"])(
       "treats the never-issued id %j as absent, not as an error",
       async (id) => {
-        expect(await apply(A, { removeNotes: [id] })).toEqual({ ok: false, unknownId: id });
-        expect(await apply(A, { editNotes: [{ id, text: "x", source: "stated" }] })).toEqual({
+        expect(await apply(A, { removeNotes: [{ id, expectedSource: "stated" }] })).toEqual({
+          ok: false,
+          unknownId: id,
+        });
+        expect(
+          await apply(A, {
+            editNotes: [{ id, text: "x", source: "stated", expectedSource: "stated" }],
+          }),
+        ).toEqual({
           ok: false,
           unknownId: id,
         });
@@ -295,6 +316,65 @@ export function describeProfileStoreContract(
       const texts = (await store.recentFocus(A, LIMIT)).map((f) => f.text);
       expect(texts).toEqual(["f11", "f10", "f9", "f8", "f7", "f6", "f5", "f4", "f3", "f2"]);
       expect((await store.recentFocus(A, 3)).map((f) => f.text)).toEqual(["f11", "f10", "f9"]);
+    });
+
+    describe("when a note's source is no longer the one that was read", () => {
+      async function seed() {
+        const added = await applyOk(A, {
+          addNotes: [
+            { text: "owner said", source: "stated" },
+            { text: "agent guessed", source: "inferred" },
+          ],
+        });
+        const [stated, guess] = added.addedNoteIds as [string, string];
+        return { stated, guess, before: await store.listNotes(A) };
+      }
+
+      it("changes nothing and reports a conflict for an edit, rolling back the other ops", async () => {
+        const { stated, guess, before } = await seed();
+        const result = await apply(
+          A,
+          {
+            addNotes: [{ text: "new", source: "stated" }],
+            editNotes: [
+              { id: guess, text: "guess, revised", source: "inferred", expectedSource: "inferred" },
+              { id: stated, text: "overwritten", source: "inferred", expectedSource: "inferred" },
+            ],
+            addFocus: [{ text: "f", source: "stated" }],
+          },
+          "codex",
+          T2,
+        );
+        expect(result).toEqual({ ok: false, conflictId: stated });
+        expect(await store.listNotes(A)).toEqual(before);
+        expect(await store.recentFocus(A, LIMIT)).toEqual([]);
+      });
+
+      it("changes nothing and reports a conflict for a remove, rolling back the other ops", async () => {
+        const { stated, guess, before } = await seed();
+        const result = await apply(
+          A,
+          {
+            editNotes: [
+              { id: guess, text: "guess, revised", source: "inferred", expectedSource: "inferred" },
+            ],
+            removeNotes: [{ id: stated, expectedSource: "inferred" }],
+          },
+          "codex",
+          T2,
+        );
+        expect(result).toEqual({ ok: false, conflictId: stated });
+        expect(await store.listNotes(A)).toEqual(before);
+      });
+
+      it("still reports an unknown id as unknown, not as a conflict", async () => {
+        const { before } = await seed();
+        const result = await apply(A, {
+          removeNotes: [{ id: "999", expectedSource: "inferred" }],
+        });
+        expect(result).toEqual({ ok: false, unknownId: "999" });
+        expect(await store.listNotes(A)).toEqual(before);
+      });
     });
 
     it("does nothing for an empty change and still returns the profile", async () => {

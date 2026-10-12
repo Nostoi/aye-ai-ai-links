@@ -38,6 +38,17 @@ async function listedToolNames(): Promise<string[]> {
   }
 }
 
+const AGENTS = readFileSync(join(ROOT, "AGENTS.md"), "utf8");
+
+/** The `src/` folders AGENTS.md's folder map lists: the entries indented one level under `src/`. */
+function mappedSrcFolders(): { name: string; planned: boolean }[] {
+  const block = AGENTS.match(/## Folder map[\s\S]*?```\n([\s\S]*?)```/)?.[1] ?? "";
+  return [...block.matchAll(/^ {3}[├└]─ ([\w-]+)\/(.*)$/gm)].map((m) => ({
+    name: m[1] as string,
+    planned: (m[2] ?? "").includes("(planned)"),
+  }));
+}
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const path = join(dir, e.name);
@@ -65,5 +76,39 @@ describe("README stays current", () => {
     expect([...vars]).toContain("AYE_DB");
     const missing = [...vars].filter((v) => !new RegExp(`\\b${v}\\b`).test(README));
     expect(missing, `README.md does not name these variables: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("AGENTS.md's folder map names every direct child folder of src/, and lists no missing one unless planned", () => {
+    const mapped = mappedSrcFolders();
+    expect(mapped.length).toBeGreaterThan(0);
+    const named = new Set(mapped.map((f) => f.name));
+    const actual = readdirSync(join(ROOT, "src"), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    const unmapped = actual.filter((name) => !named.has(name));
+    expect(
+      unmapped,
+      `AGENTS.md's folder map does not name these src/ folders: ${unmapped.join(", ")}`,
+    ).toEqual([]);
+    const gone = mapped.filter((f) => !f.planned && !actual.includes(f.name)).map((f) => f.name);
+    expect(
+      gone,
+      `AGENTS.md's folder map lists these src/ folders, which do not exist and are not marked (planned): ${gone.join(", ")}`,
+    ).toEqual([]);
+    const built = mapped.filter((f) => f.planned && actual.includes(f.name)).map((f) => f.name);
+    expect(
+      built,
+      `AGENTS.md's folder map still marks these existing src/ folders (planned): ${built.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("AGENTS.md's folder map names exactly the non-test .ts files directly in src/", () => {
+    const block = AGENTS.match(/## Folder map[\s\S]*?```\n([\s\S]*?)```/)?.[1] ?? "";
+    const mapped = [...block.matchAll(/^ {3}[├└]─ ([\w.-]+\.ts)\s/gm)].map((m) => m[1] as string);
+    expect(mapped).toContain("server.ts");
+    const actual = readdirSync(join(ROOT, "src"), { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".test.ts"))
+      .map((e) => e.name);
+    expect(mapped.sort(), "AGENTS.md's folder map and src/*.ts disagree").toEqual(actual.sort());
   });
 });

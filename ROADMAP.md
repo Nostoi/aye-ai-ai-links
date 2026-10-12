@@ -22,6 +22,17 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Profile notes and focus log (#33).
+  - **Tools (owner), a change to spec §5.** `get_profile` reads. `add_profile` adds notes and focus entries and is non-destructive. `edit_profile` edits and removes notes and is destructive. Spec §5 named a single `update_profile`; the split keeps routine adds from being gated as destructive. `save_link` also returns `profile` (notes and recent focus; the active projects stay in `filingContext`).
+  - **Labels (owner).** Notes and focus entries both carry a source (`stated`, `asked`, `inferred`) and the writer from the agent key. This follows AGENTS.md "Label guesses" and goes beyond spec §4, which gave focus entries no source.
+  - **A stated note is protected (owner).** `edit_profile` refuses to change a `stated` note unless the new source is also `stated`, and tells the agent to add its own guess with `add_profile`. Removing a stated note needs the owner's instruction, which the tool description says; core cannot check it.
+  - **Length caps (owner's defaults, can be changed).** 1,000 characters per note and 500 per focus entry. Longer text is refused, never truncated.
+  - **Recent focus** is the newest 10 entries (`RECENT_FOCUS` in `core/profile.ts`). #34 owns what a digest picks from them.
+  - **Ids and writes.** Note ids are never reused after a delete. A write returns the profile as it stood inside its own transaction, with the new ids, and does no second read. A failed edit or remove id changes nothing in that call.
+  - **Two agents editing one note:** the last write wins, which is acceptable for a single owner. An edit or removal is written only while the note still has the source it was read with; if it moved, the call answers `conflict` and changes nothing. So an inferred edit never replaces a stated note.
+  - **Older builds lock out.** The migration adds two tables (`profile_notes`, `focus_log`) and rebuilds none, but older builds refuse a database with a newer schema, as with agent keys (#6), so the server and the CLI are deployed from one build (#7, #27).
+  - **Output schemas.** `get_profile`, `add_profile` and `edit_profile` each declare one in `src/mcp/output-schemas.ts`, and `save_link`'s schema includes `profile`. This supersedes the earlier "no `outputSchema`" decision (see the #39 entry).
+  - Sources: `docs/specs/2026-10-11-profile-tool-sources.md`.
 - **2026-10-11:** Page extraction runs in a forked child process (#30, PR B).
   - **A forked child, not a `worker_thread` (owner).** This supersedes the #29 wording. A worker can abort the whole server when it runs out of memory (Node's docs say so, and a 5 MiB page aborted it at a 256 MB limit); a child that does so is only a dead child. The child runs with `--max-old-space-size=384` and is killed with `SIGKILL` at a 20 s deadline. It is not detached, so it stays in the service's process group and launchd kills it with the service.
   - **Content failures are terminal; process failures are retried (orchestrator).** A timeout, out-of-memory or crash while parsing is not retried, and any metadata already read is kept. A child that cannot start, loses its channel, or ends for any reason before it has received the page (the child says "received" first) is a separate kind that can be retried. Out-of-memory is reported only when the child's stderr says "heap out of memory"; any other abort is a crash.
@@ -32,7 +43,6 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Search text.** A separate `snapshot_search` index, with its own triggers on `snapshots`, holds the page's own title and description plus its extracted text (owner ruling, Q4). `link_search` is unchanged. Keyword search lists owner-field matches first, in their existing order, then links matched only by page text, so page length never lowers the owner's own matches. Existing links get a `pending` snapshot.
   - **Links.** `Link.snapshot` carries status and page fields, never the text; `getSnapshotText` reads it. `NewLink` omits `snapshot`, and saving a link creates its `pending` snapshot in the same transaction.
   - **Output schema.** `snapshot` is part of `linkOutput` (`src/mcp/output-schemas.ts`), with `status` a closed enum of the migration's values. Per the #39 entry, adding a status later is a breaking change for a validating client holding an earlier `tools/list`.
-
 - **2026-10-11:** MCP output schemas (#39). Sources and quotes: `docs/specs/2026-10-11-output-schema-sources.md`.
   - **Every tool declares an `outputSchema`** (`src/mcp/output-schemas.ts`), with timestamps as plain strings because a valid `Date` can serialize outside four-digit ISO years. A test enumerates `tools/list`, so a tool without a schema or samples fails; it runs the advertised schemas with Ajv against real results in both protocol eras.
   - **Errors stay text-only.** An unknown tool is a JSON-RPC -32602 error.
@@ -40,7 +50,6 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Adding an enum value is still a breaking change:** a validating client holding an earlier list refuses the new value. #30's snapshot statuses are the first case.
   - **A result that breaks its schema after a write** is logged, and the agent is told the change was saved and not to retry.
   - **#33:** its tools are `get_profile`, `add_profile` and `edit_profile`; each declares a schema from these exports, and its "no `outputSchema`" decision is superseded.
-  - **Unverified until the real-client check (#7, #27):** that Claude Code, Codex and Claude Desktop accept the new `tools/list` and still call every tool.
 - **2026-10-11:** Phase 1 done; deploy hardening (#27).
   - **Phase 1 done.** Claude Code and Codex both save, search and get links through `https://<mac>.ts.net:8444/mcp` with their own keys. Neither sends a foreign Origin, and both work with the stateless 2025 serving. The evidence is #7's closing comment.
   - **Stopping waits.** Real `launchctl bootout` returns before the process exits, so `deploy.sh` now waits for every process using `aye.env` to stop before the backup, a restore or a start. If one will not stop within 25 s, or `pgrep` fails, nothing is started (#27).

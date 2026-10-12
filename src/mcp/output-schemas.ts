@@ -92,10 +92,42 @@ const filingContextOutput = z.strictObject({
   activeProjects: z.array(tagOutput),
 });
 
+const profileNoteOutput = z.strictObject({
+  id: z.string(),
+  text: z.string(),
+  source,
+  writtenBy: z.string(),
+  updatedAt: timestamp,
+});
+const focusEntryOutput = z.strictObject({
+  id: z.string(),
+  text: z.string(),
+  source,
+  writtenBy: z.string(),
+  createdAt: timestamp,
+});
+const profileShape = {
+  notes: z.array(profileNoteOutput),
+  recentFocus: z.array(focusEntryOutput),
+};
+
+/** The notes and recent focus: `save_link`'s `profile`, and what `edit_profile` returns. */
+export const profileOutput = z.strictObject(profileShape);
+export const getProfileOutput = z.strictObject({
+  ...profileShape,
+  activeProjects: z.array(tagOutput),
+});
+export const addProfileOutput = z.strictObject({
+  ...profileShape,
+  addedNoteIds: z.array(z.string()),
+  addedFocusIds: z.array(z.string()),
+});
+
 export const saveLinkOutput = z.strictObject({
   link: linkOutput,
   created: z.boolean(),
   filingContext: filingContextOutput,
+  profile: profileOutput,
 });
 export const linkResultOutput = z.strictObject({ link: linkOutput });
 export const searchLinksOutput = z.strictObject({ links: z.array(linkOutput) });

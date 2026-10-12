@@ -83,6 +83,34 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX agent_keys_live_name ON agent_keys (owner_id, name) WHERE revoked_at IS NULL;
   `,
   snapshots(),
+  // Profile notes and the focus log. Additive: no table is rebuilt, and neither has foreign-key
+  // children. AUTOINCREMENT on notes so the id of a deleted note is never issued again.
+  // Core trims and refuses blank text; the CHECK only guards the empty string.
+  `
+  CREATE TABLE profile_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id TEXT NOT NULL REFERENCES users(id),
+    text TEXT NOT NULL,
+    source TEXT NOT NULL,
+    written_by TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    CHECK (source IN ('stated', 'asked', 'inferred')),
+    CHECK (text <> '')
+  );
+  CREATE INDEX profile_notes_owner ON profile_notes (owner_id, id);
+
+  CREATE TABLE focus_log (
+    id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES users(id),
+    text TEXT NOT NULL,
+    source TEXT NOT NULL,
+    written_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    CHECK (source IN ('stated', 'asked', 'inferred')),
+    CHECK (text <> '')
+  );
+  CREATE INDEX focus_log_owner_recent ON focus_log (owner_id, created_at DESC, id DESC);
+  `,
 ];
 
 /**

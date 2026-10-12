@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** MCP output schemas (#39). Sources and quotes: `docs/specs/2026-10-11-output-schema-sources.md`.
+  - **Every tool declares an `outputSchema`** (`src/mcp/output-schemas.ts`), strict, with timestamps as plain strings because a valid `Date` can serialize outside four-digit ISO years. A test enumerates `tools/list`, so a tool without a schema or samples fails; it runs the advertised schemas with Ajv against real results in both protocol eras.
+  - **Errors stay text-only.** An unknown tool is a JSON-RPC -32602 error.
+  - **Adding a result field has a cost.** Strict schemas mean a client holding an earlier `tools/list` that validates will refuse a result with a new field until it lists tools again. #33's `profile` key is the first case.
+  - **A result that breaks its schema after a write** is logged, and the agent is told the change was saved and not to retry.
+  - **#33:** its tools are `get_profile`, `add_profile` and `edit_profile`; each declares a schema from these exports, and its "no `outputSchema`" decision is superseded.
+  - **Unverified until the real-client check (#7, #27):** that Claude Code, Codex and Claude Desktop accept the new `tools/list` and still call every tool.
+
 - **2026-10-11:** Change a tag's kind (#23). This supersedes the MCP door (#5) entry's "will come" line.
   - **Tool.** `update_tag {name, kind}` changes an existing tag between topic and project and returns `{tag}`. It never creates a tag. The description tells agents to use it only when the owner says so. Hints, wording and sources: `docs/specs/2026-10-11-update-tag-sources.md`.
   - **Rule.** It lives in `core/tag-kind.ts`, so phase 4's web tag management (#12) can call it. Names match like all tags (ignoring case and extra spaces), and the tag keeps its first casing.

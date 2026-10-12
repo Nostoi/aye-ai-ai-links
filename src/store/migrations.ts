@@ -114,6 +114,21 @@ export const MIGRATIONS: string[] = [
   // The lease token (#30): moved by every lease, record and release, so a claim is never valid
   // twice. Additive; rebuilds nothing.
   "ALTER TABLE snapshots ADD COLUMN lease_token INTEGER NOT NULL DEFAULT 0",
+  // Meaning-search vectors (#32): one float32 embedding per link and model. Additive; rebuilds nothing.
+  `
+  CREATE TABLE link_vectors (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    model_key TEXT NOT NULL,
+    dims INTEGER NOT NULL,
+    text_hash TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    embedded_at INTEGER NOT NULL,
+    PRIMARY KEY (link_id, model_key),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (typeof(embedding) = 'blob' AND length(embedding) = dims * 4)
+  );
+  `,
 ];
 
 /**

@@ -104,6 +104,7 @@ describe("searchLinks logging", () => {
           embedded: "solar power",
           modelKey: "m",
           meaningCandidates: 4,
+          limit: 20,
           results: [
             { id: "link-1", urlKey: first?.urlKey, similarity: null, ranks: { field: 1 } },
             {
@@ -116,6 +117,18 @@ describe("searchLinks logging", () => {
         },
       },
     ]);
+  });
+
+  it.each([
+    [99, 50],
+    [undefined, 20],
+    [0, 1],
+    [7, 7],
+  ])("logs the clamped request limit: %s becomes %s", async (given, logged) => {
+    const log = new RecordingLog();
+    const { deps } = await setup(new TracingSearch(["link-1"]), log);
+    await searchLinks(deps, "a", { query: "solar", limit: given }, "claude");
+    expect(log.recorded[0]?.entry.limit).toBe(logged);
   });
 
   it("C2-T3: logs nothing for a blank query", async () => {

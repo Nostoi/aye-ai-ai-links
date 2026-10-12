@@ -38,6 +38,8 @@ export type ListRanks = { field?: number; page?: number; meaning?: number };
  * search time of each meaning candidate returned, by link id. `meaningCandidates` is the number
  * of rows the vector lookup returned, before owner-field hits are removed. It is 0 in `keyword`
  * and `fallback` modes, and in `hybrid` mode it is 0 when no stored vector passed the filters.
+ * `ranks` holds the 1-based rank of each returned link in the owner-field, page-only and meaning
+ * lists it came from; the meaning rank is counted after owner-field hits are removed.
  */
 export type SearchTrace = {
   mode: "keyword" | "hybrid" | "fallback";

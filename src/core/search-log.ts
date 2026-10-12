@@ -13,6 +13,8 @@ export type SearchLogEntry = Pick<SearchTrace, "mode" | "embedded" | "modelKey">
   Pick<SearchTrace, "meaningCandidates"> & {
     query: string;
     filters: SearchFilters;
+    /** The request limit after clamping. Fewer results than this means the search was exhaustive. */
+    limit: number;
     results: LoggedResult[];
   };
 

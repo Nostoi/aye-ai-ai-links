@@ -143,6 +143,7 @@ export const MIGRATIONS: string[] = [
     embedded TEXT,
     model_key TEXT,
     meaning_candidates INTEGER NOT NULL,
+    result_limit INTEGER NOT NULL CHECK (result_limit BETWEEN 1 AND 50),
     results TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     opened_link_id INTEGER,

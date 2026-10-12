@@ -19,8 +19,8 @@ export class SqliteSearchLog implements SearchLog {
       .prepare(
         `INSERT INTO search_log
            (owner_id, searched_by, query, filters, mode, embedded, model_key, meaning_candidates,
-            results, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            result_limit, results, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         owner,
@@ -31,6 +31,7 @@ export class SqliteSearchLog implements SearchLog {
         entry.embedded,
         entry.modelKey,
         entry.meaningCandidates,
+        entry.limit,
         JSON.stringify(entry.results),
         at.getTime(),
       );

@@ -30,6 +30,7 @@ const entry = (query = "solar"): SearchLogEntry => ({
   embedded: query,
   modelKey: "m",
   meaningCandidates: 2,
+  limit: 20,
   results: [{ id: "1", urlKey: "ex.com/1", similarity: 0.5, ranks: { page: 2, meaning: 1 } }],
 });
 
@@ -63,14 +64,16 @@ describe("migration 8, search_log", () => {
     expect(db.pragma("user_version", { simple: true })).toBe(LATEST_VERSION);
     expect(LATEST_VERSION).toBeGreaterThanOrEqual(8);
     expect(db.prepare("SELECT count(*) AS n FROM users").get()).toEqual({ n: 1 });
-    const insert = (query: string, mode = "hybrid") =>
+    const insert = (query: string, mode = "hybrid", limit = 20) =>
       db
         .prepare(
-          "INSERT INTO search_log (owner_id, searched_by, query, filters, mode, meaning_candidates, results, created_at) VALUES ('a', 'x', ?, '{}', ?, 0, '[]', 0)",
+          "INSERT INTO search_log (owner_id, searched_by, query, filters, mode, meaning_candidates, result_limit, results, created_at) VALUES ('a', 'x', ?, '{}', ?, 0, ?, '[]', 0)",
         )
-        .run(query, mode);
+        .run(query, mode, limit);
     expect(() => insert("")).toThrow(/CHECK/);
     expect(() => insert("q", "other")).toThrow(/CHECK/);
+    expect(() => insert("q", "hybrid", 0)).toThrow(/CHECK/);
+    expect(() => insert("q", "hybrid", 51)).toThrow(/CHECK/);
     expect(insert("q").changes).toBe(1);
   });
 });
@@ -89,6 +92,7 @@ describe("SqliteSearchLog.record", () => {
       embedded: "solar",
       model_key: "m",
       meaning_candidates: 2,
+      result_limit: 20,
       results: JSON.stringify([
         { id: "1", urlKey: "ex.com/1", similarity: 0.5, ranks: { page: 2, meaning: 1 } },
       ]),

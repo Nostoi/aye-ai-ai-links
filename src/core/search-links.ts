@@ -75,6 +75,7 @@ export async function searchLinks(
         ...rest,
         query: input.query,
         filters,
+        limit,
         results: links.map((l) => ({
           id: l.id,
           urlKey: l.urlKey,

@@ -241,22 +241,24 @@ describe("getDigest order", () => {
     expect(digest.links[0]?.reasons).toEqual([focusWords(newer), focusWords(older)]);
   });
 
-  it("orders other links by last surfaced (never first), then oldest saved, then id, and keeps 5", async () => {
-    const s = await link({ why: null, savedAt: at(-10 * DAY) });
+  it("orders other links by last touched (surfaced, or saved if never), then oldest saved, then id, and keeps 5", async () => {
     const q = await link({ why: null, savedAt: at(-DAY), lastSurfacedAt: null });
     const u = await link({ why: null, savedAt: at(-3 * DAY), lastSurfacedAt: null });
+    const w = await link({ why: null, savedAt: at(-15 * DAY), lastSurfacedAt: null });
     const p = await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: at(-20 * DAY) });
     const t = await link({ why: null, savedAt: at(-3 * DAY), lastSurfacedAt: null });
-    const r = await link({ why: null, savedAt: at(-5 * DAY), lastSurfacedAt: null });
-    expect(await digestIds()).toEqual([r.id, u.id, t.id, q.id, p.id]);
-    expect((await store.get(OWNER, s.id))?.lastSurfacedAt).toEqual(CUTOFF);
+    const v = await link({ why: null, savedAt: at(-30 * DAY), lastSurfacedAt: at(-15 * DAY) });
+    expect(await digestIds()).toEqual([p.id, v.id, w.id, u.id, t.id]);
+    expect((await store.get(OWNER, q.id))?.lastSurfacedAt).toBeNull();
   });
 
   it("holds FOCUS_SLOTS focus picks, then rotation links, when focus matches outnumber the slots", async () => {
     const newerHits = [await link(), await link(), await link()];
     const olderHits = [await link(), await link(), await link()];
     const rotating = [];
-    for (let i = 0; i < 3; i++) rotating.push(await link({ why: null, lastSurfacedAt: null }));
+    for (let i = 0; i < 3; i++) {
+      rotating.push(await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: null }));
+    }
     await focus("older", at(-2 * DAY));
     await focus("newer", at(-DAY));
     keyword.hits.set(
@@ -348,6 +350,22 @@ describe("getDigest order", () => {
     }
     expect(seen).toEqual(ids);
   });
+
+  it("brings shown links back although more new links are saved each day than a digest holds", async () => {
+    const first: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      first.push((await link({ why: null, savedAt: at(-60 * DAY), lastSurfacedAt: null })).id);
+    }
+    const shown = new Map<string, number>();
+    for (let day = 0; day < 60; day++) {
+      clock = at(day * DAY);
+      for (const id of await digestIds()) shown.set(id, (shown.get(id) ?? 0) + 1);
+      for (let i = 0; i < DIGEST_SIZE; i++) {
+        await link({ why: null, savedAt: clock, lastSurfacedAt: null });
+      }
+    }
+    for (const id of first) expect(shown.get(id) ?? 0, `link ${id}`).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe("getDigest claim", () => {
@@ -362,7 +380,7 @@ describe("getDigest claim", () => {
 
   it("judges reasons from the claimed link, dropping one left with none and skipping one snoozed", async () => {
     const filled = await link({ why: null });
-    const halfFilled = await link({ why: null, lastSurfacedAt: null });
+    const halfFilled = await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: null });
     const snoozed = await link({ why: null });
     const kept = await link({ why: null });
     const digest = await getDigest(

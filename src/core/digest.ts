@@ -73,11 +73,11 @@ function ownReasons(link: Link, surfacedBefore: Date | null, now: Date): DigestR
   return reasons;
 }
 
-/** Links not surfaced for longest come first (never surfaced before all), then the oldest saved. */
+/** A fair queue: least recently touched first (last surfaced, or saved if never), then oldest saved. */
 function rotation(a: Link, b: Link): number {
-  const surfaced = (l: Link) => l.lastSurfacedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const touched = (l: Link) => (l.lastSurfacedAt ?? l.savedAt).getTime();
   return (
-    surfaced(a) - surfaced(b) || a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id)
+    touched(a) - touched(b) || a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id)
   );
 }
 

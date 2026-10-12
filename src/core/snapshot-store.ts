@@ -20,8 +20,6 @@ export type SnapshotLease = { url: string; attempts: number; claim: number };
 /**
  * Persistence contract for page snapshots. Any implementation must meet all of it.
  *
- * - Every link has one snapshot, created `pending` and due at its `savedAt` in
- *   the same step as the link. A duplicate save creates and changes nothing.
  * - Owner scoping: every method takes the owner and never reads or changes
  *   another owner's snapshots, with one exception: `dueSnapshots`.
  * - Ids: those of `LinkStore`. An id never issued, or one owned by someone else,

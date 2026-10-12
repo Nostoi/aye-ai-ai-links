@@ -24,7 +24,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 
 - **2026-10-11:** Snapshot store (#30, first of three pull requests: store and migration).
   - **Interface.** Snapshots have their own `SnapshotStore` in `core/`, like `ProfileStore`, rather than more methods on `LinkStore`. `SqliteStore` and `FakeStore` implement both. `dueSnapshots` is the one cross-owner read.
-  - **Claim lease.** `leaseSnapshot` sets `next_fetch_at` to the lease end and returns `{url, attempts, claim}`, where the claim is that end time in milliseconds. `recordSnapshot` writes only while `next_fetch_at` still equals the claim, so a job that outlived its lease writes nothing and a finished snapshot cannot be written twice.
+  - **Claim lease.** `leaseSnapshot` sets `next_fetch_at` to the lease end and returns `{url, attempts, claim}`, where the claim is that end time in milliseconds. `recordSnapshot` writes only while `next_fetch_at` still equals the claim, so a job that outlived its lease writes nothing once the snapshot has been leased again, and a finished snapshot cannot be written twice.
   - **Search text.** `link_search` gains a `text` column holding the page's own title and description plus its extracted text (owner ruling, Q4). The virtual table is dropped and recreated, with the same triggers plus two on `snapshots`. Existing links get a `pending` snapshot.
   - **Links.** `Link.snapshot` carries status and page fields, never the text; `getSnapshotText` reads it. `NewLink` omits `snapshot`, and saving a link creates its `pending` snapshot in the same transaction.
 

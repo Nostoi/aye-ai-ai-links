@@ -90,10 +90,12 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
 
    ```sh
    keys() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/keys-main.js" "$@"; }
-   keys create codex     # prints the key once; store it now
-   keys list             # each AI's key, when it was made, and whether it is revoked
+   keys create codex
+   keys list
    keys revoke codex
    ```
+
+   `create` prints the key once, so store it straight away.
 
    New keys belong to the owner named by `AYE_OWNER` and `AYE_OWNER_NAME`, which default to `owner` and `Owner`. Leave them unset for a library of your own.
 
@@ -140,10 +142,9 @@ Requires Node 22.
 
 ```sh
 nvm use
-npm install        # also enables the pre-push git hook
-npm run check      # typecheck, lint, test
+npm install
+npm run check
 ```
-
 Contributors and AI agents: start with [AGENTS.md](AGENTS.md). `src/readme.test.ts` fails when this README leaves out a tool the server offers or an `AYE_` setting the code reads.
 
 ## License

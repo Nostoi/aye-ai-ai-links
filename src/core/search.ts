@@ -17,6 +17,8 @@ export type SearchFilters = {
  * - A non-blank query with no searchable word returns [].
  * - Links whose own title, summary, why or tags match come first, in keyword order; links found
  *   only through their page text or by meaning follow.
+ * - Common English words (Lucene's stop list: "the", "that", "is", ...) do not count as keyword
+ *   matches, unless the query has nothing else.
  */
 export interface LinkSearch {
   search(

@@ -11,7 +11,7 @@ You save a link, forget where, forget when, and forget why. Aye-AI-AI Links is a
 You talk to your AI; it uses the library for you.
 
 - **Save by talking.** Give your AI a link and a few words. It saves the link with a summary, tags, and a note on *why* you saved it. If you didn't say why, it asks once or makes a guess, and guesses are labelled as guesses.
-- **Find by describing.** Ask for "that article about batteries from spring". Your AI turns that into a search that matches links by meaning as well as by their words, with optional filters for tag, project and date saved. The first start after upgrading to this version embeds every saved link in the background; until a link is embedded, it is found by its words only.
+- **Find by describing.** Ask for "that article about batteries from spring". Your AI turns that into a search that matches links by meaning as well as by their words, with optional filters for tag, project and date saved. Common words like "the" or "that" are ignored in the keyword match unless the query has nothing else. The first start after upgrading to this version embeds every saved link in the background; until a link is embedded, it is found by its words only.
 - **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.

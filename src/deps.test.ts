@@ -37,7 +37,13 @@ describe("createDeps", () => {
 
     expect(logged).not.toHaveBeenCalled();
     expect(traces).toEqual([
-      { mode: "hybrid", embedded: "quokka", modelKey: MODEL_KEY, similarity: { [link.id]: 1 } },
+      {
+        mode: "hybrid",
+        embedded: "quokka",
+        modelKey: MODEL_KEY,
+        similarity: { [link.id]: 1 },
+        meaningCandidates: 1,
+      },
     ]);
     expect(ids).toEqual([link.id]);
     db.close();

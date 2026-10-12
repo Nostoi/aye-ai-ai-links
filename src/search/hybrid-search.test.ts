@@ -186,7 +186,13 @@ describe("HybridSearch", () => {
     );
     expect(ids).toEqual(["7"]);
     expect(traces).toEqual([
-      { mode: "hybrid", embedded: "automobile", modelKey: KEY, similarity: { "7": 1 } },
+      {
+        mode: "hybrid",
+        embedded: "automobile",
+        modelKey: KEY,
+        similarity: { "7": 1 },
+        meaningCandidates: 2,
+      },
     ]);
   });
 
@@ -201,7 +207,7 @@ describe("HybridSearch", () => {
     expect(ids).toEqual(["a", "b"]);
     expect(texts).toEqual([]);
     expect(vectors.asked).toEqual([]);
-    expect(traces).toEqual([{ mode: "keyword", embedded: null, modelKey: null, similarity: {} }]);
+    expect(traces).toEqual([{ mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 }]);
   });
 
   it("C1-T7: the embedded text is at most 500 code points and never splits a surrogate pair", async () => {
@@ -228,7 +234,13 @@ describe("HybridSearch", () => {
     expect(ids).toEqual(["F", "P1", "P2"]);
     expect(log).toHaveBeenCalledOnce();
     expect(log.mock.calls[0]).toContain(boom);
-    expect(traces).toEqual([{ mode: "fallback", embedded: "w", modelKey: KEY, similarity: {} }]);
+    expect(traces).toEqual([{
+        mode: "fallback",
+        embedded: "w",
+        modelKey: KEY,
+        similarity: {},
+        meaningCandidates: 0,
+      }]);
   });
 
   it("a trace callback that throws on the hybrid call does not cause a fallback or a second trace", async () => {
@@ -265,7 +277,13 @@ describe("HybridSearch", () => {
     expect(ids).toEqual(["P"]);
     expect(log).toHaveBeenCalledOnce();
     expect(traces).toEqual([
-      { mode: "fallback", embedded: "hello", modelKey: KEY, similarity: {} },
+      {
+        mode: "fallback",
+        embedded: "hello",
+        modelKey: KEY,
+        similarity: {},
+        meaningCandidates: 0,
+      },
     ]);
   });
 
@@ -316,5 +334,22 @@ describe("HybridSearch over a real database", () => {
     expect(expected.length).toBe(2);
     expect(await hybrid.search(OWNER, "solar", {}, 5)).toEqual(expected);
     expect(log).toHaveBeenCalledOnce();
+  });
+
+  it("C2-T10: meaningCandidates counts every row the vector lookup returned, field hits included", async () => {
+    const { embedder } = countingEmbedder();
+    const vectors = fakeVectors(["F", "6", "7"]);
+    const withVectors = await run(
+      make(fakeKeyword({ fields: ["F"], pageOnly: [] }), vectors, embedder),
+      "w",
+      5,
+    );
+    expect(withVectors.traces[0]?.meaningCandidates).toBe(3);
+    const none = await run(
+      make(fakeKeyword({ fields: [], pageOnly: ["P"] }), fakeVectors([]), embedder),
+      "w",
+      5,
+    );
+    expect(none.traces[0]).toMatchObject({ mode: "hybrid", meaningCandidates: 0 });
   });
 });

@@ -50,23 +50,43 @@ export class HybridSearch implements LinkSearch {
     const depth = Math.min(DEPTH_FACTOR * limit, MAX_DEPTH);
     const { fields, pageOnly } = this.fts.parts(owner, query, filters, limit, depth);
     if (fields.length >= limit) {
-      trace?.({ mode: "keyword", embedded: null, modelKey: null, similarity: {} });
+      trace?.({
+        mode: "keyword",
+        embedded: null,
+        modelKey: null,
+        similarity: {},
+        meaningCandidates: 0,
+      });
       return fields.slice(0, limit);
     }
 
     let embedded: string | null = null;
     let fused: { ids: string[]; similarity: Record<string, number> };
+    let meaningCandidates: number;
     try {
       embedded = capQuery(query);
       const vector = await this.embedder.embedQuery(embedded);
       const nearest = this.vectors.nearest(owner, vector, filters, depth);
+      meaningCandidates = nearest.length;
       fused = fuse(fields, pageOnly, nearest, limit);
     } catch (error) {
       this.log("[search] meaning search failed; using keyword results:", error);
-      trace?.({ mode: "fallback", embedded, modelKey: this.modelKey, similarity: {} });
+      trace?.({
+        mode: "fallback",
+        embedded,
+        modelKey: this.modelKey,
+        similarity: {},
+        meaningCandidates: 0,
+      });
       return [...fields, ...pageOnly].slice(0, limit);
     }
-    trace?.({ mode: "hybrid", embedded, modelKey: this.modelKey, similarity: fused.similarity });
+    trace?.({
+      mode: "hybrid",
+      embedded,
+      modelKey: this.modelKey,
+      similarity: fused.similarity,
+      meaningCandidates,
+    });
     return fused.ids;
   }
 }

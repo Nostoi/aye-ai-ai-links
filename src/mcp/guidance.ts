@@ -26,7 +26,7 @@ A repeat save (created: false) discards the tags you sent, including a requested
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
 
 Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
 

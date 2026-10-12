@@ -277,6 +277,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
       sets.push(`${column} = ?`);
       values.push(value);
     };
+    if (patch.title !== undefined) set("title", patch.title);
     if (patch.summary !== undefined) set("summary", patch.summary);
     if (patch.state !== undefined) set("state", patch.state);
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));

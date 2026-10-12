@@ -541,6 +541,16 @@ describe("MCP door over HTTP", () => {
     expect(link.why).toEqual({ text: "w", source: "stated" });
   });
 
+  it("update_link sets and clears the title, and leaves it alone when omitted", async () => {
+    await call(app, "key-a", "save_link", { url: "https://example.com/t", title: "old" });
+    const set = await call(app, "key-a", "update_link", { id: "1", title: "new" });
+    expect(set.body.result.structuredContent.link.title).toBe("new");
+    const kept = await call(app, "key-a", "update_link", { id: "1", summary: "s" });
+    expect(kept.body.result.structuredContent.link.title).toBe("new");
+    const cleared = await call(app, "key-a", "update_link", { id: "1", title: null });
+    expect(cleared.body.result.structuredContent.link.title).toBeNull();
+  });
+
   it("refuses to serve a request whose caller has no owner", async () => {
     const blank = appFor({ deps, identify: async () => ({ owner: "", savedBy: "x" }) });
     const res = await call(blank, "any", "save_link", { url: "https://example.com/blank" });

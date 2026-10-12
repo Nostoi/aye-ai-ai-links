@@ -70,6 +70,7 @@ const saveLinkInput = z.object({
 });
 const updateLinkInput = z.object({
   id: z.string(),
+  title: z.string().nullable().optional(),
   summary: z.string().nullable().optional(),
   why: why.nullable().optional(),
   tags: tags.optional(),

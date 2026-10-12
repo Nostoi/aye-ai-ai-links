@@ -237,6 +237,16 @@ describe("FtsSearch index upkeep", () => {
     expect(await s.find("numbat")).toEqual([id]);
   });
 
+  it("follows a title change", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "quokka" });
+    await updateLink(s.deps, "a", id, { title: "numbat" });
+    expect(await s.find("quokka")).toEqual([]);
+    expect(await s.find("numbat")).toEqual([id]);
+    await updateLink(s.deps, "a", id, { title: null });
+    expect(await s.find("numbat")).toEqual([]);
+  });
+
   it("follows tag replacement", async () => {
     const s = setup();
     const id = await s.save("a", { tags: ["wombat"] });

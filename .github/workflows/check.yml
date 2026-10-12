@@ -15,4 +15,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+      - name: No CUDA build of onnxruntime
+        run: |
+          bin=node_modules/onnxruntime-node/bin/napi-v6/linux/x64
+          test -e "$bin/onnxruntime_binding.node"
+          test ! -e "$bin/libonnxruntime_providers_cuda.so"
       - run: npm run check

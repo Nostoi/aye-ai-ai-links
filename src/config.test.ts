@@ -1,5 +1,13 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { databasePath, serverConfig } from "./config.js";
+import { databasePath, modelRoot, serverConfig } from "./config.js";
+
+describe("modelRoot", () => {
+  it("is ~/.aye-links/models", () => {
+    expect(modelRoot()).toBe(join(homedir(), ".aye-links", "models"));
+  });
+});
 
 describe("databasePath", () => {
   it.each([

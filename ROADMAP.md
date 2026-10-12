@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** The meaning-search model is four pinned files in a local folder, installed by the deploy (#32 PR B). Rulings: #32 comments [6116229958](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6116229958) and [6123037594](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6123037594).
+  - **A local folder replaces cache-plus-revision.** transformers.js 4.3.1 drops the tokenizer when it loads a pinned revision from its cache offline, so the first embedding fails. With an absolute folder as the model id and remote loading off, it loads with no network access.
+  - **Hashes are checked twice:** at deploy, and every time the server loads the model. A canary sentence must also embed to its recorded values (first 8 within 1e-4, 384 finite values, length near 1). The canary alone did not notice a changed `model_max_length`.
+  - **One serialized queue** inside the embedder: at most one inference runs at a time across queries and documents, and a failed call does not block the next.
+  - **CI sets `ONNXRUNTIME_NODE_INSTALL=skip`** on `npm ci`, so Linux CI does not download onnxruntime's CUDA build, and a CI step fails if it is there. It is an environment variable rather than an `.npmrc` key because npm warns that unknown `.npmrc` keys will become errors. The macOS build needs no CUDA files.
+  - **`deploy.sh` runs the prefetch** (`dist/cli/prefetch-model-main.js`) after the build and before it stops anything, on every deploy. A failure leaves the running install unchanged.
+  - **There is no `AYE_MODEL_DIR`.** The models always live in `~/.aye-links/models`, beside `releases/`, so pruning releases cannot reach them.
+
 - **2026-10-12:** Meaning search stores its vectors in an ordinary table and uses sqlite-vec only for its distance function (#32 PR A). This narrows spec §2's "sqlite-vec". Rulings: #32 body and comment 6122439969; research: #32's first comment.
   - **`link_vectors`**, migration 7, is an ordinary table keyed by link and model. A link's vectors are deleted with it, the migration needs no extension, and the keys CLI never loads one. `vec0` virtual tables are not used: tag and project filters must apply before the top-k cut.
   - **sqlite-vec is pinned at exactly 0.1.9.** Only `vec_distance_cosine` is used, so if a pre-v1 release breaks, only that one function has to be replaced.

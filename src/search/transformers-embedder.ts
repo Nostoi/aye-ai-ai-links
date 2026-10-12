@@ -15,18 +15,23 @@ import { verifyModelFiles } from "./model-files.js";
 export type RunFn = (texts: string[]) => Promise<Float32Array[]>;
 
 /**
- * Adds the query prefix and lets one inference run at a time across every caller. A call
- * that rejects does not stop the ones behind it.
+ * Adds the query prefix and lets one inference run at a time across every caller, first come
+ * first served. A call that rejects does not stop the ones behind it, and a query whose signal
+ * has aborted by its turn is rejected with the signal's reason without running.
  */
 export function createQueuedEmbedder(run: RunFn): Embedder {
   let tail: Promise<unknown> = Promise.resolve();
-  function enqueue(texts: string[]): Promise<Float32Array[]> {
-    const mine = tail.then(() => run(texts));
+  function enqueue(texts: string[], signal?: AbortSignal): Promise<Float32Array[]> {
+    const mine = tail.then(() => {
+      signal?.throwIfAborted();
+      return run(texts);
+    });
     tail = mine.catch(() => undefined);
     return mine;
   }
   return {
-    embedQuery: async (text) => (await enqueue([QUERY_PREFIX + text]))[0] as Float32Array,
+    embedQuery: async (text, signal) =>
+      (await enqueue([QUERY_PREFIX + text], signal))[0] as Float32Array,
     embedDocuments: async (texts) => (texts.length === 0 ? [] : enqueue(texts)),
   };
 }

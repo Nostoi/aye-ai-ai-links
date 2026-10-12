@@ -17,6 +17,15 @@ describe("FakeEmbedder", () => {
     expect(await a.embedQuery("solar")).not.toEqual(await a.embedQuery("soup"));
   });
 
+  it("rejects a query whose signal has already aborted, with the signal's reason", async () => {
+    const reason = new Error("expired");
+    await expect(new FakeEmbedder(8).embedQuery("a", AbortSignal.abort(reason))).rejects.toBe(
+      reason,
+    );
+    const live = new AbortController().signal;
+    await expect(new FakeEmbedder(8).embedQuery("a", live)).resolves.toHaveLength(8);
+  });
+
   it("keeps document order and embeds a query like a document", async () => {
     const e = new FakeEmbedder(8);
     const docs = await e.embedDocuments(["a", "b"]);

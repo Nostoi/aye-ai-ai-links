@@ -335,6 +335,16 @@ export function describeSnapshotStoreContract(
         expect(await store.releaseSnapshot(A, link.id, first.claim, at(2))).toBe(false);
         expect(await store.recordSnapshot(A, link.id, second.claim, record())).toBe(true);
       });
+
+      it("uses up the claim, so it cannot release or record again", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(10))).toBe(true);
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(11))).toBe(false);
+        expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(false);
+        expect((await store.get(A, link.id))?.snapshot?.status).toBe("pending");
+        expect((await lease(A, link, at(12), at(200))).attempts).toBe(1);
+      });
     });
 
     describe("getSnapshotText", () => {

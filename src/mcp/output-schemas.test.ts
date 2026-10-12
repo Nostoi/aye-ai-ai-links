@@ -23,6 +23,7 @@ import type {
   tagOutput,
   updateTagOutput,
 } from "./output-schemas.js";
+import * as outputSchemas from "./output-schemas.js";
 
 const A: Caller = { owner: "owner-a", savedBy: "claude-code" };
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -355,6 +356,55 @@ describe.each(ERAS)("a result that breaks its schema after a write, %s era", (er
       logged.mockRestore();
     },
   );
+});
+
+/** The JSON paths of object nodes in a JSON Schema that do not say `additionalProperties: false`. */
+function openObjects(node: unknown, path: string): string[] {
+  if (Array.isArray(node)) return node.flatMap((n, i) => openObjects(n, `${path}[${i}]`));
+  if (node === null || typeof node !== "object") return [];
+  const obj = node as Record<string, unknown>;
+  const here =
+    (obj.type === "object" || "properties" in obj) && obj.additionalProperties !== false
+      ? [path]
+      : [];
+  return [
+    ...here,
+    ...Object.entries(obj).flatMap(([key, child]) => {
+      // Property names and $defs keys are labels, not keywords: look at what they hold.
+      if (key === "properties" || key === "$defs" || key === "definitions") {
+        return Object.entries(child as object).flatMap(([name, sub]) =>
+          openObjects(sub, `${path}.${key}.${name}`),
+        );
+      }
+      return openObjects(child, `${path}.${key}`);
+    }),
+  ];
+}
+
+describe("output schemas stay strict on the server", () => {
+  // The module's exports are its schemas plus the `advertisedOpen` function.
+  const schemas = Object.entries(outputSchemas).flatMap(([name, value]) =>
+    typeof value === "function" ? [] : [[name, value as z.ZodType] as const],
+  );
+
+  it("finds the schemas to check", () => {
+    expect(schemas.map(([name]) => name).sort()).toEqual([
+      "linkOutput",
+      "linkResultOutput",
+      "saveLinkOutput",
+      "searchLinksOutput",
+      "tagOutput",
+      "updateTagOutput",
+    ]);
+  });
+
+  // `advertisedOpen` strips `additionalProperties: false` from what clients see, so only the
+  // strict schema's own JSON form shows a plain `z.object`. Input mode tells them apart:
+  // output mode closes both.
+  it.each(schemas)("%s closes every object node", (name, schema) => {
+    const json = schema["~standard"].jsonSchema.input({ target: "draft-2020-12" });
+    expect(openObjects(json, "$"), `${name}: objects that accept extra keys`).toEqual([]);
+  });
 });
 
 /** What `ok()` does to a value: a JSON round trip, so Dates become strings. */

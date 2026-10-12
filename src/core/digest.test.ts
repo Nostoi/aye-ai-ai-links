@@ -304,7 +304,7 @@ describe("getDigest order", () => {
     for (let i = 0; i < 60; i++) newerHits.push(await link());
     for (let i = 0; i < 60; i++) olderHits.push(await link());
     const lone = await link({ why: null, savedAt: at(-90 * DAY), lastSurfacedAt: null });
-    const oldestOnly = await link({ savedAt: at(-5 * DAY) });
+    const oldestOnly = await link({ savedAt: NOW });
     await focus("oldest", at(-2 * HOUR));
     await focus("older", at(-HOUR));
     await focus("newer", NOW);

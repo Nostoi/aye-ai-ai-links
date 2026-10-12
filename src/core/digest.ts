@@ -32,7 +32,7 @@ export type DigestLink = { link: Link; reasons: DigestReason[] };
 export type DigestDeps = {
   store: LinkStore;
   profile: ProfileStore;
-  /** Keyword matching only: with no similarity floor yet (#68), every link is a meaning match. */
+  /** Keyword matching only: with no similarity floor yet (#68), any link can come back as a meaning match. */
   keywordSearch: LinkSearch;
   now: () => Date;
 };

@@ -2,7 +2,7 @@
 
 **Goal:** save links by talking to any AI, find them again from a vague memory, get nudged back to the ones that matter now, and see them on a calm, visual page. Full design: `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 
-**Current phase:** Phase 1 · Save & find
+**Current phase:** Phase 2 · Smart
 
 Tasks live in GitHub issues under each phase's milestone: https://github.com/Nostoi/aye-ai-ai-links/milestones
 
@@ -11,9 +11,9 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase | Outcome | Status |
 |---|---|---|
 | Phase 0 · Setup | Repo, README, AGENTS.md, this roadmap, `npm run check`, pre-push hook, CI | done |
-| Phase 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | not started |
+| Phase 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | done |
 | Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | not started |
-| Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | not started |
+| Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | in progress |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then Tailscale Funnel on. ChatGPT and Claude apps connect | not started |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | not started |
 | Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
@@ -31,14 +31,33 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Ids and writes.** Note ids are never reused after a delete. A write returns the profile as it stood inside its own transaction, with the new ids, and does no second read. A failed edit or remove id changes nothing in that call.
   - **Two agents editing one note:** the last write wins, which is acceptable for a single owner. An edit or removal is written only while the note still has the source it was read with; if it moved, the call answers `conflict` and changes nothing. So an inferred edit never replaces a stated note.
   - **Older builds lock out.** The migration adds two tables (`profile_notes`, `focus_log`) and rebuilds none, but older builds refuse a database with a newer schema, as with agent keys (#6), so the server and the CLI are deployed from one build (#7, #27).
-  - **Output schemas** come from #39, which lands first; these tools follow its pattern.
+  - **Output schemas.** `get_profile`, `add_profile` and `edit_profile` each declare one in `src/mcp/output-schemas.ts`, and `save_link`'s schema includes `profile`. This supersedes the earlier "no `outputSchema`" decision (see the #39 entry).
   - Sources: `docs/specs/2026-10-11-profile-tool-sources.md`.
+- **2026-10-11:** MCP output schemas (#39). Sources and quotes: `docs/specs/2026-10-11-output-schema-sources.md`.
+  - **Every tool declares an `outputSchema`** (`src/mcp/output-schemas.ts`), with timestamps as plain strings because a valid `Date` can serialize outside four-digit ISO years. A test enumerates `tools/list`, so a tool without a schema or samples fails; it runs the advertised schemas with Ajv against real results in both protocol eras.
+  - **Errors stay text-only.** An unknown tool is a JSON-RPC -32602 error.
+  - **Strict in the server, open in `tools/list`.** `guarded` checks the exact shape; `tools/list` allows extra keys, so a validating client holding an earlier list still accepts a result with a field added later. #30's `snapshot` and #33's `profile` are the first added fields. Each tool states its schema once, through `register` in `server.ts`.
+  - **Adding an enum value is still a breaking change:** a validating client holding an earlier list refuses the new value. #30's snapshot statuses are the first case.
+  - **A result that breaks its schema after a write** is logged, and the agent is told the change was saved and not to retry.
+  - **#33:** its tools are `get_profile`, `add_profile` and `edit_profile`; each declares a schema from these exports, and its "no `outputSchema`" decision is superseded.
+  - **Real-client check settled 2026-10-11:** Claude Code, Codex and Claude Desktop accepted the new `tools/list` and still called every tool (#39 comments 6116822480 and 6116836879).
+- **2026-10-11:** Phase 1 done; deploy hardening (#27).
+  - **Phase 1 done.** Claude Code and Codex both save, search and get links through `https://<mac>.ts.net:8444/mcp` with their own keys. Neither sends a foreign Origin, and both work with the stateless 2025 serving. The evidence is #7's closing comment.
+  - **Stopping waits.** Real `launchctl bootout` returns before the process exits, so `deploy.sh` now waits for every process using `aye.env` to stop before the backup, a restore or a start. If one will not stop within 25 s, or `pgrep` fails, nothing is started (#27).
+  - **Automatic rollback.** From the old service being told to stop until the new release is listening, any interruption, and after the stop is confirmed any failure, stops the new release and starts the previous one again (before the switch, only if its plist is installed); an interruption after the new release is listening leaves it running; with no previous release it removes `current` and the plist and leaves the service stopped. If the schema changed or there was no database before, the failed release's database, with its writes, moves to `data/backups/failed-*.db` (not merged back) and this deploy's backup, if any, is restored; otherwise the live database and its writes stay. If a rollback step fails, the service is stopped (or reported as unconfirmed), the plist moves to `~/.aye-links/com.aye-links.plist.disabled` so login cannot start it, and `~/.aye-links/recovery-pending` records what happened; deploys refuse to run until the owner fixes things and deletes it.
+  - **Pruning.** After a good deploy only the `current` and previous releases and the 10 newest backups are kept; `failed-*` files are never removed.
+- **2026-10-11:** Change a tag's kind (#23). This supersedes the MCP door (#5) entry's "will come" line.
+  - **Tool.** `update_tag {name, kind}` changes an existing tag between topic and project and returns `{tag}`. It never creates a tag. The description tells agents to use it only when the owner says so. Hints, wording and sources: `docs/specs/2026-10-11-update-tag-sources.md`.
+  - **Rule.** It lives in `core/tag-kind.ts`, so phase 4's web tag management (#12) can call it. Names match like all tags (ignoring case and extra spaces), and the tag keeps its first casing.
+  - **Project status.** Any change of kind clears "done". Changing a project to a topic and back therefore reopens it; the tool has no status argument, and the description says so. Asking for the kind a tag already has changes nothing. Setting or reopening status is #12's, and it must go through a core rule that refuses a status on a topic.
+  - **Races.** The store writes only while the kind is still the one core read (`updateTag(owner, key, patch, expectedKind)`). If it moved, core reads once more and applies the rule again; a second miss is a `conflict` error.
+  - **Freshness.** Calls that start after `update_tag` returns see the new kind. A search that ranked its results before the change can still return the old kind, the limit already accepted in the keyword search (#4) entry.
+  - **No migration.** The `tags` columns already existed. There is still no source stored for a tag's kind, so a kind set by an inferred `save_link` mention is not labelled as a guess; that is an owner decision, not made here.
 - **2026-10-11:** Tailnet service (#7).
   - **Shape.** A per-user LaunchAgent (`com.aye-links`) runs `dist/server.js` on `127.0.0.1:3002`, and `tailscale serve --https=8444` publishes it on the tailnet. It runs while the account is logged in; sleep settings are the owner's.
   - **Deploys.** `deploy/deploy.sh <ref>` builds and tests each commit in `~/.aye-links/releases/<sha>`. Only on success does it stop the service, back up the database, switch the `~/.aye-links/current` symlink and bootstrap the plist again. A failed build leaves the running install untouched. The key CLI runs from `current`, so one build serves both.
   - **Rate limit.** 120 requests a minute per identified caller (`owner/agent`); a request without a valid key is not limited and always gets 401. It runs inside the `/mcp` mount, after the Host and Origin checks and after the key check, so an exhausted bucket never hides a 403, and failed key guesses cannot use up an agent's allowance. Over the limit gets 429 with `Retry-After` and JSON-RPC code -32000. MCP 2026-07-28 `schema.ts` ("MCP error codes") leaves -32000 to -32019 to implementations and keeps -32002 reserved for resource not found. The SDK uses -32000 for its own HTTP rejections.
   - **Shutdown.** On SIGTERM or SIGINT the server stops accepting connections, waits up to 10 s for in-flight requests, then closes the MCP handler and the database. The plist's `ExitTimeOut` is 20 s.
-  - **Unverified until the real-client check:** the `Origin` that Claude Code and Codex send, and whether both accept the stateless 2025 serving.
 
 - **2026-10-11:** Agent keys (#6).
   - **Keys.** A key is `aak_` plus 32 random bytes. Only its SHA-256 digest is stored (migration 3, `agent_keys`), and each owner and agent has one live key.

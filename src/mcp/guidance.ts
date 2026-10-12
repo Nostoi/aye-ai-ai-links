@@ -20,7 +20,7 @@ Send summary, why and tags in the same call when you know them. Give the why as 
 
 If the URL is already saved you get the existing link back with created: false. Only a missing why is filled in; use update_link to change anything else.
 
-Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. Check the returned tag's kind: if it differs from what you asked for, the tag already existed. Tell the owner that changing a tag's kind is not available yet, and do NOT invent a near-duplicate name to get a project.
+Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. Check the returned tag's kind: if it differs from what you asked for, the tag already existed. If the owner wants that tag's kind changed, call update_tag; do NOT invent a near-duplicate name to get a project.
 
 A repeat save (created: false) discards the tags you sent, including a requested project. To file it, call update_link with the full tag set.`;
 
@@ -29,6 +29,12 @@ export const UPDATE_LINK = `Change a saved link. Only the fields you send change
 summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
 
 Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
+
+export const UPDATE_TAG = `Change a tag between topic and project. Use this only when the owner tells you to, for example "make home batteries a project"; never on your own guess.
+
+name matches the existing tag ignoring case and extra spaces. kind is "topic" or "project". Calls that start after this one returns see the new kind: every link with the tag, search_links' project filter and save_link's filingContext.
+
+Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. Asking for the kind a tag already has changes nothing. A name with no tag is an error: tags are created by tagging a link.`;
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 

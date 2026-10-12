@@ -1,4 +1,13 @@
-import type { Labelled, Link, LinkPatch, NewLink, OwnerId, Tag } from "./types.js";
+import type {
+  Labelled,
+  Link,
+  LinkPatch,
+  NewLink,
+  OwnerId,
+  Tag,
+  TagKind,
+  TagPatch,
+} from "./types.js";
 
 /**
  * Persistence contract used by core. Any implementation must meet all of it.
@@ -7,7 +16,7 @@ import type { Labelled, Link, LinkPatch, NewLink, OwnerId, Tag } from "./types.j
  *   changes another owner's links or tags.
  * - Tags: identity is `key`, per owner. A key the owner has not used before is
  *   created with the attached name and kind. Attaching an existing tag never
- *   changes its name, kind, colour, pin or project fields. Every returned
+ *   changes its name, kind, colour, pin or project fields; only updateTag does. Every returned
  *   LinkTag.name and .kind is the catalog's for its key, not the one passed in;
  *   each LinkTag keeps its own source. Tags come back in the order
  *   they were attached.
@@ -49,4 +58,20 @@ export interface LinkStore {
    * appear; an owner with no tags (or an unknown one) yields [], never an error.
    */
   listTags(owner: OwnerId): Promise<Tag[]>;
+
+  /**
+   * Conditional write: apply only the fields present in the patch to the
+   * owner's tag with this key, and only while that tag's kind is still
+   * `expectedKind`. Returns the tag as it is afterwards, or null when the owner
+   * has no such key or its kind is no longer `expectedKind`; then nothing is
+   * written. Never creates a tag and never touches another owner's. Links'
+   * tags read the new values in calls that start afterwards. Project status is
+   * a core rule: only core may write it, and never on a topic.
+   */
+  updateTag(
+    owner: OwnerId,
+    key: string,
+    patch: TagPatch,
+    expectedKind: TagKind,
+  ): Promise<Tag | null>;
 }

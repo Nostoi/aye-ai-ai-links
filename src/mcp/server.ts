@@ -1,4 +1,9 @@
-import { McpServer } from "@modelcontextprotocol/server";
+import {
+  McpServer,
+  type StandardSchemaWithJSON,
+  type ToolAnnotations,
+  type ToolCallback,
+} from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Caller } from "../auth/caller.js";
 import { CoreError } from "../core/errors.js";
@@ -9,8 +14,19 @@ import type { ProfileStore } from "../core/profile-store.js";
 import type { LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { LinkStore } from "../core/store.js";
+import { changeTagKind } from "../core/tag-kind.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
+import {
+  addProfileOutput,
+  advertisedOpen,
+  getProfileOutput,
+  linkResultOutput,
+  profileOutput,
+  saveLinkOutput,
+  searchLinksOutput,
+  updateTagOutput,
+} from "./output-schemas.js";
 
 export type McpDeps = {
   store: LinkStore;
@@ -64,6 +80,7 @@ const searchLinksInput = z.object({
   savedTo: timestamp.optional(),
   limit: z.number().optional(),
 });
+const updateTagInput = z.object({ name: z.string(), kind: z.enum(TAG_KINDS) });
 const getLinkInput = z.object({ id: z.string() });
 // A strict empty object advertises additionalProperties: false, the schema MCP recommends for a tool with no parameters.
 const getProfileInput = z.strictObject({});
@@ -106,13 +123,31 @@ function toFailure(error: unknown) {
   );
 }
 
-async function guarded(run: () => Promise<unknown>) {
+const OUTPUT_MISMATCH =
+  "The request was handled and any change you asked for was saved, but the result could not be returned in its declared shape. Do not retry it. Tell the owner.";
+
+/**
+ * The SDK checks a result only after the handler has committed, and reports a mismatch
+ * without logging it, so check here first: the agent then learns the change was saved.
+ */
+async function guarded(output: z.ZodType, run: () => Promise<unknown>) {
   try {
-    return ok(await run());
+    const result = ok(await run());
+    const check = output.safeParse(result.structuredContent);
+    if (check.success) return result;
+    console.error("[mcp] result does not match its output schema:", check.error.issues);
+    return fail(OUTPUT_MISMATCH);
   } catch (error) {
     return toFailure(error);
   }
 }
+
+type ToolConfig<I extends StandardSchemaWithJSON> = {
+  description: string;
+  inputSchema: I;
+  outputSchema: z.ZodType;
+  annotations: ToolAnnotations;
+};
 
 /** The caller comes from the authenticated request, never from tool arguments. */
 export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
@@ -122,11 +157,26 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
   );
   const { owner, savedBy } = caller;
 
-  server.registerTool(
+  /** Each tool states its output schema once: `tools/list` shows it open, `guarded` checks it strictly. */
+  const register = <I extends StandardSchemaWithJSON>(
+    name: string,
+    { outputSchema, ...config }: ToolConfig<I>,
+    run: (args: StandardSchemaWithJSON.InferOutput<I>) => Promise<unknown>,
+  ) =>
+    server.registerTool(
+      name,
+      { ...config, outputSchema: advertisedOpen(outputSchema) },
+      // ToolCallback<I> is a conditional type TypeScript cannot resolve while I is generic.
+      ((args: StandardSchemaWithJSON.InferOutput<I>) =>
+        guarded(outputSchema, () => run(args))) as ToolCallback<I>,
+    );
+
+  register(
     "save_link",
     {
       description: guidance.SAVE_LINK,
       inputSchema: saveLinkInput,
+      outputSchema: saveLinkOutput,
       // Every hint is set: the spec defaults are destructive and open-world (https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
       annotations: {
         readOnlyHint: false,
@@ -135,22 +185,22 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    (args) =>
-      guarded(async () => {
-        const saved = await saveLink(deps, owner, { ...args, savedBy });
-        return {
-          ...saved,
-          filingContext: await filingContext(deps, owner),
-          profile: await profileContext(deps, owner),
-        };
-      }),
+    async (args) => {
+      const saved = await saveLink(deps, owner, { ...args, savedBy });
+      return {
+        ...saved,
+        filingContext: await filingContext(deps, owner),
+        profile: await profileContext(deps, owner),
+      };
+    },
   );
 
-  server.registerTool(
+  register(
     "update_link",
     {
       description: guidance.UPDATE_LINK,
       inputSchema: updateLinkInput,
+      outputSchema: linkResultOutput,
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -158,22 +208,38 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    ({ id, snoozedUntil, ...rest }) =>
-      guarded(async () => ({
-        link: await updateLink(deps, owner, id, {
-          ...rest,
-          ...(snoozedUntil !== undefined && {
-            snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
-          }),
+    async ({ id, snoozedUntil, ...rest }) => ({
+      link: await updateLink(deps, owner, id, {
+        ...rest,
+        ...(snoozedUntil !== undefined && {
+          snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
         }),
-      })),
+      }),
+    }),
   );
 
-  server.registerTool(
+  register(
+    "update_tag",
+    {
+      description: guidance.UPDATE_TAG,
+      inputSchema: updateTagInput,
+      outputSchema: updateTagOutput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ name, kind }) => ({ tag: await changeTagKind(deps, owner, { name, kind }) }),
+  );
+
+  register(
     "search_links",
     {
       description: guidance.SEARCH_LINKS,
       inputSchema: searchLinksInput,
+      outputSchema: searchLinksOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -181,21 +247,21 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    ({ savedFrom, savedTo, ...rest }) =>
-      guarded(async () => ({
-        links: await searchLinks(deps, owner, {
-          ...rest,
-          savedFrom: toDate(savedFrom),
-          savedTo: toDate(savedTo),
-        }),
-      })),
+    async ({ savedFrom, savedTo, ...rest }) => ({
+      links: await searchLinks(deps, owner, {
+        ...rest,
+        savedFrom: toDate(savedFrom),
+        savedTo: toDate(savedTo),
+      }),
+    }),
   );
 
-  server.registerTool(
+  register(
     "get_link",
     {
       description: guidance.GET_LINK,
       inputSchema: getLinkInput,
+      outputSchema: linkResultOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -203,14 +269,15 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    ({ id }) => guarded(async () => ({ link: await getLink(deps, owner, id) })),
+    async ({ id }) => ({ link: await getLink(deps, owner, id) }),
   );
 
-  server.registerTool(
+  register(
     "get_profile",
     {
       description: guidance.GET_PROFILE,
       inputSchema: getProfileInput,
+      outputSchema: getProfileOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -218,14 +285,15 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    () => guarded(() => getProfile(deps, owner)),
+    () => getProfile(deps, owner),
   );
 
-  server.registerTool(
+  register(
     "add_profile",
     {
       description: guidance.ADD_PROFILE,
       inputSchema: addProfileInput,
+      outputSchema: addProfileOutput,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -233,14 +301,15 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    (args) => guarded(() => addProfile(deps, owner, savedBy, args)),
+    (args) => addProfile(deps, owner, savedBy, args),
   );
 
-  server.registerTool(
+  register(
     "edit_profile",
     {
       description: guidance.EDIT_PROFILE,
       inputSchema: editProfileInput,
+      outputSchema: profileOutput,
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -248,7 +317,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    (args) => guarded(() => editProfile(deps, owner, savedBy, args)),
+    (args) => editProfile(deps, owner, savedBy, args),
   );
 
   return server;

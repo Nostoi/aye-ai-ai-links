@@ -36,6 +36,9 @@ export type Tag = {
   projectStatus: "active" | "done" | null;
 };
 
+/** Catalog fields a tag patch may set; an absent field is left untouched. */
+export type TagPatch = Partial<Pick<Tag, "kind" | "projectStatus">>;
+
 export type NewLink = Omit<Link, "id">;
 
 /** Fields a patch may set; an absent (undefined) field is left untouched. */

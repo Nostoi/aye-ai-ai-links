@@ -1,5 +1,7 @@
 import { CoreError } from "./errors.js";
-import type { LinkTag, Source, TagKind } from "./types.js";
+import { type LinkTag, type Source, TAG_KINDS, type TagKind } from "./types.js";
+
+export const isTagKind = (k: string): k is TagKind => (TAG_KINDS as readonly string[]).includes(k);
 
 const strength: Record<Source, number> = { stated: 3, asked: 2, inferred: 1 };
 

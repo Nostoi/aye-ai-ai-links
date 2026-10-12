@@ -37,6 +37,7 @@ const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
   kind: "topic",
+  kindSource: "inferred",
   color: null,
   pinned: false,
   description: null,

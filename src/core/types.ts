@@ -28,8 +28,18 @@ export type SnapshotSummary = {
   imageUrl: string | null;
 };
 
-/** key is the identity (lower-cased name); name is for display. */
-export type LinkTag = { key: string; name: string; source: Source; kind: TagKind };
+/**
+ * key is the identity (lower-cased name); name is for display. `source` labels this attachment.
+ * `kindSource` says who decided the tag's kind: on a write it is used only when the tag is new;
+ * on a read it is the catalog's (see `Tag.kindSource`).
+ */
+export type LinkTag = {
+  key: string;
+  name: string;
+  source: Source;
+  kind: TagKind;
+  kindSource: Source;
+};
 
 export type Link = {
   id: string;
@@ -53,6 +63,8 @@ export type Tag = {
   key: string;
   name: string;
   kind: TagKind;
+  /** Who decided `kind`: "stated" only when the owner did. Anything else is shown as a guess. */
+  kindSource: Source;
   color: string | null;
   pinned: boolean;
   description: string | null;
@@ -60,7 +72,7 @@ export type Tag = {
 };
 
 /** Catalog fields a tag patch may set; an absent field is left untouched. */
-export type TagPatch = Partial<Pick<Tag, "kind" | "projectStatus">>;
+export type TagPatch = Partial<Pick<Tag, "kind" | "kindSource" | "projectStatus">>;
 
 export type NewLink = Omit<Link, "id" | "snapshot">;
 

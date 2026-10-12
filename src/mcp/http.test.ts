@@ -212,6 +212,7 @@ describe("MCP door over HTTP", () => {
       key: "reading",
       name: "Reading",
       kind: "topic",
+      kindSource: "inferred",
       color: null,
       pinned: false,
       description: null,
@@ -227,8 +228,20 @@ describe("MCP door over HTTP", () => {
         summary: "A page",
         why: { text: "for the launch", source: "stated" },
         tags: [
-          { key: "reading", name: "Reading", source: "asked", kind: "topic" },
-          { key: "aye launch", name: "Aye Launch", source: "inferred", kind: "project" },
+          {
+            key: "reading",
+            name: "Reading",
+            source: "asked",
+            kind: "topic",
+            kindSource: "inferred",
+          },
+          {
+            key: "aye launch",
+            name: "Aye Launch",
+            source: "inferred",
+            kind: "project",
+            kindSource: "inferred",
+          },
         ],
         savedAt: "2026-10-11T12:00:00.000Z",
         savedBy: "claude-code",
@@ -418,6 +431,7 @@ describe("MCP door over HTTP", () => {
       key: "home batteries",
       name: "Home Batteries",
       kind: "project",
+      kindSource: "stated",
       projectStatus: null,
     });
     expect(JSON.parse(changed.body.result.content[0].text)).toEqual(
@@ -429,7 +443,10 @@ describe("MCP door over HTTP", () => {
       next.body.result.structuredContent.filingContext.activeProjects.map((t: Json) => t.key),
     ).toEqual(["home batteries"]);
     const got = await call(app, "key-a", "get_link", { id: "1" });
-    expect(got.body.result.structuredContent.link.tags[0].kind).toBe("project");
+    expect(got.body.result.structuredContent.link.tags[0]).toMatchObject({
+      kind: "project",
+      kindSource: "stated",
+    });
 
     await call(app, "key-a", "update_tag", { name: "Home Batteries", kind: "topic" });
     expect(await filed("home batteries")).toEqual([]);

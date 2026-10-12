@@ -51,6 +51,7 @@ export class FakeStore implements LinkStore, SnapshotStore {
           key: t.key,
           name: t.name,
           kind: t.kind,
+          kindSource: t.kindSource,
           color: null,
           pinned: false,
           description: null,
@@ -77,6 +78,7 @@ export class FakeStore implements LinkStore, SnapshotStore {
       const entry = catalog.get(t.key);
       t.name = entry?.name ?? t.name;
       t.kind = entry?.kind ?? t.kind;
+      t.kindSource = entry?.kindSource ?? t.kindSource;
     }
     return out;
   }
@@ -215,6 +217,7 @@ export class FakeStore implements LinkStore, SnapshotStore {
     const entry = this.catalogOf(owner).get(key);
     if (!entry || entry.kind !== expectedKind) return null;
     if (patch.kind !== undefined) entry.kind = patch.kind;
+    if (patch.kindSource !== undefined) entry.kindSource = patch.kindSource;
     if (patch.projectStatus !== undefined) entry.projectStatus = patch.projectStatus;
     return structuredClone(entry);
   }

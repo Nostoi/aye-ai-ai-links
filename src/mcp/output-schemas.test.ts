@@ -169,7 +169,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
         summary: "A page",
         why: { text: "for the launch", source: "stated" },
         tags: [
-          { name: "Reading", source: "asked" },
+          { name: "Reading", source: "asked", kind: "topic" },
           { name: "Aye Launch", source: "inferred", kind: "project" },
           { name: "Side", source: "stated", kind: "project" },
         ],
@@ -284,6 +284,14 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
         (t) => t.kind,
       ),
     ).toEqual(new Set(["topic", "project"]));
+    const allKindSources = new Set(["stated", "asked", "inferred"]);
+    expect(
+      values(
+        links.flatMap((l) => l.tags),
+        (t) => t.kindSource,
+      ),
+    ).toEqual(allKindSources);
+    expect(values(tagsSeen, (t) => t.kindSource)).toEqual(allKindSources);
     expect(values(links, (l) => l.tags.length === 0)).toEqual(new Set([true, false]));
     expect(values(tagsSeen, (t) => t.projectStatus)).toEqual(new Set([null, "active", "done"]));
     for (const field of ["color", "description"]) {

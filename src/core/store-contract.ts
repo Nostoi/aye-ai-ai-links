@@ -60,17 +60,33 @@ function racing(inner: LinkStore): LinkStore {
   });
 }
 
-/** Before each tag write, another caller flips the tag to the other kind (done when it becomes a project). */
-function racingTagWrite(inner: LinkStore): LinkStore {
+/**
+ * Before each of the first `flips` tag writes, another caller flips the tag to the other kind
+ * (done when it becomes a project).
+ */
+function racingTagWrite(inner: LinkStore, flips = Number.POSITIVE_INFINITY): LinkStore {
+  let flipped = 0;
   return wrap(inner, {
     async updateTag(owner, key, patch, expected) {
-      const other: TagKind = expected === "topic" ? "project" : "topic";
-      await inner.updateTag(
-        owner,
-        key,
-        { kind: other, projectStatus: other === "project" ? "done" : null },
-        expected,
-      );
+      if (flipped++ < flips) {
+        const other: TagKind = expected === "topic" ? "project" : "topic";
+        await inner.updateTag(
+          owner,
+          key,
+          { kind: other, projectStatus: other === "project" ? "done" : null },
+          expected,
+        );
+      }
+      return inner.updateTag(owner, key, patch, expected);
+    },
+  });
+}
+
+/** Before each tag write, another caller marks the project done: a status change the writer never read. */
+function racingStatusWrite(inner: LinkStore): LinkStore {
+  return wrap(inner, {
+    async updateTag(owner, key, patch, expected) {
+      await inner.updateTag(owner, key, { projectStatus: "done" }, expected);
       return inner.updateTag(owner, key, patch, expected);
     },
   });
@@ -92,6 +108,7 @@ const tagOf = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
   kind: "topic",
+  kindSource: "inferred",
   color: null,
   pinned: false,
   description: null,
@@ -294,6 +311,7 @@ export function describeStoreContract(
         key: "sleep",
         name: "Sleep",
         kind: "project",
+        kindSource: "stated",
         color: "blue",
         pinned: true,
         description: "d",
@@ -313,7 +331,7 @@ export function describeStoreContract(
         });
         expect(one.link.tags[0]?.name).toBe("Sleep");
         expect(two.link.tags).toEqual([
-          { key: "sleep", name: "Sleep", source: "asked", kind: "topic" },
+          { key: "sleep", name: "Sleep", source: "asked", kind: "topic", kindSource: "inferred" },
         ]);
         expect((await getLink(deps(), A, two.link.id)).tags[0]?.name).toBe("Sleep");
         expect((await h.all(A))[1]?.tags[0]?.name).toBe("Sleep");
@@ -386,6 +404,142 @@ export function describeStoreContract(
         expect((await h.store.listTags(A)).map((t) => t.kind)).toEqual(["topic"]);
       });
 
+      const kindSources = (tags: { key: string; kindSource: string }[]) =>
+        tags.map((t) => [t.key, t.kindSource]);
+
+      it("records who decided a new tag's kind: the winning mention's source when it gave a kind", async () => {
+        const { link } = await saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [
+            { name: "Guess", source: "inferred", kind: "project" },
+            { name: "Told", source: "stated", kind: "project" },
+            { name: "Asked", source: "asked", kind: "project" },
+            { name: "Plain", source: "stated" },
+            { name: "Mixed", source: "asked", kind: "project" },
+            { name: "mixed", source: "stated" },
+          ],
+        });
+        const expected = [
+          ["guess", "inferred"],
+          ["told", "stated"],
+          ["asked", "asked"],
+          ["plain", "inferred"],
+          ["mixed", "inferred"],
+        ];
+        expect(kindSources(link.tags)).toEqual(expected);
+        expect(kindSources(await h.store.listTags(A))).toEqual([...expected].sort());
+        expect(kindSources((await h.all(A))[0]?.tags ?? [])).toEqual(expected);
+      });
+
+      it("update_link records the kind source of the tags it creates too", async () => {
+        const { link } = await saveLink(deps(), A, { url, savedBy: "agent" });
+        const updated = await updateLink(deps(), A, link.id, {
+          tags: [
+            { name: "Kitchen", source: "stated", kind: "project" },
+            { name: "Pantry", source: "stated" },
+          ],
+        });
+        expect(kindSources(updated.tags)).toEqual([
+          ["kitchen", "stated"],
+          ["pantry", "inferred"],
+        ]);
+        expect(kindSources(await h.store.listTags(A))).toEqual([
+          ["kitchen", "stated"],
+          ["pantry", "inferred"],
+        ]);
+      });
+
+      it("a later mention never changes an existing tag's kind source", async () => {
+        await saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [{ name: "Solar", source: "inferred", kind: "project" }],
+        });
+        const mentions = [
+          { name: "solar", source: "stated" as const, kind: "project" as const },
+          { name: "solar", source: "stated" as const },
+          { name: "solar", source: "asked" as const, kind: "project" as const },
+        ];
+        for (const [i, mention] of mentions.entries()) {
+          const saved = await saveLink(deps(), A, {
+            url: `https://ex.com/new-${i}`,
+            savedBy: "agent",
+            tags: [mention],
+          });
+          expect(kindSources(saved.link.tags), `save ${i}`).toEqual([["solar", "inferred"]]);
+          const { link } = await saveLink(deps(), A, {
+            url: `https://ex.com/bare-${i}`,
+            savedBy: "agent",
+          });
+          const updated = await updateLink(deps(), A, link.id, { tags: [mention] });
+          expect(kindSources(updated.tags), `update ${i}`).toEqual([["solar", "inferred"]]);
+        }
+        expect(kindSources(await h.store.listTags(A))).toEqual([["solar", "inferred"]]);
+        expect(await h.catalog(A)).toEqual([
+          tagOf("solar", { name: "Solar", kind: "project", kindSource: "inferred" }),
+        ]);
+      });
+
+      it("a confirmation shows on every link already carrying the tag, in every read", async () => {
+        const first = await saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [{ name: "Solar", source: "inferred", kind: "project" }],
+        });
+        const asProject = { name: "solar", kind: "project" as const };
+        await changeTagKind(deps(), A, asProject);
+        const seen = (tags: { kindSource: string }[]) => tags.map((t) => t.kindSource);
+        expect(seen((await getLink(deps(), A, first.link.id)).tags)).toEqual(["stated"]);
+        expect(seen((await h.all(A))[0]?.tags ?? [])).toEqual(["stated"]);
+        const again = await saveLink(deps(), A, { url, savedBy: "agent" });
+        expect(again.created).toBe(false);
+        expect(seen(again.link.tags)).toEqual(["stated"]);
+        const context = await filingContext(deps(), A);
+        expect(seen(context.tags)).toEqual(["stated"]);
+        expect(seen(context.activeProjects)).toEqual(["stated"]);
+      });
+
+      it("another owner's tag keeps its kind source when this owner confirms theirs", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project" }));
+        await h.seedTag(B, tagOf("solar", { kind: "project" }));
+        await changeTagKind(deps(), A, { name: "solar", kind: "project" });
+        expect(kindSources(await h.catalog(A))).toEqual([["solar", "stated"]]);
+        expect(kindSources(await h.catalog(B))).toEqual([["solar", "inferred"]]);
+      });
+
+      it("returns no field beyond the schema's, however the tag was made or confirmed", async () => {
+        const { link } = await saveLink(deps(), A, {
+          url,
+          savedBy: "agent",
+          tags: [{ name: "Solar", source: "stated", kind: "project" }],
+        });
+        await changeTagKind(deps(), A, { name: "solar", kind: "topic" });
+        const updated = await updateLink(deps(), A, link.id, {
+          tags: [{ name: "solar", source: "asked", kind: "project" }],
+        });
+        const linkTagKeys = ["key", "kind", "kindSource", "name", "source"];
+        const tagKeys = [
+          "color",
+          "description",
+          "key",
+          "kind",
+          "kindSource",
+          "name",
+          "pinned",
+          "projectStatus",
+        ];
+        const fromStores = [
+          ...link.tags,
+          ...updated.tags,
+          ...((await h.all(A))[0]?.tags ?? []),
+          ...((await h.store.get(A, link.id))?.tags ?? []),
+        ];
+        for (const t of fromStores) expect(Object.keys(t).sort()).toEqual(linkTagKeys);
+        const catalogTags = [...(await h.store.listTags(A)), ...(await h.catalog(A))];
+        for (const t of catalogTags) expect(Object.keys(t).sort()).toEqual(tagKeys);
+      });
+
       it("re-tagging via update keeps an existing tag's metadata and catalog name", async () => {
         await h.seedTag(A, projectTag);
         const { link } = await saveLink(deps(), A, { url, savedBy: "agent" });
@@ -396,8 +550,14 @@ export function describeStoreContract(
           ],
         });
         expect(updated.tags).toEqual([
-          { key: "sleep", name: "Sleep", source: "inferred", kind: "project" },
-          { key: "fresh", name: "fresh", source: "stated", kind: "topic" },
+          {
+            key: "sleep",
+            name: "Sleep",
+            source: "inferred",
+            kind: "project",
+            kindSource: "stated",
+          },
+          { key: "fresh", name: "fresh", source: "stated", kind: "topic", kindSource: "inferred" },
         ]);
         expect(await h.catalog(A)).toEqual([
           projectTag,
@@ -405,6 +565,7 @@ export function describeStoreContract(
             key: "fresh",
             name: "fresh",
             kind: "topic",
+            kindSource: "inferred",
             color: null,
             pinned: false,
             description: null,
@@ -445,6 +606,7 @@ export function describeStoreContract(
           key: "sleep",
           name: "Sleep",
           kind: "project",
+          kindSource: "stated",
           color: "blue",
           pinned: true,
           description: "d",
@@ -457,13 +619,14 @@ export function describeStoreContract(
           tags: tag("sleep"),
         });
         expect(link.tags).toEqual([
-          { key: "sleep", name: "sleep", source: "stated", kind: "topic" },
+          { key: "sleep", name: "sleep", source: "stated", kind: "topic", kindSource: "inferred" },
         ]);
         expect(await h.catalog(B)).toEqual([
           {
             key: "sleep",
             name: "sleep",
             kind: "topic",
+            kindSource: "inferred",
             color: null,
             pinned: false,
             description: null,
@@ -479,6 +642,7 @@ export function describeStoreContract(
         key,
         name,
         kind: "topic",
+        kindSource: "inferred",
         color: null,
         pinned: false,
         description: null,
@@ -502,6 +666,7 @@ export function describeStoreContract(
           key: "sleep",
           name: "Sleep",
           kind: "project",
+          kindSource: "asked",
           color: "blue",
           pinned: true,
           description: "d",
@@ -561,7 +726,13 @@ export function describeStoreContract(
         expect(updated).toEqual({ ...solarA, kind: "project" });
         const read = await h.store.get(A, link.id);
         expect(read?.tags).toEqual([
-          { key: "solar", name: "Solar", source: "inferred", kind: "project" },
+          {
+            key: "solar",
+            name: "Solar",
+            source: "inferred",
+            kind: "project",
+            kindSource: "inferred",
+          },
         ]);
         expect(await h.catalog(A)).toEqual([{ ...solarA, kind: "project" }]);
         expect(await h.catalog(B)).toEqual([solarB]);
@@ -591,6 +762,17 @@ export function describeStoreContract(
           tagOf("solar", { kind: "project", projectStatus: "done" }),
         ]);
       });
+
+      it("sets the kind source alone, leaving kind and project status, only while the kind matches", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project", projectStatus: "done" }));
+        expect(await h.store.updateTag(A, "solar", { kindSource: "stated" }, "topic")).toBeNull();
+        expect((await h.catalog(A))[0]?.kindSource).toBe("inferred");
+        const tag = await h.store.updateTag(A, "solar", { kindSource: "stated" }, "project");
+        expect(tag).toEqual(
+          tagOf("solar", { kind: "project", kindSource: "stated", projectStatus: "done" }),
+        );
+        expect(await h.catalog(A)).toEqual([tag]);
+      });
     });
 
     describe("changeTagKind", () => {
@@ -602,8 +784,23 @@ export function describeStoreContract(
           name: "  HOME   batteries ",
           kind: "project",
         });
-        expect(tag).toEqual(tagOf("home batteries", { name: "Home Batteries", kind: "project" }));
+        expect(tag).toEqual(
+          tagOf("home batteries", {
+            name: "Home Batteries",
+            kind: "project",
+            kindSource: "stated",
+          }),
+        );
         expect(await h.catalog(A)).toEqual([tag]);
+      });
+
+      it("a change of kind records the owner as its source, whatever it was before", async () => {
+        await h.seedTag(A, tagOf("solar", { kindSource: "asked" }));
+        const tag = await changeTagKind(deps(), A, asProject);
+        expect(tag).toMatchObject({ kind: "project", kindSource: "stated" });
+        expect(await h.catalog(A)).toEqual([
+          tagOf("solar", { kind: "project", kindSource: "stated" }),
+        ]);
       });
 
       it("clears the done status in both directions, so a round trip reopens the project", async () => {
@@ -618,15 +815,57 @@ export function describeStoreContract(
         ]);
       });
 
-      it("writes nothing when the tag already has the kind, so a done project stays done", async () => {
-        await h.seedTag(A, tagOf("solar", { kind: "project", projectStatus: "done" }));
+      it("writes nothing when the tag already has the kind and the owner stated it", async () => {
+        const stated = tagOf("solar", {
+          kind: "project",
+          kindSource: "stated",
+          projectStatus: "done",
+        });
+        await h.seedTag(A, stated);
         const counted = countingTagWrites(h.store);
         const tag = await changeTagKind({ store: counted.store }, A, asProject);
-        expect(tag).toMatchObject({ kind: "project", projectStatus: "done" });
+        expect(tag).toEqual(stated);
         expect(counted.calls()).toBe(0);
-        expect(await h.catalog(A)).toEqual([
-          tagOf("solar", { kind: "project", projectStatus: "done" }),
-        ]);
+        expect(await h.catalog(A)).toEqual([stated]);
+      });
+
+      for (const guess of ["inferred", "asked"] as const) {
+        it(`confirms a kind that was ${guess} without changing the kind or reopening a done project`, async () => {
+          await h.seedTag(
+            A,
+            tagOf("solar", { kind: "project", kindSource: guess, projectStatus: "done" }),
+          );
+          const counted = countingTagWrites(h.store);
+          const tag = await changeTagKind({ store: counted.store }, A, asProject);
+          const confirmed = tagOf("solar", {
+            kind: "project",
+            kindSource: "stated",
+            projectStatus: "done",
+          });
+          expect(tag).toEqual(confirmed);
+          expect(counted.calls()).toBe(1);
+          expect(await h.catalog(A)).toEqual([confirmed]);
+          expect((await filingContext(deps(), A)).activeProjects).toEqual([]);
+        });
+      }
+
+      it("a status change made between the read and the confirmation is kept", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project", projectStatus: "active" }));
+        const tag = await changeTagKind({ store: racingStatusWrite(h.store) }, A, asProject);
+        const expected = tagOf("solar", {
+          kind: "project",
+          kindSource: "stated",
+          projectStatus: "done",
+        });
+        expect(tag).toEqual(expected);
+        expect(await h.catalog(A)).toEqual([expected]);
+      });
+
+      it("a kind changed by someone else while confirming is a conflict, and nothing is confirmed", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project" }));
+        const racing = racingTagWrite(h.store);
+        expect(await code(changeTagKind({ store: racing }, A, asProject))).toBe("conflict");
+        expect((await h.catalog(A)).map((t) => t.kindSource)).toEqual(["inferred"]);
       });
 
       it("refuses an unknown tag, a blank name and a bad kind without writing", async () => {
@@ -655,10 +894,10 @@ export function describeStoreContract(
 
       it("keeps a concurrent change instead of overwriting it", async () => {
         await h.seedTag(A, tagOf("solar"));
-        const tag = await changeTagKind({ store: racingTagWrite(h.store) }, A, asProject);
+        const tag = await changeTagKind({ store: racingTagWrite(h.store, 1) }, A, asProject);
         expect(tag).toMatchObject({ kind: "project", projectStatus: "done" });
         expect(await h.catalog(A)).toEqual([
-          tagOf("solar", { kind: "project", projectStatus: "done" }),
+          tagOf("solar", { kind: "project", kindSource: "stated", projectStatus: "done" }),
         ]);
       });
     });
@@ -668,7 +907,13 @@ export function describeStoreContract(
         summary: "changed",
         state: "archived" as const,
         tags: [
-          { key: "newtag", name: "NewTag", source: "stated" as const, kind: "topic" as const },
+          {
+            key: "newtag",
+            name: "NewTag",
+            source: "stated" as const,
+            kind: "topic" as const,
+            kindSource: "inferred" as const,
+          },
         ],
       };
       const why: Labelled = { text: "filled", source: "stated" };
@@ -722,7 +967,13 @@ export function describeStoreContract(
           tags: [{ name: " New  Tag ", source: "inferred" }],
         });
         expect(updated.tags).toEqual([
-          { key: "new tag", name: "New Tag", source: "inferred", kind: "topic" },
+          {
+            key: "new tag",
+            name: "New Tag",
+            source: "inferred",
+            kind: "topic",
+            kindSource: "inferred",
+          },
         ]);
         expect((await h.all(A))[0]?.tags).toEqual(updated.tags);
       });

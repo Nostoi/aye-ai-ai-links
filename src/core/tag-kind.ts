@@ -1,11 +1,13 @@
 import { CoreError } from "./errors.js";
 import type { LinkStore } from "./store.js";
 import { isTagKind, tagKey } from "./tags.js";
-import type { OwnerId, Tag, TagKind } from "./types.js";
+import type { OwnerId, Tag, TagKind, TagPatch } from "./types.js";
 
 /**
- * Change an existing tag between topic and project. Any change of kind clears
- * the project status; asking for the kind the tag already has writes nothing.
+ * Set an existing tag's kind on the owner's word, between topic and project. The kind then
+ * counts as stated. Any change of kind clears the project status. Asking for the kind the
+ * tag already has confirms it: only its source is written, so the status stays. If the
+ * owner already stated that kind, nothing is written.
  * The write only lands while the kind is still the one that was read; if it
  * moved, read again once and apply the rule to what is there now.
  */
@@ -27,8 +29,12 @@ export async function changeTagKind(
         `No tag named "${name}" was found. Ask the owner for the exact name; the tags on links from search_links show the names in use. A tag is created by tagging a link.`,
       );
     }
-    if (current.kind === kind) return current;
-    const updated = await store.updateTag(owner, key, { kind, projectStatus: null }, current.kind);
+    const sameKind = current.kind === kind;
+    if (sameKind && current.kindSource === "stated") return current;
+    const patch: TagPatch = sameKind
+      ? { kindSource: "stated" }
+      : { kind, kindSource: "stated", projectStatus: null };
+    const updated = await store.updateTag(owner, key, patch, current.kind);
     if (updated) return updated;
   }
   throw new CoreError(

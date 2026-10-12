@@ -15,10 +15,10 @@ import type {
  * - Owner scoping: every method takes the owner first and never reads or
  *   changes another owner's links or tags.
  * - Tags: identity is `key`, per owner. A key the owner has not used before is
- *   created with the attached name and kind. Attaching an existing tag never
- *   changes its name, kind, colour, pin or project fields; only updateTag does. Every returned
- *   LinkTag.name and .kind is the catalog's for its key, not the one passed in;
- *   each LinkTag keeps its own source. Tags come back in the order
+ *   created with the attached name, kind and kindSource. Attaching an existing tag never
+ *   changes its name, kind, kindSource, colour, pin or project fields; only updateTag does.
+ *   Every returned LinkTag.name, .kind and .kindSource is the catalog's for its key, not the
+ *   one passed in; each LinkTag keeps its own source. Tags come back in the order
  *   they were attached.
  * - Atomicity: each method that takes several steps (insert with tags, update
  *   with tags, read-back) either completes whole or changes nothing.

@@ -40,18 +40,19 @@ function harnessFor(db: Db): StoreHarness {
     catalog: (owner) =>
       db
         .prepare(
-          "SELECT key, name, kind, color, pinned, description, project_status AS projectStatus FROM tags WHERE owner_id = ? ORDER BY id",
+          "SELECT key, name, kind, kind_source AS kindSource, color, pinned, description, project_status AS projectStatus FROM tags WHERE owner_id = ? ORDER BY id",
         )
         .all(owner)
         .map((r) => ({ ...(r as Tag), pinned: (r as { pinned: number }).pinned === 1 })),
     seedTag: (owner, t) => {
       db.prepare(
-        "INSERT INTO tags (owner_id, key, name, kind, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tags (owner_id, key, name, kind, kind_source, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         owner,
         t.key,
         t.name,
         t.kind,
+        t.kindSource,
         t.color,
         t.pinned ? 1 : 0,
         t.description,
@@ -78,7 +79,7 @@ const baseLink = (): NewLink => ({
   title: null,
   summary: null,
   why: null,
-  tags: [{ key: "t", name: "t", source: "stated", kind: "topic" }],
+  tags: [{ key: "t", name: "t", source: "stated", kind: "topic", kindSource: "inferred" }],
   savedAt: NOW,
   savedBy: "x",
   lastOpenedAt: null,

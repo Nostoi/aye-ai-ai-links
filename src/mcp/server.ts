@@ -10,6 +10,12 @@ import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
+import {
+  linkResultOutput,
+  saveLinkOutput,
+  searchLinksOutput,
+  updateTagOutput,
+} from "./output-schemas.js";
 
 export type McpDeps = { store: LinkStore; search: LinkSearch; now: () => Date };
 
@@ -90,9 +96,20 @@ function toFailure(error: unknown) {
   );
 }
 
-async function guarded(run: () => Promise<unknown>) {
+const OUTPUT_MISMATCH =
+  "The request was handled and any change you asked for was saved, but the result could not be returned in its declared shape. Do not retry it. Tell the owner.";
+
+/**
+ * The SDK checks a result only after the handler has committed, and reports a mismatch
+ * without logging it, so check here first: the agent then learns the change was saved.
+ */
+async function guarded(output: z.ZodType, run: () => Promise<unknown>) {
   try {
-    return ok(await run());
+    const result = ok(await run());
+    const check = output.safeParse(result.structuredContent);
+    if (check.success) return result;
+    console.error("[mcp] result does not match its output schema:", check.error.issues);
+    return fail(OUTPUT_MISMATCH);
   } catch (error) {
     return toFailure(error);
   }
@@ -111,6 +128,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
     {
       description: guidance.SAVE_LINK,
       inputSchema: saveLinkInput,
+      outputSchema: saveLinkOutput,
       // Every hint is set: the spec defaults are destructive and open-world (https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
       annotations: {
         readOnlyHint: false,
@@ -120,7 +138,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
       },
     },
     (args) =>
-      guarded(async () => {
+      guarded(saveLinkOutput, async () => {
         const saved = await saveLink(deps, owner, { ...args, savedBy });
         return { ...saved, filingContext: await filingContext(deps, owner) };
       }),
@@ -131,6 +149,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
     {
       description: guidance.UPDATE_LINK,
       inputSchema: updateLinkInput,
+      outputSchema: linkResultOutput,
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -139,7 +158,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
       },
     },
     ({ id, snoozedUntil, ...rest }) =>
-      guarded(async () => ({
+      guarded(linkResultOutput, async () => ({
         link: await updateLink(deps, owner, id, {
           ...rest,
           ...(snoozedUntil !== undefined && {
@@ -154,6 +173,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
     {
       description: guidance.UPDATE_TAG,
       inputSchema: updateTagInput,
+      outputSchema: updateTagOutput,
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -162,7 +182,9 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
       },
     },
     ({ name, kind }) =>
-      guarded(async () => ({ tag: await changeTagKind(deps, owner, { name, kind }) })),
+      guarded(updateTagOutput, async () => ({
+        tag: await changeTagKind(deps, owner, { name, kind }),
+      })),
   );
 
   server.registerTool(
@@ -170,6 +192,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
     {
       description: guidance.SEARCH_LINKS,
       inputSchema: searchLinksInput,
+      outputSchema: searchLinksOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -178,7 +201,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
       },
     },
     ({ savedFrom, savedTo, ...rest }) =>
-      guarded(async () => ({
+      guarded(searchLinksOutput, async () => ({
         links: await searchLinks(deps, owner, {
           ...rest,
           savedFrom: toDate(savedFrom),
@@ -192,6 +215,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
     {
       description: guidance.GET_LINK,
       inputSchema: getLinkInput,
+      outputSchema: linkResultOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -199,7 +223,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         openWorldHint: false,
       },
     },
-    ({ id }) => guarded(async () => ({ link: await getLink(deps, owner, id) })),
+    ({ id }) => guarded(linkResultOutput, async () => ({ link: await getLink(deps, owner, id) })),
   );
 
   return server;

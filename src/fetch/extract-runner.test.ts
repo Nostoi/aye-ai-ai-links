@@ -87,7 +87,7 @@ describe("child extractor: a hostile page", () => {
     const elapsed = performance.now() - started;
     clearInterval(timer);
     expect(out.kind).toBe("timeout");
-    expect(elapsed).toBeGreaterThan(DEADLINE_MS / 2);
+    expect(elapsed).toBeGreaterThan(DEADLINE_MS - 50);
     expect(elapsed).toBeLessThan(DEADLINE_MS + 4500);
     expect(ticks).toBeGreaterThan(30);
     expect(pids).toHaveLength(1);

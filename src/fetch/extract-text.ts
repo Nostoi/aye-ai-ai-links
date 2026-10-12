@@ -1,5 +1,5 @@
 import { Readability } from "@mozilla/readability";
-import { capCodePoints } from "./cap.js";
+import { capCodePoints } from "./cap.ts";
 
 const TEXT_MAX = 100_000;
 

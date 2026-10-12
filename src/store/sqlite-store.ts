@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import type { SnapshotLease, SnapshotRecord, SnapshotStore } from "../core/snapshot-store.js";
 import type { LinkStore } from "../core/store.js";
 import type {
   Labelled,
@@ -7,6 +8,7 @@ import type {
   LinkTag,
   NewLink,
   OwnerId,
+  SnapshotStatus,
   Tag,
   TagKind,
   TagPatch,
@@ -50,13 +52,21 @@ function toMs(d: Date | null): number | null {
 const fromMs = (ms: number | null): Date | null => (ms === null ? null : new Date(ms));
 
 /** Canonical decimal ids in 1..MAX_SAFE_INTEGER; anything else was never issued. */
-function parseId(id: string): number | null {
+export function parseId(id: string): number | null {
   if (!/^[1-9][0-9]*$/.test(id)) return null;
   const n = Number(id);
   return Number.isSafeInteger(n) ? n : null;
 }
 
-export class SqliteStore implements LinkStore {
+type SnapshotRow = {
+  fetch_status: SnapshotStatus;
+  fetched_at: number | null;
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+};
+
+export class SqliteStore implements LinkStore, SnapshotStore {
   constructor(private readonly db: Database) {}
 
   /** Idempotent. Owners are created here, outside LinkStore. */
@@ -120,6 +130,75 @@ export class SqliteStore implements LinkStore {
     return row ? { ...row, pinned: row.pinned === 1 } : null;
   }
 
+  async dueSnapshots(now: Date, limit: number) {
+    const rows = this.db
+      .prepare(
+        `SELECT owner_id, link_id FROM snapshots
+         WHERE fetch_status IN ('pending', 'retrying') AND next_fetch_at <= ?
+         ORDER BY next_fetch_at, link_id LIMIT ?`,
+      )
+      .all(toMs(now), limit) as { owner_id: string; link_id: number }[];
+    return rows.map((r) => ({ owner: r.owner_id, linkId: String(r.link_id) }));
+  }
+
+  async leaseSnapshot(
+    owner: OwnerId,
+    linkId: string,
+    now: Date,
+    until: Date,
+  ): Promise<SnapshotLease | null> {
+    const claim = toMs(until) as number;
+    if (claim <= (toMs(now) as number)) throw new RangeError("A lease must end after it starts.");
+    const n = parseId(linkId);
+    if (n === null) return null;
+    const row = this.db
+      .prepare(
+        `UPDATE snapshots SET next_fetch_at = ?
+         WHERE link_id = ? AND owner_id = ? AND fetch_status IN ('pending', 'retrying')
+           AND next_fetch_at <= ?
+         RETURNING attempts`,
+      )
+      .get(claim, n, owner, toMs(now)) as { attempts: number } | undefined;
+    if (!row) return null;
+    const { url } = this.db.prepare("SELECT url FROM links WHERE id = ?").get(n) as { url: string };
+    return { url, attempts: row.attempts, claim };
+  }
+
+  async recordSnapshot(owner: OwnerId, linkId: string, claim: number, r: SnapshotRecord) {
+    const n = parseId(linkId);
+    if (n === null) return false;
+    const { changes } = this.db
+      .prepare(
+        `UPDATE snapshots SET fetch_status = ?, attempts = ?, next_fetch_at = ?, fetched_at = ?,
+           title = ?, description = ?, image_url = ?, text = ?, last_error = ?
+         WHERE link_id = ? AND owner_id = ? AND next_fetch_at = ?`,
+      )
+      .run(
+        r.status,
+        r.attempts,
+        toMs(r.nextFetchAt),
+        toMs(r.fetchedAt),
+        r.title,
+        r.description,
+        r.imageUrl,
+        r.text,
+        r.lastError,
+        n,
+        owner,
+        claim,
+      );
+    return changes === 1;
+  }
+
+  async getSnapshotText(owner: OwnerId, linkId: string) {
+    const n = parseId(linkId);
+    if (n === null) return null;
+    const row = this.db
+      .prepare("SELECT text FROM snapshots WHERE link_id = ? AND owner_id = ?")
+      .get(n, owner) as { text: string | null } | undefined;
+    return row?.text ?? null;
+  }
+
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {
     let row: { id: number } | undefined;
     try {
@@ -155,6 +234,11 @@ export class SqliteStore implements LinkStore {
       throw e;
     }
     if (row) {
+      this.db
+        .prepare(
+          "INSERT INTO snapshots (link_id, owner_id, fetch_status, next_fetch_at) VALUES (?, ?, 'pending', ?)",
+        )
+        .run(row.id, owner, toMs(link.savedAt));
       this.attachTags(owner, row.id, link.tags);
       return { link: this.mustRead(owner, row.id), created: true };
     }
@@ -233,6 +317,12 @@ export class SqliteStore implements LinkStore {
          WHERE lt.link_id = ? AND lt.owner_id = ? ORDER BY lt.position`,
       )
       .all(id, owner) as LinkTag[];
+    const snap = this.db
+      .prepare(
+        `SELECT fetch_status, fetched_at, title, description, image_url
+         FROM snapshots WHERE link_id = ? AND owner_id = ?`,
+      )
+      .get(id, owner) as SnapshotRow | undefined;
     return {
       id: String(row.id),
       url: row.url,
@@ -250,6 +340,15 @@ export class SqliteStore implements LinkStore {
       lastSurfacedAt: fromMs(row.last_surfaced_at),
       snoozedUntil: fromMs(row.snoozed_until),
       state: row.state,
+      snapshot: snap
+        ? {
+            status: snap.fetch_status,
+            fetchedAt: fromMs(snap.fetched_at),
+            title: snap.title,
+            description: snap.description,
+            imageUrl: snap.image_url,
+          }
+        : null,
     };
   }
 }

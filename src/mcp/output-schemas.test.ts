@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { z } from "zod";
 import { createApp } from "../app.js";
 import type { Caller } from "../auth/caller.js";
+import type { getDigest } from "../core/digest.js";
 import type { filingContext } from "../core/filing-context.js";
 import type { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
@@ -23,6 +24,7 @@ import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import {
   type addProfileOutput,
+  type getDigestOutput,
   getLinkOutput,
   type getProfileOutput,
   type linkOutput,
@@ -99,6 +101,7 @@ const retag = (name: string, kind: string): Step => ({ tool: "update_tag", args:
 const addToProfile = (args: Record<string, unknown>): Step => ({ tool: "add_profile", args });
 const editProfileStep = (args: Record<string, unknown>): Step => ({ tool: "edit_profile", args });
 const getProfileStep: Step = { tool: "get_profile", args: {} };
+const digestStep: Step = { tool: "get_digest", args: {} };
 
 /** A copy of `value` with one unknown key added to every plain object in it, as a later server version might send. */
 function withAddedField(value: Json): { value: Json; added: number } {
@@ -130,6 +133,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_profile",
       "edit_profile",
+      "get_digest",
       "get_link",
       "get_profile",
       "save_link",
@@ -228,10 +232,29 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(editProfileStep({ removeNotes: ["2"] }));
     await run(getProfileStep);
     await run(save({ url: "https://example.com/d" })); // its profile holds notes and focus
+    // A digest reaching every reason: link 5 matches the inferred focus entry, link 3 is old
+    // with no why, and link 4 is new with no why.
+    await run(
+      save({ url: "https://example.com/e", title: "Quokka", why: { text: "w", source: "stated" } }),
+    );
+    await run(addToProfile({ addFocus: [{ text: "quokka", source: "inferred" }] }));
+    db.prepare("UPDATE links SET saved_at = ? WHERE id = 3").run(NOW.getTime() - 60 * 86_400_000);
+    const digest = await run(digestStep);
+    const emptyDigest = await run(digestStep); // everything due was just surfaced
 
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
-    const links: Json[] = outputs.flatMap((o) => [o.link, ...(o.links ?? [])]).filter(Boolean);
+    expect(emptyDigest).toEqual({ links: [] });
+    expect(digest.links.map((d: Json) => [d.link.id, d.reasons.map((r: Json) => r.kind)])).toEqual([
+      ["5", ["focus_words", "never_surfaced"]],
+      ["3", ["no_why", "not_opened_recently", "never_surfaced"]],
+      ["4", ["no_why", "never_surfaced"]],
+    ]);
+    expect(digest.links[0].reasons[0].focus).toMatchObject({ text: "quokka", source: "inferred" });
+
+    const links: Json[] = outputs
+      .flatMap((o) => [o.link, ...(o.links ?? []).map((x: Json) => x.link ?? x)])
+      .filter(Boolean);
     const tagsSeen: Json[] = outputs
       .flatMap((o) => [
         o.tag,
@@ -367,13 +390,18 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(
       addToProfile({
         addNotes: [{ text: "plans a home battery install", source: "stated" }],
-        addFocus: [{ text: "comparing battery quotes", source: "asked" }],
+        addFocus: [
+          { text: "comparing battery quotes", source: "asked" },
+          { text: "launch", source: "inferred" },
+        ],
       }),
     );
     await run(
       editProfileStep({ editNotes: [{ id: "1", text: "plans a battery", source: "stated" }] }),
     );
     await run(getProfileStep);
+    const digest = await run(digestStep);
+    expect(digest.links[0].reasons[0].focus.addedLater).toBe(1);
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
     // Enums stay closed: a new enum value is still a contract change.
@@ -586,6 +614,9 @@ describe("output schemas against core's types (checked by tsc)", () => {
     >();
     expectTypeOf<z.output<typeof updateTagOutput>>().toEqualTypeOf<
       Wire<{ tag: Returned<typeof changeTagKind> }>
+    >();
+    expectTypeOf<z.output<typeof getDigestOutput>>().toEqualTypeOf<
+      Wire<Returned<typeof getDigest>>
     >();
   });
 });

@@ -139,3 +139,13 @@ export const linkResultOutput = z.strictObject({ link: linkOutput });
 export const getLinkOutput = z.strictObject({ link: linkOutput, snapshotText: snapshotTextOutput });
 export const searchLinksOutput = z.strictObject({ links: z.array(linkOutput) });
 export const updateTagOutput = z.strictObject({ tag: tagOutput });
+
+const digestReasonOutput = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput }),
+  z.strictObject({ kind: z.literal("no_why") }),
+  z.strictObject({ kind: z.literal("not_opened_recently") }),
+  z.strictObject({ kind: z.literal("never_surfaced") }),
+]);
+export const getDigestOutput = z.strictObject({
+  links: z.array(z.strictObject({ link: linkOutput, reasons: z.array(digestReasonOutput) })),
+});

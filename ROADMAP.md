@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** Meaning search stores its vectors in an ordinary table and uses sqlite-vec only for its distance function (#32 PR A). This narrows spec §2's "sqlite-vec". Rulings: #32 body and comment 6122439969; research: #32's first comment.
+  - **`link_vectors`**, migration 7, is an ordinary table keyed by link and model. A link's vectors are deleted with it, the migration needs no extension, and the keys CLI never loads one. `vec0` virtual tables are not used: tag and project filters must apply before the top-k cut.
+  - **sqlite-vec is pinned at exactly 0.1.9.** Only `vec_distance_cosine` is used, so if a pre-v1 release breaks, only that one function has to be replaced.
+  - **The reader leaves out vectors it cannot score:** rows of a different size than the query, and zero, NaN or near-zero vectors.
+
 - **2026-10-12:** `save_link` shows the fetched page, and `get_link` returns its text (#31). Rulings: #31 comment 6118791899. Sources: `docs/specs/2026-10-12-snapshot-excerpt-sources.md`.
   - **The wait lives in core.** `saveLink` races a new link's kick promise against 4 s (`SAVE_WAIT_MS`), clears the timer, and reads the link again, so the result shows the page and any edit made meanwhile. A repeat save never kicks or waits.
   - **`snapshotText: {text, truncated} | null`** is a new top-level key on `save_link` (500 code points) and `get_link` (20,000), built only in `core/snapshot-text.ts`. `Link.snapshot` still never carries the text, and search and `update_link` never read it.

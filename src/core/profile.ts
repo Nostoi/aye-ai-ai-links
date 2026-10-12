@@ -98,21 +98,17 @@ const conflict = (id: string) =>
   );
 
 /** The result comes from the write itself: a read after a committed write could fail and look like a failed write. */
-function apply(deps: ProfileDeps, owner: OwnerId, writtenBy: string, changes: ProfileChanges) {
-  return deps.profile.apply(owner, changes, {
-    writtenBy,
-    at: deps.now(),
-    focusLimit: RECENT_FOCUS,
-  });
-}
-
 async function write(
   deps: ProfileDeps,
   owner: OwnerId,
   writtenBy: string,
   changes: ProfileChanges,
 ) {
-  const result = await apply(deps, owner, writtenBy, changes);
+  const result = await deps.profile.apply(owner, changes, {
+    writtenBy,
+    at: deps.now(),
+    focusLimit: RECENT_FOCUS,
+  });
   if (!result.ok) {
     if ("unknownId" in result) throw notFound(result.unknownId);
     throw conflict(result.conflictId);
@@ -148,28 +144,24 @@ export async function editProfile(
   if (new Set(ids).size !== ids.length) {
     throw invalid("Edit or remove each note once per call. An id appears more than once.");
   }
-  for (let attempt = 0; ; attempt++) {
-    const read = new Map((await deps.profile.listNotes(owner)).map((n) => [n.id, n.source]));
-    const sourceOf = (id: string): Source => {
-      const source = read.get(id);
-      if (source === undefined) throw notFound(id);
-      return source;
-    };
-    const changes: ProfileChanges = {
-      ...noChanges(),
-      editNotes: edits.map((e) => ({ ...e, expectedSource: sourceOf(e.id) })),
-      removeNotes: removes.map((id) => ({ id, expectedSource: sourceOf(id) })),
-    };
-    for (const e of changes.editNotes) {
-      if (e.source !== "stated" && e.expectedSource === "stated") {
-        throw invalid(
-          `Note "${e.id}" is stated by the owner, so it can only be edited with source "stated". Leave it as it is and call add_profile with your own note, labelled ${e.source}.`,
-        );
-      }
+  const read = new Map((await deps.profile.listNotes(owner)).map((n) => [n.id, n.source]));
+  const sourceOf = (id: string): Source => {
+    const source = read.get(id);
+    if (source === undefined) throw notFound(id);
+    return source;
+  };
+  const changes: ProfileChanges = {
+    ...noChanges(),
+    editNotes: edits.map((e) => ({ ...e, expectedSource: sourceOf(e.id) })),
+    removeNotes: removes.map((id) => ({ id, expectedSource: sourceOf(id) })),
+  };
+  for (const e of changes.editNotes) {
+    if (e.source !== "stated" && e.expectedSource === "stated") {
+      throw invalid(
+        `Note "${e.id}" is stated by the owner, so it can only be edited with source "stated". Leave it as it is and call add_profile with your own note, labelled ${e.source}.`,
+      );
     }
-    const result = await apply(deps, owner, writtenBy, changes);
-    if (result.ok) return { notes: result.notes, recentFocus: result.recentFocus };
-    if ("unknownId" in result) throw notFound(result.unknownId);
-    if (attempt > 0 || removes.includes(result.conflictId)) throw conflict(result.conflictId);
   }
+  const result = await write(deps, owner, writtenBy, changes);
+  return { notes: result.notes, recentFocus: result.recentFocus };
 }

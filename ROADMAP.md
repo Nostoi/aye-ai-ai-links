@@ -29,7 +29,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Length caps (owner's defaults, can be changed).** 1,000 characters per note and 500 per focus entry. Longer text is refused, never truncated.
   - **Recent focus** is the newest 10 entries (`RECENT_FOCUS` in `core/profile.ts`). #34 owns what a digest picks from them.
   - **Ids and writes.** Note ids are never reused after a delete. A write returns the profile as it stood inside its own transaction, with the new ids, and does no second read. A failed edit or remove id changes nothing in that call.
-  - **Two agents editing one note:** the last write wins, which is acceptable for a single owner. An edit or removal is written only while the note still has the source it was read with; if it moved, a removal answers `conflict` and an edit reads once more, applies the stated-note rule again, and otherwise answers `conflict`. So an inferred edit never replaces a stated note.
+  - **Two agents editing one note:** the last write wins, which is acceptable for a single owner. An edit or removal is written only while the note still has the source it was read with; if it moved, the call answers `conflict` and changes nothing. So an inferred edit never replaces a stated note.
   - **Older builds lock out.** The migration adds two tables (`profile_notes`, `focus_log`) and rebuilds none, but older builds refuse a database with a newer schema, as with agent keys (#6), so the server and the CLI are deployed from one build (#7, #27).
   - **Output schemas** come from #39, which lands first; these tools follow its pattern.
   - Sources: `docs/specs/2026-10-11-profile-tool-sources.md`.

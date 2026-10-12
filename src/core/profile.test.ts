@@ -389,22 +389,68 @@ describe("profile use cases", () => {
         return { stub, counts: () => ({ reads, applies }) };
       }
 
-      it("refuses an inferred edit of a note that became stated, and keeps the stated note", async () => {
+      it("answers conflict, applying once, when an inferred edit's note became stated, and keeps the stated note", async () => {
         const id = await addNote("lives in York", "inferred");
-        const { stub } = racing(1, () => "stated");
+        const { stub, counts } = racing(1, () => "stated");
         const err = await code(
           editProfile({ ...deps, profile: stub }, A, "codex", {
             editNotes: [{ id, text: "lives in York, guessed", source: "inferred" }],
           }),
         );
-        expect(err?.code).toBe("invalid_input");
-        expect(err?.message).toMatch(/add_profile/);
+        expect(err?.code).toBe("conflict");
+        expect(err?.message).toContain("get_profile");
+        expect(counts()).toEqual({ reads: 1, applies: 1 });
         expect(await notes()).toEqual([
           { id, text: "lives in York", source: "stated", writtenBy: "owner", updatedAt: NOW },
         ]);
       });
 
-      it("answers conflict, naming get_profile, when the second attempt conflicts too", async () => {
+      it("keeps a note the owner made stated when a mixed edit and removal both raced", async () => {
+        const editId = await addNote("edit me", "inferred");
+        const removeId = await addNote("remove me", "inferred");
+        let reads = 0;
+        let applies = 0;
+        const flip = (id: string, text: string, source: Source) =>
+          profile.apply(
+            A,
+            {
+              addNotes: [],
+              addFocus: [],
+              removeNotes: [],
+              editNotes: [{ id, text, source, expectedSource: "inferred" }],
+            },
+            { writtenBy: "owner", at: NOW, focusLimit: RECENT_FOCUS },
+          );
+        const stub: ProfileStore = {
+          recentFocus: (o, l) => profile.recentFocus(o, l),
+          listNotes: async (o) => {
+            const seen = await profile.listNotes(o);
+            if (reads++ === 0) {
+              await flip(editId, "edit me", "asked");
+              await flip(removeId, "OWNER", "stated");
+            }
+            return seen;
+          },
+          apply: (...args) => {
+            applies++;
+            return profile.apply(...args);
+          },
+        };
+        const err = await code(
+          editProfile({ ...deps, profile: stub }, A, "codex", {
+            editNotes: [{ id: editId, text: "guessed", source: "inferred" }],
+            removeNotes: [removeId],
+          }),
+        );
+        expect(err?.code).toBe("conflict");
+        expect(applies).toBe(1);
+        expect(await notes()).toEqual([
+          { id: editId, text: "edit me", source: "asked", writtenBy: "owner", updatedAt: NOW },
+          { id: removeId, text: "OWNER", source: "stated", writtenBy: "owner", updatedAt: NOW },
+        ]);
+      });
+
+      it("answers conflict after a single apply when the edit's note changed source", async () => {
         const id = await addNote("lives in York", "inferred");
         const { stub, counts } = racing(2, (_id, seen) =>
           seen === "inferred" ? "asked" : "inferred",
@@ -416,7 +462,7 @@ describe("profile use cases", () => {
         );
         expect(err?.code).toBe("conflict");
         expect(err?.message).toContain("get_profile");
-        expect(counts()).toEqual({ reads: 2, applies: 2 });
+        expect(counts()).toEqual({ reads: 1, applies: 1 });
         expect((await notes())[0]?.text).toBe("lives in York");
       });
     });

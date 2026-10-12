@@ -84,7 +84,7 @@ describe("SqliteProfileStore only", () => {
     expect(() => focus("ok", "inferred")).not.toThrow();
   });
 
-  it("keeps a note the owner made stated on another connection after an inferred edit read it as inferred", async () => {
+  it("keeps a note the owner made stated on another connection after an inferred edit read it as inferred, answering conflict", async () => {
     const dir = mkdtempSync(join(tmpdir(), "profile-wal-"));
     try {
       const path = join(dir, "db.sqlite");
@@ -115,9 +115,58 @@ describe("SqliteProfileStore only", () => {
         editProfile({ profile: s1, now }, A, "codex", {
           editNotes: [{ id, text: "lives in York, guessed", source: "inferred" }],
         }),
-      ).rejects.toMatchObject({ code: "invalid_input" });
+      ).rejects.toMatchObject({ code: "conflict" });
       expect(await s2.listNotes(A)).toEqual([
         { id, text: "lives in Leeds", source: "stated", writtenBy: "claude", updatedAt: AT },
+      ]);
+    } finally {
+      for (const db of open.splice(0)) if (db.open) db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps both notes when a mixed edit and removal both changed source on another connection", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "profile-wal-"));
+    try {
+      const path = join(dir, "db.sqlite");
+      const c1 = openDatabase(path);
+      const c2 = openDatabase(path);
+      open.push(c1, c2);
+      new SqliteStore(c1).ensureUser(A, A);
+      const s1 = new SqliteProfileStore(c1);
+      const s2 = new SqliteProfileStore(c2);
+      const now = () => AT;
+      const { addedNoteIds } = await addProfile({ profile: s1, now }, A, "codex", {
+        addNotes: [
+          { text: "edit me", source: "inferred" },
+          { text: "remove me", source: "inferred" },
+        ],
+      });
+      const [editId, removeId] = addedNoteIds as [string, string];
+      const read = s1.listNotes.bind(s1);
+      let fired = false;
+      s1.listNotes = async (o) => {
+        const seen = await read(o);
+        if (!fired) {
+          fired = true;
+          await editProfile({ profile: s2, now }, A, "claude", {
+            editNotes: [{ id: editId, text: "edit me", source: "asked" }],
+          });
+          await editProfile({ profile: s2, now }, A, "claude", {
+            editNotes: [{ id: removeId, text: "OWNER", source: "stated" }],
+          });
+        }
+        return seen;
+      };
+      await expect(
+        editProfile({ profile: s1, now }, A, "codex", {
+          editNotes: [{ id: editId, text: "guessed", source: "inferred" }],
+          removeNotes: [removeId],
+        }),
+      ).rejects.toMatchObject({ code: "conflict" });
+      expect(await s2.listNotes(A)).toEqual([
+        { id: editId, text: "edit me", source: "asked", writtenBy: "claude", updatedAt: AT },
+        { id: removeId, text: "OWNER", source: "stated", writtenBy: "claude", updatedAt: AT },
       ]);
     } finally {
       for (const db of open.splice(0)) if (db.open) db.close();

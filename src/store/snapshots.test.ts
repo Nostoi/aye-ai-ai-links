@@ -148,15 +148,14 @@ describe("search over snapshot text", () => {
     return { db, store, id: link.id, search: new FtsSearch(db) };
   }
 
-  it("keeps finding the page's text after the link is edited", async () => {
+  it.each([
+    ["summary", { summary: "now has a platypus" }, "platypus"],
+    ["tags", { tags: [{ name: "Marsupials", source: "stated" as const }] }, "marsupials"],
+  ])("keeps finding the page's text after the link's %s change", async (_, edit, word) => {
     const { store, id, search } = await savedWithText();
+    await updateLink({ store, now: () => at(2) }, "a", id, edit);
+    expect(await search.search("a", word, {}, 10)).toEqual([id]);
     expect(await search.search("a", "numbat", {}, 10)).toEqual([id]);
-    await updateLink({ store, now: () => at(2) }, "a", id, {
-      summary: "now has a summary",
-      tags: [{ name: "Marsupials", source: "stated" }],
-    });
-    expect(await search.search("a", "numbat", {}, 10)).toEqual([id]);
-    expect(await search.search("a", "summary", {}, 10)).toEqual([id]);
   });
 
   it("drops the old text from the index when the snapshot text changes", async () => {

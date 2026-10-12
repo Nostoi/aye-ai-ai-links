@@ -55,6 +55,7 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
       let stderr = "";
       let settled = false;
       let child: ChildProcess | undefined;
+      let graceTimer: NodeJS.Timeout | undefined;
       const stop = (by: EndedBy) => {
         endedBy ??= by;
         child?.kill("SIGKILL");
@@ -65,6 +66,7 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        clearTimeout(graceTimer);
         signal?.removeEventListener("abort", onAbort);
         killers.delete(onAbort);
         resolve(outcome);
@@ -84,9 +86,20 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
         return settle({ kind: "spawn_failed", detail: errorText(err) });
       }
       const spawned = child;
-      if (spawned.pid !== undefined) onSpawn?.(spawned.pid);
+      // The hooks belong to the caller: a throw must not reject this call or end up uncaught.
+      if (spawned.pid !== undefined) {
+        try {
+          onSpawn?.(spawned.pid);
+        } catch {
+          // Ignored.
+        }
+      }
       spawned.stderr?.on("data", (chunk: Buffer) => {
-        onStderr(chunk);
+        try {
+          onStderr(chunk);
+        } catch {
+          // Ignored.
+        }
         stderr = (stderr + chunk.toString("utf8")).slice(-STDERR_KEPT);
       });
       spawned.on(
@@ -98,7 +111,9 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
         },
       );
       spawned.on("disconnect", () => {
-        if (text === undefined) setTimeout(() => settled || stop("ipc"), DISCONNECT_GRACE_MS);
+        if (text === undefined && !settled) {
+          graceTimer = setTimeout(() => settled || stop("ipc"), DISCONNECT_GRACE_MS);
+        }
       });
       spawned.on("error", (err) => {
         // A child that never got a pid never ran, so nothing will exit: settle here.

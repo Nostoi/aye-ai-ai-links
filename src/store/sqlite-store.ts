@@ -1,5 +1,10 @@
 import type { Database } from "better-sqlite3";
-import type { SnapshotLease, SnapshotRecord, SnapshotStore } from "../core/snapshot-store.js";
+import {
+  hasConsistentSchedule,
+  type SnapshotLease,
+  type SnapshotRecord,
+  type SnapshotStore,
+} from "../core/snapshot-store.js";
 import type { LinkStore } from "../core/store.js";
 import type {
   Labelled,
@@ -147,31 +152,48 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     now: Date,
     until: Date,
   ): Promise<SnapshotLease | null> {
-    const claim = toMs(until) as number;
-    if (claim <= (toMs(now) as number)) throw new RangeError("A lease must end after it starts.");
+    if ((toMs(until) as number) <= (toMs(now) as number)) {
+      throw new RangeError("A lease must end after it starts.");
+    }
     const n = parseId(linkId);
     if (n === null) return null;
     const row = this.db
       .prepare(
-        `UPDATE snapshots SET next_fetch_at = ?
+        `UPDATE snapshots SET next_fetch_at = ?, attempts = attempts + 1, lease_token = lease_token + 1
          WHERE link_id = ? AND owner_id = ? AND fetch_status IN ('pending', 'retrying')
            AND next_fetch_at <= ?
-         RETURNING attempts`,
+         RETURNING attempts, lease_token`,
       )
-      .get(claim, n, owner, toMs(now)) as { attempts: number } | undefined;
+      .get(toMs(until), n, owner, toMs(now)) as
+      | { attempts: number; lease_token: number }
+      | undefined;
     if (!row) return null;
     const { url } = this.db.prepare("SELECT url FROM links WHERE id = ?").get(n) as { url: string };
-    return { url, attempts: row.attempts, claim };
+    return { url, attempts: row.attempts, claim: row.lease_token };
   }
 
-  async recordSnapshot(owner: OwnerId, linkId: string, claim: number, r: SnapshotRecord) {
+  async releaseSnapshot(owner: OwnerId, linkId: string, claim: number, now: Date) {
     const n = parseId(linkId);
     if (n === null) return false;
     const { changes } = this.db
       .prepare(
+        `UPDATE snapshots SET attempts = attempts - 1, next_fetch_at = ?, lease_token = lease_token + 1
+         WHERE link_id = ? AND owner_id = ? AND lease_token = ?
+           AND fetch_status IN ('pending', 'retrying')`,
+      )
+      .run(toMs(now), n, owner, claim);
+    return changes === 1;
+  }
+
+  async recordSnapshot(owner: OwnerId, linkId: string, claim: number, r: SnapshotRecord) {
+    const n = parseId(linkId);
+    if (n === null || !hasConsistentSchedule(r)) return false;
+    const { changes } = this.db
+      .prepare(
         `UPDATE snapshots SET fetch_status = ?, attempts = ?, next_fetch_at = ?, fetched_at = ?,
-           title = ?, description = ?, image_url = ?, text = ?, last_error = ?
-         WHERE link_id = ? AND owner_id = ? AND next_fetch_at = ?`,
+           title = ?, description = ?, image_url = ?, text = ?, last_error = ?,
+           lease_token = lease_token + 1
+         WHERE link_id = ? AND owner_id = ? AND lease_token = ?`,
       )
       .run(
         r.status,

@@ -99,10 +99,16 @@ export function describeSnapshotStoreContract(
         const link = await save(A, at(0));
         expect(await store.leaseSnapshot(A, link.id, at(1), at(100))).toEqual({
           url: "https://ex.com/1",
-          attempts: 0,
+          attempts: 1,
           claim: expect.any(Number),
         });
         expect(await store.leaseSnapshot(A, link.id, at(50), at(150))).toBeNull();
+      });
+
+      it("counts the attempt at lease time: an expired lease leased again is attempt 2", async () => {
+        const link = await save(A, at(0));
+        expect((await lease(A, link, at(1), at(100))).attempts).toBe(1);
+        expect((await lease(A, link, at(100), at(200))).attempts).toBe(2);
       });
 
       it("hands out a different claim once the lease has ended", async () => {
@@ -175,7 +181,7 @@ export function describeSnapshotStoreContract(
         expect(await store.getSnapshotText(A, link.id)).toBe("body text");
       });
 
-      it("schedules a retry, and the next lease sees the attempts recorded", async () => {
+      it("schedules a retry, and the next lease counts one more attempt", async () => {
         const link = await save(A, at(0));
         const first = await lease(A, link, at(1), at(100));
         await store.recordSnapshot(
@@ -196,7 +202,7 @@ export function describeSnapshotStoreContract(
         expect(await store.leaseSnapshot(A, link.id, at(159), at(300))).toBeNull();
         expect(await store.dueSnapshots(at(160), 10)).toEqual([{ owner: A, linkId: link.id }]);
         expect(await store.leaseSnapshot(A, link.id, at(160), at(300))).toMatchObject({
-          attempts: 1,
+          attempts: 2,
         });
       });
 
@@ -242,6 +248,102 @@ export function describeSnapshotStoreContract(
         expect((await store.get(A, link.id))?.snapshot?.status).toBe("pending");
         expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(true);
         expect(await store.getSnapshotText(A, link.id)).toBe("body text");
+      });
+
+      it("refuses a record whose status and next time disagree, and changes nothing", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        const bad = [
+          record({ status: "pending", nextFetchAt: null }),
+          record({ status: "retrying", nextFetchAt: null }),
+          record({ status: "ok", nextFetchAt: at(500) }),
+          record({ status: "failed", nextFetchAt: at(500) }),
+        ];
+        for (const b of bad) expect(await store.recordSnapshot(A, link.id, l.claim, b)).toBe(false);
+        expect((await store.get(A, link.id))?.snapshot?.status).toBe("pending");
+        expect(await store.getSnapshotText(A, link.id)).toBeNull();
+        // The refusals did not spend the claim.
+        expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(true);
+      });
+
+      it("rejects a second record, and a release, with the claim of a retry whose next time equals the lease end", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        const retry = record({
+          status: "retrying",
+          nextFetchAt: at(100),
+          fetchedAt: null,
+          text: null,
+          lastError: "fetch:timeout",
+        });
+        expect(await store.recordSnapshot(A, link.id, l.claim, retry)).toBe(true);
+        expect(await store.recordSnapshot(A, link.id, l.claim, record({ text: "second" }))).toBe(
+          false,
+        );
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(50))).toBe(false);
+        expect(await store.getSnapshotText(A, link.id)).toBeNull();
+        expect((await store.get(A, link.id))?.snapshot?.status).toBe("retrying");
+      });
+    });
+
+    describe("releaseSnapshot", () => {
+      it("gives back the attempt and makes the snapshot due again", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        expect(await store.dueSnapshots(at(10), 10)).toEqual([]);
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(10))).toBe(true);
+        expect(await store.dueSnapshots(at(10), 10)).toEqual([{ owner: A, linkId: link.id }]);
+        expect((await lease(A, link, at(10), at(200))).attempts).toBe(1);
+      });
+
+      it("returns false and changes nothing for a stale claim", async () => {
+        const link = await save(A, at(0));
+        const stale = await lease(A, link, at(1), at(100));
+        const fresh = await lease(A, link, at(100), at(200));
+        expect(await store.releaseSnapshot(A, link.id, stale.claim, at(150))).toBe(false);
+        expect(await store.dueSnapshots(at(150), 10)).toEqual([]);
+        expect(await store.recordSnapshot(A, link.id, fresh.claim, record({ attempts: 2 }))).toBe(
+          true,
+        );
+      });
+
+      it("returns false and changes nothing after a record", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        const retry = record({ status: "retrying", nextFetchAt: at(500), text: null });
+        await store.recordSnapshot(A, link.id, l.claim, retry);
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(10))).toBe(false);
+        expect(await store.dueSnapshots(at(499), 10)).toEqual([]);
+        expect((await store.get(A, link.id))?.snapshot?.status).toBe("retrying");
+        expect((await lease(A, link, at(500), at(600))).attempts).toBe(2);
+      });
+
+      it("returns false for another owner, and leaves the claim valid for its owner", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        expect(await store.releaseSnapshot(B, link.id, l.claim, at(10))).toBe(false);
+        expect(await store.dueSnapshots(at(10), 10)).toEqual([]);
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(10))).toBe(true);
+      });
+
+      it("rejects the old claim after a release and a new lease in the same millisecond", async () => {
+        const link = await save(A, at(0));
+        const first = await lease(A, link, at(1), at(100));
+        expect(await store.releaseSnapshot(A, link.id, first.claim, at(1))).toBe(true);
+        const second = await lease(A, link, at(1), at(100));
+        expect(await store.recordSnapshot(A, link.id, first.claim, record())).toBe(false);
+        expect(await store.releaseSnapshot(A, link.id, first.claim, at(2))).toBe(false);
+        expect(await store.recordSnapshot(A, link.id, second.claim, record())).toBe(true);
+      });
+
+      it("uses up the claim, so it cannot release or record again", async () => {
+        const link = await save(A, at(0));
+        const l = await lease(A, link, at(1), at(100));
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(10))).toBe(true);
+        expect(await store.releaseSnapshot(A, link.id, l.claim, at(11))).toBe(false);
+        expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(false);
+        expect((await store.get(A, link.id))?.snapshot?.status).toBe("pending");
+        expect((await lease(A, link, at(12), at(200))).attempts).toBe(1);
       });
     });
 

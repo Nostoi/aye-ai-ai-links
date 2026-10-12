@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PageExtractor } from "../core/extract.js";
 import { CHILD_ENTRY, createChildExtractor } from "./extract-runner.js";
 
@@ -166,18 +166,62 @@ describe("child extractor: process management", () => {
 
   it("runs one extraction at a time", async () => {
     const pids: number[] = [];
+    const earlierAliveAtSpawn: boolean[] = [];
     const extractor = make({
       deadlineMs: 400,
       childEntry: fixture("child-hang.mjs"),
+      // Only collect here: a throw in the hook would be swallowed, and so would the check.
       onSpawn: (pid) => {
-        // The first child must be fully gone before the second starts.
-        if (pids.length === 1) expect(alive(pids[0] as number)).toBe(false);
+        earlierAliveAtSpawn.push(pids.some(alive));
         pids.push(pid);
       },
     });
     const both = await Promise.all([extractor.extract(PAGE, URL0), extractor.extract(PAGE, URL0)]);
     expect(both.map((o) => o.kind)).toEqual(["timeout", "timeout"]);
     expect(pids).toHaveLength(2);
+    // The first child must be fully gone before the second starts.
+    expect(earlierAliveAtSpawn).toEqual([false, false]);
+  }, 20_000);
+
+  it("is not stopped by an onSpawn that throws: that and the next extraction still resolve", async () => {
+    const extractor = make({
+      onSpawn: () => {
+        throw new Error("hook failed");
+      },
+    });
+    const first = await extractor.extract(PAGE, URL0);
+    const second = await extractor.extract(PAGE, URL0);
+    expect([first.kind, second.kind]).toEqual(["ok", "ok"]);
+  }, 30_000);
+
+  it("raises no uncaught exception when onStderr throws", async () => {
+    const uncaught: unknown[] = [];
+    const listener = (err: unknown) => uncaught.push(err);
+    process.on("uncaughtException", listener);
+    try {
+      const out = await make({
+        childEntry: fixture("child-throw.mjs"),
+        onStderr: () => {
+          throw new Error("sink failed");
+        },
+      }).extract(PAGE, URL0);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(out.kind).toBe("crashed");
+      expect(uncaught).toEqual([]);
+    } finally {
+      process.off("uncaughtException", listener);
+    }
+  }, 20_000);
+
+  it("leaves no timer behind when the child ends on its own before the disconnect grace passes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const out = await make({ childEntry: fixture("child-throw.mjs") }).extract(PAGE, URL0);
+      expect(out.kind).toBe("crashed");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   }, 20_000);
 
   it("reports spawn_failed, a retryable kind, when the child cannot start", async () => {

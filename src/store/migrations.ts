@@ -111,6 +111,9 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX focus_log_owner_recent ON focus_log (owner_id, created_at DESC, id DESC);
   `,
+  // The lease token (#30): moved by every lease, record and release, so a claim is never valid
+  // twice. Additive; rebuilds nothing.
+  "ALTER TABLE snapshots ADD COLUMN lease_token INTEGER NOT NULL DEFAULT 0",
 ];
 
 /**

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
+import { filingContext } from "./filing-context.js";
 import { getLink, saveLink, updateLink } from "./links.js";
 import type { LinkStore } from "./store.js";
-import type { Labelled, Link, Tag } from "./types.js";
+import { changeTagKind } from "./tag-kind.js";
+import type { Labelled, Link, Tag, TagKind } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
@@ -30,9 +32,22 @@ async function code(p: Promise<unknown>): Promise<string> {
   return "no error";
 }
 
+/** Delegates every method to the store, except those overridden. */
+function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
+  return {
+    insertIfAbsent: (owner, link) => inner.insertIfAbsent(owner, link),
+    get: (owner, id) => inner.get(owner, id),
+    update: (owner, id, patch) => inner.update(owner, id, patch),
+    fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
+    listTags: (owner) => inner.listTags(owner),
+    updateTag: (owner, key, patch, expected) => inner.updateTag(owner, key, patch, expected),
+    ...over,
+  };
+}
+
 /** Delegates to any store and, after a duplicate insert, sets a why before the caller can. */
 function racing(inner: LinkStore): LinkStore {
-  return {
+  return wrap(inner, {
     async insertIfAbsent(owner, link) {
       const result = await inner.insertIfAbsent(owner, link);
       if (!result.created) {
@@ -42,12 +57,47 @@ function racing(inner: LinkStore): LinkStore {
       }
       return result;
     },
-    get: (owner, id) => inner.get(owner, id),
-    update: (owner, id, patch) => inner.update(owner, id, patch),
-    fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
-    listTags: (owner) => inner.listTags(owner),
-  };
+  });
 }
+
+/** Before each tag write, another caller flips the tag to the other kind (done when it becomes a project). */
+function racingTagWrite(inner: LinkStore): LinkStore {
+  return wrap(inner, {
+    async updateTag(owner, key, patch, expected) {
+      const other: TagKind = expected === "topic" ? "project" : "topic";
+      await inner.updateTag(
+        owner,
+        key,
+        { kind: other, projectStatus: other === "project" ? "done" : null },
+        expected,
+      );
+      return inner.updateTag(owner, key, patch, expected);
+    },
+  });
+}
+
+/** Counts the tag writes that reach the store. */
+function countingTagWrites(inner: LinkStore): { store: LinkStore; calls: () => number } {
+  let n = 0;
+  const store = wrap(inner, {
+    updateTag(owner, key, patch, expected) {
+      n++;
+      return inner.updateTag(owner, key, patch, expected);
+    },
+  });
+  return { store, calls: () => n };
+}
+
+const tagOf = (key: string, over: Partial<Tag> = {}): Tag => ({
+  key,
+  name: key,
+  kind: "topic",
+  color: null,
+  pinned: false,
+  description: null,
+  projectStatus: null,
+  ...over,
+});
 
 export function describeStoreContract(
   name: string,
@@ -487,6 +537,129 @@ export function describeStoreContract(
         await attach(B, 1, "x");
         expect(await h.store.listTags(A)).toEqual([]);
         expect(await h.store.listTags("no-such-owner")).toEqual([]);
+      });
+    });
+
+    describe("updateTag", () => {
+      const solarA = tagOf("solar", {
+        name: "Solar",
+        color: "blue",
+        pinned: true,
+        description: "d",
+      });
+      const solarB = tagOf("solar", { name: "Solar B", color: "red" });
+
+      it("changes only the owner's tag with a matching kind, and links read it at once", async () => {
+        await h.seedTag(A, solarA);
+        await h.seedTag(B, solarB);
+        const { link } = await saveLink(deps(), A, {
+          url: "https://ex.com/1",
+          savedBy: "agent",
+          tags: [{ name: "solar", source: "inferred" }],
+        });
+        const updated = await h.store.updateTag(A, "solar", { kind: "project" }, "topic");
+        expect(updated).toEqual({ ...solarA, kind: "project" });
+        const read = await h.store.get(A, link.id);
+        expect(read?.tags).toEqual([
+          { key: "solar", name: "Solar", source: "inferred", kind: "project" },
+        ]);
+        expect(await h.catalog(A)).toEqual([{ ...solarA, kind: "project" }]);
+        expect(await h.catalog(B)).toEqual([solarB]);
+      });
+
+      it("writes nothing and returns null for an absent key, another owner's key, or a moved kind", async () => {
+        await h.seedTag(A, solarA);
+        await h.seedTag(B, tagOf("only-b"));
+        const beforeA = await h.catalog(A);
+        const beforeB = await h.catalog(B);
+        expect(await h.store.updateTag(A, "absent", { kind: "project" }, "topic")).toBeNull();
+        expect(await h.store.updateTag(A, "only-b", { kind: "project" }, "topic")).toBeNull();
+        expect(
+          await h.store.updateTag(A, "solar", { kind: "topic", projectStatus: null }, "project"),
+        ).toBeNull();
+        expect(await h.catalog(A)).toEqual(beforeA);
+        expect(await h.catalog(B)).toEqual(beforeB);
+      });
+
+      it("applies only the fields in the patch", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project", projectStatus: "active" }));
+        const done = await h.store.updateTag(A, "solar", { projectStatus: "done" }, "project");
+        expect(done).toMatchObject({ kind: "project", projectStatus: "done" });
+        const same = await h.store.updateTag(A, "solar", {}, "project");
+        expect(same).toMatchObject({ kind: "project", projectStatus: "done" });
+        expect(await h.catalog(A)).toEqual([
+          tagOf("solar", { kind: "project", projectStatus: "done" }),
+        ]);
+      });
+    });
+
+    describe("changeTagKind", () => {
+      const asProject = { name: "solar", kind: "project" as const };
+
+      it("matches the name ignoring case and spaces, and keeps the first casing", async () => {
+        await h.seedTag(A, tagOf("home batteries", { name: "Home Batteries" }));
+        const tag = await changeTagKind(deps(), A, {
+          name: "  HOME   batteries ",
+          kind: "project",
+        });
+        expect(tag).toEqual(tagOf("home batteries", { name: "Home Batteries", kind: "project" }));
+        expect(await h.catalog(A)).toEqual([tag]);
+      });
+
+      it("clears the done status in both directions, so a round trip reopens the project", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project", projectStatus: "done" }));
+        expect((await filingContext(deps(), A)).activeProjects).toEqual([]);
+        const topic = await changeTagKind(deps(), A, { name: "solar", kind: "topic" });
+        expect(topic).toMatchObject({ kind: "topic", projectStatus: null });
+        const project = await changeTagKind(deps(), A, asProject);
+        expect(project).toMatchObject({ kind: "project", projectStatus: null });
+        expect((await filingContext(deps(), A)).activeProjects.map((t) => t.key)).toEqual([
+          "solar",
+        ]);
+      });
+
+      it("writes nothing when the tag already has the kind, so a done project stays done", async () => {
+        await h.seedTag(A, tagOf("solar", { kind: "project", projectStatus: "done" }));
+        const counted = countingTagWrites(h.store);
+        const tag = await changeTagKind({ store: counted.store }, A, asProject);
+        expect(tag).toMatchObject({ kind: "project", projectStatus: "done" });
+        expect(counted.calls()).toBe(0);
+        expect(await h.catalog(A)).toEqual([
+          tagOf("solar", { kind: "project", projectStatus: "done" }),
+        ]);
+      });
+
+      it("refuses an unknown tag, a blank name and a bad kind without writing", async () => {
+        await h.seedTag(A, tagOf("solar"));
+        const counted = countingTagWrites(h.store);
+        const deps2 = { store: counted.store };
+        expect(await code(changeTagKind(deps2, A, { name: "nope", kind: "project" }))).toBe(
+          "not_found",
+        );
+        expect(await code(changeTagKind(deps2, A, { name: "  ", kind: "project" }))).toBe(
+          "invalid_input",
+        );
+        expect(
+          await code(changeTagKind(deps2, A, { name: "solar", kind: "folder" as never })),
+        ).toBe("invalid_input");
+        expect(counted.calls()).toBe(0);
+        expect(await h.catalog(A)).toEqual([tagOf("solar")]);
+      });
+
+      it("leaves another owner's tag with the same key alone", async () => {
+        await h.seedTag(A, tagOf("solar"));
+        await h.seedTag(B, tagOf("solar", { description: "b" }));
+        await changeTagKind(deps(), A, asProject);
+        expect(await h.catalog(B)).toEqual([tagOf("solar", { description: "b" })]);
+      });
+
+      it("keeps a concurrent change instead of overwriting it", async () => {
+        await h.seedTag(A, tagOf("solar"));
+        const tag = await changeTagKind({ store: racingTagWrite(h.store) }, A, asProject);
+        expect(tag).toMatchObject({ kind: "project", projectStatus: "done" });
+        expect(await h.catalog(A)).toEqual([
+          tagOf("solar", { kind: "project", projectStatus: "done" }),
+        ]);
       });
     });
 

@@ -5,6 +5,7 @@ import type { Caller, Identify } from "../auth/caller.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLink, saveLink, updateLink } from "../core/links.js";
 import { searchLinks } from "../core/search-links.js";
+import { changeTagKind } from "../core/tag-kind.js";
 import { createDeps } from "../deps.js";
 import { openDatabase } from "../store/database.js";
 
@@ -149,7 +150,7 @@ describe("MCP door over HTTP", () => {
     expect(res.body.result.instructions).toContain("inferred");
   });
 
-  it("lists the four tools with their annotations and string dates", async () => {
+  it("lists the five tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
@@ -157,6 +158,7 @@ describe("MCP door over HTTP", () => {
       "save_link",
       "search_links",
       "update_link",
+      "update_tag",
     ]);
     const hints = (readOnlyHint: boolean, destructiveHint: boolean, idempotentHint: boolean) => ({
       readOnlyHint,
@@ -168,6 +170,11 @@ describe("MCP door over HTTP", () => {
     expect(tools.get_link.annotations).toEqual(hints(true, false, true));
     expect(tools.save_link.annotations).toEqual(hints(false, false, true));
     expect(tools.update_link.annotations).toEqual(hints(false, true, false));
+    expect(tools.update_tag.annotations).toEqual(hints(false, true, true));
+    expect(tools.update_tag.description.slice(0, 512)).toContain("only when the owner");
+    expect(tools.update_tag.description).toContain("done");
+    expect(tools.save_link.description).toContain("update_tag");
+    expect(tools.save_link.description).not.toContain("not available yet");
     expect(tools.search_links.inputSchema.properties.savedFrom.type).toBe("string");
     expect(JSON.stringify(tools.update_link.inputSchema.properties.snoozedUntil)).toContain(
       '"string"',
@@ -244,6 +251,12 @@ describe("MCP door over HTTP", () => {
     const upd = await call(app, "key-a", "update_link", { id: "1", ...patch });
     const updDirect = await updateLink(direct, A.owner, "1", patch);
     expect(upd.body.result.structuredContent).toEqual(wire({ link: updDirect }));
+
+    const retagged = await call(app, "key-a", "update_tag", { name: "ALPHA", kind: "topic" });
+    expect(retagged.body.result.structuredContent).toEqual(
+      wire({ tag: await changeTagKind(direct, A.owner, { name: "ALPHA", kind: "topic" }) }),
+    );
+    expect(retagged.body.result.structuredContent.tag.kind).toBe("topic");
 
     const got = await call(app, "key-a", "get_link", { id: "1" });
     expect(got.body.result.structuredContent).toEqual(
@@ -352,6 +365,75 @@ describe("MCP door over HTTP", () => {
     expect(refusals[0]?.error).toContain("source");
     for (const r of refusals.slice(1, 5)) expect(r.error).toMatch(/ISO-8601|snoozedUntil|saved/);
     expect(linkCount(db)).toBe(0);
+  });
+
+  it("update_tag turns a topic into a project everywhere the kind is read, and back", async () => {
+    const saved = await call(app, "key-a", "save_link", {
+      url: "https://example.com/hb",
+      title: "Batteries",
+      tags: [{ name: "Home Batteries", source: "stated" }],
+    });
+    expect(saved.body.result.structuredContent.link.tags[0].kind).toBe("topic");
+    const filed = async (project: string) =>
+      (await call(app, "key-a", "search_links", { query: "", project })).body.result
+        .structuredContent.links;
+    expect(await filed("home batteries")).toEqual([]);
+
+    const changed = await call(app, "key-a", "update_tag", {
+      name: "home batteries",
+      kind: "project",
+    });
+    expect(changed.body.result.isError).toBeUndefined();
+    expect(changed.body.result.structuredContent.tag).toMatchObject({
+      key: "home batteries",
+      name: "Home Batteries",
+      kind: "project",
+      projectStatus: null,
+    });
+    expect(JSON.parse(changed.body.result.content[0].text)).toEqual(
+      changed.body.result.structuredContent,
+    );
+    expect((await filed("home batteries")).map((l: Json) => l.id)).toEqual(["1"]);
+    const next = await call(app, "key-a", "save_link", { url: "https://example.com/other" });
+    expect(
+      next.body.result.structuredContent.filingContext.activeProjects.map((t: Json) => t.key),
+    ).toEqual(["home batteries"]);
+    const got = await call(app, "key-a", "get_link", { id: "1" });
+    expect(got.body.result.structuredContent.link.tags[0].kind).toBe("project");
+
+    await call(app, "key-a", "update_tag", { name: "Home Batteries", kind: "topic" });
+    expect(await filed("home batteries")).toEqual([]);
+    const after = await call(app, "key-a", "save_link", { url: "https://example.com/third" });
+    expect(after.body.result.structuredContent.filingContext.activeProjects).toEqual([]);
+  });
+
+  it("update_tag cannot see or change another owner's tag, or create one", async () => {
+    await call(app, "key-a", "save_link", {
+      url: "https://example.com/hb",
+      tags: [{ name: "Home Batteries", source: "stated" }],
+    });
+    const foreign = await call(app, "key-b", "update_tag", {
+      name: "home batteries",
+      kind: "project",
+    });
+    expect(foreign.body.result.isError).toBe(true);
+    expect(foreign.body.result.content[0].text).toContain("No tag named");
+    const missing = await call(app, "key-a", "update_tag", { name: "never made", kind: "project" });
+    expect(missing.body.result.isError).toBe(true);
+    const tags = (await deps.store.listTags(A.owner)).map((t) => [t.key, t.kind]);
+    expect(tags).toEqual([["home batteries", "topic"]]);
+    expect(await deps.store.listTags(B.owner)).toEqual([]);
+  });
+
+  it("update_tag refuses a bad kind before anything is written", async () => {
+    await call(app, "key-a", "save_link", {
+      url: "https://example.com/hb",
+      tags: [{ name: "Home Batteries", source: "stated" }],
+    });
+    const bad = await call(app, "key-a", "update_tag", { name: "home batteries", kind: "folder" });
+    expect(bad.body.error?.message ?? bad.body.result?.content?.[0]?.text).toBeTruthy();
+    expect(bad.body.result?.isError ?? Boolean(bad.body.error)).toBe(true);
+    expect((await deps.store.listTags(A.owner)).map((t) => t.kind)).toEqual(["topic"]);
   });
 
   it.each(["2026-02-30T00:00:00Z", "2026-04-31T10:00:00+02:00", "2025-02-29T00:00:00Z"])(

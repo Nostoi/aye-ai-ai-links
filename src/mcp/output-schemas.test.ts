@@ -91,6 +91,9 @@ const update = (args: Record<string, unknown>): Step => ({ tool: "update_link", 
 const get = (id: string): Step => ({ tool: "get_link", args: { id } });
 const search = (query: string): Step => ({ tool: "search_links", args: { query } });
 const retag = (name: string, kind: string): Step => ({ tool: "update_tag", args: { name, kind } });
+const addToProfile = (args: Record<string, unknown>): Step => ({ tool: "add_profile", args });
+const editProfileStep = (args: Record<string, unknown>): Step => ({ tool: "edit_profile", args });
+const getProfileStep: Step = { tool: "get_profile", args: {} };
 
 /** A copy of `value` with one unknown key added to every plain object in it, as a later server version might send. */
 function withAddedField(value: Json): { value: Json; added: number } {
@@ -120,7 +123,10 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
   it("every listed tool declares an object-rooted outputSchema", async () => {
     const tools = await listTools(app, era);
     expect(tools.map((t) => t.name).sort()).toEqual([
+      "add_profile",
+      "edit_profile",
       "get_link",
+      "get_profile",
       "save_link",
       "search_links",
       "update_link",
@@ -191,6 +197,22 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(retag("Reading", "project"));
     await run(retag("Aye Launch", "topic"));
     await run(retag("Aye Launch", "topic"));
+    await run(getProfileStep); // empty profile
+    await run(
+      addToProfile({
+        addNotes: [
+          { text: "plans a home battery install", source: "stated" },
+          { text: "likes long reads", source: "inferred" },
+        ],
+        addFocus: [{ text: "comparing battery quotes", source: "asked" }],
+      }),
+    );
+    await run(
+      editProfileStep({ editNotes: [{ id: "2", text: "reads long essays", source: "inferred" }] }),
+    );
+    await run(editProfileStep({ removeNotes: ["2"] }));
+    await run(getProfileStep);
+    await run(save({ url: "https://example.com/d" })); // its profile holds notes and focus
 
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
@@ -238,6 +260,15 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     }
     expect(values(tagsSeen, (t) => t.pinned)).toEqual(new Set([true, false]));
     expect(values(tagsSeen, (t) => t.kind)).toEqual(new Set(["topic", "project"]));
+    const profiles: Json[] = outputs.filter((o) => o.profile || o.notes).map((o) => o.profile ?? o);
+    expect(values(profiles, (p) => p.notes.length === 0)).toEqual(new Set([true, false]));
+    expect(values(profiles, (p) => p.recentFocus.length === 0)).toEqual(new Set([true, false]));
+    expect(
+      values(
+        profiles.flatMap((p) => p.notes),
+        (n) => n.source,
+      ),
+    ).toEqual(new Set(["stated", "inferred"]));
     expect(
       values(
         outputs.filter((o) => "created" in o),
@@ -291,6 +322,16 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(get("1"));
     await run(search(""));
     await run(retag("Aye Launch", "topic"));
+    await run(
+      addToProfile({
+        addNotes: [{ text: "plans a home battery install", source: "stated" }],
+        addFocus: [{ text: "comparing battery quotes", source: "asked" }],
+      }),
+    );
+    await run(
+      editProfileStep({ editNotes: [{ id: "1", text: "plans a battery", source: "stated" }] }),
+    );
+    await run(getProfileStep);
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
     // Enums stay closed: a new enum value is still a contract change.

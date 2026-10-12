@@ -741,6 +741,24 @@ export function describeStoreContract(
         expect(updated.tags.map((t) => t.key)).toEqual(["t"]);
       });
 
+      it("sets, keeps and clears the title like the summary", async () => {
+        const { link } = await saveLink(deps(), A, {
+          url: "https://ex.com/a",
+          title: "old",
+          summary: "s",
+          savedBy: "agent",
+        });
+        const set = await updateLink(deps(), A, link.id, { title: "new" });
+        expect(set.title).toBe("new");
+        expect(set.summary).toBe("s");
+        const kept = await updateLink(deps(), A, link.id, { summary: "s2" });
+        expect(kept.title).toBe("new");
+        const cleared = await updateLink(deps(), A, link.id, { title: null });
+        expect(cleared.title).toBeNull();
+        expect(cleared.summary).toBe("s2");
+        expect((await h.all(A))[0]?.title).toBeNull();
+      });
+
       it("trims a new why and treats a blank one as missing", async () => {
         const { link } = await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "agent" });
         const set = await updateLink(deps(), A, link.id, {

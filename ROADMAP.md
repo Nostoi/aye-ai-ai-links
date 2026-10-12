@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** `update_link` can change a link's title (#57, owner request). This extends spec §5. It works like summary: leave it out to keep it, send null to clear it. It has no source label, because it is the agent's own wording, not a guess about the owner. The page's own title stays separate in the snapshot and stays searchable, so a search for an old title can still find the link through its page.
 - **2026-10-11:** Page snapshots run in the background (#30, PR C: C1–C4). The C1 entry below covers the store.
   - **Runner (core).** `core/snapshot-runner.ts` runs at most 2 jobs at once, sweeps for due snapshots every 30 s, and refills a slot as soon as a job ends. A job leases its snapshot for 120 s, fetches, extracts and records. `core/snapshot-outcome.ts` maps each outcome to a status and a `lastError` of the form `<stage>:<kind>[:<detail>]`, and retries a retryable outcome after 1 min, 10 min, 1 h, 6 h and 24 h, then fails at 6 attempts.
   - **Kick only on created.** Core `saveLink` sends a new link's snapshot ahead of the backlog; a repeat save never fetches. The kick never rejects, so a background failure cannot fail a committed save. #31's excerpt wait will use the kick's promise.

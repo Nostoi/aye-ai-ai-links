@@ -110,7 +110,7 @@ export async function updateLink(
   id: string,
   input: UpdateLinkInput,
 ): Promise<Link> {
-  const { tags, why, summary, state, snoozedUntil, opened } = input;
+  const { tags, why, title, summary, state, snoozedUntil, opened } = input;
   if (state !== undefined && !isState(state)) {
     throw invalid(`The state "${state}" is not valid. Use active or archived.`);
   }
@@ -123,6 +123,7 @@ export async function updateLink(
   }
   checkSources(why, tags);
   const patch: LinkPatch = {};
+  if (title !== undefined) patch.title = title;
   if (summary !== undefined) patch.summary = summary;
   if (state !== undefined) patch.state = state;
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;

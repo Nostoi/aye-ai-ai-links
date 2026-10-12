@@ -66,7 +66,7 @@ export type NewLink = Omit<Link, "id" | "snapshot">;
 
 /** Fields a patch may set; an absent (undefined) field is left untouched. */
 export type LinkPatch = Partial<
-  Pick<Link, "summary" | "why" | "tags" | "state" | "snoozedUntil" | "lastOpenedAt">
+  Pick<Link, "title" | "summary" | "why" | "tags" | "state" | "snoozedUntil" | "lastOpenedAt">
 >;
 
 /** A note about the owner. `source` says how the writer learned it. */

@@ -24,7 +24,7 @@ The tools your AI uses:
 | Tool | What it does |
 |---|---|
 | `save_link` | Saves a link. Saving one that's already saved returns the existing link. |
-| `update_link` | Changes a link's summary, why, tags, state or snooze date. |
+| `update_link` | Changes a link's title, summary, why, tags, state or snooze date. |
 | `update_tag` | Switches a tag between topic and project. |
 | `search_links` | Finds links, best match first. A blank search lists the newest. |
 | `get_link` | Opens one link by its id. |

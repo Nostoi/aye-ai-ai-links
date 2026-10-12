@@ -1,3 +1,4 @@
+import diagnosticsChannel from "node:diagnostics_channel";
 import type { LookupAddress } from "node:dns";
 import http from "node:http";
 import net, { type AddressInfo } from "node:net";
@@ -215,30 +216,39 @@ describe("a page on an allowed address", () => {
     expect(lastRequestHeaders["accept-encoding"]).toBe("gzip, deflate, br");
   });
 
-  /*
-   * The fixed ports are not bound, so a parallel test run cannot collide with this one. Whatever
-   * is or is not listening there, the fetcher must have tried to connect: an unused port ends as
-   * ECONNREFUSED, a used one as a response. Only a policy refusal is ruled out.
-   */
-  const connectAttempted = (outcome: FetchOutcome) =>
-    outcome.kind === "network_error"
-      ? ["ECONNREFUSED", "UND_ERR_SOCKET", "ECONNRESET"].includes(outcome.code)
-      : ["ok", "http_error", "not_html"].includes(outcome.kind);
+  async function connectedPorts(host: string, run: () => Promise<FetchOutcome>) {
+    const ports: string[] = [];
+    const onConnect = (message: unknown) => {
+      const { hostname, port } = (message as { connectParams: { hostname: string; port: string } })
+        .connectParams;
+      if (hostname === host) ports.push(port);
+    };
+    diagnosticsChannel.subscribe("undici:client:beforeConnect", onConnect);
+    try {
+      return { outcome: await run(), ports };
+    } finally {
+      diagnosticsChannel.unsubscribe("undici:client:beforeConnect", onConnect);
+    }
+  }
 
   it.each(BLOCKED_PORTS)(
-    "tries to connect to port %i, which the Fetch standard blocks (any port on a public address)",
+    "connects to port %i, which the Fetch standard blocks (any port on a public address)",
     async (port) => {
-      const outcome = await fetcherWith().fetch(`http://site.test:${port}/ok`);
+      const { outcome, ports } = await connectedPorts("site.test", () =>
+        fetcherWith().fetch(`http://site.test:${port}/ok`),
+      );
       expect(outcome.kind).not.toBe("refused");
-      expect(connectAttempted(outcome), JSON.stringify(outcome)).toBe(true);
+      expect(ports).toEqual([String(port)]);
     },
   );
 
-  it.each(BLOCKED_PORTS)("follows a redirect to port %i and tries to connect", async (port) => {
-    const outcome = await fetcherWith().fetch(siteUrl(`/r-port/${port}`));
+  it.each(BLOCKED_PORTS)("follows a redirect to port %i and connects to it", async (port) => {
+    const { outcome, ports } = await connectedPorts("site.test", () =>
+      fetcherWith().fetch(siteUrl(`/r-port/${port}`)),
+    );
     expect(siteHits).toEqual([`/r-port/${port}`]);
     expect(outcome.kind).not.toBe("refused");
-    expect(connectAttempted(outcome), JSON.stringify(outcome)).toBe(true);
+    expect(ports).toEqual([String(sitePort), String(port)]);
   });
 
   it.each([

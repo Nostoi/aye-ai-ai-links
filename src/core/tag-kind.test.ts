@@ -9,6 +9,7 @@ const solar: Tag = {
   key: "solar",
   name: "Solar",
   kind: "topic",
+  kindSource: "inferred",
   color: null,
   pinned: false,
   description: null,

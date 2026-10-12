@@ -2,6 +2,8 @@
 
 import { TEXT_CHARS } from "../core/snapshot-text.js";
 
+const KIND_SOURCE_RULE = `When you send kind, source also labels the kind: send kind with "stated" or "asked" only if the owner gave the kind; otherwise leave kind out, or send it with source "inferred".`;
+
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 
 The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline, or it is a bad moment, infer it from the conversation and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
@@ -9,6 +11,8 @@ The "why" is the reason the owner saved a link. If they told you, record it as "
 Saving:
 - If you already know the summary, why and tags, send them all in one save_link call. Otherwise save first, then call update_link.
 - Saving a URL that is already saved returns the existing link (created: false). It only fills in a missing why. It also discards any tags you sent. Use update_link for anything else, with the full tag set if you want tags changed.
+
+Tag kinds: ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
 
 Dates are full ISO-8601 timestamps with an offset or Z, such as 2026-10-01T09:30:00Z.
 
@@ -24,6 +28,8 @@ If the URL is already saved you get the existing link back with created: false. 
 
 Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. Check the returned tag's kind: if it differs from what you asked for, the tag already existed. If the owner wants that tag's kind changed, call update_tag; do NOT invent a near-duplicate name to get a project.
 
+${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
+
 A repeat save (created: false) discards the tags you sent, including a requested project. To file it, call update_link with the full tag set.
 
 Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it. A repeat save does not fetch the page again.`;
@@ -38,7 +44,7 @@ export const UPDATE_TAG = `Change a tag between topic and project. Use this only
 
 name matches the existing tag ignoring case and extra spaces. kind is "topic" or "project". Calls that start after this one returns see the new kind: every link with the tag, search_links' project filter and save_link's filingContext.
 
-Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. Asking for the kind a tag already has changes nothing. A name with no tag is an error: tags are created by tagging a link.`;
+The result's kindSource becomes "stated". Asking for the kind a tag already has confirms it the same way and leaves everything else as it is, including a done status. Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. A name with no tag is an error: tags are created by tagging a link.`;
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
@@ -50,7 +56,7 @@ snapshotText is the page's text, up to ${TEXT_CHARS.toLocaleString("en-US")} cha
 
 export const GET_PROFILE = `Get what is known about the owner: their notes, the projects still active, and what they have been working on lately. Call it before you infer a why or tags.
 
-Every note and focus entry has a source: stated (the owner said it), asked (you asked and they answered) or inferred (a guess). Present inferred ones to the owner as guesses, not facts. Notes have ids for edit_profile.`;
+Every note and focus entry has a source: stated (the owner said it), asked (you asked and they answered) or inferred (a guess). Present inferred ones to the owner as guesses, not facts. Notes have ids for edit_profile. Each active project also has a kindSource: present one whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms it.`;
 
 export const ADD_PROFILE = `Record something about the owner: a note about them, or a focus entry for what they are working on now. Adds only; it never changes or removes anything.
 

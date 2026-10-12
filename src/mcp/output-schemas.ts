@@ -49,6 +49,7 @@ const linkTagOutput = z.strictObject({
   name: z.string(),
   source,
   kind: z.enum(TAG_KINDS),
+  kindSource: source,
 });
 
 // What a page fetch produced, never its text. Adding a status is a breaking change (ROADMAP #39).
@@ -81,6 +82,7 @@ export const tagOutput = z.strictObject({
   key: z.string(),
   name: z.string(),
   kind: z.enum(TAG_KINDS),
+  kindSource: source,
   color: z.string().nullable(),
   pinned: z.boolean(),
   description: z.string().nullable(),

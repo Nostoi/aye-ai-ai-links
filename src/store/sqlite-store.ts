@@ -47,6 +47,9 @@ type LinkRow = {
 
 type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 
+const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
+  project_status AS projectStatus`;
+
 function toMs(d: Date | null): number | null {
   if (d === null) return null;
   const ms = d.getTime();
@@ -106,10 +109,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
 
   async listTags(owner: OwnerId) {
     const rows = this.db
-      .prepare(
-        `SELECT key, name, kind, color, pinned, description, project_status AS projectStatus
-         FROM tags WHERE owner_id = ? ORDER BY key`,
-      )
+      .prepare(`SELECT ${TAG_COLUMNS} FROM tags WHERE owner_id = ? ORDER BY key`)
       .all(owner) as TagRow[];
     return rows.map((r): Tag => ({ ...r, pinned: r.pinned === 1 }));
   }
@@ -121,6 +121,10 @@ export class SqliteStore implements LinkStore, SnapshotStore {
       sets.push("kind = ?");
       values.push(patch.kind);
     }
+    if (patch.kindSource !== undefined) {
+      sets.push("kind_source = ?");
+      values.push(patch.kindSource);
+    }
     if (patch.projectStatus !== undefined) {
       sets.push("project_status = ?");
       values.push(patch.projectStatus);
@@ -129,7 +133,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     const row = this.db
       .prepare(
         `UPDATE tags SET ${sets.join(", ")} WHERE owner_id = ? AND key = ? AND kind = ?
-         RETURNING key, name, kind, color, pinned, description, project_status AS projectStatus`,
+         RETURNING ${TAG_COLUMNS}`,
       )
       .get(...values, owner, key, expectedKind) as TagRow | undefined;
     return row ? { ...row, pinned: row.pinned === 1 } : null;
@@ -309,7 +313,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
 
   private attachTags(owner: OwnerId, linkId: number, tags: LinkTag[]): void {
     const create = this.db.prepare(
-      `INSERT INTO tags (owner_id, key, name, kind, pinned) VALUES (?, ?, ?, ?, 0)
+      `INSERT INTO tags (owner_id, key, name, kind, kind_source, pinned) VALUES (?, ?, ?, ?, ?, 0)
        ON CONFLICT (owner_id, key) DO NOTHING`,
     );
     const attach = this.db.prepare(
@@ -317,7 +321,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
        SELECT ?, ?, id, ?, ? FROM tags WHERE owner_id = ? AND key = ?`,
     );
     tags.forEach((t, position) => {
-      create.run(owner, t.key, t.name, t.kind);
+      create.run(owner, t.key, t.name, t.kind, t.kindSource);
       attach.run(owner, linkId, t.source, position, owner, t.key);
     });
   }
@@ -335,7 +339,8 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     if (!row) return null;
     const tags = this.db
       .prepare(
-        `SELECT t.key AS key, t.name AS name, lt.source AS source, t.kind AS kind
+        `SELECT t.key AS key, t.name AS name, lt.source AS source, t.kind AS kind,
+           t.kind_source AS kindSource
          FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id
          WHERE lt.link_id = ? AND lt.owner_id = ? ORDER BY lt.position`,
       )

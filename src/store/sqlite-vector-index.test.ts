@@ -46,6 +46,7 @@ const tag = (name: string): LinkTag => ({
   name,
   source: "stated",
   kind: "topic",
+  kindSource: "inferred",
 });
 
 describe("SqliteVectorIndex.writeVector (D-T3)", () => {

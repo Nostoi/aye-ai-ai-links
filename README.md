@@ -13,7 +13,7 @@ You talk to your AI; it uses the library for you.
 - **Save by talking.** Give your AI a link and a few words. It saves the link with a summary, tags, and a note on *why* you saved it. If you didn't say why, it asks once or makes a guess, and guesses are labelled as guesses.
 - **Find by describing.** Ask for "that article about batteries from spring". Your AI turns that into a search that matches links by meaning as well as by their words, with optional filters for tag, project and date saved. Common words like "the" or "that" are ignored in the keyword match unless the query has nothing else. The first start after upgrading to this version embeds every saved link in the background; until a link is embedded, it is found by its words only.
 - **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
-- **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by.
+- **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by. Every tag records who decided its kind: you, or your AI's guess. A project your AI only guessed is presented as a guess until you confirm it. Tags from before this was recorded count as guesses too.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
 - **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
 
@@ -25,7 +25,7 @@ The tools your AI uses:
 |---|---|
 | `save_link` | Saves a link. Saving one that's already saved returns the existing link. |
 | `update_link` | Changes a link's title, summary, why, tags, state or snooze date. |
-| `update_tag` | Switches a tag between topic and project. |
+| `update_tag` | Switches a tag between topic and project, or confirms its kind as yours. |
 | `search_links` | Finds links, best match first. A blank search lists the newest. |
 | `get_link` | Opens one link by its id, with its page's text (up to 20,000 characters). |
 | `get_profile` | Reads the notes about you and your active projects. |

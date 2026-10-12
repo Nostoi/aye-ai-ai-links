@@ -40,18 +40,19 @@ function harnessFor(db: Db): StoreHarness {
     catalog: (owner) =>
       db
         .prepare(
-          "SELECT key, name, kind, color, pinned, description, project_status AS projectStatus FROM tags WHERE owner_id = ? ORDER BY id",
+          "SELECT key, name, kind, kind_source AS kindSource, color, pinned, description, project_status AS projectStatus FROM tags WHERE owner_id = ? ORDER BY id",
         )
         .all(owner)
         .map((r) => ({ ...(r as Tag), pinned: (r as { pinned: number }).pinned === 1 })),
     seedTag: (owner, t) => {
       db.prepare(
-        "INSERT INTO tags (owner_id, key, name, kind, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tags (owner_id, key, name, kind, kind_source, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         owner,
         t.key,
         t.name,
         t.kind,
+        t.kindSource,
         t.color,
         t.pinned ? 1 : 0,
         t.description,
@@ -78,7 +79,7 @@ const baseLink = (): NewLink => ({
   title: null,
   summary: null,
   why: null,
-  tags: [{ key: "t", name: "t", source: "stated", kind: "topic" }],
+  tags: [{ key: "t", name: "t", source: "stated", kind: "topic", kindSource: "inferred" }],
   savedAt: NOW,
   savedBy: "x",
   lastOpenedAt: null,
@@ -284,6 +285,38 @@ describe("migrate", () => {
       expect(version(db)).toBe(LATEST_VERSION);
       expect(foreignKeys(db)).toBe(1);
     });
+  });
+});
+
+describe("the tags.kind_source migration, from version 8 with tags", () => {
+  function migratedTags(): Db {
+    const db = track(new Database(":memory:"));
+    db.pragma("foreign_keys = ON");
+    migrate(db, MIGRATIONS.slice(0, 8));
+    db.exec(`
+      INSERT INTO users VALUES ('a', 'a', 0);
+      INSERT INTO tags (owner_id, key, name, kind, pinned) VALUES ('a', 'solar', 'Solar', 'project', 0);`);
+    migrate(db);
+    return db;
+  }
+
+  it("gives every existing tag the source 'inferred' and keeps its kind", () => {
+    const db = migratedTags();
+    expect(db.prepare("SELECT key, kind, kind_source FROM tags").all()).toEqual([
+      { key: "solar", kind: "project", kind_source: "inferred" },
+    ]);
+  });
+
+  it("refuses a kind source outside stated, asked and inferred, and accepts those three", () => {
+    const db = migratedTags();
+    const insertWith = (key: string, source: string) =>
+      db
+        .prepare(
+          "INSERT INTO tags (owner_id, key, name, kind, kind_source, pinned) VALUES ('a', ?, ?, 'topic', ?, 0)",
+        )
+        .run(key, key, source);
+    expect(() => insertWith("bad", "unknown")).toThrow(/CHECK/);
+    for (const source of ["stated", "asked", "inferred"]) insertWith(source, source);
   });
 });
 

@@ -6,6 +6,7 @@ import { CHILD_ENTRY, createChildExtractor } from "./extract-runner.js";
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url);
 const URL0 = "https://example.com/post";
 const PAGE = `<!doctype html><html><head><title>Hi</title><meta property='og:image' content='/i.png'></head><body><article><h1>Quokkas</h1><p>${"Quokkas live on Rottnest island and are very friendly to visitors. ".repeat(20)}</p></article></body></html>`;
+const SLOW_TEXT = `<title>Parsed fast</title><body>${"<div>".repeat(190)}<p>${"word ".repeat(200_000)}</p>${"</div>".repeat(190)}`;
 const DIV400K = `<title>Hostile</title><body>${"<div>".repeat(400_000)}`;
 
 function alive(pid: number): boolean {
@@ -23,7 +24,7 @@ const pgidOf = (pid: number) =>
 
 const open: PageExtractor[] = [];
 function make(...args: Parameters<typeof createChildExtractor>) {
-  const extractor = createChildExtractor(...args);
+  const extractor = createChildExtractor({ onStderr: () => {}, ...args[0] });
   open.push(extractor);
   return extractor;
 }
@@ -74,6 +75,28 @@ describe("child extractor: a hostile page", () => {
       kind: "timeout",
       metadata: { title: "Posted first", description: null, imageUrl: null },
     });
+  }, 20_000);
+
+  it("keeps the metadata of a real child whose text step outlives the deadline", async () => {
+    const out = await make({ deadlineMs: 3000 }).extract(SLOW_TEXT, URL0);
+    expect(out).toMatchObject({ kind: "timeout", metadata: { title: "Parsed fast" } });
+  }, 20_000);
+
+  it("finds the heap-limit line even after 70 KB of earlier stderr", async () => {
+    const out = await make({
+      maxOldSpaceMb: 48,
+      childEntry: fixture("child-oom-noisy.mjs"),
+    }).extract(PAGE, URL0);
+    expect(out.kind).toBe("out_of_memory");
+  }, 30_000);
+
+  it("forwards a crashing child's stderr to the sink", async () => {
+    const chunks: string[] = [];
+    await make({
+      childEntry: fixture("child-throw.mjs"),
+      onStderr: (chunk) => chunks.push(chunk.toString("utf8")),
+    }).extract(PAGE, URL0);
+    expect(chunks.join("")).toContain("Error");
   }, 20_000);
 
   it("reports out_of_memory when the child dies of heap exhaustion, and the parent lives on", async () => {
@@ -130,6 +153,19 @@ describe("child extractor: process management", () => {
   it("reports spawn_failed, a retryable kind, when the child cannot start", async () => {
     const out = await make({ execPath: "/nonexistent/node" }).extract(PAGE, URL0);
     expect(out.kind).toBe("spawn_failed");
+  }, 20_000);
+
+  it("kills a child that drops its channel but stays alive, and reports spawn_failed", async () => {
+    const pids: number[] = [];
+    const started = performance.now();
+    const out = await make({
+      deadlineMs: 15_000,
+      childEntry: fixture("child-disconnect.mjs"),
+      onSpawn: (pid) => pids.push(pid),
+    }).extract(PAGE, URL0);
+    expect(out.kind).toBe("spawn_failed");
+    expect(performance.now() - started).toBeLessThan(5000);
+    expect(alive(pids[0] as number)).toBe(false);
   }, 20_000);
 
   it("kills the child and reports aborted when the caller's signal fires", async () => {

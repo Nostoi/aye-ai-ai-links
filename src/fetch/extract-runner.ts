@@ -15,11 +15,14 @@ export type ChildExtractorOptions = {
   execPath?: string;
   /** Called with the child's pid right after it is spawned. */
   onSpawn?: (pid: number) => void;
+  /** Receives each chunk the child writes to stderr. Defaults to this process's stderr. */
+  onStderr?: (chunk: Buffer) => void;
 };
 
 type EndedBy = "deadline" | "abort" | "ipc";
 // V8's fatal-error line: "Reached heap limit Allocation failed - JavaScript heap out of memory".
 const HEAP_OOM = "heap out of memory";
+const DISCONNECT_GRACE_MS = 500;
 const STDERR_KEPT = 64 * 1024;
 
 /**
@@ -36,6 +39,7 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
     childEntry = CHILD_ENTRY,
     execPath = process.execPath,
     onSpawn,
+    onStderr = (chunk) => process.stderr.write(chunk),
   } = options;
   let closed = false;
   let tail: Promise<unknown> = Promise.resolve();
@@ -81,7 +85,8 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
       const spawned = child;
       if (spawned.pid !== undefined) onSpawn?.(spawned.pid);
       spawned.stderr?.on("data", (chunk: Buffer) => {
-        if (stderr.length < STDERR_KEPT) stderr += chunk.toString("utf8");
+        onStderr(chunk);
+        stderr = (stderr + chunk.toString("utf8")).slice(-STDERR_KEPT);
       });
       spawned.on(
         "message",
@@ -90,6 +95,9 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
           if (m.type === "text") text = m.text ?? null;
         },
       );
+      spawned.on("disconnect", () => {
+        if (text === undefined) setTimeout(() => settled || stop("ipc"), DISCONNECT_GRACE_MS);
+      });
       spawned.on("error", (err) => {
         // A child that never got a pid never ran, so nothing will exit: settle here.
         if (spawned.pid === undefined) settle({ kind: "spawn_failed", detail: errorText(err) });

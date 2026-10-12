@@ -182,8 +182,15 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     ).run();
     db.prepare("UPDATE tags SET project_status = 'done' WHERE key = 'aye launch'").run();
     db.prepare("UPDATE tags SET project_status = 'active' WHERE key = 'side'").run();
+    // Snapshot rows no tool writes yet: one fetched, one failed, a third deleted below, the rest pending.
+    db.prepare(
+      `UPDATE snapshots SET fetch_status = 'ok', fetched_at = ?, title = 'Page', description = 'About',
+         image_url = 'https://example.com/i.png' WHERE link_id = 1`,
+    ).run(NOW.getTime());
+    db.prepare("UPDATE snapshots SET fetch_status = 'extract_timeout' WHERE link_id = 2").run();
     await run(get("1"));
     await run(save({ url: "https://example.com/c" })); // its filingContext holds the seeded tags
+    db.prepare("DELETE FROM snapshots WHERE link_id = 3").run();
     await run(update({ id: "1", why: null, summary: null }));
     await run(search(""));
     await run(search("zzzznomatch"));
@@ -237,6 +244,17 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       expect(isNull, `link.${field} null and non-null`).toEqual(new Set([true, false]));
     }
     expect(values(links, (l) => l.state)).toEqual(new Set(["active", "archived"]));
+    expect(values(links, (l) => l.snapshot === null)).toEqual(new Set([true, false]));
+    const snapshots = links.map((l) => l.snapshot).filter(Boolean);
+    expect(values(snapshots, (x) => x.status)).toEqual(
+      new Set(["pending", "ok", "extract_timeout"]),
+    );
+    for (const field of ["fetchedAt", "title", "description", "imageUrl"]) {
+      expect(
+        values(snapshots, (x) => x[field] === null),
+        `snapshot.${field}`,
+      ).toEqual(new Set([true, false]));
+    }
     expect(values(links, (l) => l.why?.source)).toContain("stated");
     expect(
       values(

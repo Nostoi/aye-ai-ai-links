@@ -261,8 +261,9 @@ describe("migrate", () => {
     it("rolls back a migration that leaves an orphan, and turns foreign keys back on", async () => {
       const { db } = await seeded();
       const orphan = "DELETE FROM links WHERE id = 2;";
-      expect(() => migrate(db, [...MIGRATIONS, orphan])).toThrow(/1 foreign key violation/);
+      expect(() => migrate(db, [...MIGRATIONS, orphan])).toThrow(/2 foreign key violation/);
       expect(count(db, "links")).toBe(2);
+      expect(count(db, "snapshots")).toBe(2);
       expect(count(db, "link_tags")).toBe(3);
       expect(version(db)).toBe(LATEST_VERSION);
       expect(foreignKeys(db)).toBe(1);

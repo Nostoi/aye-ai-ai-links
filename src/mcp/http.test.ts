@@ -230,6 +230,13 @@ describe("MCP door over HTTP", () => {
         lastSurfacedAt: null,
         snoozedUntil: null,
         state: "active",
+        snapshot: {
+          status: "pending",
+          fetchedAt: null,
+          title: null,
+          description: null,
+          imageUrl: null,
+        },
       },
       created: true,
       filingContext: { tags: [launch, reading], activeProjects: [launch] },

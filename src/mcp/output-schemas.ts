@@ -1,6 +1,6 @@
 import type { StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
+import { SNAPSHOT_STATUSES, SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 
 // The JSON form of core's results: `ok()` in server.ts turns each Date into a string.
 // Timestamps are plain strings because `Date#toJSON` is not always a four-digit ISO year.
@@ -51,6 +51,15 @@ const linkTagOutput = z.strictObject({
   kind: z.enum(TAG_KINDS),
 });
 
+// What a page fetch produced, never its text. Adding a status is a breaking change (ROADMAP #39).
+const snapshotOutput = z.strictObject({
+  status: z.enum(SNAPSHOT_STATUSES),
+  fetchedAt: timestamp.nullable(),
+  title: z.string().nullable(),
+  description: z.string().nullable(),
+  imageUrl: z.string().nullable(),
+});
+
 export const linkOutput = z.strictObject({
   id: z.string(),
   url: z.string(),
@@ -65,6 +74,7 @@ export const linkOutput = z.strictObject({
   lastSurfacedAt: timestamp.nullable(),
   snoozedUntil: timestamp.nullable(),
   state: z.enum(STATES),
+  snapshot: snapshotOutput.nullable(),
 });
 
 export const tagOutput = z.strictObject({

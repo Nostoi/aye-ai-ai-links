@@ -341,3 +341,102 @@ describe("migration 2", () => {
     expect(await search.search("a", "wombat", {}, 10)).toEqual(["7"]);
   });
 });
+
+describe("FtsSearch page text", () => {
+  type S = ReturnType<typeof setup>;
+  const page = (s: S, id: string, f: { title?: string; description?: string; text?: string }) =>
+    s.db
+      .prepare("UPDATE snapshots SET title = ?, description = ?, text = ? WHERE link_id = ?")
+      .run(f.title ?? null, f.description ?? null, f.text ?? null, Number(id));
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => `w${i % 997}`).join(" ");
+
+  it("ranks a title match above a link that matches only in page text, long page or short", async () => {
+    const s = setup();
+    const longPage = await s.save("a", { title: "Quokka field guide" });
+    page(s, longPage, { text: filler(5000) });
+    const shortPage = await s.save("a", { title: "Holiday notes" });
+    page(s, shortPage, { text: `saw a quokka ${filler(40)}` });
+    const noPage = await s.save("a", { title: "Quokka trip plan" });
+    for (let i = 0; i < 30; i++) {
+      const id = await s.save("a", { title: "Other" });
+      page(s, id, { text: filler(800) });
+    }
+    expect(await s.find("quokka")).toEqual([noPage, longPage, shortPage]);
+  });
+
+  it("lists page-only matches after owner-field matches, best page match first", async () => {
+    const s = setup();
+    await addFiller(s);
+    const weak = await s.save("a", { title: "x" });
+    page(s, weak, { text: `numbat ${filler(60)}` });
+    const strong = await s.save("a", { title: "y" });
+    page(s, strong, { text: "numbat numbat numbat" });
+    const own = await s.save("a", { summary: "numbat" });
+    expect(await s.find("numbat")).toEqual([own, strong, weak]);
+  });
+
+  it("finds a page's own title and description", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "x" });
+    page(s, id, { title: "Wallaby notes", description: "marsupial census" });
+    expect(await s.find("wallaby")).toEqual([id]);
+    expect(await s.find("marsupial")).toEqual([id]);
+  });
+
+  it("returns a link once when it matches in its fields and in its page", async () => {
+    const s = setup();
+    const both = await s.save("a", { title: "numbat" });
+    page(s, both, { text: "numbat" });
+    expect(await s.find("numbat")).toEqual([both]);
+  });
+
+  it("applies the limit across both lists", async () => {
+    const s = setup();
+    const own = await s.save("a", { title: "numbat" });
+    const p1 = await s.save("a", { title: "x" });
+    page(s, p1, { text: "numbat" });
+    const p2 = await s.save("a", { title: "y" });
+    page(s, p2, { text: "numbat numbat" });
+    expect(await s.find("numbat", {}, "a", 2)).toEqual([own, p2]);
+    expect(await s.find("numbat", {}, "a", 1)).toEqual([own]);
+    expect(await s.find("numbat", {}, "a", 3)).toHaveLength(3);
+  });
+
+  it("fills the limit with page-only matches when a link matches in both places", async () => {
+    const s = setup();
+    const both = await s.save("a", { title: "numbat", at: 1_000 });
+    page(s, both, { text: "numbat" });
+    const only = await s.save("a", { title: "x", at: 2_000 });
+    page(s, only, { text: "numbat" });
+    expect(await s.find("numbat", {}, "a", 2)).toEqual([both, only]);
+  });
+
+  it("never returns another owner's page text", async () => {
+    const s = setup();
+    const theirs = await s.save("b", { title: "x" });
+    page(s, theirs, { text: "numbat" });
+    expect(await s.find("numbat", {}, "a")).toEqual([]);
+    expect(await s.find("numbat", {}, "b")).toEqual([theirs]);
+  });
+
+  it("applies the tag, project and date filters to page-only matches", async () => {
+    const s = setup();
+    const early = await s.save("a", { title: "x", tags: ["alpha"], at: 1_000 });
+    const late = await s.save("a", { title: "y", tags: ["beta"], at: 3_000 });
+    for (const id of [early, late]) page(s, id, { text: "numbat" });
+    s.db.prepare("UPDATE tags SET kind = 'project' WHERE owner_id = 'a' AND key = 'beta'").run();
+    expect(await s.find("numbat", { tagKey: "alpha" })).toEqual([early]);
+    expect(await s.find("numbat", { projectKey: "beta" })).toEqual([late]);
+    expect(await s.find("numbat", { projectKey: "alpha" })).toEqual([]);
+    expect(await s.find("numbat", { savedFrom: new Date(2_000) })).toEqual([late]);
+    expect(await s.find("numbat", { savedTo: new Date(2_000) })).toEqual([early]);
+  });
+
+  it("keeps the blank-query listing and no-word result unchanged", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "x" });
+    page(s, id, { text: "numbat" });
+    expect(await s.find("")).toEqual([id]);
+    expect(await s.find("!!!")).toEqual([]);
+  });
+});

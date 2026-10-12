@@ -43,6 +43,7 @@ describe("createDeps", () => {
         modelKey: MODEL_KEY,
         similarity: { [link.id]: 1 },
         meaningCandidates: 1,
+        ranks: { [link.id]: { meaning: 1 } },
       },
     ]);
     expect(ids).toEqual([link.id]);

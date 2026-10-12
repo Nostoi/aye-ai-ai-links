@@ -1,8 +1,13 @@
-import type { SearchFilters, SearchTrace } from "./search.js";
+import type { ListRanks, SearchFilters, SearchTrace } from "./search.js";
 import type { OwnerId } from "./types.js";
 
 /** One link a logged search returned. `similarity` is null for a link found by keyword only. */
-export type LoggedResult = { id: string; urlKey: string; similarity: number | null };
+export type LoggedResult = {
+  id: string;
+  urlKey: string;
+  similarity: number | null;
+  ranks: ListRanks;
+};
 
 export type SearchLogEntry = Pick<SearchTrace, "mode" | "embedded" | "modelKey"> &
   Pick<SearchTrace, "meaningCandidates"> & {

@@ -1,7 +1,8 @@
-import type { LinkSearch, SearchFilters, SearchTrace } from "../core/search.js";
+import type { LinkSearch, ListRanks, SearchFilters, SearchTrace } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 import type { Embedder } from "./embedder.js";
 import { type FtsSearch, queryKind } from "./fts-search.js";
+import { listRanks } from "./list-ranks.js";
 import type { VectorSearch } from "./vector-search.js";
 
 type Keyword = Pick<FtsSearch, "search" | "parts">;
@@ -56,12 +57,13 @@ export class HybridSearch implements LinkSearch {
         modelKey: null,
         similarity: {},
         meaningCandidates: 0,
+        ranks: listRanks(fields, { field: fields }),
       });
       return fields.slice(0, limit);
     }
 
     let embedded: string | null = null;
-    let fused: { ids: string[]; similarity: Record<string, number> };
+    let fused: Fused;
     let meaningCandidates: number;
     try {
       embedded = capQuery(query);
@@ -71,14 +73,16 @@ export class HybridSearch implements LinkSearch {
       fused = fuse(fields, pageOnly, nearest, limit);
     } catch (error) {
       this.log("[search] meaning search failed; using keyword results:", error);
+      const ids = [...fields, ...pageOnly].slice(0, limit);
       trace?.({
         mode: "fallback",
         embedded,
         modelKey: this.modelKey,
         similarity: {},
         meaningCandidates: 0,
+        ranks: listRanks(ids, { field: fields, page: pageOnly }),
       });
-      return [...fields, ...pageOnly].slice(0, limit);
+      return ids;
     }
     trace?.({
       mode: "hybrid",
@@ -86,10 +90,17 @@ export class HybridSearch implements LinkSearch {
       modelKey: this.modelKey,
       similarity: fused.similarity,
       meaningCandidates,
+      ranks: fused.ranks,
     });
     return fused.ids;
   }
 }
+
+type Fused = {
+  ids: string[];
+  similarity: Record<string, number>;
+  ranks: Record<string, ListRanks>;
+};
 
 type Candidate = { id: string; score: number; best: number };
 
@@ -99,7 +110,7 @@ function fuse(
   pageOnly: string[],
   nearest: { id: string; similarity: number }[],
   limit: number,
-): { ids: string[]; similarity: Record<string, number> } {
+): Fused {
   const owned = new Set(fields);
   const meaning = nearest.filter((n) => !owned.has(n.id));
   const byId = new Map<string, Candidate>();
@@ -119,5 +130,9 @@ function fuse(
   const returned = new Set(ids);
   const similarity: Record<string, number> = {};
   for (const n of meaning) if (returned.has(n.id)) similarity[n.id] = n.similarity;
-  return { ids, similarity };
+  return {
+    ids,
+    similarity,
+    ranks: listRanks(ids, { field: fields, page: pageOnly, meaning: meaning.map((n) => n.id) }),
+  };
 }

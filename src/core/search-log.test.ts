@@ -49,6 +49,7 @@ class TracingSearch implements LinkSearch {
       modelKey: "m",
       similarity: {},
       meaningCandidates: 0,
+      ranks: {},
     },
   ) {}
   async search(
@@ -86,6 +87,7 @@ describe("searchLinks logging", () => {
       modelKey: "m",
       similarity: { "link-2": 0.75 },
       meaningCandidates: 4,
+      ranks: { "link-1": { field: 1 }, "link-2": { page: 3, meaning: 2 } },
     };
     const { deps, saved } = await setup(new TracingSearch(["link-1", "link-2", "99"], trace), log);
     const [first, second] = saved;
@@ -103,8 +105,13 @@ describe("searchLinks logging", () => {
           modelKey: "m",
           meaningCandidates: 4,
           results: [
-            { id: "link-1", urlKey: first?.urlKey, similarity: null },
-            { id: "link-2", urlKey: second?.urlKey, similarity: 0.75 },
+            { id: "link-1", urlKey: first?.urlKey, similarity: null, ranks: { field: 1 } },
+            {
+              id: "link-2",
+              urlKey: second?.urlKey,
+              similarity: 0.75,
+              ranks: { page: 3, meaning: 2 },
+            },
           ],
         },
       },
@@ -133,6 +140,7 @@ describe("searchLinks logging", () => {
       modelKey: "m",
       similarity: {},
       meaningCandidates: 0,
+      ranks: {},
     };
     const { deps } = await setup(new TracingSearch(["link-1"], fallback), log);
     await searchLinks(deps, "a", { query: "solar" }, "claude");

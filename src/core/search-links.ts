@@ -66,7 +66,7 @@ export async function searchLinks(
   );
   const [trace] = traces;
   if (trace) {
-    const { similarity, ...rest } = trace;
+    const { similarity, ranks, ...rest } = trace;
     await logSearch(
       searchLog,
       owner,
@@ -79,6 +79,7 @@ export async function searchLinks(
           id: l.id,
           urlKey: l.urlKey,
           similarity: similarity[l.id] ?? null,
+          ranks: ranks[l.id] ?? {},
         })),
       },
       now(),

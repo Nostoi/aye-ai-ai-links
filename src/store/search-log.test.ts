@@ -30,7 +30,7 @@ const entry = (query = "solar"): SearchLogEntry => ({
   embedded: query,
   modelKey: "m",
   meaningCandidates: 2,
-  results: [{ id: "1", urlKey: "ex.com/1", similarity: 0.5 }],
+  results: [{ id: "1", urlKey: "ex.com/1", similarity: 0.5, ranks: { page: 2, meaning: 1 } }],
 });
 
 const T = (minutes: number) => new Date(Date.UTC(2026, 9, 12, 12, minutes));
@@ -89,7 +89,9 @@ describe("SqliteSearchLog.record", () => {
       embedded: "solar",
       model_key: "m",
       meaning_candidates: 2,
-      results: JSON.stringify([{ id: "1", urlKey: "ex.com/1", similarity: 0.5 }]),
+      results: JSON.stringify([
+        { id: "1", urlKey: "ex.com/1", similarity: 0.5, ranks: { page: 2, meaning: 1 } },
+      ]),
       created_at: T(0).getTime(),
       opened_link_id: null,
       opened_url_key: null,
@@ -200,6 +202,7 @@ describe("a deleted link's reused id", () => {
           modelKey: null,
           similarity: {},
           meaningCandidates: 0,
+          ranks: { [first.id]: { field: 1 } },
         });
         return [first.id];
       },

@@ -192,6 +192,7 @@ describe("HybridSearch", () => {
         modelKey: KEY,
         similarity: { "7": 1 },
         meaningCandidates: 2,
+        ranks: { "7": { meaning: 1 } },
       },
     ]);
   });
@@ -208,7 +209,14 @@ describe("HybridSearch", () => {
     expect(texts).toEqual([]);
     expect(vectors.asked).toEqual([]);
     expect(traces).toEqual([
-      { mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 },
+      {
+        mode: "keyword",
+        embedded: null,
+        modelKey: null,
+        similarity: {},
+        meaningCandidates: 0,
+        ranks: { a: { field: 1 }, b: { field: 2 } },
+      },
     ]);
   });
 
@@ -243,6 +251,7 @@ describe("HybridSearch", () => {
         modelKey: KEY,
         similarity: {},
         meaningCandidates: 0,
+        ranks: { F: { field: 1 }, P1: { page: 1 }, P2: { page: 2 } },
       },
     ]);
   });
@@ -287,8 +296,32 @@ describe("HybridSearch", () => {
         modelKey: KEY,
         similarity: {},
         meaningCandidates: 0,
+        ranks: { P: { page: 1 } },
       },
     ]);
+  });
+
+  it("trace ranks give each returned id its place in every list that found it", async () => {
+    const { embedder } = countingEmbedder();
+    const vectors = {
+      nearest: () => [
+        { id: "F", similarity: 0.9 },
+        { id: "M", similarity: 0.8 },
+        { id: "B", similarity: 0.7 },
+      ],
+    };
+    const { ids, traces } = await run(
+      make(fakeKeyword({ fields: ["F"], pageOnly: ["P", "B"] }), vectors as never, embedder),
+      "w",
+      10,
+    );
+    expect([...ids].sort()).toEqual(["B", "F", "M", "P"]);
+    expect(traces[0]?.ranks).toEqual({
+      F: { field: 1 },
+      P: { page: 1 },
+      M: { meaning: 1 },
+      B: { page: 2, meaning: 2 },
+    });
   });
 
   it("trace similarity covers only the meaning candidates returned", async () => {
@@ -307,6 +340,7 @@ describe("HybridSearch", () => {
     );
     expect(ids).toEqual(["6", "5"]);
     expect(traces[0]?.similarity).toEqual({ "6": 0.9 });
+    expect(traces[0]?.ranks).toEqual({ "6": { meaning: 1 }, "5": { page: 1 } });
   });
 });
 

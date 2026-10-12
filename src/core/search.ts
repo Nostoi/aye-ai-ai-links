@@ -28,6 +28,9 @@ export interface LinkSearch {
   ): Promise<string[]>;
 }
 
+/** A returned link's 1-based place in each list that found it. */
+export type ListRanks = { field?: number; page?: number; meaning?: number };
+
 /**
  * What a word query did, reported to `trace` once per call. `embedded` is the text sent to the
  * embedder (the query capped at 500 code points), or null if nothing was sent; on a fallback it
@@ -42,4 +45,5 @@ export type SearchTrace = {
   modelKey: string | null;
   similarity: Record<string, number>;
   meaningCandidates: number;
+  ranks: Record<string, ListRanks>;
 };

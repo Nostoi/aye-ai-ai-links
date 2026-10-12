@@ -12,7 +12,7 @@ You talk to your AI; it uses the library for you.
 
 - **Save by talking.** Give your AI a link and a few words. It saves the link with a summary, tags, and a note on *why* you saved it. If you didn't say why, it asks once or makes a guess, and guesses are labelled as guesses.
 - **Find by describing.** Ask for "that article about batteries from spring". Your AI turns that into a word search, with optional filters for tag, project and date saved.
-- **Tidy up.** Ask your AI to change a link's summary, why or tags, archive it, or snooze it until later.
+- **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
 

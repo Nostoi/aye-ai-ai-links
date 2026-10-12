@@ -32,6 +32,7 @@ export type SnapshotRunnerOptions = {
 export type SnapshotRunner = {
   /** Sweep now, then every `pollMs`. */
   start(): void;
+  quiesce(): void;
   /**
    * Stop sweeping, refuse kicks, abort running jobs and wait for them. An aborted job gives its
    * attempt back, unless its page was already extracted ok: that one is recorded.
@@ -51,6 +52,8 @@ type Job = {
   linkId: string;
   key: string;
   leased: boolean;
+  /** One per job: a signal shared by every fetch would keep each fetch's wrapper alive. */
+  controller: AbortController;
   promise: Promise<void>;
   resolve: () => void;
 };
@@ -68,37 +71,39 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
   if (leaseMs < MIN_LEASE_MS)
     throw new RangeError(`A lease must last at least ${MIN_LEASE_MS} ms.`);
 
-  const controller = new AbortController();
   /** Queued and running jobs, by owner and link. */
   const jobs = new Map<string, Job>();
   /** Kicks waiting for a slot; they go before anything due. */
   const queue: Job[] = [];
-  let active = 0;
+  /** Jobs holding a slot. */
+  const running = new Set<Job>();
   let started = false;
-  let stopped = false;
+  let quiet = false;
   let stopping: Promise<void> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const keyOf = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
-  const shutDown = () => controller.signal.reason === SHUTDOWN;
+  const shutDown = (job: Job) => job.controller.signal.reason === SHUTDOWN;
 
   function newJob(owner: OwnerId, linkId: string): Job {
     let resolve = () => {};
     const promise = new Promise<void>((r) => {
       resolve = r;
     });
-    const job = { owner, linkId, key: keyOf(owner, linkId), leased: false, promise, resolve };
-    jobs.set(job.key, job);
+    const key = keyOf(owner, linkId);
+    const controller = new AbortController();
+    const job: Job = { owner, linkId, key, leased: false, controller, promise, resolve };
+    jobs.set(key, job);
     return job;
   }
 
   /** Runs a job in a slot taken before its first await, so no lease can exceed `slots`. */
   function launch(job: Job): void {
-    active++;
+    running.add(job);
     attempt(job)
       .catch((err) => log(`snapshot ${job.key}: job failed`, err))
       .finally(() => {
-        active--;
+        running.delete(job);
         jobs.delete(job.key);
         job.resolve();
         refill(job.leased);
@@ -107,13 +112,13 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
 
   /** Kicks first, then due rows: only after a leased job, so a failing store cannot spin. */
   function refill(fromDue: boolean): void {
-    if (stopped) return;
-    while (active < slots) {
+    if (quiet) return;
+    while (running.size < slots) {
       const next = queue.shift();
       if (!next) break;
       launch(next);
     }
-    if (fromDue && active < slots) void sweep();
+    if (fromDue && running.size < slots) void sweep();
   }
 
   async function attempt(job: Job): Promise<void> {
@@ -129,10 +134,10 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
     if (pastLastAttempt(lease.attempts)) {
       return write(job, lease, pastLastAttemptRecord(lease.attempts));
     }
-    const outcome = shutDown() ? null : await fetchAndExtract(lease.url);
+    const outcome = shutDown(job) ? null : await fetchAndExtract(job, lease.url);
     // A page extracted ok is finished work: record it even when the shutdown came during it.
     const finished = outcome?.stage === "extract" && outcome.extract.kind === "ok";
-    if (outcome === null || (shutDown() && !finished)) {
+    if (outcome === null || (shutDown(job) && !finished)) {
       const released = await store.releaseSnapshot(job.owner, job.linkId, lease.claim, now());
       if (!released) log(`snapshot ${job.key}: release refused`);
       return;
@@ -141,11 +146,11 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
   }
 
   /** The attempt's outcome, or null for a page fetched after shutdown: it is not extracted. */
-  async function fetchAndExtract(url: string): Promise<AttemptOutcome | null> {
-    const signal = controller.signal;
+  async function fetchAndExtract(job: Job, url: string): Promise<AttemptOutcome | null> {
+    const signal = job.controller.signal;
     const fetched = await fetcher.fetch(url, signal);
     if (fetched.kind !== "ok") return { stage: "fetch", fetch: fetched };
-    if (shutDown()) return null;
+    if (shutDown(job)) return null;
     const extract = await extractor.extract(fetched.html, fetched.finalUrl, signal);
     return { stage: "extract", extract };
   }
@@ -157,50 +162,57 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
   }
 
   async function sweep(): Promise<void> {
-    if (stopped || active >= slots) return;
+    if (quiet || running.size >= slots) return;
     let due: { owner: OwnerId; linkId: string }[];
     try {
-      due = await store.dueSnapshots(now(), slots - active);
+      due = await store.dueSnapshots(now(), slots - running.size);
     } catch (err) {
       log("snapshot sweep failed", err);
       return;
     }
     for (const { owner, linkId } of due) {
-      if (stopped || active >= slots) return;
+      if (quiet || running.size >= slots) return;
       if (!jobs.has(keyOf(owner, linkId))) launch(newJob(owner, linkId));
+    }
+  }
+
+  function quiesce(): void {
+    if (quiet) return;
+    quiet = true;
+    clearTimeout(timer);
+    for (const job of queue.splice(0)) {
+      jobs.delete(job.key);
+      job.resolve();
     }
   }
 
   return {
     start() {
-      if (started || stopped) return;
+      if (started || quiet) return;
       started = true;
       const tick = async () => {
         await sweep();
-        if (!stopped) timer = setTimeout(tick, pollMs);
+        if (!quiet) timer = setTimeout(tick, pollMs);
       };
       void tick();
     },
 
+    quiesce,
+
     stop() {
       if (stopping) return stopping;
-      stopped = true;
-      clearTimeout(timer);
-      controller.abort(SHUTDOWN);
-      for (const job of queue.splice(0)) {
-        jobs.delete(job.key);
-        job.resolve();
-      }
-      stopping = Promise.all([...jobs.values()].map((j) => j.promise)).then(() => {});
+      quiesce();
+      for (const job of running) job.controller.abort(SHUTDOWN);
+      stopping = Promise.all([...running].map((j) => j.promise)).then(() => {});
       return stopping;
     },
 
     kick(owner, linkId) {
-      if (stopped) return Promise.resolve();
+      if (quiet) return Promise.resolve();
       const existing = jobs.get(keyOf(owner, linkId));
       if (existing) return existing.promise;
       const job = newJob(owner, linkId);
-      if (active < slots) launch(job);
+      if (running.size < slots) launch(job);
       else queue.push(job);
       return job.promise;
     },

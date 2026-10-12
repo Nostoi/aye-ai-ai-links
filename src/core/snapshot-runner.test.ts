@@ -117,6 +117,14 @@ const finishHeld = (calls: { finish(): void }[]) => {
   for (const c of calls) c.finish();
 };
 
+/** Collect unhandled rejections until `off()`. */
+function listenUnhandled() {
+  const unhandled: unknown[] = [];
+  const on = (e: unknown) => unhandled.push(e);
+  process.on("unhandledRejection", on);
+  return { unhandled, off: () => process.off("unhandledRejection", on) };
+}
+
 describe("snapshot runner", () => {
   it("runs at most 2 jobs at once across sweeps and kicks, and finishes them all", async () => {
     const s = setup();
@@ -250,6 +258,36 @@ describe("snapshot runner", () => {
     }
   });
 
+  it("quiesce() lets a running job finish and record, and starts nothing new", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const s = setup({ pollMs: 1000, slots: 1 });
+      const running = await s.save(A, 1);
+      const queued = await s.save(A, 2);
+      const late = await s.save(A, 3);
+      s.extract.hold = true;
+      s.runner.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(s.extract.calls).toHaveLength(1);
+      let queuedSettled = false;
+      void s.runner.kick(A, queued.id).then(() => {
+        queuedSettled = true;
+      });
+      s.runner.quiesce();
+      void s.runner.kick(A, late.id);
+      s.extract.calls[0]?.finish();
+      await vi.advanceTimersByTimeAsync(5000);
+      await new Promise((r) => setImmediate(r));
+      expect(queuedSettled).toBe(true);
+      expect(s.order).toEqual([]);
+      expect(s.releases).toEqual([]);
+      expect(s.records.map((r) => [r.linkId, r.rec.status])).toEqual([[running.id, "ok"]]);
+      expect(s.leases.map((l) => l.linkId)).toEqual([running.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(["fetch", "extract"] as const)(
     "an abort that is not a shutdown, in the %s, uses up the attempt",
     async (stage) => {
@@ -288,9 +326,7 @@ describe("snapshot runner", () => {
   });
 
   it("a store that throws is logged, never an unhandled rejection, and the next job runs", async () => {
-    const unhandled: unknown[] = [];
-    const onUnhandled = (e: unknown) => unhandled.push(e);
-    process.on("unhandledRejection", onUnhandled);
+    const { unhandled, off } = listenUnhandled();
     try {
       const s = setup({ slots: 1 });
       await s.save(A, 1);
@@ -311,8 +347,49 @@ describe("snapshot runner", () => {
         expect.objectContaining({ message: "disk full" }),
       );
     } finally {
-      process.off("unhandledRejection", onUnhandled);
+      off();
     }
+  });
+
+  it("a sweep whose store throws is logged, and polling carries on", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { unhandled, off } = listenUnhandled();
+    try {
+      const s = setup({ pollMs: 1000 });
+      let sweeps = 0;
+      s.store.dueSnapshots = async () => {
+        sweeps++;
+        throw new Error("db locked");
+      };
+      s.runner.start();
+      await vi.advanceTimersByTimeAsync(2000);
+      await new Promise((r) => setImmediate(r));
+      expect(sweeps).toBe(3);
+      expect(unhandled).toEqual([]);
+      expect(s.log).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ message: "db locked" }),
+      );
+    } finally {
+      off();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a lease that always throws does not spin: no new lease until the next poll", async () => {
+    const s = setup();
+    await Promise.all([1, 2, 3].map((n) => s.save(A, n)));
+    let leaseCalls = 0;
+    s.rawLease = async () => {
+      leaseCalls++;
+      throw new Error("db locked");
+    };
+    const due = s.store.dueSnapshots.bind(s.store);
+    s.store.dueSnapshots = async (now, limit) => (leaseCalls > 20 ? [] : due(now, limit));
+    await s.runner.sweep();
+    await new Promise((r) => setImmediate(r));
+    expect(leaseCalls).toBe(2);
+    await s.runner.stop();
   });
 
   it("writes each snapshot with its own owner, and a foreign kick leases nothing", async () => {

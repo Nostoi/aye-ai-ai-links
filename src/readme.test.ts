@@ -63,7 +63,7 @@ describe("README stays current", () => {
       for (const m of readFileSync(file, "utf8").matchAll(/\bAYE_[A-Z0-9_]+\b/g)) vars.add(m[0]);
     }
     expect([...vars]).toContain("AYE_DB");
-    const missing = [...vars].filter((v) => !README.includes(v));
+    const missing = [...vars].filter((v) => !new RegExp(`\\b${v}\\b`).test(README));
     expect(missing, `README.md does not name these variables: ${missing.join(", ")}`).toEqual([]);
   });
 });

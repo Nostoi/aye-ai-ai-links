@@ -89,10 +89,10 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
 4. Make a key for each AI. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
 
    ```sh
-   KEYS="node --env-file=$HOME/.aye-links/aye.env $HOME/.aye-links/current/dist/cli/keys-main.js"
-   $KEYS create codex     # prints the key once; store it now
-   $KEYS list             # each AI's key, when it was made, and whether it is revoked
-   $KEYS revoke codex
+   keys() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/keys-main.js" "$@"; }
+   keys create codex     # prints the key once; store it now
+   keys list             # each AI's key, when it was made, and whether it is revoked
+   keys revoke codex
    ```
 
    New keys belong to the owner named by `AYE_OWNER` and `AYE_OWNER_NAME`, which default to `owner` and `Owner`. Leave them unset for a library of your own.

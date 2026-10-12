@@ -101,12 +101,19 @@ describe("the snapshot migration, from the version before it, with data", () => 
     db.prepare("DELETE FROM links WHERE id = 1").run();
     expect(db.prepare("SELECT link_id FROM snapshots").all()).toEqual([{ link_id: 2 }]);
     expect(count(db, "link_search")).toBe(1);
+    expect(count(db, "snapshot_search")).toBe(1);
     expect(db.pragma("foreign_key_check")).toEqual([]);
   });
 
-  it("leaves the 7 earlier search triggers and adds the 2 on snapshots", () => {
+  it("leaves link_search and its 7 triggers as they were, and adds snapshot_search with 3", () => {
     const db = legacy();
+    const searchObjects = () =>
+      db
+        .prepare("SELECT name, sql FROM sqlite_master WHERE name LIKE 'link_search%' ORDER BY name")
+        .all();
+    const before = searchObjects();
     migrate(db);
+    expect(searchObjects()).toEqual(before);
     const names = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name")
       .all()
@@ -118,9 +125,10 @@ describe("the snapshot migration, from the version before it, with data", () => 
       "link_search_lt_del",
       "link_search_lt_ins",
       "link_search_lt_upd",
-      "link_search_snap_ins",
-      "link_search_snap_upd",
       "link_search_tags_upd",
+      "snapshot_search_del",
+      "snapshot_search_ins",
+      "snapshot_search_upd",
     ]);
   });
 });

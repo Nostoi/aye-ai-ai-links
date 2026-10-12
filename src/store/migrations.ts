@@ -122,27 +122,12 @@ function searchIndex(): string {
   `;
 }
 
-/**
- * Page snapshots, and `link_search` rebuilt with a `text` column (a virtual table cannot be
- * altered). `text` is the page's own title and description plus its extracted text. The
- * triggers dropped are the 7 that `searchIndex()` created, listed by name; this SQL is frozen.
- */
+/** Page snapshots, and `snapshot_search`, a keyword index over the page's own text. */
 function snapshots(): string {
-  const pageText = `coalesce((SELECT concat_ws(char(10), s.title, s.description, s.text)
-        FROM snapshots s WHERE s.link_id = l.id AND s.owner_id = l.owner_id), '')`;
-  const insert = (ids: string) => `
-    INSERT INTO link_search (rowid, owner_id, title, summary, why, tags, text)
-    SELECT l.id, l.owner_id, coalesce(l.title, ''), coalesce(l.summary, ''), coalesce(l.why_text, ''),
-      coalesce((SELECT group_concat(name, ' ') FROM
-        (SELECT t.name AS name FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id
-         WHERE lt.link_id = l.id ORDER BY lt.position)), ''),
-      ${pageText}
-    FROM links l WHERE l.id IN (${ids});`;
-  const trigger = (name: string, event: string, ids: string) =>
-    `CREATE TRIGGER link_search_${name} AFTER ${event} BEGIN
-    DELETE FROM link_search WHERE rowid IN (${ids});${insert(ids)}
-  END;`;
-  const dropped = ["links_ins", "links_upd", "links_del", "lt_ins", "lt_upd", "lt_del", "tags_upd"];
+  const row = (
+    r: string,
+  ) => `INSERT INTO snapshot_search (rowid, owner_id, title, description, text)
+    VALUES (${r}.link_id, ${r}.owner_id, coalesce(${r}.title, ''), coalesce(${r}.description, ''), coalesce(${r}.text, ''));`;
   return `
   CREATE TABLE snapshots (
     link_id INTEGER PRIMARY KEY,
@@ -161,27 +146,24 @@ function snapshots(): string {
       'extract_timeout', 'extract_out_of_memory', 'extract_crashed'))
   );
   CREATE INDEX snapshots_due ON snapshots (next_fetch_at) WHERE next_fetch_at IS NOT NULL;
-  INSERT INTO snapshots (link_id, owner_id, fetch_status, next_fetch_at)
-    SELECT id, owner_id, 'pending', 0 FROM links;
 
-  ${dropped.map((n) => `DROP TRIGGER link_search_${n};`).join("\n  ")}
-  DROP TABLE link_search;
-  CREATE VIRTUAL TABLE link_search USING fts5(
-    owner_id UNINDEXED, title, summary, why, tags, text,
+  CREATE VIRTUAL TABLE snapshot_search USING fts5(
+    owner_id UNINDEXED, title, description, text,
     tokenize = 'porter unicode61 remove_diacritics 2'
   );
-  ${insert("SELECT id FROM links")}
-  ${trigger("links_ins", "INSERT ON links", "SELECT NEW.id")}
-  ${trigger("links_upd", "UPDATE ON links", "SELECT NEW.id")}
-  CREATE TRIGGER link_search_links_del AFTER DELETE ON links BEGIN
-    DELETE FROM link_search WHERE rowid = OLD.id;
+  CREATE TRIGGER snapshot_search_ins AFTER INSERT ON snapshots BEGIN
+    ${row("NEW")}
   END;
-  ${trigger("lt_ins", "INSERT ON link_tags", "SELECT NEW.link_id")}
-  ${trigger("lt_upd", "UPDATE ON link_tags", "SELECT OLD.link_id UNION SELECT NEW.link_id")}
-  ${trigger("lt_del", "DELETE ON link_tags", "SELECT OLD.link_id")}
-  ${trigger("tags_upd", "UPDATE OF name ON tags", "SELECT link_id FROM link_tags WHERE tag_id = NEW.id")}
-  ${trigger("snap_ins", "INSERT ON snapshots", "SELECT NEW.link_id")}
-  ${trigger("snap_upd", "UPDATE OF title, description, text ON snapshots", "SELECT NEW.link_id")}
+  CREATE TRIGGER snapshot_search_upd AFTER UPDATE OF title, description, text ON snapshots BEGIN
+    DELETE FROM snapshot_search WHERE rowid = NEW.link_id;
+    ${row("NEW")}
+  END;
+  CREATE TRIGGER snapshot_search_del AFTER DELETE ON snapshots BEGIN
+    DELETE FROM snapshot_search WHERE rowid = OLD.link_id;
+  END;
+
+  INSERT INTO snapshots (link_id, owner_id, fetch_status, next_fetch_at)
+    SELECT id, owner_id, 'pending', 0 FROM links;
   `;
 }
 

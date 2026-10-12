@@ -279,6 +279,46 @@ describe("profile use cases", () => {
       expect(await notes()).toEqual([]);
     });
 
+    it("answers conflict, without retrying, when a note it meant to remove became stated after it was read", async () => {
+      const id = await addNote("probably York", "inferred");
+      let applies = 0;
+      let reads = 0;
+      const racing: ProfileStore = {
+        listNotes: async (owner) => {
+          const seen = await profile.listNotes(owner);
+          if (reads++ === 0) {
+            await profile.apply(
+              owner,
+              {
+                addNotes: [],
+                editNotes: [
+                  { id, text: "lives in Leeds", source: "stated", expectedSource: "inferred" },
+                ],
+                removeNotes: [],
+                addFocus: [],
+              },
+              { writtenBy: "claude", at: NOW, focusLimit: RECENT_FOCUS },
+            );
+          }
+          return seen;
+        },
+        apply: (...args) => {
+          applies++;
+          return profile.apply(...args);
+        },
+        recentFocus: (...args) => profile.recentFocus(...args),
+      };
+      const err = await code(
+        editProfile({ profile: racing, now: () => NOW }, A, W, { removeNotes: [id] }),
+      );
+      expect(err?.code).toBe("conflict");
+      expect(err?.message).toContain("get_profile");
+      expect(applies).toBe(1);
+      expect(await notes()).toEqual([
+        { id, text: "lives in Leeds", source: "stated", writtenBy: "claude", updatedAt: NOW },
+      ]);
+    });
+
     it("refuses blank or over-long edit text, bad sources, and an id used twice, writing nothing", async () => {
       const id = await addNote("keep");
       const other = await addNote("other", "inferred");

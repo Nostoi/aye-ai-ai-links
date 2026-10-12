@@ -91,24 +91,31 @@ const notFound = (id: string) =>
     `No profile note with id "${id}". Call get_profile to see the note ids. Nothing was changed.`,
   );
 
+const conflict = (id: string) =>
+  new CoreError(
+    "conflict",
+    `Note "${id}" was changed by someone else while this ran. Nothing was changed. Call get_profile to see the notes as they are now, then try again if the change still applies.`,
+  );
+
 /** The result comes from the write itself: a read after a committed write could fail and look like a failed write. */
+function apply(deps: ProfileDeps, owner: OwnerId, writtenBy: string, changes: ProfileChanges) {
+  return deps.profile.apply(owner, changes, {
+    writtenBy,
+    at: deps.now(),
+    focusLimit: RECENT_FOCUS,
+  });
+}
+
 async function write(
   deps: ProfileDeps,
   owner: OwnerId,
   writtenBy: string,
   changes: ProfileChanges,
 ) {
-  const result = await deps.profile.apply(owner, changes, {
-    writtenBy,
-    at: deps.now(),
-    focusLimit: RECENT_FOCUS,
-  });
+  const result = await apply(deps, owner, writtenBy, changes);
   if (!result.ok) {
     if ("unknownId" in result) throw notFound(result.unknownId);
-    throw new CoreError(
-      "conflict",
-      `Note "${result.conflictId}" was changed by someone else while this ran. Nothing was changed. Call get_profile to see the notes as they are now, then try again if the change still applies.`,
-    );
+    throw conflict(result.conflictId);
   }
   return result;
 }
@@ -160,11 +167,9 @@ export async function editProfile(
         );
       }
     }
-    try {
-      const { notes, recentFocus: focus } = await write(deps, owner, writtenBy, changes);
-      return { notes, recentFocus: focus };
-    } catch (e) {
-      if (attempt > 0 || !(e instanceof CoreError && e.code === "conflict")) throw e;
-    }
+    const result = await apply(deps, owner, writtenBy, changes);
+    if (result.ok) return { notes: result.notes, recentFocus: result.recentFocus };
+    if ("unknownId" in result) throw notFound(result.unknownId);
+    if (attempt > 0 || removes.includes(result.conflictId)) throw conflict(result.conflictId);
   }
 }

@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import type { Caller } from "./auth/caller.js";
 import { createDeps } from "./deps.js";
+import { FakeEmbedder } from "./search/embedder.js";
+import { DIMS } from "./search/model.js";
 import { openDatabase } from "./store/database.js";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -13,7 +15,7 @@ const OWNER: Caller = { owner: "owner-a", savedBy: "claude-code" };
 async function listedToolNames(): Promise<string[]> {
   const db = openDatabase(":memory:");
   try {
-    const deps = createDeps(db);
+    const deps = createDeps(db, new FakeEmbedder(DIMS));
     deps.store.ensureUser(OWNER.owner, OWNER.owner);
     const { app } = createApp({ deps, identify: async () => OWNER });
     const res = await app.fetch(

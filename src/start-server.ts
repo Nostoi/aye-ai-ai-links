@@ -1,14 +1,18 @@
 import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
+import type { Database } from "better-sqlite3";
 import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
-import type { ServerConfig } from "./config.js";
+import { modelRoot, type ServerConfig } from "./config.js";
 import type { PageExtractor } from "./core/extract.js";
 import type { PageFetcher } from "./core/fetch.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { createChildExtractor } from "./fetch/extract-runner.js";
 import { createGuardedFetcher } from "./fetch/guarded-fetcher.js";
+import type { Embedder } from "./search/embedder.js";
+import { revisionDir } from "./search/model.js";
+import { loadTransformersEmbedder } from "./search/transformers-embedder.js";
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
 
@@ -18,9 +22,9 @@ const SETTLE_MS = 5_000;
 
 /**
  * Seams for tests: `decorateDeps` wraps the deps (the snapshot runner uses the wrapped store),
- * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, and `fetcher` and `extractor`
- * replace the real page pipeline, which is otherwise the guarded fetcher (5 MiB cap) and the
- * child extractor.
+ * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
+ * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
+ * fetcher (5 MiB cap) and the child extractor.
  */
 export type StartOptions = {
   decorateDeps?: (deps: AppDeps) => AppDeps;
@@ -28,13 +32,16 @@ export type StartOptions = {
   settleMs?: number;
   /** How long a new link's save waits for its page; core's `SAVE_WAIT_MS` when left out. */
   saveWaitMs?: number;
+  /** Answers query embeddings; the pinned model loaded from `modelRoot()` when left out. */
+  embedder?: Embedder;
   fetcher?: PageFetcher;
   extractor?: PageExtractor;
 };
 
 /**
- * Opens the database and serves on loopback; Tailscale Serve is what reaches it from the tailnet.
- * The snapshot runner starts once the server is listening.
+ * Loads the model, opens the database and serves on loopback; Tailscale Serve is what reaches it from the tailnet.
+ * The snapshot runner starts once the server is listening. Any failure before that closes
+ * what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
  * 1. The runner takes no new work; running jobs carry on.
@@ -53,34 +60,48 @@ export async function startServer(
     drainMs = DRAIN_MS,
     settleMs = SETTLE_MS,
     saveWaitMs,
+    embedder,
     fetcher = createGuardedFetcher(),
     extractor = createChildExtractor(),
   }: StartOptions = {},
 ) {
-  const db = openDatabase(config.dbPath);
-  const deps = decorateDeps(createDeps(db));
-  const runner = createSnapshotRunner({ store: deps.store, fetcher, extractor, now: deps.now });
-  const { app, close, calls } = createApp({
-    deps: { ...deps, snapshots: runner, saveWaitMs },
-    identify: keyIdentify(new SqliteKeyStore(db)),
-    allowedHosts: config.allowedHosts,
-  });
+  // Loading first means a missing or tampered model fails the start with nothing to close.
+  const model = embedder ?? (await loadTransformersEmbedder(revisionDir(modelRoot())));
+
+  let db: Database | undefined;
+  let closeApp: (() => Promise<void>) | undefined;
   const closeAll = async () => {
     await fetcher.close();
     await extractor.close();
-    await close();
-    db.close();
+    await closeApp?.();
+    db?.close();
   };
 
+  let runner: ReturnType<typeof createSnapshotRunner>;
+  let calls: ReturnType<typeof createApp>["calls"];
   let server: Server;
   try {
+    db = openDatabase(config.dbPath);
+    const deps = decorateDeps(createDeps(db, model));
+    runner = createSnapshotRunner({ store: deps.store, fetcher, extractor, now: deps.now });
+    const built = createApp({
+      deps: { ...deps, snapshots: runner, saveWaitMs },
+      identify: keyIdentify(new SqliteKeyStore(db)),
+      allowedHosts: config.allowedHosts,
+    });
+    closeApp = built.close;
+    calls = built.calls;
     server = await new Promise<Server>((resolve, reject) => {
-      const s = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: config.port }) as Server;
+      const s = serve({
+        fetch: built.app.fetch,
+        hostname: "127.0.0.1",
+        port: config.port,
+      }) as Server;
       s.once("error", reject);
       s.once("listening", () => resolve(s));
     });
   } catch (error) {
-    await closeAll();
+    await closeAll().catch((e) => console.error("[server] cleanup after a failed start:", e));
     throw error;
   }
   runner.start();

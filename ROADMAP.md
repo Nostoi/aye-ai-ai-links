@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** Search combines keyword and meaning results (#32 PR C1). Rulings: #32 comments [6116408707](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6116408707), [6116939105](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6116939105) and [6124184460](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6124184460).
+  - **Your words first.** Links whose own title, summary, why or tags match come first, in keyword order. Page-text and meaning hits follow, merged by reciprocal rank fusion (k = 60) over the top `min(3 × limit, 150)` of each list, with no similarity floor yet.
+  - **Keyword fallback.** If the model or the vector lookup fails, search returns the keyword results and logs the error.
+  - **Start order.** The server loads the model before it opens the database, so a missing or changed model fails the start and the deploy rolls back. Any failure before listening closes everything opened so far.
+  - Until PR D stores vectors, results are the same as keyword search. Common words still count as owner-field matches; #66 changes that.
 - **2026-10-12:** The meaning-search model is four pinned files in a local folder, installed by the deploy (#32 PR B). Rulings: #32 comments [6116229958](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6116229958) and [6123037594](https://github.com/Nostoi/aye-ai-ai-links/issues/32#issuecomment-6123037594).
   - **A local folder replaces cache-plus-revision.** transformers.js 4.3.1 drops the tokenizer when it loads a pinned revision from its cache offline, so the first embedding fails. With an absolute folder as the model id and remote loading off, it loads with no network access.
   - **Hashes are checked twice:** at deploy, and every time the server loads the model. A canary sentence must also embed to its recorded values (first 8 within 1e-4, 384 finite values, length near 1). The canary alone did not notice a changed `model_max_length`.

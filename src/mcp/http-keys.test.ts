@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { createAgentKey, keyIdentify, revokeAgentKey } from "../auth/agent-keys.js";
 import { createDeps } from "../deps.js";
+import { FakeEmbedder } from "../search/embedder.js";
+import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import { SqliteKeyStore } from "../store/key-store.js";
 
@@ -42,7 +44,8 @@ describe("MCP door with real agent keys", () => {
   let markKey: string;
   let aliceKey: string;
   const linkCount = () => (db.prepare("SELECT COUNT(*) AS n FROM links").get() as { n: number }).n;
-  const idsFor = async (owner: string) => createDeps(db).search.search(owner, "", {}, 50);
+  const idsFor = async (owner: string) =>
+    createDeps(db, new FakeEmbedder(DIMS)).search.search(owner, "", {}, 50);
 
   beforeEach(() => {
     db = openDatabase(":memory:");
@@ -53,7 +56,7 @@ describe("MCP door with real agent keys", () => {
       ownerName: "Alice",
       agent: "claude-code",
     });
-    app = appFor({ deps: createDeps(db), identify: keyIdentify(keys) });
+    app = appFor({ deps: createDeps(db, new FakeEmbedder(DIMS)), identify: keyIdentify(keys) });
   });
 
   const save = (key: string | null, extra: object = {}) =>

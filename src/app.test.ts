@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import type { Caller, Identify } from "./auth/caller.js";
 import { createDeps } from "./deps.js";
+import { FakeEmbedder } from "./search/embedder.js";
+import { DIMS } from "./search/model.js";
 import { openDatabase } from "./store/database.js";
 
 const A: Caller = { owner: "owner-a", savedBy: "claude-code" };
@@ -21,7 +23,7 @@ const LIST = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 
 function setup(limit: number) {
   const db = openDatabase(":memory:");
-  const deps = createDeps(db);
+  const deps = createDeps(db, new FakeEmbedder(DIMS));
   for (const o of [A.owner, B.owner]) deps.store.ensureUser(o, o);
   const built = createApp({ deps, identify, rateLimit: { limit, now: () => 0 } });
   const send = (key: string | null, extra: HeadersInit = {}) => {

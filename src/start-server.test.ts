@@ -10,6 +10,8 @@ import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
 import type { FetchOutcome, PageFetcher } from "./core/fetch.js";
 import { saveLink } from "./core/links.js";
 import { type AppDeps, createDeps } from "./deps.js";
+import { FakeEmbedder } from "./search/embedder.js";
+import { DIMS } from "./search/model.js";
 import { type StartOptions, startServer } from "./start-server.js";
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
@@ -89,7 +91,7 @@ function fakePipeline(
       log.push("extractor.close");
     },
   };
-  return { fetcher, extractor, log, closed, fetched };
+  return { fetcher, extractor, embedder: new FakeEmbedder(DIMS), log, closed, fetched };
 }
 
 /** Collects unhandled rejections and uncaught exceptions while a test runs. */
@@ -208,7 +210,7 @@ describe("startServer", () => {
   const seed = async (url: string) => {
     const db = openDatabase(dbPath);
     try {
-      await saveLink(createDeps(db), "owner", { url, savedBy: "seed" });
+      await saveLink(createDeps(db, new FakeEmbedder(DIMS)), "owner", { url, savedBy: "seed" });
     } finally {
       db.close();
     }
@@ -382,6 +384,56 @@ describe("startServer", () => {
     await stop();
     expect(existsSync(`${dbPath}-wal`)).toBe(false);
     await expect(stop()).resolves.toBeUndefined();
+  });
+
+  describe("startup failures", () => {
+    const freePort = () =>
+      new Promise<number>((resolve) => {
+        const s = net.createServer().listen(0, "127.0.0.1", () => {
+          const { port } = s.address() as net.AddressInfo;
+          s.close(() => resolve(port));
+        });
+      });
+    const listening = (port: number) =>
+      new Promise<boolean>((resolve) => {
+        const c = net.connect(port, "127.0.0.1");
+        c.once("connect", () => {
+          c.destroy();
+          resolve(true);
+        });
+        c.once("error", () => resolve(false));
+      });
+
+    it("fails before opening the database when the model cannot load, and listens on nothing", async () => {
+      vi.stubEnv("HOME", dir);
+      const fresh = join(dir, "fresh.db");
+      const port = await freePort();
+      const { fetcher, extractor } = fakePipeline();
+      await expect(startServer({ dbPath: fresh, port }, { fetcher, extractor })).rejects.toThrow();
+      expect(existsSync(fresh)).toBe(false);
+      expect(await listening(port)).toBe(false);
+      vi.unstubAllEnvs();
+    });
+
+    it("closes the database and the pipeline when startup fails after the database opens", async () => {
+      const fresh = join(dir, "fresh.db");
+      const pipeline = fakePipeline();
+      const boom = new Error("deps failed");
+      await expect(
+        startServer(
+          { dbPath: fresh, port: 0 },
+          {
+            ...pipeline,
+            decorateDeps: () => {
+              throw boom;
+            },
+          },
+        ),
+      ).rejects.toBe(boom);
+      expect(existsSync(fresh)).toBe(true);
+      expect(existsSync(`${fresh}-wal`)).toBe(false);
+      expect(pipeline.closed).toEqual({ fetcher: 1, extractor: 1 });
+    });
   });
 
   describe("page snapshots", () => {

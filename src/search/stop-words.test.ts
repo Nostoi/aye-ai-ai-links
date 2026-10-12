@@ -71,6 +71,12 @@ describe("stop words in keyword matching (#66)", () => {
     expect(ids[0]).toBe(target);
   });
 
+  it("an underscore-joined filler pair does not crowd out the meaning match", async () => {
+    const { ids, target, mode } = await crowded("that this", "that_this automobile");
+    expect(mode).toBe("hybrid");
+    expect(ids[0]).toBe(target);
+  });
+
   it("T2: a filler word is not a prefix match on 'apple'", async () => {
     const s = setup();
     const apple = await s.own("apple pie");

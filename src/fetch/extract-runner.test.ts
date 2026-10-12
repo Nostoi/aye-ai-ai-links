@@ -123,6 +123,36 @@ describe("child extractor: a hostile page", () => {
   }, 20_000);
 });
 
+describe("child extractor: a child that ends before it has the page", () => {
+  it("reports spawn_failed when the child throws while loading", async () => {
+    const out = await make({ childEntry: fixture("child-load-throw.mjs") }).extract(PAGE, URL0);
+    expect(out.kind).toBe("spawn_failed");
+    expect(out.kind === "spawn_failed" && out.detail).toContain("before receiving the page");
+  }, 20_000);
+
+  it("reports spawn_failed when the deadline fires before the child has the page", async () => {
+    const out = await make({ deadlineMs: 500, childEntry: fixture("child-silent.mjs") }).extract(
+      PAGE,
+      URL0,
+    );
+    expect(out.kind).toBe("spawn_failed");
+    expect(out.kind === "spawn_failed" && out.detail).toContain("before receiving the page");
+  }, 20_000);
+
+  it("still reports crashed for a child that received the page and then threw", async () => {
+    const out = await make({ childEntry: fixture("child-throw.mjs") }).extract(PAGE, URL0);
+    expect(out.kind).toBe("crashed");
+  }, 20_000);
+
+  it("still reports timeout for a child that received the page and then hung", async () => {
+    const out = await make({ deadlineMs: 500, childEntry: fixture("child-hang.mjs") }).extract(
+      PAGE,
+      URL0,
+    );
+    expect(out.kind).toBe("timeout");
+  }, 20_000);
+});
+
 describe("child extractor: process management", () => {
   it("runs the child in the service's own process group", async () => {
     const groups: string[] = [];

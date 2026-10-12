@@ -51,6 +51,7 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
       let metadata: PageMetadata | null = null;
       let text: string | null | undefined;
       let endedBy: EndedBy | undefined;
+      let received = false;
       let stderr = "";
       let settled = false;
       let child: ChildProcess | undefined;
@@ -91,6 +92,7 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
       spawned.on(
         "message",
         (m: { type?: string; metadata?: PageMetadata; text?: string | null }) => {
+          if (m.type === "received") received = true;
           if (m.type === "metadata" && m.metadata) metadata = m.metadata;
           if (m.type === "text") text = m.text ?? null;
         },
@@ -106,6 +108,21 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
       spawned.on("close", (code, sig) => {
         if (endedBy === "abort") return settle({ kind: "aborted" });
         if (text !== undefined && metadata) return settle({ kind: "ok", metadata, text });
+        if (!received) {
+          // The page was never parsed, so this is the machine's fault, not the content's.
+          const cause =
+            endedBy === "deadline"
+              ? "deadline passed"
+              : endedBy === "ipc"
+                ? "channel failed"
+                : sig
+                  ? `signal ${sig}`
+                  : `exit code ${code}`;
+          return settle({
+            kind: "spawn_failed",
+            detail: `child ended before receiving the page: ${cause}`,
+          });
+        }
         if (endedBy === "deadline") return settle({ kind: "timeout", metadata });
         if (endedBy === "ipc")
           return settle({ kind: "spawn_failed", detail: "child channel failed" });

@@ -11,8 +11,8 @@ export type PageMetadata = {
  *
  * - `timeout`, `out_of_memory` and `crashed` come from the page's content: the same HTML will
  *   fail the same way, so callers should not retry them.
- * - `spawn_failed` is about the machine (the child could not start or lost its channel), not the
- *   page, so a retry is reasonable.
+ * - `spawn_failed` is about the machine (the child could not start, lost its channel, or ended
+ *   before it had received the page), not the page, so a retry is reasonable.
  * - `aborted` means the caller's signal fired or the extractor was closed (shutdown).
  */
 export type ExtractOutcome =

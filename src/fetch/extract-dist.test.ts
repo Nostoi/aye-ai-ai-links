@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 // Inside node_modules so the build output resolves its dependencies and stays git-ignored.
-const outDir = path.join(root, "node_modules/.cache/aye-dist-test");
+const outDir = path.join(root, `node_modules/.cache/aye-dist-test-${process.pid}`);
 
 afterAll(() => fs.rmSync(outDir, { recursive: true, force: true }));
 
@@ -33,8 +33,9 @@ describe("the deployed path", () => {
       env: {},
     }).toString();
     const result = JSON.parse(stdout);
-    expect(result.entry).toMatch(/\/aye-dist-test\/fetch\/extract-child\.js$/);
-    expect(result.out).toMatchObject({ kind: "ok", metadata: { title: "Dist" } });
+    expect(result.entry).toMatch(/\/aye-dist-test-\d+\/fetch\/extract-child\.js$/);
+    expect(result.out.kind, JSON.stringify(result.out)).toBe("ok");
+    expect(result.out.metadata.title).toBe("Dist");
     expect(result.out.text).toContain("Rottnest");
   }, 60_000);
 });

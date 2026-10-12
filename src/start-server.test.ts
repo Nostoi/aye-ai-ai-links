@@ -630,4 +630,52 @@ describe("startServer", () => {
       }
     });
   });
+
+  describe("meaning search", () => {
+    const vectorCount = () => read<{ n: number }>("SELECT count(*) AS n FROM link_vectors")[0]?.n;
+
+    it("D-T12: a saved link is found by a meaning-only query once the indexer has swept", async () => {
+      await seed("https://example.com/backlog");
+      const { port } = await start();
+      await until(() => vectorCount() === 1, "a stored vector");
+      const res = await json(
+        await post(port, {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "search_links", arguments: { query: "zebra" } },
+        }),
+      );
+      expect(res.result.structuredContent.links.map((l: { url: string }) => l.url)).toEqual([
+        "https://example.com/backlog",
+      ]);
+      expect(read("SELECT mode, meaning_candidates AS n FROM search_log")).toEqual([
+        { mode: "hybrid", n: 1 },
+      ]);
+    });
+
+    it("stops within the settle bound while a document embedding hangs, and embeds nothing more", async () => {
+      await seed("https://example.com/one");
+      await seed("https://example.com/two");
+      const pipeline = fakePipeline();
+      const calls: string[][] = [];
+      const embedder = {
+        embedQuery: (t: string, s?: AbortSignal) => pipeline.embedder.embedQuery(t, s),
+        embedDocuments: (texts: string[]) => {
+          calls.push(texts);
+          return new Promise<Float32Array[]>(() => {});
+        },
+      };
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { stop } = await start({ ...pipeline, embedder });
+      await until(() => calls.length === 1, "a document embedding");
+      const started = performance.now();
+      await stop();
+      expect(performance.now() - started).toBeLessThan(2000);
+      await sleep(50);
+      expect(calls).toHaveLength(1);
+      expect(vectorCount()).toBe(0);
+      expect(errors.mock.calls.flat().join(" ")).toMatch(/indexer still running/);
+    });
+  });
 });

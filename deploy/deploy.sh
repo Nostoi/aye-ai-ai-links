@@ -84,7 +84,7 @@ prune() {
   local r f backups rc=0
   for r in "$home"/releases/*; do
     [ -e "$r" ] || continue
-    [ "$r" = "$release" ] || [ "$r" = "$previous" ] || rm -rf "$r" || rc=1
+    [ "$r" = "$release" ] || [ "$r" = "$previous" ] || { rm -f "$r/.ready" && rm -rf "$r"; } || rc=1
   done
   backups=("$home"/data/backups/links-*.db)
   if [ -e "${backups[0]}" ] && [ "${#backups[@]}" -gt 10 ]; then
@@ -131,13 +131,7 @@ rollback() {
   trap - ERR
   trap '' INT TERM HUP
   set +e
-  if ! stop_and_wait; then
-    if [ "$switched" = 0 ]; then
-      echo "The deploy was stopped before anything was switched, and stopping the service is unconfirmed. Nothing was changed or started." >&2
-      exit 1
-    fi
-    give_up stop
-  fi
+  stop_and_wait || give_up stop
   if [ "$switched" = 0 ]; then
     if [ ! -f "$plist" ]; then
       echo "The deploy failed before anything was switched, and there was no service to restart. The service is stopped." >&2

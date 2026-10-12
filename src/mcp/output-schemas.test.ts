@@ -1,3 +1,4 @@
+import { McpServer } from "@modelcontextprotocol/server";
 import {
   Ajv,
   AjvJsonSchemaValidator,
@@ -23,7 +24,7 @@ import type {
   tagOutput,
   updateTagOutput,
 } from "./output-schemas.js";
-import * as outputSchemas from "./output-schemas.js";
+import { buildMcpServer } from "./server.js";
 
 const A: Caller = { owner: "owner-a", savedBy: "claude-code" };
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -382,27 +383,24 @@ function openObjects(node: unknown, path: string): string[] {
 }
 
 describe("output schemas stay strict on the server", () => {
-  // The module's exports are its schemas plus the `advertisedOpen` function.
-  const schemas = Object.entries(outputSchemas).flatMap(([name, value]) =>
-    typeof value === "function" ? [] : [[name, value as z.ZodType] as const],
-  );
+  // Walk what the server registers, not what output-schemas.ts exports: a root schema written
+  // inline, or kept in another module, would escape a walk over the exports.
+  const register = vi.spyOn(McpServer.prototype, "registerTool");
+  buildMcpServer({} as never, A);
+  const tools = register.mock.calls.map(([name, cfg]) => [name, cfg] as const);
+  register.mockRestore();
 
-  it("finds the schemas to check", () => {
-    expect(schemas.map(([name]) => name).sort()).toEqual([
-      "linkOutput",
-      "linkResultOutput",
-      "saveLinkOutput",
-      "searchLinksOutput",
-      "tagOutput",
-      "updateTagOutput",
-    ]);
+  it("finds the registered tools", () => {
+    expect(tools.length).toBeGreaterThan(0);
   });
 
   // `advertisedOpen` strips `additionalProperties: false` from what clients see, so only the
   // strict schema's own JSON form shows a plain `z.object`. Input mode tells them apart:
-  // output mode closes both.
-  it.each(schemas)("%s closes every object node", (name, schema) => {
-    const json = schema["~standard"].jsonSchema.input({ target: "draft-2020-12" });
+  // output mode closes both. `advertisedOpen` passes input mode through unchanged.
+  it.each(tools)("%s closes every object node of its output schema", (name, cfg) => {
+    const schema = cfg.outputSchema as z.ZodType | undefined;
+    expect(schema, `${name} declares an outputSchema`).toBeDefined();
+    const json = schema?.["~standard"].jsonSchema.input({ target: "draft-2020-12" });
     expect(openObjects(json, "$"), `${name}: objects that accept extra keys`).toEqual([]);
   });
 });

@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { MANIFEST, revisionDir } from "../search/model.js";
 import { prefetchModel } from "./prefetch-model.js";
+
+const roots: string[] = [];
+const emptyRoot = () => {
+  const r = mkdtempSync(join(tmpdir(), "aye-prefetch-"));
+  roots.push(r);
+  return r;
+};
+afterEach(() => {
+  for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
+});
 
 const fetchFn = () => Promise.reject(new Error("not used"));
 
@@ -44,5 +57,29 @@ describe("prefetchModel", () => {
       }),
     ).rejects.toThrow("download failed");
     expect(loaded).toBe(false);
+  });
+
+  it("by default loads through the pinned-file check", async () => {
+    await expect(prefetchModel(emptyRoot(), { install: async () => {} })).rejects.toThrow(
+      /not as pinned/,
+    );
+  });
+
+  it("by default installs through the given fetch", async () => {
+    await expect(
+      prefetchModel(emptyRoot(), {
+        fetchFn: () => Promise.reject(new Error("offline")),
+        load: async () => {},
+      }),
+    ).rejects.toThrow(/Could not install/);
+  });
+
+  it("is the CLI that deploy.sh runs", () => {
+    const script = readFileSync(join(import.meta.dirname, "../../deploy/deploy.sh"), "utf8");
+    const built = [...script.matchAll(/dist\/cli\/([\w-]+)\.js/g)].map((m) => m[1]);
+    expect(built).toContain("prefetch-model-main");
+    for (const name of built) {
+      expect(existsSync(join(import.meta.dirname, `${name}.ts`)), name).toBe(true);
+    }
   });
 });

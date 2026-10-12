@@ -22,6 +22,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Snapshot store (#30, first of three pull requests: store and migration).
+  - **Interface.** Snapshots have their own `SnapshotStore` in `core/`, like `ProfileStore`, rather than more methods on `LinkStore`. `SqliteStore` and `FakeStore` implement both. `dueSnapshots` is the one cross-owner read.
+  - **Claim lease.** `leaseSnapshot` sets `next_fetch_at` to the lease end and returns `{url, attempts, claim}`, where the claim is that end time in milliseconds. `recordSnapshot` writes only while `next_fetch_at` still equals the claim, so a job that outlived its lease writes nothing and a finished snapshot cannot be written twice.
+  - **Search text.** `link_search` gains a `text` column holding the page's own title and description plus its extracted text (owner ruling, Q4). The virtual table is dropped and recreated, with the same triggers plus two on `snapshots`. Existing links get a `pending` snapshot.
+  - **Links.** `Link.snapshot` carries status and page fields, never the text; `getSnapshotText` reads it. `NewLink` omits `snapshot`, and saving a link creates its `pending` snapshot in the same transaction.
+
 - **2026-10-11:** Change a tag's kind (#23). This supersedes the MCP door (#5) entry's "will come" line.
   - **Tool.** `update_tag {name, kind}` changes an existing tag between topic and project and returns `{tag}`. It never creates a tag. The description tells agents to use it only when the owner says so. Hints, wording and sources: `docs/specs/2026-10-11-update-tag-sources.md`.
   - **Rule.** It lives in `core/tag-kind.ts`, so phase 4's web tag management (#12) can call it. Names match like all tags (ignoring case and extra spaces), and the tag keeps its first casing.

@@ -7,9 +7,10 @@ import type { Database } from "better-sqlite3";
  * migration may rebuild a table (SQLite's 12-step procedure, steps 3-9). Two rules:
  * - Cascades do not run during a migration. One that removes parent rows must delete
  *   their child rows itself, or the foreign-key check refuses it.
- * - A rebuild of `links`, `tags` or `link_tags` must drop the 7 `link_search_*`
- *   triggers before the DROP and recreate them after the RENAME (frozen SQL, never
- *   `searchIndex()`), and refresh `link_search` if the rebuild changes searchable text.
+ * - A rebuild of a table must drop every trigger whose SQL names it before the DROP and
+ *   recreate them after the RENAME, copied from `sqlite_master` at the previous version
+ *   (no fixed count; never from `searchIndex()` or any current builder), and refresh
+ *   `link_search` if the rebuild changes searchable text.
  */
 export const MIGRATIONS: string[] = [
   `
@@ -83,6 +84,7 @@ export const MIGRATIONS: string[] = [
 
   CREATE UNIQUE INDEX agent_keys_live_name ON agent_keys (owner_id, name) WHERE revoked_at IS NULL;
   `,
+  snapshots(),
 ];
 
 /**
@@ -117,6 +119,69 @@ function searchIndex(): string {
   ${trigger("link_search_lt_upd", "UPDATE ON link_tags", "SELECT OLD.link_id UNION SELECT NEW.link_id")}
   ${trigger("link_search_lt_del", "DELETE ON link_tags", "SELECT OLD.link_id")}
   ${trigger("link_search_tags_upd", "UPDATE OF name ON tags", tagLinks)}
+  `;
+}
+
+/**
+ * Page snapshots, and `link_search` rebuilt with a `text` column (a virtual table cannot be
+ * altered). `text` is the page's own title and description plus its extracted text. The
+ * triggers dropped are the 7 that `searchIndex()` created, listed by name; this SQL is frozen.
+ */
+function snapshots(): string {
+  const pageText = `coalesce((SELECT concat_ws(char(10), s.title, s.description, s.text)
+        FROM snapshots s WHERE s.link_id = l.id AND s.owner_id = l.owner_id), '')`;
+  const insert = (ids: string) => `
+    INSERT INTO link_search (rowid, owner_id, title, summary, why, tags, text)
+    SELECT l.id, l.owner_id, coalesce(l.title, ''), coalesce(l.summary, ''), coalesce(l.why_text, ''),
+      coalesce((SELECT group_concat(name, ' ') FROM
+        (SELECT t.name AS name FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id
+         WHERE lt.link_id = l.id ORDER BY lt.position)), ''),
+      ${pageText}
+    FROM links l WHERE l.id IN (${ids});`;
+  const trigger = (name: string, event: string, ids: string) =>
+    `CREATE TRIGGER link_search_${name} AFTER ${event} BEGIN
+    DELETE FROM link_search WHERE rowid IN (${ids});${insert(ids)}
+  END;`;
+  const dropped = ["links_ins", "links_upd", "links_del", "lt_ins", "lt_upd", "lt_del", "tags_upd"];
+  return `
+  CREATE TABLE snapshots (
+    link_id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    fetch_status TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_fetch_at INTEGER,
+    fetched_at INTEGER,
+    title TEXT,
+    description TEXT,
+    image_url TEXT,
+    text TEXT,
+    last_error TEXT,
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (fetch_status IN ('pending', 'retrying', 'ok', 'failed', 'refused', 'not_html',
+      'extract_timeout', 'extract_out_of_memory', 'extract_crashed'))
+  );
+  CREATE INDEX snapshots_due ON snapshots (next_fetch_at) WHERE next_fetch_at IS NOT NULL;
+  INSERT INTO snapshots (link_id, owner_id, fetch_status, next_fetch_at)
+    SELECT id, owner_id, 'pending', 0 FROM links;
+
+  ${dropped.map((n) => `DROP TRIGGER link_search_${n};`).join("\n  ")}
+  DROP TABLE link_search;
+  CREATE VIRTUAL TABLE link_search USING fts5(
+    owner_id UNINDEXED, title, summary, why, tags, text,
+    tokenize = 'porter unicode61 remove_diacritics 2'
+  );
+  ${insert("SELECT id FROM links")}
+  ${trigger("links_ins", "INSERT ON links", "SELECT NEW.id")}
+  ${trigger("links_upd", "UPDATE ON links", "SELECT NEW.id")}
+  CREATE TRIGGER link_search_links_del AFTER DELETE ON links BEGIN
+    DELETE FROM link_search WHERE rowid = OLD.id;
+  END;
+  ${trigger("lt_ins", "INSERT ON link_tags", "SELECT NEW.link_id")}
+  ${trigger("lt_upd", "UPDATE ON link_tags", "SELECT OLD.link_id UNION SELECT NEW.link_id")}
+  ${trigger("lt_del", "DELETE ON link_tags", "SELECT OLD.link_id")}
+  ${trigger("tags_upd", "UPDATE OF name ON tags", "SELECT link_id FROM link_tags WHERE tag_id = NEW.id")}
+  ${trigger("snap_ins", "INSERT ON snapshots", "SELECT NEW.link_id")}
+  ${trigger("snap_upd", "UPDATE OF title, description, text ON snapshots", "SELECT NEW.link_id")}
   `;
 }
 

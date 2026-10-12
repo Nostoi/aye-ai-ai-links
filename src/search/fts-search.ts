@@ -52,7 +52,7 @@ export class FtsSearch implements LinkSearch {
       ? `SELECT l.id FROM links l WHERE ${where.join(" AND ")} ORDER BY ${newest} LIMIT ?`
       : `SELECT l.id FROM link_search JOIN links l ON l.id = link_search.rowid
          WHERE ${where.join(" AND ")}
-         ORDER BY bm25(link_search, 0, 3, 1, 2, 3), ${newest} LIMIT ?`;
+         ORDER BY bm25(link_search, 0, 3, 1, 2, 3, 1), ${newest} LIMIT ?`;
     const rows = this.db.prepare(sql).all(...params, limit) as { id: number }[];
     return rows.map((r) => String(r.id));
   }

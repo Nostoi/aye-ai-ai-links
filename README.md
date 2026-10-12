@@ -15,7 +15,7 @@ You talk to your AI; it uses the library for you.
 - **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
-- **Page snapshots.** The server fetches each new link's page in the background and keeps its text, so a search also matches what the page says. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
+- **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
 
 Each AI has its own key, and every link records which AI saved it.
 
@@ -27,7 +27,7 @@ The tools your AI uses:
 | `update_link` | Changes a link's title, summary, why, tags, state or snooze date. |
 | `update_tag` | Switches a tag between topic and project. |
 | `search_links` | Finds links, best match first. A blank search lists the newest. |
-| `get_link` | Opens one link by its id. |
+| `get_link` | Opens one link by its id, with its page's text (up to 20,000 characters). |
 | `get_profile` | Reads the notes about you and your active projects. |
 | `add_profile` | Adds a note about you, or what you're working on now. |
 | `edit_profile` | Changes or removes notes, when you ask. |

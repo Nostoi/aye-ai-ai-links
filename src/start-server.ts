@@ -18,13 +18,16 @@ const SETTLE_MS = 5_000;
 
 /**
  * Seams for tests: `decorateDeps` wraps the deps (the snapshot runner uses the wrapped store),
- * `drainMs` and `settleMs` shorten the waits, and `fetcher` and `extractor` replace the real
- * page pipeline, which is otherwise the guarded fetcher (5 MiB cap) and the child extractor.
+ * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, and `fetcher` and `extractor`
+ * replace the real page pipeline, which is otherwise the guarded fetcher (5 MiB cap) and the
+ * child extractor.
  */
 export type StartOptions = {
   decorateDeps?: (deps: AppDeps) => AppDeps;
   drainMs?: number;
   settleMs?: number;
+  /** How long a new link's save waits for its page; core's `SAVE_WAIT_MS` when left out. */
+  saveWaitMs?: number;
   fetcher?: PageFetcher;
   extractor?: PageExtractor;
 };
@@ -49,6 +52,7 @@ export async function startServer(
     decorateDeps = (d) => d,
     drainMs = DRAIN_MS,
     settleMs = SETTLE_MS,
+    saveWaitMs,
     fetcher = createGuardedFetcher(),
     extractor = createChildExtractor(),
   }: StartOptions = {},
@@ -57,7 +61,7 @@ export async function startServer(
   const deps = decorateDeps(createDeps(db));
   const runner = createSnapshotRunner({ store: deps.store, fetcher, extractor, now: deps.now });
   const { app, close, calls } = createApp({
-    deps: { ...deps, snapshots: runner },
+    deps: { ...deps, snapshots: runner, saveWaitMs },
     identify: keyIdentify(new SqliteKeyStore(db)),
     allowedHosts: config.allowedHosts,
   });

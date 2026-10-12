@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** `save_link` shows the fetched page, and `get_link` returns its text (#31). Rulings: #31 comment 6118791899. Sources: `docs/specs/2026-10-12-snapshot-excerpt-sources.md`.
+  - **The wait lives in core.** `saveLink` races a new link's kick promise against 4 s (`SAVE_WAIT_MS`), clears the timer, and reads the link again, so the result shows the page and any edit made meanwhile. A repeat save never kicks or waits.
+  - **`snapshotText: {text, truncated} | null`** is a new top-level key on `save_link` (500 code points) and `get_link` (20,000), built only in `core/snapshot-text.ts`. `Link.snapshot` still never carries the text, and search and `update_link` never read it.
+  - **Text only when ok (Codex).** Text is read only when the link's own snapshot is `ok`, so a status and its text always come from one moment.
+  - **`pending` means not fetched yet (Codex).** A finished job can still leave `pending` (a failed record, or shutdown). The guidance says to call `get_link` later. No new status.
+  - **Inline is expected, not guaranteed (Codex).** The cap bounds the text, not the result: escaped control characters or a long title can still pass Claude Code's 50,000-character limit. The next deploy checks a long page live; the cap drops only if it goes to a file (owner, Q3).
+  - **No special failure handling after the commit.** A failed read after the commit reports "try again", and a retry returns the saved link with `created: false`.
+
 - **2026-10-12:** `update_link` can change a link's title (#57, owner request). This extends spec §5. It works like summary: leave it out to keep it, send null to clear it. It has no source label, because it is the agent's own wording, not a guess about the owner. The page's own title stays separate in the snapshot and stays searchable, so a search for an old title can still find the link through its page.
 - **2026-10-11:** Page snapshots run in the background (#30, PR C: C1–C4). The C1 entry below covers the store.
   - **Runner (core).** `core/snapshot-runner.ts` runs at most 2 jobs at once, sweeps for due snapshots every 30 s, and refills a slot as soon as a job ends. A job leases its snapshot for 120 s, fetches, extracts and records. `core/snapshot-outcome.ts` maps each outcome to a status and a `lastError` of the form `<stage>:<kind>[:<detail>]`, and retries a retryable outcome after 1 min, 10 min, 1 h, 6 h and 24 h, then fails at 6 attempts.

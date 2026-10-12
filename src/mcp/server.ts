@@ -8,12 +8,13 @@ import { z } from "zod";
 import type { Caller } from "../auth/caller.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
-import { getLink, saveLink, updateLink } from "../core/links.js";
+import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
 import type { LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { SnapshotRunner } from "../core/snapshot-runner.js";
+import type { PageTextReader } from "../core/snapshot-text.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
@@ -21,6 +22,7 @@ import * as guidance from "./guidance.js";
 import {
   addProfileOutput,
   advertisedOpen,
+  getLinkOutput,
   getProfileOutput,
   linkResultOutput,
   profileOutput,
@@ -35,6 +37,8 @@ export type McpDeps = {
   profile: ProfileStore;
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
+  pages: PageTextReader;
+  saveWaitMs?: number | undefined;
 };
 
 /** Wraps each tool call's promise; `mcpApp` uses it to count calls still running. */
@@ -272,7 +276,7 @@ export function buildMcpServer(
     {
       description: guidance.GET_LINK,
       inputSchema: getLinkInput,
-      outputSchema: linkResultOutput,
+      outputSchema: getLinkOutput,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -280,7 +284,7 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ id }) => ({ link: await getLink(deps, owner, id) }),
+    ({ id }) => getLinkWithText(deps, owner, id),
   );
 
   register(

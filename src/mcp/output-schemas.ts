@@ -123,12 +123,17 @@ export const addProfileOutput = z.strictObject({
   addedFocusIds: z.array(z.string()),
 });
 
+// The page's text, which `snapshotOutput` never carries: an opening excerpt or a capped read.
+const snapshotTextOutput = z.strictObject({ text: z.string(), truncated: z.boolean() }).nullable();
+
 export const saveLinkOutput = z.strictObject({
   link: linkOutput,
   created: z.boolean(),
+  snapshotText: snapshotTextOutput,
   filingContext: filingContextOutput,
   profile: profileOutput,
 });
 export const linkResultOutput = z.strictObject({ link: linkOutput });
+export const getLinkOutput = z.strictObject({ link: linkOutput, snapshotText: snapshotTextOutput });
 export const searchLinksOutput = z.strictObject({ links: z.array(linkOutput) });
 export const updateTagOutput = z.strictObject({ tag: tagOutput });

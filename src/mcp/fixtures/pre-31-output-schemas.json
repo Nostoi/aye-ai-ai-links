@@ -1,0 +1,434 @@
+{
+  "capturedFrom": "tools/list on main 296b80c, before #31; both protocol eras advertise the same schemas",
+  "save_link": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "urlKey": {
+            "type": "string"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["text", "source"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                }
+              },
+              "required": ["key", "name", "source", "kind"]
+            }
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "savedBy": {
+            "type": "string"
+          },
+          "lastOpenedAt": {
+            "type": ["string", "null"]
+          },
+          "lastSurfacedAt": {
+            "type": ["string", "null"]
+          },
+          "snoozedUntil": {
+            "type": ["string", "null"]
+          },
+          "state": {
+            "type": "string",
+            "enum": ["active", "archived"]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "retrying",
+                      "ok",
+                      "failed",
+                      "refused",
+                      "not_html",
+                      "extract_timeout",
+                      "extract_out_of_memory",
+                      "extract_crashed"
+                    ]
+                  },
+                  "fetchedAt": {
+                    "type": ["string", "null"]
+                  },
+                  "title": {
+                    "type": ["string", "null"]
+                  },
+                  "description": {
+                    "type": ["string", "null"]
+                  },
+                  "imageUrl": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "urlKey",
+          "title",
+          "summary",
+          "why",
+          "tags",
+          "savedAt",
+          "savedBy",
+          "lastOpenedAt",
+          "lastSurfacedAt",
+          "snoozedUntil",
+          "state",
+          "snapshot"
+        ]
+      },
+      "created": {
+        "type": "boolean"
+      },
+      "filingContext": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "color": {
+                  "type": ["string", "null"]
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": ["string", "null"]
+                },
+                "projectStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["active", "done"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["key", "name", "kind", "color", "pinned", "description", "projectStatus"]
+            }
+          },
+          "activeProjects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "color": {
+                  "type": ["string", "null"]
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": ["string", "null"]
+                },
+                "projectStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["active", "done"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["key", "name", "kind", "color", "pinned", "description", "projectStatus"]
+            }
+          }
+        },
+        "required": ["tags", "activeProjects"]
+      },
+      "profile": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "writtenBy": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "text", "source", "writtenBy", "updatedAt"]
+            }
+          },
+          "recentFocus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "writtenBy": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "text", "source", "writtenBy", "createdAt"]
+            }
+          }
+        },
+        "required": ["notes", "recentFocus"]
+      }
+    },
+    "required": ["link", "created", "filingContext", "profile"]
+  },
+  "get_link": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "urlKey": {
+            "type": "string"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["text", "source"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                }
+              },
+              "required": ["key", "name", "source", "kind"]
+            }
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "savedBy": {
+            "type": "string"
+          },
+          "lastOpenedAt": {
+            "type": ["string", "null"]
+          },
+          "lastSurfacedAt": {
+            "type": ["string", "null"]
+          },
+          "snoozedUntil": {
+            "type": ["string", "null"]
+          },
+          "state": {
+            "type": "string",
+            "enum": ["active", "archived"]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "retrying",
+                      "ok",
+                      "failed",
+                      "refused",
+                      "not_html",
+                      "extract_timeout",
+                      "extract_out_of_memory",
+                      "extract_crashed"
+                    ]
+                  },
+                  "fetchedAt": {
+                    "type": ["string", "null"]
+                  },
+                  "title": {
+                    "type": ["string", "null"]
+                  },
+                  "description": {
+                    "type": ["string", "null"]
+                  },
+                  "imageUrl": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "urlKey",
+          "title",
+          "summary",
+          "why",
+          "tags",
+          "savedAt",
+          "savedBy",
+          "lastOpenedAt",
+          "lastSurfacedAt",
+          "snoozedUntil",
+          "state",
+          "snapshot"
+        ]
+      }
+    },
+    "required": ["link"]
+  }
+}

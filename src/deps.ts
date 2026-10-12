@@ -5,11 +5,12 @@ import { HybridSearch } from "./search/hybrid-search.js";
 import { MODEL_KEY } from "./search/model.js";
 import { loadVectorFunctions, VectorSearch } from "./search/vector-search.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
+import { SqliteSearchLog } from "./store/search-log.js";
 import { SqliteStore } from "./store/sqlite-store.js";
 
 /**
- * Builds the store, search, profile and page-text reader from ONE database handle. They must
- * share it: ids ranked or saved in one database and read through another come back as the
+ * Builds the store, search, search log, profile and page-text reader from ONE database handle.
+ * They must share it: ids ranked or saved in one database and read through another come back as the
  * wrong links, or with another link's page text.
  */
 export function createDeps(db: Database, embedder: Embedder) {
@@ -23,6 +24,7 @@ export function createDeps(db: Database, embedder: Embedder) {
       embedder,
       MODEL_KEY,
     ),
+    searchLog: new SqliteSearchLog(db),
     profile: new SqliteProfileStore(db),
     pages: store,
     now: () => new Date(),

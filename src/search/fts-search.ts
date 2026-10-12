@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { LinkSearch, SearchFilters, SearchTrace } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
+import { listRanks } from "./list-ranks.js";
 import { scope } from "./scope.js";
 
 const withoutControls = (s: string): string => s.replace(/\p{Cc}/gu, " ");
@@ -45,8 +46,16 @@ export class FtsSearch implements LinkSearch {
       );
     }
     const { fields, pageOnly } = this.parts(owner, query, filters, limit, limit);
-    trace?.({ mode: "keyword", embedded: null, modelKey: null, similarity: {} });
-    return [...fields, ...pageOnly].slice(0, limit);
+    const ids = [...fields, ...pageOnly].slice(0, limit);
+    trace?.({
+      mode: "keyword",
+      embedded: null,
+      modelKey: null,
+      similarity: {},
+      meaningCandidates: 0,
+      ranks: listRanks(ids, { field: fields, page: pageOnly }),
+    });
+    return ids;
   }
 
   /**

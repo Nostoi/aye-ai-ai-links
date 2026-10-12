@@ -160,7 +160,7 @@ describe("FtsSearch filters", () => {
     });
     await s.save("a", { title: "other", tags: ["home batteries topic"] });
     const deps = { store: s.deps.store, search: s.search };
-    const found = await searchLinks(deps, "a", { query: "", project: "home batteries" });
+    const found = await searchLinks(deps, "a", { query: "", project: "home batteries" }, "t");
     expect(found.map((l) => l.id)).toEqual([link.id]);
     const ctx = await filingContext(s.deps, "a");
     expect(ctx.activeProjects.map((t) => t.key)).toEqual(["home batteries"]);

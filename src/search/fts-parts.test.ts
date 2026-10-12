@@ -69,14 +69,24 @@ describe("FtsSearch.parts", () => {
   });
 
   it("search reports a keyword trace for word queries only", async () => {
-    const { search, own } = await setup();
-    await own(1, "solar one");
+    const { search, own, paged } = await setup();
     const traces: SearchTrace[] = [];
     const trace = (t: SearchTrace) => traces.push(t);
     await search.search("o", "", {}, 5, trace);
     await search.search("o", "?!", {}, 5, trace);
     expect(traces).toEqual([]);
+    const field = await own(1, "solar one");
+    const page = await paged(2, "solar page");
     await search.search("o", "solar", {}, 5, trace);
-    expect(traces).toEqual([{ mode: "keyword", embedded: null, modelKey: null, similarity: {} }]);
+    expect(traces).toEqual([
+      {
+        mode: "keyword",
+        embedded: null,
+        modelKey: null,
+        similarity: {},
+        meaningCandidates: 0,
+        ranks: { [field]: { field: 1 }, [page]: { page: 1 } },
+      },
+    ]);
   });
 });

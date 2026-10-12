@@ -1,5 +1,6 @@
 import { CoreError } from "./errors.js";
-import type { LinkSearch, SearchFilters } from "./search.js";
+import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
+import { logSearch, type SearchLog } from "./search-log.js";
 import type { LinkStore } from "./store.js";
 import { tagKey } from "./tags.js";
 import type { Link, OwnerId } from "./types.js";
@@ -27,11 +28,22 @@ function checkedDate(name: string, d: Date | undefined): Date | undefined {
   return d;
 }
 
-/** Find the owner's links, best match first. A blank query lists newest first. */
+export type SearchLinksDeps = {
+  store: LinkStore;
+  search: LinkSearch;
+  searchLog?: SearchLog | undefined;
+  now?: (() => Date) | undefined;
+};
+
+/**
+ * Find the owner's links, best match first. A blank query lists newest first. A search whose
+ * trace fires (a word query) is logged under `by`, the calling agent.
+ */
 export async function searchLinks(
-  { store, search }: { store: LinkStore; search: LinkSearch },
+  { store, search, searchLog, now = () => new Date() }: SearchLinksDeps,
   owner: OwnerId,
   input: SearchLinksInput,
+  by: string,
 ): Promise<Link[]> {
   const filters: SearchFilters = {};
   if (input.tag !== undefined) filters.tagKey = tagKey(input.tag);
@@ -47,7 +59,32 @@ export async function searchLinks(
     throw invalid("limit must be a whole number from 1 to 50. Pass an integer, or leave it out.");
   }
   const limit = Math.min(MAX_LIMIT, Math.max(1, input.limit ?? DEFAULT_LIMIT));
-  const ids = await search.search(owner, input.query, filters, limit);
-  const links = await Promise.all(ids.map((id) => store.get(owner, id)));
-  return links.filter((l): l is Link => l !== null);
+  const traces: SearchTrace[] = [];
+  const ids = await search.search(owner, input.query, filters, limit, (t) => traces.push(t));
+  const links = (await Promise.all(ids.map((id) => store.get(owner, id)))).filter(
+    (l): l is Link => l !== null,
+  );
+  const [trace] = traces;
+  if (trace) {
+    const { similarity, ranks, ...rest } = trace;
+    await logSearch(
+      searchLog,
+      owner,
+      by,
+      {
+        ...rest,
+        query: input.query,
+        filters,
+        limit,
+        results: links.map((l) => ({
+          id: l.id,
+          urlKey: l.urlKey,
+          similarity: similarity[l.id] ?? null,
+          ranks: ranks[l.id] ?? {},
+        })),
+      },
+      now(),
+    );
+  }
+  return links;
 }

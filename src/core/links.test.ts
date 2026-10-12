@@ -222,7 +222,12 @@ describe("saveLink waits for a new link's page", () => {
       const store = new FakeStore();
       const { link } = await saveLink({ store, now: () => T0 }, "a", URL_A);
       coherent(
-        await getLinkWithText({ store, now: () => T0, pages: racingPages(store) }, "a", link.id),
+        await getLinkWithText(
+          { store, now: () => T0, pages: racingPages(store) },
+          "a",
+          link.id,
+          "t",
+        ),
       );
     });
   });
@@ -340,7 +345,7 @@ describe("getLinkWithText", () => {
     const deps = { store, pages: store, now: () => T0 };
     const { link } = await saveLink(deps, "a", URL_A);
     await finishOk(store, "a", link.id, "y".repeat(TEXT_CHARS + 1));
-    const got = await getLinkWithText(deps, "a", link.id);
+    const got = await getLinkWithText(deps, "a", link.id, "t");
     expect(got.link.snapshot?.status).toBe("ok");
     expect(got.snapshotText).toEqual({ text: "y".repeat(TEXT_CHARS), truncated: true });
   });

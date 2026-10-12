@@ -1,4 +1,5 @@
 import { CoreError } from "./errors.js";
+import { logOpen, type SearchLog } from "./search-log.js";
 import type { SnapshotRunner } from "./snapshot-runner.js";
 import {
   EXCERPT_CHARS,
@@ -35,6 +36,7 @@ export type Deps = {
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
   pages?: PageTextReader | undefined;
+  searchLog?: SearchLog | undefined;
   saveWaitMs?: number | undefined;
 };
 
@@ -147,13 +149,18 @@ export async function getLink({ store }: Deps, owner: OwnerId, id: string): Prom
   return link;
 }
 
-/** The link with its page text, up to `TEXT_CHARS`. */
+/**
+ * The link with its page text, up to `TEXT_CHARS`. `by` is the calling agent; with `searchLog`,
+ * the open is paired with that agent's latest search.
+ */
 export async function getLinkWithText(
   deps: Deps,
   owner: OwnerId,
   id: string,
+  by: string,
 ): Promise<{ link: Link; snapshotText: SnapshotText | null }> {
   const link = await getLink(deps, owner, id);
+  await logOpen(deps.searchLog, owner, by, link, deps.now());
   return { link, snapshotText: await readSnapshotText(deps.pages, owner, link, TEXT_CHARS) };
 }
 

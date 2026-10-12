@@ -33,13 +33,18 @@ describe("searchLinks", () => {
     const { deps, search } = await setup();
     const from = new Date(1);
     const to = new Date(2);
-    await searchLinks(deps, "a", {
-      query: "sleep",
-      tag: "  Home   Batteries ",
-      project: " Sleep ",
-      savedFrom: from,
-      savedTo: to,
-    });
+    await searchLinks(
+      deps,
+      "a",
+      {
+        query: "sleep",
+        tag: "  Home   Batteries ",
+        project: " Sleep ",
+        savedFrom: from,
+        savedTo: to,
+      },
+      "t",
+    );
     expect(search.calls).toEqual([
       {
         owner: "a",
@@ -52,13 +57,13 @@ describe("searchLinks", () => {
 
   it("keeps the search order and drops ids the store does not return", async () => {
     const { deps, saved } = await setup(["link-3", "link-99", "link-1"]);
-    const links = await searchLinks(deps, "a", { query: "x" });
+    const links = await searchLinks(deps, "a", { query: "x" }, "t");
     expect(links.map((l) => l.id)).toEqual([saved[2]?.id, saved[0]?.id]);
   });
 
   it("drops ids that belong to another owner", async () => {
     const { deps } = await setup(["link-1"]);
-    expect(await searchLinks(deps, "b", { query: "x" })).toEqual([]);
+    expect(await searchLinks(deps, "b", { query: "x" }, "t")).toEqual([]);
   });
 
   it("refuses bad input without calling search", async () => {
@@ -74,14 +79,14 @@ describe("searchLinks", () => {
       { limit: Number.POSITIVE_INFINITY },
     ];
     for (const extra of cases) {
-      await expect(searchLinks(deps, "a", { query: "x", ...extra })).rejects.toEqual(invalid);
+      await expect(searchLinks(deps, "a", { query: "x", ...extra }, "t")).rejects.toEqual(invalid);
     }
     expect(search.calls).toEqual([]);
   });
 
   it("accepts equal date bounds", async () => {
     const { deps, search } = await setup();
-    await searchLinks(deps, "a", { query: "", savedFrom: new Date(5), savedTo: new Date(5) });
+    await searchLinks(deps, "a", { query: "", savedFrom: new Date(5), savedTo: new Date(5) }, "t");
     expect(search.calls).toHaveLength(1);
   });
 
@@ -92,7 +97,7 @@ describe("searchLinks", () => {
     [7, 7],
   ])("clamps limit %s to %s", async (given, used) => {
     const { deps, search } = await setup();
-    await searchLinks(deps, "a", { query: "x", limit: given });
+    await searchLinks(deps, "a", { query: "x", limit: given }, "t");
     expect(search.calls[0]?.limit).toBe(used);
   });
 });

@@ -287,6 +287,38 @@ describe("migrate", () => {
   });
 });
 
+describe("the tags.kind_source migration, from version 8 with tags", () => {
+  function migratedTags(): Db {
+    const db = track(new Database(":memory:"));
+    db.pragma("foreign_keys = ON");
+    migrate(db, MIGRATIONS.slice(0, 8));
+    db.exec(`
+      INSERT INTO users VALUES ('a', 'a', 0);
+      INSERT INTO tags (owner_id, key, name, kind, pinned) VALUES ('a', 'solar', 'Solar', 'project', 0);`);
+    migrate(db);
+    return db;
+  }
+
+  it("gives every existing tag the source 'inferred' and keeps its kind", () => {
+    const db = migratedTags();
+    expect(db.prepare("SELECT key, kind, kind_source FROM tags").all()).toEqual([
+      { key: "solar", kind: "project", kind_source: "inferred" },
+    ]);
+  });
+
+  it("refuses a kind source outside stated, asked and inferred, and accepts those three", () => {
+    const db = migratedTags();
+    const insertWith = (key: string, source: string) =>
+      db
+        .prepare(
+          "INSERT INTO tags (owner_id, key, name, kind, kind_source, pinned) VALUES ('a', ?, ?, 'topic', ?, 0)",
+        )
+        .run(key, key, source);
+    expect(() => insertWith("bad", "unknown")).toThrow(/CHECK/);
+    for (const source of ["stated", "asked", "inferred"]) insertWith(source, source);
+  });
+});
+
 describe("SqliteStore constraints", () => {
   it("has foreign keys on", () => {
     expect(setup().db.pragma("foreign_keys", { simple: true })).toBe(1);

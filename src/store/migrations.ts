@@ -152,6 +152,10 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX search_log_pairing ON search_log (owner_id, searched_by, id);
   `,
+  // Who decided a tag's kind (#45). The default is the backfill: for tags that already exist the
+  // origin was not recorded, so each is shown as a guess. Additive; rebuilds nothing.
+  `ALTER TABLE tags ADD COLUMN kind_source TEXT NOT NULL DEFAULT 'inferred'
+    CHECK (kind_source IN ('stated', 'asked', 'inferred'))`,
 ];
 
 /**

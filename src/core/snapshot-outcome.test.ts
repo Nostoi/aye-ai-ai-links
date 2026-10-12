@@ -5,6 +5,7 @@ import {
   type AttemptOutcome,
   MAX_ATTEMPTS,
   pastLastAttempt,
+  pastLastAttemptRecord,
   RETRY_DELAYS_MS,
   snapshotRecord,
 } from "./snapshot-outcome.js";
@@ -97,6 +98,22 @@ describe("retry schedule", () => {
   it("still fetches the last allowed attempt, and skips only beyond it", () => {
     expect(pastLastAttempt(MAX_ATTEMPTS)).toBe(false);
     expect(pastLastAttempt(MAX_ATTEMPTS + 1)).toBe(true);
+  });
+
+  it("a lease past the last attempt records failed, final, with its attempts unchanged", () => {
+    const r = pastLastAttemptRecord(MAX_ATTEMPTS + 1);
+    expect(r).toEqual({
+      status: "failed",
+      attempts: MAX_ATTEMPTS + 1,
+      nextFetchAt: null,
+      fetchedAt: null,
+      title: null,
+      description: null,
+      imageUrl: null,
+      text: null,
+      lastError: "lease:expired",
+    });
+    expectConsistent(r);
   });
 });
 

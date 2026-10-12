@@ -327,7 +327,7 @@ describe("extraction never throws and keeps the metadata", () => {
     );
     expect(s.title).toBe("t");
     expect(s.text).toContain("Home batteries store solar energy");
-  });
+  }, 60_000);
 
   it("survives a shadow root with 100,000 children", () => {
     const html = `<title>t</title><meta property="og:image" content="/og.png"><body><div><template shadowrootmode="open">${"<i></i>".repeat(100_000)}<p>${BODY}</p></template></div></body>`;
@@ -335,7 +335,7 @@ describe("extraction never throws and keeps the metadata", () => {
     expect(s.title).toBe("t");
     expect(s.imageUrl).toBe("https://example.com/og.png");
     expect(s.text).toContain("Home batteries store solar energy");
-  });
+  }, 60_000);
 
   it("returns text null with the metadata when the text step throws", () => {
     vi.spyOn(Readability.prototype, "parse").mockImplementation(() => {

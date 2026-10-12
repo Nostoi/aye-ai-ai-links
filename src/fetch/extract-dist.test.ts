@@ -34,7 +34,8 @@ describe("the deployed path", () => {
     }).toString();
     const result = JSON.parse(stdout);
     expect(result.entry).toMatch(/\/aye-dist-test\/fetch\/extract-child\.js$/);
-    expect(result.out).toMatchObject({ kind: "ok", metadata: { title: "Dist" } });
+    expect(result.out.kind, JSON.stringify(result.out)).toBe("ok");
+    expect(result.out.metadata.title).toBe("Dist");
     expect(result.out.text).toContain("Rottnest");
   }, 60_000);
 });

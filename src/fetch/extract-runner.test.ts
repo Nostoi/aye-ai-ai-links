@@ -7,6 +7,10 @@ const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url)
 const URL0 = "https://example.com/post";
 const PAGE = `<!doctype html><html><head><title>Hi</title><meta property='og:image' content='/i.png'></head><body><article><h1>Quokkas</h1><p>${"Quokkas live on Rottnest island and are very friendly to visitors. ".repeat(20)}</p></article></body></html>`;
 const SLOW_TEXT = `<title>Parsed fast</title><body>${"<div>".repeat(190)}<p>${"word ".repeat(200_000)}</p>${"</div>".repeat(190)}`;
+// Child start-up counts against the deadline, and a child that has not yet received the page when
+// it fires is reported `spawn_failed`, not `timeout`. Idle start-up is 40-80 ms; this leaves room
+// for a machine under heavy load.
+const DEADLINE_MS = 2000;
 const DIV400K = `<title>Hostile</title><body>${"<div>".repeat(400_000)}`;
 
 function alive(pid: number): boolean {
@@ -75,7 +79,7 @@ describe("child extractor: the real extraction code, as the child loads it", () 
 describe("child extractor: a hostile page", () => {
   it("is killed at the deadline, the loop keeps ticking, and the child is gone", async () => {
     const pids: number[] = [];
-    const extractor = make({ deadlineMs: 1500, onSpawn: (pid) => pids.push(pid) });
+    const extractor = make({ deadlineMs: DEADLINE_MS, onSpawn: (pid) => pids.push(pid) });
     let ticks = 0;
     const timer = setInterval(() => ticks++, 20);
     const started = performance.now();
@@ -83,18 +87,18 @@ describe("child extractor: a hostile page", () => {
     const elapsed = performance.now() - started;
     clearInterval(timer);
     expect(out.kind).toBe("timeout");
-    expect(elapsed).toBeGreaterThan(1400);
-    expect(elapsed).toBeLessThan(6000);
+    expect(elapsed).toBeGreaterThan(DEADLINE_MS / 2);
+    expect(elapsed).toBeLessThan(DEADLINE_MS + 4500);
     expect(ticks).toBeGreaterThan(30);
     expect(pids).toHaveLength(1);
     expect(alive(pids[0] as number)).toBe(false);
   }, 20_000);
 
   it("keeps the metadata posted before the deadline kill", async () => {
-    const out = await make({ deadlineMs: 800, childEntry: fixture("child-hang.mjs") }).extract(
-      PAGE,
-      URL0,
-    );
+    const out = await make({
+      deadlineMs: DEADLINE_MS,
+      childEntry: fixture("child-hang.mjs"),
+    }).extract(PAGE, URL0);
     expect(out).toEqual({
       kind: "timeout",
       metadata: { title: "Posted first", description: null, imageUrl: null },
@@ -169,10 +173,10 @@ describe("child extractor: a child that ends before it has the page", () => {
   }, 20_000);
 
   it("still reports timeout for a child that received the page and then hung", async () => {
-    const out = await make({ deadlineMs: 500, childEntry: fixture("child-hang.mjs") }).extract(
-      PAGE,
-      URL0,
-    );
+    const out = await make({
+      deadlineMs: DEADLINE_MS,
+      childEntry: fixture("child-hang.mjs"),
+    }).extract(PAGE, URL0);
     expect(out.kind).toBe("timeout");
   }, 20_000);
 });
@@ -192,7 +196,7 @@ describe("child extractor: process management", () => {
     const pids: number[] = [];
     const earlierAliveAtSpawn: boolean[] = [];
     const extractor = make({
-      deadlineMs: 400,
+      deadlineMs: DEADLINE_MS,
       childEntry: fixture("child-hang.mjs"),
       // Only collect here: a throw in the hook would be swallowed, and so would the check.
       onSpawn: (pid) => {

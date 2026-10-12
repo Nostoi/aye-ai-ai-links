@@ -1,4 +1,4 @@
-import { capCodePoints } from "./cap.js";
+import { capCodePoints } from "./cap.ts";
 
 const TITLE_MAX = 500;
 const DESCRIPTION_MAX = 1_000;

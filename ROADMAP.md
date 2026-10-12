@@ -22,6 +22,10 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Page extraction runs in a forked child process (#30, PR B).
+  - **A forked child, not a `worker_thread` (owner).** This supersedes the #29 wording. A worker can abort the whole server when it runs out of memory (Node's docs say so, and a 5 MiB page aborted it at a 256 MB limit); a child that does so is only a dead child. The child runs with `--max-old-space-size=384` and is killed with `SIGKILL` at a 20 s deadline. It is not detached, so it stays in the service's process group and launchd kills it with the service.
+  - **Content failures are terminal; process failures are retried (orchestrator).** A timeout, out-of-memory or crash while parsing is not retried, and any metadata already read is kept. A child that cannot start, or loses its channel, is a separate kind that can be retried. Out-of-memory is reported only when the child's stderr says "heap out of memory"; any other abort is a crash.
+  - **Files the extraction child loads import each other with `.ts` names (owner).** `rewriteRelativeImportExtensions` makes `tsc` emit `.js` for `dist/`. These files use only TypeScript that Node can strip (no enums, namespaces or parameter properties). A test that starts the real child enforces both. Rule: `src/fetch/AGENTS.md`.
 - **2026-10-11:** Change a tag's kind (#23). This supersedes the MCP door (#5) entry's "will come" line.
   - **Tool.** `update_tag {name, kind}` changes an existing tag between topic and project and returns `{tag}`. It never creates a tag. The description tells agents to use it only when the owner says so. Hints, wording and sources: `docs/specs/2026-10-11-update-tag-sources.md`.
   - **Rule.** It lives in `core/tag-kind.ts`, so phase 4's web tag management (#12) can call it. Names match like all tags (ignoring case and extra spaces), and the tag keeps its first casing.

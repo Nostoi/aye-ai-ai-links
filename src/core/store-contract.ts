@@ -964,7 +964,10 @@ export function describeStoreContract(
           url: "https://ex.com/1",
           savedBy: "a",
           why: { text: "w", source: "asked" },
-          tags: [{ name: "Solar", source: "stated" }],
+          tags: [
+            { name: "Wind", source: "stated" },
+            { name: "Solar", source: "stated" },
+          ],
         });
         const second = await saveLink(deps(), A, { url: "https://ex.com/2", savedBy: "a" });
         const third = await saveLink(deps(), A, {
@@ -982,6 +985,7 @@ export function describeStoreContract(
         const ids = [first.link.id, second.link.id, third.link.id];
         expect(listed.map((l) => l.id)).toEqual(ids);
         expect(listed).toEqual(await Promise.all(ids.map((id) => h.store.get(A, id))));
+        expect(listed[0]?.tags.map((t) => t.key)).toEqual(["wind", "solar"]);
         expect(listed[1]?.state).toBe("archived");
         expect(listed[2]?.tags).toEqual([
           {

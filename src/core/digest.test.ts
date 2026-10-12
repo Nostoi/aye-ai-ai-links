@@ -4,6 +4,7 @@ import {
   DIGEST_SIZE,
   type DigestReason,
   FOCUS_MATCHES_PER_ENTRY,
+  FOCUS_SLOTS,
   FOCUS_WINDOW_MS,
   getDigest,
   NOT_OPENED_MS,
@@ -17,6 +18,7 @@ import type { FocusEntry, Link, NewLink, Source } from "./types.js";
 
 const OWNER = "o";
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
 const NOW = new Date("2026-06-01T00:00:00Z");
 const at = (delta: number) => new Date(NOW.getTime() + delta);
 const CUTOFF = at(-SURFACE_COOLDOWN_MS);
@@ -248,6 +250,80 @@ describe("getDigest order", () => {
     const r = await link({ why: null, savedAt: at(-5 * DAY), lastSurfacedAt: null });
     expect(await digestIds()).toEqual([r.id, u.id, t.id, q.id, p.id]);
     expect((await store.get(OWNER, s.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("holds FOCUS_SLOTS focus picks, then rotation links, when focus matches outnumber the slots", async () => {
+    const newerHits = [await link(), await link(), await link()];
+    const olderHits = [await link(), await link(), await link()];
+    const rotating = [];
+    for (let i = 0; i < 3; i++) rotating.push(await link({ why: null, lastSurfacedAt: null }));
+    await focus("older", at(-2 * DAY));
+    await focus("newer", at(-DAY));
+    keyword.hits.set(
+      "newer",
+      newerHits.map((l) => l.id),
+    );
+    keyword.hits.set(
+      "older",
+      olderHits.map((l) => l.id),
+    );
+    expect(FOCUS_SLOTS).toBe(3);
+    expect(await digestIds()).toEqual([
+      ...newerHits.slice(0, FOCUS_SLOTS).map((l) => l.id),
+      rotating[0]?.id,
+      rotating[1]?.id,
+    ]);
+  });
+
+  it("lets rotation fill the slots focus does not use", async () => {
+    const hit = await link();
+    const rotating = [];
+    for (let i = 0; i < 5; i++) rotating.push(await link({ why: null, lastSurfacedAt: null }));
+    await focus("topic", at(-DAY));
+    keyword.hits.set("topic", [hit.id]);
+    expect(await digestIds()).toEqual([
+      hit.id,
+      ...rotating.slice(0, DIGEST_SIZE - 1).map((l) => l.id),
+    ]);
+  });
+
+  it("returns a link that is both a focus match and without a why once", async () => {
+    const both = await link({ why: null, savedAt: at(-50 * DAY) });
+    for (let i = 0; i < 5; i++) await link({ why: null });
+    await focus("topic", at(-DAY));
+    keyword.hits.set("topic", [both.id]);
+    const ids = await digestIds();
+    expect(ids).toHaveLength(DIGEST_SIZE);
+    expect(new Set(ids).size).toBe(DIGEST_SIZE);
+    expect(ids.filter((id) => id === both.id)).toHaveLength(1);
+  });
+
+  it("gives every link a turn in 30 days although two broad focus entries match 120 links", async () => {
+    const newerHits = [];
+    const olderHits = [];
+    for (let i = 0; i < 60; i++) newerHits.push(await link());
+    for (let i = 0; i < 60; i++) olderHits.push(await link());
+    const lone = await link({ why: null, savedAt: at(-90 * DAY), lastSurfacedAt: null });
+    const oldestOnly = await link({ savedAt: at(-5 * DAY) });
+    await focus("oldest", at(-2 * HOUR));
+    await focus("older", at(-HOUR));
+    await focus("newer", NOW);
+    keyword.hits.set(
+      "newer",
+      newerHits.map((l) => l.id),
+    );
+    keyword.hits.set(
+      "older",
+      olderHits.map((l) => l.id),
+    );
+    keyword.hits.set("oldest", [oldestOnly.id]);
+    const seen = new Set<string>();
+    for (let day = 0; day < 30; day++) {
+      clock = at(day * DAY);
+      for (const id of await digestIds()) seen.add(id);
+    }
+    expect(seen.has(lone.id), "the link with no why").toBe(true);
+    expect(seen.has(oldestOnly.id), "the link matched only by the oldest entry").toBe(true);
   });
 
   it("compares decimal ids as numbers and other ids as strings", () => {

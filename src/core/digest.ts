@@ -16,6 +16,8 @@ export const FOCUS_WINDOW_MS = 30 * DAY_MS;
 export const NOT_OPENED_MS = 30 * DAY_MS;
 /** Each focus entry gives its reason to at most this many links, its best-ranked eligible ones. */
 export const FOCUS_MATCHES_PER_ENTRY = 3;
+/** At most this many of a digest's links are picked for a focus match; the rest rotate. */
+export const FOCUS_SLOTS = 3;
 
 /**
  * Why a link is in the digest. `focus_words`: the link shares words with that focus entry, which
@@ -105,8 +107,7 @@ async function focusReasons(
 
 /**
  * Picks up to DIGEST_SIZE eligible links that have a reason, marks them surfaced, and returns them
- * with every reason that applies. Focus links come first; the rest rotate by `rotation`, so reason
- * kinds never outrank each other and every eligible link with a reason gets its turn.
+ * with every reason that applies.
  *
  * Eligible: active, not snoozed at now, and surfaced at or before now - SURFACE_COOLDOWN_MS.
  * The claim re-checks that in the store; a link it skips is left out, and the other reasons are
@@ -126,10 +127,15 @@ export async function getDigest(
   if (candidates.size === 0) return { links: [] };
 
   const focus = await focusReasons(deps, owner, now, all.length, (id) => candidates.has(id));
+  const focusPicked = new Set([...focus.keys()].slice(0, FOCUS_SLOTS));
   const rest = [...candidates.values()]
-    .filter((l) => !focus.has(l.id) && ownReasons(l, l.lastSurfacedAt, now).length > 0)
+    .filter(
+      (l) =>
+        !focusPicked.has(l.id) &&
+        (focus.has(l.id) || ownReasons(l, l.lastSurfacedAt, now).length > 0),
+    )
     .sort(rotation);
-  const picked = [...focus.keys(), ...rest.map((l) => l.id)].slice(0, DIGEST_SIZE);
+  const picked = [...focusPicked, ...rest.map((l) => l.id)].slice(0, DIGEST_SIZE);
   if (picked.length === 0) return { links: [] };
 
   const claimed = await deps.store.claimSurfaced(owner, picked, { at: now, notSurfacedAfter, now });

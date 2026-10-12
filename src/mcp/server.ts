@@ -63,7 +63,16 @@ const timestamp = z
 
 const source = z.enum(SOURCES);
 const why = z.object({ text: z.string(), source });
-const tags = z.array(z.object({ name: z.string(), source, kind: z.enum(TAG_KINDS).optional() }));
+const tags = z.array(
+  z.object({
+    name: z.string(),
+    source,
+    kind: z
+      .enum(TAG_KINDS)
+      .optional()
+      .describe('If sent, source also labels the kind: "stated" only if the owner said the kind.'),
+  }),
+);
 
 const saveLinkInput = z.object({
   url: z.string(),

@@ -52,7 +52,7 @@ fi
 
 # Runs on every deploy, since the model lives outside the release. No --env-file: stop_and_wait
 # looks for that argument, and the check needs no settings.
-if ! "$node_path" "$release/dist/cli/prefetch-model-main.js"; then
+if [ -e "$release/dist/cli/prefetch-model-main.js" ] && ! "$node_path" "$release/dist/cli/prefetch-model-main.js"; then
   echo "Model prefetch failed for $sha. The running install was not changed." >&2
   exit 1
 fi

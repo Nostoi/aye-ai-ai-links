@@ -27,7 +27,7 @@ export function createQueuedEmbedder(run: RunFn): Embedder {
   }
   return {
     embedQuery: async (text) => (await enqueue([QUERY_PREFIX + text]))[0] as Float32Array,
-    embedDocuments: (texts) => enqueue(texts),
+    embedDocuments: async (texts) => (texts.length === 0 ? [] : enqueue(texts)),
   };
 }
 

@@ -49,6 +49,8 @@ async function download(dir: string, file: ManifestFile, fetchFn: FetchFn): Prom
       transform(chunk: Buffer, _enc, cb) {
         hash.update(chunk);
         bytes += chunk.length;
+        if (bytes > file.bytes)
+          return cb(new Error(`the download is larger than ${file.bytes} bytes`));
         cb(null, chunk);
       },
     });

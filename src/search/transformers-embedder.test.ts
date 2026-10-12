@@ -1,9 +1,16 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { FakeEmbedder } from "./embedder.js";
 import type { Canary } from "./model.js";
 import { QUERY_PREFIX } from "./model.js";
-import { checkCanary, createQueuedEmbedder, type RunFn } from "./transformers-embedder.js";
+import {
+  checkCanary,
+  createQueuedEmbedder,
+  loadTransformersEmbedder,
+  type RunFn,
+} from "./transformers-embedder.js";
 
 const unit = (n: number) => Float32Array.from({ length: n }, (_, i) => (i === 0 ? 1 : 0));
 
@@ -55,10 +62,30 @@ describe("createQueuedEmbedder", () => {
     expect(t.seen).toEqual([[`${QUERY_PREFIX}solar`], ["solar"]]);
   });
 
+  it("returns no vectors for no documents without running the model", async () => {
+    const e = createQueuedEmbedder(async (texts) => {
+      if (texts.length === 0) throw new Error("text array must be non-empty");
+      return texts.map(() => unit(4));
+    });
+    await expect(e.embedDocuments([])).resolves.toEqual([]);
+    await expect(new FakeEmbedder(4).embedDocuments([])).resolves.toEqual([]);
+  });
+
   it("returns one vector per document, in order", async () => {
     const e = createQueuedEmbedder(async (texts) => texts.map((t) => Float32Array.of(t.length)));
     const out = await e.embedDocuments(["a", "bbb", "cc"]);
     expect(out.map((v) => v[0])).toEqual([1, 3, 2]);
+  });
+});
+
+describe("loadTransformersEmbedder", () => {
+  it("rejects a folder whose files are not the pinned ones, before loading anything", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "aye-empty-model-"));
+    try {
+      await expect(loadTransformersEmbedder(dir)).rejects.toThrow(/not as pinned/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -125,12 +152,13 @@ describe("lazy import", () => {
   }
   // `import x from "pkg"`, `import "pkg"`, `export ... from "pkg"`; not `import("pkg")`.
   const staticImport =
-    /(?:^|\n)\s*(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']@huggingface\/transformers["']/;
+    /(?:^|\n)\s*(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']@huggingface\/transformers["']|require\s*\(\s*["']@huggingface\/transformers["']\s*\)/;
 
   it("detects a static import and ignores a dynamic one", () => {
     expect(staticImport.test('import { env } from "@huggingface/transformers";')).toBe(true);
     expect(staticImport.test('import "@huggingface/transformers";')).toBe(true);
     expect(staticImport.test('import type { X } from "@huggingface/transformers";')).toBe(true);
+    expect(staticImport.test('import t = require("@huggingface/transformers");')).toBe(true);
     expect(staticImport.test('const m = await import("@huggingface/transformers");')).toBe(false);
   });
 

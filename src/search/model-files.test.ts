@@ -97,6 +97,22 @@ describe("installModelFiles", () => {
     expect(allFiles(dir)).toEqual(["sub/b.bin"]);
   });
 
+  it("stops reading an oversized body soon after it passes the pinned size", async () => {
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) {
+        if (sent >= 800) return c.close();
+        sent++;
+        c.enqueue(chunk);
+      },
+    });
+    const f = servingFetch({ "a.json": () => new Response(body) });
+    await expect(installModelFiles(dir, manifest, f.fn)).rejects.toThrow(/a\.json/);
+    expect(sent).toBeLessThan(50);
+    expect(allFiles(dir)).toEqual(["sub/b.bin"]);
+  });
+
   it("rejects an HTTP error status without writing the error page", async () => {
     const f = servingFetch({ "a.json": () => new Response("nope", { status: 404 }) });
     await expect(installModelFiles(dir, manifest, f.fn)).rejects.toThrow(/a\.json/);

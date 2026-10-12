@@ -79,6 +79,13 @@ describe("VectorSearch filters apply before the cut", () => {
     expect(s.ids({ projectKey: "beta" }, 2)).toEqual([far1, far2]);
   });
 
+  it("projectKey: a topic tag with the same key does not match", async () => {
+    const s = setup();
+    await s.save("a", { away: 0.1, tags: [{ name: "Beta" }] });
+    expect(s.ids({ projectKey: "beta" })).toEqual([]);
+    expect(s.ids({ tagKey: "beta" })).toHaveLength(1);
+  });
+
   it("date bounds: in-range links come back past the cut, and both bounds are inclusive", async () => {
     const s = setup();
     await s.save("a", { away: 0.1, at: 100 });
@@ -159,5 +166,37 @@ describe("VectorSearch ordering", () => {
     const s = setup();
     for (const away of [1, 2, 3]) await s.save("a", { away });
     expect(s.ids({}, 2)).toHaveLength(2);
+  });
+});
+
+describe("VectorSearch inputs", () => {
+  it("leaves out stored zero and NaN vectors, which have no direction", async () => {
+    const s = setup();
+    const good = await s.save("a", { away: 0.5 });
+    s.putVector("a", await s.save("a"), new Float32Array(4));
+    s.putVector("a", await s.save("a"), new Float32Array([1, Number.NaN, 0, 0]));
+    expect(s.ids()).toEqual([good]);
+  });
+
+  it("returns nothing for a zero query vector", async () => {
+    const s = setup();
+    await s.save("a", { away: 0 });
+    expect(s.nearest({}, 10, "a", new Float32Array(4))).toEqual([]);
+  });
+
+  it.each([-1, 0, 1.5, Number.NaN])("returns nothing for k = %s", async (k) => {
+    const s = setup();
+    await s.save("a", { away: 0 });
+    expect(s.nearest({}, k)).toEqual([]);
+  });
+
+  it("reads a query that is a view into a larger buffer", async () => {
+    const s = setup();
+    const id = await s.save("a", { away: 0 });
+    await s.save("a", { away: 9 });
+    const big = new Float32Array([0, 1, 1, 0, 0, 0, 0, 1]);
+    const [first] = s.nearest({}, 10, "a", big.subarray(2, 6));
+    expect(first?.id).toBe(id);
+    expect(first?.similarity).toBeCloseTo(1, 5);
   });
 });

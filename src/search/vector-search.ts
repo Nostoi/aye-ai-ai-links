@@ -26,17 +26,18 @@ export class VectorSearch {
     filters: SearchFilters,
     k: number,
   ): { id: string; similarity: number }[] {
+    if (!Number.isInteger(k) || k < 1) return [];
     const blob = Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength);
     const q = scope("l.owner_id", owner, filters);
     const rows = this.db
       .prepare(
-        `SELECT l.id AS id, vec_distance_cosine(v.embedding, ?) AS distance
+        `SELECT l.id AS id, CASE WHEN v.dims = ? THEN vec_distance_cosine(v.embedding, ?) END AS distance
          FROM links l
-         JOIN link_vectors v ON v.owner_id = l.owner_id AND v.link_id = l.id AND v.model_key = ? AND v.dims = ?
-         WHERE ${q.where}
+         JOIN link_vectors v ON v.owner_id = l.owner_id AND v.link_id = l.id AND v.model_key = ?
+         WHERE ${q.where} AND distance IS NOT NULL
          ORDER BY distance ASC, l.saved_at DESC, l.id DESC LIMIT ?`,
       )
-      .all(blob, this.modelKey, vector.length, ...q.params, k) as {
+      .all(vector.length, blob, this.modelKey, ...q.params, k) as {
       id: number;
       distance: number;
     }[];

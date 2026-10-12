@@ -1,6 +1,15 @@
-import { isAbsolute } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 
 export type Env = Record<string, string | undefined>;
+
+/**
+ * Where model files live. Fixed, not a setting: it sits beside `releases/`, never inside it,
+ * so pruning old releases cannot reach it.
+ */
+export function modelRoot(): string {
+  return join(homedir(), ".aye-links", "models");
+}
 
 const DEFAULT_PORT = 3002;
 

@@ -66,7 +66,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    deploy/deploy.sh main
    ```
 
-   This builds and tests the commit, backs up the database, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded. A failed build or test leaves the running install alone, and a failure while switching rolls back to the previous release.
+   This builds and tests the commit, then downloads and checks the meaning-search model (about 35 MB, into `~/.aye-links/models`; only missing files are fetched) before it stops the service. It then backs up the database, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded. A failed build, test or model check leaves the running install alone, and a failure while switching rolls back to the previous release.
 
    <details>
    <summary>Exactly what happens when a deploy fails</summary>

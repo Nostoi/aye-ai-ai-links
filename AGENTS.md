@@ -71,7 +71,7 @@ aye-ai-ai-links/
    ├─ fetch/      page snapshots (has its own `AGENTS.md`)
    ├─ auth/       agent keys and the caller identity (sessions, OAuth to come)
    ├─ http/       request rate limiting
-   ├─ cli/        the `keys` command for agent keys
+   ├─ cli/        the `keys` command for agent keys and the model prefetch
    ├─ mcp/        AI connector door
    ├─ api/        JSON API door (planned)
    ├─ web/        web page door (planned)

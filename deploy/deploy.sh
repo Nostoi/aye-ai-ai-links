@@ -1,9 +1,10 @@
 #!/bin/bash
 # Deploy a commit as the running LaunchAgent.
 #   deploy/deploy.sh <git-ref>
-# Builds the commit in ~/.aye-links/releases/<sha> and tests it there. Only if that succeeds does
-# it stop the service, wait for every process using aye.env to exit, back up the database, point
-# ~/.aye-links/current at the new release and start the service again. A failed build leaves the
+# Builds the commit in ~/.aye-links/releases/<sha> and tests it there, then downloads and checks
+# the meaning-search model in ~/.aye-links/models. Only if both succeed does it stop the service,
+# wait for every process using aye.env to exit, back up the database, point ~/.aye-links/current
+# at the new release and start the service again. A failed build or model check leaves the
 # running install untouched.
 # Run it from the source checkout, or set AYE_SOURCE to one. Run deploys and key commands one at a time.
 set -eEuo pipefail
@@ -47,6 +48,13 @@ if [ ! -e "$release/.ready" ]; then
     echo "Build or tests failed for $sha. The running install was not changed." >&2
     exit 1
   fi
+fi
+
+# Runs on every deploy, since the model lives outside the release. No --env-file: stop_and_wait
+# looks for that argument, and the check needs no settings.
+if ! "$node_path" "$release/dist/cli/prefetch-model-main.js"; then
+  echo "Model prefetch failed for $sha. The running install was not changed." >&2
+  exit 1
 fi
 
 read_env() { env -i "$node_path" --env-file="$env_file" -e "console.log(process.env.$1 ?? \"$2\")"; }
@@ -113,6 +121,7 @@ give_up() {
   note="deploy of $sha failed and its rollback did not finish ($(date))
 failed step: $1
 previous release: ${previous:-none}
+current: $(readlink "$home/current" || echo none)
 backup: ${backup:-none}
 failed database: ${failed_db:-none}
 plist moved to: $moved"

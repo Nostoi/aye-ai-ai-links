@@ -131,7 +131,13 @@ rollback() {
   trap - ERR
   trap '' INT TERM HUP
   set +e
-  stop_and_wait || give_up stop
+  if ! stop_and_wait; then
+    if [ "$switched" = 0 ]; then
+      echo "The deploy was stopped before anything was switched, and stopping the service is unconfirmed. Nothing was changed or started." >&2
+      exit 1
+    fi
+    give_up stop
+  fi
   if [ "$switched" = 0 ]; then
     if [ ! -f "$plist" ]; then
       echo "The deploy failed before anything was switched, and there was no service to restart. The service is stopped." >&2
@@ -211,5 +217,5 @@ if ! listening; then
 fi
 trap - ERR INT TERM HUP
 
-prune || echo "Warning: removing old releases or backups failed. The deploy itself succeeded." >&2
 echo "Deployed $sha."
+prune || echo "Warning: removing old releases or backups failed. The deploy itself succeeded." >&2

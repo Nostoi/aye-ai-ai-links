@@ -1,5 +1,12 @@
 import { CoreError } from "./errors.js";
 import type { SnapshotRunner } from "./snapshot-runner.js";
+import {
+  EXCERPT_CHARS,
+  type PageTextReader,
+  readSnapshotText,
+  type SnapshotText,
+  TEXT_CHARS,
+} from "./snapshot-text.js";
 import type { LinkStore } from "./store.js";
 import { isTagKind, normalizeTags } from "./tags.js";
 import {
@@ -15,11 +22,20 @@ import {
 } from "./types.js";
 import { urlKey } from "./url-key.js";
 
-/** `snapshots` fetches a new link's page in the background; without it, saving fetches nothing. */
+/** How long a save of a new link waits for its page before returning. */
+export const SAVE_WAIT_MS = 4_000;
+
+/**
+ * `snapshots` fetches a new link's page in the background; without it, saving fetches nothing.
+ * `pages` reads a page's text; without it, `snapshotText` is null. `saveWaitMs` defaults to
+ * `SAVE_WAIT_MS`.
+ */
 export type Deps = {
   store: LinkStore;
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
+  pages?: PageTextReader | undefined;
+  saveWaitMs?: number | undefined;
 };
 
 type TagInput = { name: string; source: Source; kind?: TagKind }[];
@@ -67,12 +83,29 @@ function cleanWhy(why: Labelled | null | undefined): Labelled | null {
   return why && text ? { text, source: why.source } : null;
 }
 
-/** Saves a link, or returns the one already saved. Only a new link's page is fetched. */
+/** Waits for `job`, or `ms`, whichever ends first, and leaves no timer behind. */
+async function settledWithin(job: Promise<void>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeUp = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  try {
+    await Promise.race([job, timeUp]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Saves a link, or returns the one already saved. Only a new link's page is fetched; the save
+ * waits up to `saveWaitMs` for it, so the result can show the page. A repeat save never waits.
+ * `snapshotText` is the page's opening text, up to `EXCERPT_CHARS`.
+ */
 export async function saveLink(
-  { store, now, snapshots }: Deps,
+  { store, now, snapshots, pages, saveWaitMs = SAVE_WAIT_MS }: Deps,
   owner: OwnerId,
   input: SaveLinkInput,
-): Promise<{ link: Link; created: boolean }> {
+): Promise<{ link: Link; created: boolean; snapshotText: SnapshotText | null }> {
   const key = urlKey(input.url);
   checkSources(input.why, input.tags);
   const tags = normalizeTags(input.tags ?? []);
@@ -91,17 +124,37 @@ export async function saveLink(
     snoozedUntil: null,
     state: "active",
   });
-  // The save has committed; `kick` never rejects, so the background fetch cannot fail it.
-  if (result.created) void snapshots?.kick(owner, result.link.id);
-  if (result.created || !why || result.link.why) return result;
-  const filled = await store.fillWhyIfMissing(owner, result.link.id, why);
-  return { link: filled ?? result.link, created: false };
+  let link = result.link;
+  if (result.created) {
+    // The save has committed; `kick` never rejects, so the background fetch cannot fail it.
+    const job = snapshots?.kick(owner, link.id);
+    if (job) await settledWithin(job, saveWaitMs);
+    // Read again for the page, and for any edit made while waiting.
+    link = (await store.get(owner, link.id)) ?? link;
+  } else if (why && !link.why) {
+    link = (await store.fillWhyIfMissing(owner, link.id, why)) ?? link;
+  }
+  return {
+    link,
+    created: result.created,
+    snapshotText: await readSnapshotText(pages, owner, link, EXCERPT_CHARS),
+  };
 }
 
 export async function getLink({ store }: Deps, owner: OwnerId, id: string): Promise<Link> {
   const link = await store.get(owner, id);
   if (!link) throw notFound(id);
   return link;
+}
+
+/** The link with its page text, up to `TEXT_CHARS`. */
+export async function getLinkWithText(
+  deps: Deps,
+  owner: OwnerId,
+  id: string,
+): Promise<{ link: Link; snapshotText: SnapshotText | null }> {
+  const link = await getLink(deps, owner, id);
+  return { link, snapshotText: await readSnapshotText(deps.pages, owner, link, TEXT_CHARS) };
 }
 
 export async function updateLink(

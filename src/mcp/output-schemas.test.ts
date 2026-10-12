@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/server";
 import {
   Ajv,
@@ -10,23 +12,24 @@ import type { z } from "zod";
 import { createApp } from "../app.js";
 import type { Caller } from "../auth/caller.js";
 import type { filingContext } from "../core/filing-context.js";
-import type { getLink, saveLink, updateLink } from "../core/links.js";
+import type { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { searchLinks } from "../core/search-links.js";
 import type { changeTagKind } from "../core/tag-kind.js";
 import type { Link, Tag } from "../core/types.js";
 import { createDeps } from "../deps.js";
 import { openDatabase } from "../store/database.js";
-import type {
-  addProfileOutput,
-  getProfileOutput,
-  linkOutput,
-  linkResultOutput,
-  profileOutput,
+import {
+  type addProfileOutput,
+  getLinkOutput,
+  type getProfileOutput,
+  type linkOutput,
+  type linkResultOutput,
+  type profileOutput,
   saveLinkOutput,
-  searchLinksOutput,
-  tagOutput,
-  updateTagOutput,
+  type searchLinksOutput,
+  type tagOutput,
+  type updateTagOutput,
 } from "./output-schemas.js";
 import { buildMcpServer } from "./server.js";
 
@@ -188,7 +191,10 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
          image_url = 'https://example.com/i.png' WHERE link_id = 1`,
     ).run(NOW.getTime());
     db.prepare("UPDATE snapshots SET fetch_status = 'extract_timeout' WHERE link_id = 2").run();
+    // Text longer than save's cap and shorter than get's: truncated both ways.
+    db.prepare("UPDATE snapshots SET text = ? WHERE link_id = 1").run("t".repeat(600));
     await run(get("1"));
+    await run(save({ url: "https://example.com/a" }));
     await run(save({ url: "https://example.com/c" })); // its filingContext holds the seeded tags
     db.prepare("DELETE FROM snapshots WHERE link_id = 3").run();
     await run(update({ id: "1", why: null, summary: null }));
@@ -244,6 +250,14 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       expect(isNull, `link.${field} null and non-null`).toEqual(new Set([true, false]));
     }
     expect(values(links, (l) => l.state)).toEqual(new Set(["active", "archived"]));
+    const texts: Json[] = outputs.filter((o) => "snapshotText" in o).map((o) => o.snapshotText);
+    expect(values(texts, (t) => t === null)).toEqual(new Set([true, false]));
+    expect(
+      values(
+        texts.filter((t) => t !== null),
+        (t) => t.truncated,
+      ),
+    ).toEqual(new Set([true, false]));
     expect(values(links, (l) => l.snapshot === null)).toEqual(new Set([true, false]));
     const snapshots = links.map((l) => l.snapshot).filter(Boolean);
     expect(values(snapshots, (x) => x.status)).toEqual(
@@ -353,7 +367,10 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
     // Enums stay closed: a new enum value is still a contract change.
-    expect(cached.get_link?.({ link: { ...saved.link, state: "deleted" } })).toBe(false);
+    // With snapshotText present, only the unknown enum value can make the second one fail.
+    const got = { link: saved.link, snapshotText: null };
+    expect(cached.get_link?.(got)).toBe(true);
+    expect(cached.get_link?.({ ...got, link: { ...saved.link, state: "deleted" } })).toBe(false);
   });
 
   it.each([
@@ -420,6 +437,55 @@ describe.each(ERAS)("a result that breaks its schema after a write, %s era", (er
       logged.mockRestore();
     },
   );
+});
+
+describe.each(ERAS)("a session holding main's tools/list from before #31, %s era", (era) => {
+  // Captured from tools/list before any #31 change; both eras advertised the same schemas.
+  const frozen = JSON.parse(
+    readFileSync(join(import.meta.dirname, "fixtures/pre-31-output-schemas.json"), "utf8"),
+  );
+
+  it("accepts save_link and get_link results that carry page text (D9)", async () => {
+    expect(frozen.save_link.properties.snapshotText).toBeUndefined();
+    expect(frozen.get_link.properties.snapshotText).toBeUndefined();
+    const ajv = new Ajv({
+      strict: false,
+      validateFormats: true,
+      validateSchema: false,
+      allErrors: true,
+    });
+    addFormats(ajv);
+    const { db, app } = freshApp();
+    await callTool(app, era, "save_link", { url: "https://example.com/a" });
+    db.prepare(
+      `UPDATE snapshots SET fetch_status = 'ok', next_fetch_at = NULL, fetched_at = ?,
+         title = 'Page', text = ? WHERE link_id = 1`,
+    ).run(NOW.getTime(), "body ".repeat(200));
+    const results = {
+      save_link: (await callTool(app, era, "save_link", { url: "https://example.com/a" })).result,
+      get_link: (await callTool(app, era, "get_link", { id: "1" })).result,
+    };
+    expect(results.save_link.structuredContent.snapshotText?.truncated).toBe(true);
+    expect(results.get_link.structuredContent.snapshotText?.truncated).toBe(false);
+    for (const [tool, res] of Object.entries(results)) {
+      const check = ajv.compile(frozen[tool]);
+      expect(check(res.structuredContent), `${tool}: ${ajv.errorsText(check.errors)}`).toBe(true);
+    }
+  });
+});
+
+describe("page text stays strict on the server (D11)", () => {
+  const link = { snapshot: null } as unknown;
+  it.each([
+    ["saveLinkOutput", saveLinkOutput],
+    ["getLinkOutput", getLinkOutput],
+  ])("%s refuses an extra key inside snapshotText", (_name, schema) => {
+    const stray = { text: "t", truncated: false, stray: 1 };
+    const issues = schema.safeParse({ link, snapshotText: stray }).error?.issues ?? [];
+    expect(issues.some((i) => i.code === "unrecognized_keys" && i.path[0] === "snapshotText")).toBe(
+      true,
+    );
+  });
 });
 
 /** The JSON paths of object nodes in a JSON Schema that do not say `additionalProperties: false`. */
@@ -502,8 +568,8 @@ describe("output schemas against core's types (checked by tsc)", () => {
     expectTypeOf<z.output<typeof linkResultOutput>>().toEqualTypeOf<
       Wire<{ link: Returned<typeof updateLink> }>
     >();
-    expectTypeOf<z.output<typeof linkResultOutput>>().toEqualTypeOf<
-      Wire<{ link: Returned<typeof getLink> }>
+    expectTypeOf<z.output<typeof getLinkOutput>>().toEqualTypeOf<
+      Wire<Returned<typeof getLinkWithText>>
     >();
     expectTypeOf<z.output<typeof searchLinksOutput>>().toEqualTypeOf<
       Wire<{ links: Returned<typeof searchLinks> }>

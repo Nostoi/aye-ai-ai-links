@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import type { Caller, Identify } from "../auth/caller.js";
 import { filingContext } from "../core/filing-context.js";
-import { getLink, saveLink, updateLink } from "../core/links.js";
+import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import { searchLinks } from "../core/search-links.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { createDeps } from "../deps.js";
 import { openDatabase } from "../store/database.js";
+import { linkOutput } from "./output-schemas.js";
 
 const appFor = (options: Parameters<typeof createApp>[0]) => createApp(options).app;
 
@@ -180,6 +181,8 @@ describe("MCP door over HTTP", () => {
     expect(tools.update_tag.description).toContain("done");
     expect(tools.save_link.description).toContain("update_tag");
     expect(tools.save_link.description).not.toContain("not available yet");
+    expect(tools.save_link.description).toMatch(/"pending".*not been fetched yet.*get_link/);
+    expect(tools.get_link.description).toContain("up to 20,000 characters");
     expect(tools.get_profile.annotations).toEqual(hints(true, false, true));
     expect(tools.add_profile.annotations).toEqual(hints(false, false, false));
     expect(tools.edit_profile.annotations).toEqual(hints(false, true, false));
@@ -240,6 +243,8 @@ describe("MCP door over HTTP", () => {
         },
       },
       created: true,
+      // No runner here, so the page is not fetched and there is no text.
+      snapshotText: null,
       filingContext: { tags: [launch, reading], activeProjects: [launch] },
       profile: { notes: [], recentFocus: [] },
     };
@@ -281,7 +286,7 @@ describe("MCP door over HTTP", () => {
 
     const got = await call(app, "key-a", "get_link", { id: "1" });
     expect(got.body.result.structuredContent).toEqual(
-      wire({ link: await getLink(direct, A.owner, "1") }),
+      wire(await getLinkWithText(direct, A.owner, "1")),
     );
 
     const found = await call(app, "key-a", "search_links", {
@@ -455,6 +460,83 @@ describe("MCP door over HTTP", () => {
     expect(bad.body.error?.message ?? bad.body.result?.content?.[0]?.text).toBeTruthy();
     expect(bad.body.result?.isError ?? Boolean(bad.body.error)).toBe(true);
     expect((await deps.store.listTags(A.owner)).map((t) => t.kind)).toEqual(["topic"]);
+  });
+
+  describe("page text", () => {
+    /** Sets a link's snapshot as a finished job would leave it, with this text. */
+    const setSnapshot = (linkId: string, status: string, text: string | null) =>
+      db
+        .prepare(
+          "UPDATE snapshots SET fetch_status = ?, next_fetch_at = NULL, text = ? WHERE link_id = ?",
+        )
+        .run(status, text, Number(linkId));
+    const codePoints = (s: string) => [...s].length;
+    // Ordinary prose: short lines, so JSON adds one escape per line.
+    const PROSE = "The quick brown fox jumps over the lazy dog, then naps in the sun.\n".repeat(
+      400,
+    );
+
+    it("get_link returns the text capped at 20,000 code points; a sanity bound on its size (D6)", async () => {
+      await call(app, "key-a", "save_link", { url: "https://example.com/long" });
+      expect(codePoints(PROSE)).toBeGreaterThan(20_000);
+      setSnapshot("1", "ok", PROSE);
+      const got = (await call(app, "key-a", "get_link", { id: "1" })).body.result;
+      expect(got.structuredContent.snapshotText).toEqual({
+        text: PROSE.slice(0, 20_000),
+        truncated: true,
+      });
+      // Not a guarantee for every page: escaped control characters or a long title can exceed it.
+      expect(got.content[0].text.length).toBeLessThanOrEqual(50_000);
+    });
+
+    it("a repeat save_link returns the stored text capped at 500 code points (D7)", async () => {
+      await call(app, "key-a", "save_link", { url: "https://example.com/long" });
+      setSnapshot("1", "ok", PROSE);
+      const again = await call(app, "key-a", "save_link", { url: "https://example.com/long" });
+      expect(again.body.result.structuredContent.created).toBe(false);
+      expect(again.body.result.structuredContent.snapshotText).toEqual({
+        text: PROSE.slice(0, 500),
+        truncated: true,
+      });
+    });
+
+    it("get_link's text is null unless the snapshot is ok, and with no snapshot row (D8)", async () => {
+      await call(app, "key-a", "save_link", { url: "https://example.com/a" });
+      await call(app, "key-a", "save_link", { url: "https://example.com/b" });
+      // A text beside a failed status is not a state any writer leaves; it proves the guard.
+      setSnapshot("1", "failed", "stale text");
+      db.prepare("DELETE FROM snapshots WHERE link_id = 2").run();
+      for (const id of ["1", "2"]) {
+        const got = await call(app, "key-a", "get_link", { id });
+        expect(got.body.result.isError).toBeUndefined();
+        expect(got.body.result.structuredContent.snapshotText).toBeNull();
+      }
+    });
+
+    it("get_link never returns another owner's text", async () => {
+      await call(app, "key-b", "save_link", { url: "https://example.com/b-only" });
+      setSnapshot("1", "ok", "b's page");
+      const foreign = await call(app, "key-a", "get_link", { id: "1" });
+      expect(foreign.body.result.isError).toBe(true);
+      expect(JSON.stringify(foreign.body)).not.toContain("b's page");
+    });
+
+    it("search_links and update_link neither read nor return the text (D10)", async () => {
+      await call(app, "key-a", "save_link", { url: "https://example.com/long", title: "Long" });
+      const text = `zebracrossing ${"word ".repeat(10_000)}`;
+      setSnapshot("1", "ok", text);
+      const reads = vi.spyOn(deps.pages, "getSnapshotText");
+      const found = await call(app, "key-a", "search_links", { query: "zebracrossing" });
+      const updated = await call(app, "key-a", "update_link", { id: "1", summary: "s" });
+      expect(reads).not.toHaveBeenCalled();
+      const links = found.body.result.structuredContent.links;
+      expect(links.map((l: Json) => l.id)).toEqual(["1"]);
+      expect(Object.keys(links[0]).sort()).toEqual(Object.keys(linkOutput.shape).sort());
+      expect(Object.keys(updated.body.result.structuredContent)).toEqual(["link"]);
+      for (const res of [found, updated]) {
+        expect(JSON.stringify(res.body)).not.toContain(text.slice(0, 40));
+      }
+    });
   });
 
   it.each(["2026-02-30T00:00:00Z", "2026-04-31T10:00:00+02:00", "2025-02-29T00:00:00Z"])(

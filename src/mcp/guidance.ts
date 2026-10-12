@@ -1,5 +1,7 @@
 /** The single source of agent guidance: the server instructions and every tool description. */
 
+import { TEXT_CHARS } from "../core/snapshot-text.js";
+
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 
 The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline, or it is a bad moment, infer it from the conversation and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
@@ -22,7 +24,9 @@ If the URL is already saved you get the existing link back with created: false. 
 
 Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. Check the returned tag's kind: if it differs from what you asked for, the tag already existed. If the owner wants that tag's kind changed, call update_tag; do NOT invent a near-duplicate name to get a project.
 
-A repeat save (created: false) discards the tags you sent, including a requested project. To file it, call update_link with the full tag set.`;
+A repeat save (created: false) discards the tags you sent, including a requested project. To file it, call update_link with the full tag set.
+
+Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it. A repeat save does not fetch the page again.`;
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
@@ -40,7 +44,9 @@ export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
 Use a few words you remember from the link. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back.`;
 
-export const GET_LINK = `Get one saved link by its id, with its why, tags and state. Use search_links to find an id.`;
+export const GET_LINK = `Get one saved link by its id, with its why, tags, state and page snapshot. Use search_links to find an id.
+
+snapshotText is the page's text, up to ${TEXT_CHARS.toLocaleString("en-US")} characters, with truncated: true when it was cut. It is null until the page has been fetched successfully, and for a page with no readable text.`;
 
 export const GET_PROFILE = `Get what is known about the owner: their notes, the projects still active, and what they have been working on lately. Call it before you infer a why or tags.
 

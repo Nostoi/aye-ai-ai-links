@@ -4,14 +4,17 @@ import { SqliteProfileStore } from "./store/profile-store.js";
 import { SqliteStore } from "./store/sqlite-store.js";
 
 /**
- * Builds the store, search and profile from ONE database handle. They must share it:
- * ids ranked in one database and read through another come back as the wrong links.
+ * Builds the store, search, profile and page-text reader from ONE database handle. They must
+ * share it: ids ranked or saved in one database and read through another come back as the
+ * wrong links, or with another link's page text.
  */
 export function createDeps(db: Database) {
+  const store = new SqliteStore(db);
   return {
-    store: new SqliteStore(db),
+    store,
     search: new FtsSearch(db),
     profile: new SqliteProfileStore(db),
+    pages: store,
     now: () => new Date(),
   };
 }

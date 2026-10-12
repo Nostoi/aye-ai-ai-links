@@ -394,6 +394,19 @@ describe("startServer", () => {
       ]);
     });
 
+    it("answers save_link with the fetched page and its excerpt, without polling (D12)", async () => {
+      const { port } = await start();
+      const res = await json(await post(port, SAVE));
+      expect(res.result.structuredContent.link.snapshot).toMatchObject({
+        status: "ok",
+        title: "Page title",
+      });
+      expect(res.result.structuredContent.snapshotText).toEqual({
+        text: "page text",
+        truncated: false,
+      });
+    });
+
     it("leases and fetches nothing for a repeat save", async () => {
       const pipeline = fakePipeline();
       const leases: string[] = [];
@@ -460,6 +473,8 @@ describe("startServer", () => {
       const released: boolean[] = [];
       const { port, stop } = await start({
         ...pipeline,
+        // The save's page never arrives, so the save waits this long instead of 4 s.
+        saveWaitMs: 50,
         decorateDeps: (deps) => {
           const store = Object.create(deps.store);
           store.releaseSnapshot = async (

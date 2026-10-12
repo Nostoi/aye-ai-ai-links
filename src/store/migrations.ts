@@ -9,8 +9,6 @@ import type { Database } from "better-sqlite3";
  *   their child rows itself, or the foreign-key check refuses it.
  * - A rebuild of a table must drop every trigger whose SQL names it before the DROP and
  *   recreate them after the RENAME, copied from `sqlite_master` at the previous version
- *   (no fixed count; never from `searchIndex()` or any current builder), and refresh
- *   `link_search` if the rebuild changes searchable text.
  */
 export const MIGRATIONS: string[] = [
   `

@@ -417,6 +417,36 @@ describe("startServer", () => {
       expect(pipeline.fetched).toEqual([URL_A]);
     });
 
+    it("starts no snapshot job once stopping, even for a save that commits during the drain", async () => {
+      const release = gate();
+      const held = holdInserts(release.opened);
+      const pipeline = fakePipeline();
+      const leases: string[] = [];
+      const { port, stop } = await start({
+        ...pipeline,
+        drainMs: 5_000,
+        decorateDeps: (deps) => {
+          const decorated = held.decorateDeps(deps);
+          const store = Object.create(decorated.store);
+          store.leaseSnapshot = (...args: Parameters<AppDeps["store"]["leaseSnapshot"]>) => {
+            leases.push(args[1]);
+            return deps.store.leaseSnapshot(...args);
+          };
+          return { ...decorated, store };
+        },
+      });
+      const inFlight = post(port, SAVE);
+      await held.entered;
+      const stopping = stop();
+      release.open();
+      expect((await inFlight).status).toBe(200);
+      await stopping;
+      expect(rows()).toEqual([{ url: URL_A, savedBy: "codex" }]);
+      expect(leases).toEqual([]);
+      expect(pipeline.fetched).toEqual([]);
+      expect(snapshots()).toMatchObject([{ status: "pending", attempts: 0 }]);
+    });
+
     it("picks up the backlog when it starts", async () => {
       await seed("https://example.com/backlog");
       await start();

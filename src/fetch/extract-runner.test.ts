@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, fork } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PageExtractor } from "../core/extract.js";
 import { CHILD_ENTRY, createChildExtractor } from "./extract-runner.js";
@@ -45,6 +45,30 @@ describe("child extractor: the real extraction code, as the child loads it", () 
     expect(out.kind === "ok" && out.text).toContain("Rottnest");
     expect(CHILD_ENTRY.pathname).toMatch(/\/src\/fetch\/extract-child\.ts$/);
     expect(alive(pids[0] as number)).toBe(false);
+  }, 30_000);
+
+  it("finishes its page when SIGINT arrives during the text step", async () => {
+    const child = fork(CHILD_ENTRY, {
+      serialization: "advanced",
+      env: {},
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    });
+    try {
+      const got: string[] = [];
+      const ended = new Promise<{ code: number | null; signal: string | null }>((resolve) =>
+        child.on("exit", (code, signal) => resolve({ code, signal })),
+      );
+      child.on("message", (m: { type: string }) => {
+        got.push(m.type);
+        if (m.type === "metadata") child.kill("SIGINT");
+      });
+      const page = `<title>T</title><body>${"<div>".repeat(190)}<p>${"word ".repeat(20_000)}</p>`;
+      child.send({ html: page, finalUrl: URL0 });
+      expect(await ended).toEqual({ code: 0, signal: null });
+      expect(got).toEqual(["received", "metadata", "text"]);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }
   }, 30_000);
 });
 

@@ -3,15 +3,30 @@ import type { LinkSearch, SearchFilters, SearchTrace } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 import { listRanks } from "./list-ranks.js";
 import { scope } from "./scope.js";
+import { STOP_WORDS } from "./stop-words.js";
 
 const withoutControls = (s: string): string => s.replace(/\p{Cc}/gu, " ");
 const NEWEST = "l.saved_at DESC, l.id DESC";
 
-/** Words with no letter or digit are dropped; the rest become OR-ed prefix phrases. */
+/** The words of a fragment as the index tokenizer (`unicode61 remove_diacritics 2`) sees them. */
+const tokens = (fragment: string): string[] =>
+  fragment
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+/**
+ * Words with no letter or digit are dropped, then words made only of stop words; if that leaves
+ * nothing, the stop words stay. The rest become OR-ed prefix phrases.
+ */
 function buildMatch(query: string): string {
-  return withoutControls(query)
+  const words = withoutControls(query)
     .split(/\s+/)
-    .filter((w) => /[\p{L}\p{N}]/u.test(w))
+    .filter((w) => /[\p{L}\p{N}]/u.test(w));
+  const content = words.filter((w) => !tokens(w).every((t) => STOP_WORDS.has(t)));
+  return (content.length > 0 ? content : words)
     .map((w) => `"${w.replaceAll('"', '""')}"*`)
     .join(" OR ");
 }

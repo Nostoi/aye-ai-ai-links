@@ -32,6 +32,10 @@ export type SnapshotRunnerOptions = {
 export type SnapshotRunner = {
   /** Sweep now, then every `pollMs`. */
   start(): void;
+  /**
+   * Take no new work: stop sweeping, refuse kicks, and settle queued kicks without leasing.
+   * Running jobs carry on and record their outcome. Shutdown calls this before the HTTP drain.
+   */
   quiesce(): void;
   /**
    * Stop sweeping, refuse kicks, abort running jobs and wait for them. An aborted job gives its
@@ -40,7 +44,8 @@ export type SnapshotRunner = {
   stop(): Promise<void>;
   /**
    * Fetch this link ahead of the backlog. Resolves when its job ends; a link already queued or
-   * running shares that job. Resolves at once when stopped or when the lease is refused.
+   * running shares that job. Resolves at once when stopped or when the lease is refused, and
+   * after `quiesce()`, even for a link whose job is still running. Never rejects.
    */
   kick(owner: OwnerId, linkId: string): Promise<void>;
   /** Start due snapshots in the free slots. Resolves once they are started, not finished. */

@@ -2,6 +2,8 @@
 // as it has the page, then posts the page's metadata before it starts on the text, so a slow text step cannot take the metadata with it.
 import { pageMetadata, pageText, parsePage } from "./extract.ts";
 
+process.on("SIGINT", () => {});
+
 process.once("message", (msg: { html: string; finalUrl: string }) => {
   const send = (m: object) =>
     new Promise<void>((resolve) => {

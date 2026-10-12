@@ -19,5 +19,5 @@ export function createApp({
   const app = new Hono();
   const mcp = mcpApp({ deps, identify, allowedHosts, rateLimit });
   app.route("/mcp", mcp.app);
-  return { app, close: mcp.close };
+  return { app, close: mcp.close, calls: mcp.calls };
 }

@@ -450,6 +450,13 @@ describe("size limit", () => {
     expect((await fetcher.fetch(siteUrl("/big/100"))).kind).toBe("ok");
     expect(await fetcher.fetch(siteUrl("/big/101"))).toEqual({ kind: "too_large" });
   });
+
+  it("caps a page at 5 MiB when no limits are passed, as the server builds it", async () => {
+    const fetcher = fetcherWith();
+    const cap = 5 * 1024 * 1024;
+    expect((await fetcher.fetch(siteUrl(`/big/${cap}`))).kind).toBe("ok");
+    expect(await fetcher.fetch(siteUrl(`/big/${cap + 1}`))).toEqual({ kind: "too_large" });
+  });
 });
 
 describe("deadline and cancellation", () => {

@@ -1,4 +1,5 @@
 import { CoreError } from "./errors.js";
+import type { SnapshotRunner } from "./snapshot-runner.js";
 import type { LinkStore } from "./store.js";
 import { isTagKind, normalizeTags } from "./tags.js";
 import {
@@ -14,7 +15,12 @@ import {
 } from "./types.js";
 import { urlKey } from "./url-key.js";
 
-export type Deps = { store: LinkStore; now: () => Date };
+/** `snapshots` fetches a new link's page in the background; without it, saving fetches nothing. */
+export type Deps = {
+  store: LinkStore;
+  now: () => Date;
+  snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
+};
 
 type TagInput = { name: string; source: Source; kind?: TagKind }[];
 
@@ -61,8 +67,9 @@ function cleanWhy(why: Labelled | null | undefined): Labelled | null {
   return why && text ? { text, source: why.source } : null;
 }
 
+/** Saves a link, or returns the one already saved. Only a new link's page is fetched. */
 export async function saveLink(
-  { store, now }: Deps,
+  { store, now, snapshots }: Deps,
   owner: OwnerId,
   input: SaveLinkInput,
 ): Promise<{ link: Link; created: boolean }> {
@@ -84,6 +91,8 @@ export async function saveLink(
     snoozedUntil: null,
     state: "active",
   });
+  // The save has committed; `kick` never rejects, so the background fetch cannot fail it.
+  if (result.created) void snapshots?.kick(owner, result.link.id);
   if (result.created || !why || result.link.why) return result;
   const filled = await store.fillWhyIfMissing(owner, result.link.id, why);
   return { link: filled ?? result.link, created: false };

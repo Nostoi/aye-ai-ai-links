@@ -3,8 +3,8 @@ import type { ExtractOutcome, PageMetadata } from "./extract.js";
 import type { FetchOutcome, RefusedReason } from "./fetch.js";
 import {
   type AttemptOutcome,
-  exhausted,
   MAX_ATTEMPTS,
+  pastLastAttempt,
   RETRY_DELAYS_MS,
   snapshotRecord,
 } from "./snapshot-outcome.js";
@@ -28,14 +28,14 @@ function expectConsistent(r: SnapshotRecord) {
   expect(r.nextFetchAt !== null).toBe(open);
 }
 
-const refusedReasons: RefusedReason[] = [
-  "invalid_url",
-  "scheme",
-  "credentials",
-  "address",
-  "bad_redirect",
-  "too_many_redirects",
-];
+const refusedReasons = Object.keys({
+  invalid_url: 0,
+  scheme: 0,
+  credentials: 0,
+  address: 0,
+  bad_redirect: 0,
+  too_many_redirects: 0,
+} satisfies Record<RefusedReason, 0>) as RefusedReason[];
 
 // Adding an outcome kind makes one of these switches fail to compile.
 function assertAllFetchKinds(o: FetchOutcome): string {
@@ -86,19 +86,17 @@ describe("retry schedule", () => {
   ])("attempt %i retries after %i ms", (attempts, delay) => {
     const r = map(fetchOf({ kind: "timeout" }), attempts);
     expect(r).toMatchObject({ status: "retrying", attempts, nextFetchAt: after(delay) });
-    expect(exhausted(attempts)).toBe(false);
   });
 
   it.each([6, 7, 20])("attempt %i fails for good", (attempts) => {
     const r = map(fetchOf({ kind: "timeout" }), attempts);
     expect(r).toMatchObject({ status: "failed", attempts, nextFetchAt: null });
     expect(r.lastError).toBe("fetch:timeout");
-    expect(exhausted(attempts)).toBe(true);
   });
 
-  it("exhausted turns true exactly at MAX_ATTEMPTS", () => {
-    expect(exhausted(MAX_ATTEMPTS - 1)).toBe(false);
-    expect(exhausted(MAX_ATTEMPTS)).toBe(true);
+  it("still fetches the last allowed attempt, and skips only beyond it", () => {
+    expect(pastLastAttempt(MAX_ATTEMPTS)).toBe(false);
+    expect(pastLastAttempt(MAX_ATTEMPTS + 1)).toBe(true);
   });
 });
 

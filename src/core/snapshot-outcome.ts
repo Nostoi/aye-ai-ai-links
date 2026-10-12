@@ -21,9 +21,9 @@ export type AttemptOutcome =
   | { stage: "fetch"; fetch: Exclude<FetchOutcome, { kind: "ok" }> }
   | { stage: "extract"; extract: ExtractOutcome };
 
-/** True when no attempts remain; `attempts` is the lease count and may exceed `MAX_ATTEMPTS`. */
-export function exhausted(attempts: number): boolean {
-  return attempts >= MAX_ATTEMPTS;
+/** True when a lease's attempt is beyond the last allowed one: record `failed` without fetching. */
+export function pastLastAttempt(attempts: number): boolean {
+  return attempts > MAX_ATTEMPTS;
 }
 
 type Verdict =
@@ -106,7 +106,7 @@ export function snapshotRecord(input: {
   const v = judge(outcome);
   const base = { attempts, title: null, description: null, imageUrl: null, text: null };
   if ("retry" in v) {
-    const delay = exhausted(attempts) ? undefined : RETRY_DELAYS_MS[attempts - 1];
+    const delay = attempts >= MAX_ATTEMPTS ? undefined : RETRY_DELAYS_MS[attempts - 1];
     return {
       ...base,
       status: delay === undefined ? "failed" : "retrying",

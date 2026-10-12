@@ -40,7 +40,6 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Adding an enum value is still a breaking change:** a validating client holding an earlier list refuses the new value. #30's snapshot statuses are the first case.
   - **A result that breaks its schema after a write** is logged, and the agent is told the change was saved and not to retry.
   - **#33:** its tools are `get_profile`, `add_profile` and `edit_profile`; each declares a schema from these exports, and its "no `outputSchema`" decision is superseded.
-  - **Real-client check settled 2026-10-11:** Claude Code, Codex and Claude Desktop accepted the new `tools/list` and still called every tool (#39 comments 6116822480 and 6116836879).
 - **2026-10-11:** Phase 1 done; deploy hardening (#27).
   - **Phase 1 done.** Claude Code and Codex both save, search and get links through `https://<mac>.ts.net:8444/mcp` with their own keys. Neither sends a foreign Origin, and both work with the stateless 2025 serving. The evidence is #7's closing comment.
   - **Stopping waits.** Real `launchctl bootout` returns before the process exits, so `deploy.sh` now waits for every process using `aye.env` to stop before the backup, a restore or a start. If one will not stop within 25 s, or `pgrep` fails, nothing is started (#27).

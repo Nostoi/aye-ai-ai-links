@@ -26,6 +26,21 @@ export function pastLastAttempt(attempts: number): boolean {
   return attempts > MAX_ATTEMPTS;
 }
 
+/** The record for a lease that `pastLastAttempt` rejects: final `failed`, attempts as leased. */
+export function pastLastAttemptRecord(attempts: number): SnapshotRecord {
+  return {
+    status: "failed",
+    attempts,
+    nextFetchAt: null,
+    fetchedAt: null,
+    title: null,
+    description: null,
+    imageUrl: null,
+    text: null,
+    lastError: "lease:expired",
+  };
+}
+
 type Verdict =
   | {
       terminal: SnapshotStatus;

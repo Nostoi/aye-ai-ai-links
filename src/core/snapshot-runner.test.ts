@@ -17,6 +17,8 @@ const pageOk: ExtractOutcome = {
 function step<T>(name: string, order: string[], ok: (arg: string) => T, aborted: T) {
   const s = {
     hold: false,
+    /** Log an abort but keep the call held, like a step that finishes just after it. */
+    ignoreAbort: false,
     calls: [] as { arg: string; finish(v?: T): void }[],
     run(arg: string, signal?: AbortSignal): Promise<T> {
       return new Promise<T>((resolve) => {
@@ -27,7 +29,7 @@ function step<T>(name: string, order: string[], ok: (arg: string) => T, aborted:
         };
         const abort = () => {
           if (!done) order.push(`${name}:abort`);
-          finish(aborted);
+          if (!s.ignoreAbort) finish(aborted);
         };
         s.calls.push({ arg, finish });
         if (signal?.aborted) abort();
@@ -47,7 +49,7 @@ afterEach(async () => {
   await Promise.all(runners.splice(0).map((r) => r.stop()));
 });
 
-function setup(opts: { slots?: number; leaseMs?: number } = {}) {
+function setup(opts: { slots?: number; leaseMs?: number; pollMs?: number } = {}) {
   const store = new FakeStore();
   const order: string[] = [];
   const h = {
@@ -193,6 +195,61 @@ describe("snapshot runner", () => {
     },
   );
 
+  it("an extraction that ends ok after stop() is recorded, not thrown away", async () => {
+    const s = setup();
+    const link = await s.save(A, 1);
+    s.extract.hold = true;
+    s.extract.ignoreAbort = true;
+    void s.runner.kick(A, link.id);
+    await vi.waitFor(() => expect(s.extract.calls).toHaveLength(1));
+    const stopped = s.runner.stop();
+    s.extract.calls[0]?.finish();
+    await stopped;
+    expect(s.order).toEqual(["extract:abort"]);
+    expect(s.releases).toEqual([]);
+    expect(s.records.map((r) => [r.rec.status, r.rec.attempts])).toEqual([["ok", 1]]);
+  });
+
+  it("a fetch that ends ok after stop() is given back without extracting", async () => {
+    const s = setup();
+    const link = await s.save(A, 1);
+    s.fetch.hold = true;
+    s.fetch.ignoreAbort = true;
+    void s.runner.kick(A, link.id);
+    await vi.waitFor(() => expect(s.fetch.calls).toHaveLength(1));
+    const stopped = s.runner.stop();
+    s.fetch.calls[0]?.finish();
+    await stopped;
+    expect(s.extract.calls).toHaveLength(0);
+    expect(s.records).toEqual([]);
+    expect(s.releases).toEqual([link.id]);
+  });
+
+  it("start() sweeps at once and every pollMs, and stop() leaves no timer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const s = setup({ pollMs: 1000 });
+      const first = await s.save(A, 1);
+      const later = await s.save(A, 2, at(2000));
+      s.runner.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(s.leases.map((l) => l.linkId)).toEqual([first.id]);
+      s.clock = at(3000);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(s.leases).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(s.leases.map((l) => l.linkId)).toEqual([first.id, later.id]);
+      await s.save(A, 3, at(4000));
+      s.clock = at(5000);
+      await s.runner.stop();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(s.leases).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(["fetch", "extract"] as const)(
     "an abort that is not a shutdown, in the %s, uses up the attempt",
     async (stage) => {
@@ -337,5 +394,24 @@ describe("snapshot runner", () => {
     await vi.waitFor(() => expect(s.fetch.calls).toHaveLength(2));
     s.fetch.calls[0]?.finish();
     await vi.waitFor(() => expect(s.fetch.calls).toHaveLength(3));
+  });
+
+  it("the default log prints a message without a trailing undefined", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const store = new FakeStore();
+      const link = (await store.insertIfAbsent(A, newLink(1, at(0)))).link;
+      store.recordSnapshot = async () => false;
+      const runner = createSnapshotRunner({
+        store,
+        fetcher: { fetch: async () => ({ kind: "timeout" }), close: async () => {} },
+        extractor: { extract: async () => pageOk, close: async () => {} },
+        now: () => at(1000),
+      });
+      await runner.kick(A, link.id);
+      expect(spy.mock.calls).toEqual([[expect.stringContaining("record refused")]]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

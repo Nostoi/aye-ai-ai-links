@@ -32,7 +32,10 @@ export type SnapshotRunnerOptions = {
 export type SnapshotRunner = {
   /** Sweep now, then every `pollMs`. */
   start(): void;
-  /** Stop sweeping, refuse kicks, abort running jobs, give their attempts back and wait for them. */
+  /**
+   * Stop sweeping, refuse kicks, abort running jobs and wait for them. An aborted job gives its
+   * attempt back, unless its page was already extracted ok: that one is recorded.
+   */
   stop(): Promise<void>;
   /**
    * Fetch this link ahead of the backlog. Resolves when its job ends; a link already queued or
@@ -55,7 +58,10 @@ type Job = {
 /** Takes due snapshots from the store, fetches and extracts them, and records the outcome. */
 export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
   const { store, fetcher, extractor, now } = o;
-  const log = o.log ?? ((message, error) => console.error(message, error));
+  const log =
+    o.log ??
+    ((message, error) =>
+      error === undefined ? console.error(message) : console.error(message, error));
   const leaseMs = o.leaseMs ?? 120_000;
   const pollMs = o.pollMs ?? 30_000;
   const slots = o.slots ?? 2;
@@ -124,7 +130,9 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
       return write(job, lease, pastLastAttemptRecord(lease.attempts));
     }
     const outcome = shutDown() ? null : await fetchAndExtract(lease.url);
-    if (outcome === null || shutDown()) {
+    // A page extracted ok is finished work: record it even when the shutdown came during it.
+    const finished = outcome?.stage === "extract" && outcome.extract.kind === "ok";
+    if (outcome === null || (shutDown() && !finished)) {
       const released = await store.releaseSnapshot(job.owner, job.linkId, lease.claim, now());
       if (!released) log(`snapshot ${job.key}: release refused`);
       return;
@@ -132,10 +140,12 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
     return write(job, lease, snapshotRecord({ outcome, attempts: lease.attempts, now: now() }));
   }
 
-  async function fetchAndExtract(url: string): Promise<AttemptOutcome> {
+  /** The attempt's outcome, or null for a page fetched after shutdown: it is not extracted. */
+  async function fetchAndExtract(url: string): Promise<AttemptOutcome | null> {
     const signal = controller.signal;
     const fetched = await fetcher.fetch(url, signal);
     if (fetched.kind !== "ok") return { stage: "fetch", fetch: fetched };
+    if (shutDown()) return null;
     const extract = await extractor.extract(fetched.html, fetched.finalUrl, signal);
     return { stage: "extract", extract };
   }

@@ -15,6 +15,7 @@ You talk to your AI; it uses the library for you.
 - **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
+- **Page snapshots.** The server fetches each new link's page in the background and keeps its text, so a search also matches what the page says. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
 
 Each AI has its own key, and every link records which AI saved it.
 
@@ -33,7 +34,6 @@ The tools your AI uses:
 
 ### Still to come
 
-- **Page snapshots:** the server saves the text of each page, so a search can match what a page says.
 - **Search by meaning**, not just by matching words.
 - **Digests** that bring back old links that match what you're working on now.
 - **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something.
@@ -44,7 +44,7 @@ The tools your AI uses:
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores and searches, and needs **no AI API keys**. Data lives in one SQLite file on your machine.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine.
 
 ## Run it on your Mac
 

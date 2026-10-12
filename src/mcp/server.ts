@@ -13,6 +13,7 @@ import { addProfile, editProfile, getProfile, profileContext } from "../core/pro
 import type { ProfileStore } from "../core/profile-store.js";
 import type { LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
+import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
@@ -33,7 +34,11 @@ export type McpDeps = {
   search: LinkSearch;
   profile: ProfileStore;
   now: () => Date;
+  snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
 };
+
+/** Wraps each tool call's promise; `mcpApp` uses it to count calls still running. */
+export type TrackCall = <T>(call: Promise<T>) => Promise<T>;
 
 const TIMESTAMP_SHAPE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -150,7 +155,11 @@ type ToolConfig<I extends StandardSchemaWithJSON> = {
 };
 
 /** The caller comes from the authenticated request, never from tool arguments. */
-export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
+export function buildMcpServer(
+  deps: McpDeps,
+  caller: Caller,
+  track: TrackCall = (call) => call,
+): McpServer {
   const server = new McpServer(
     { name: "aye-ai-ai-links", version: "0.1.0" },
     { instructions: guidance.INSTRUCTIONS },
@@ -168,7 +177,7 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
       { ...config, outputSchema: advertisedOpen(outputSchema) },
       // ToolCallback<I> is a conditional type TypeScript cannot resolve while I is generic.
       ((args: StandardSchemaWithJSON.InferOutput<I>) =>
-        guarded(outputSchema, () => run(args))) as ToolCallback<I>,
+        track(guarded(outputSchema, () => run(args)))) as ToolCallback<I>,
     );
 
   register(
@@ -182,7 +191,8 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
         readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: false,
+        // Saving fetches the new link's page in the background.
+        openWorldHint: true,
       },
     },
     async (args) => {

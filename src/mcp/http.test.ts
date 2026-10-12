@@ -164,15 +164,16 @@ describe("MCP door over HTTP", () => {
       "update_link",
       "update_tag",
     ]);
-    const hints = (readOnlyHint: boolean, destructiveHint: boolean, idempotentHint: boolean) => ({
-      readOnlyHint,
-      destructiveHint,
-      idempotentHint,
-      openWorldHint: false,
-    });
+    const hints = (
+      readOnlyHint: boolean,
+      destructiveHint: boolean,
+      idempotentHint: boolean,
+      openWorldHint = false,
+    ) => ({ readOnlyHint, destructiveHint, idempotentHint, openWorldHint });
     expect(tools.search_links.annotations).toEqual(hints(true, false, true));
     expect(tools.get_link.annotations).toEqual(hints(true, false, true));
-    expect(tools.save_link.annotations).toEqual(hints(false, false, true));
+    // Saving fetches the new link's page in the background, so it reaches the open web.
+    expect(tools.save_link.annotations).toEqual(hints(false, false, true, true));
     expect(tools.update_link.annotations).toEqual(hints(false, true, false));
     expect(tools.update_tag.annotations).toEqual(hints(false, true, true));
     expect(tools.update_tag.description.slice(0, 512)).toContain("only when the owner");

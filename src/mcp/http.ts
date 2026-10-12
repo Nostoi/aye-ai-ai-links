@@ -2,7 +2,7 @@ import { createMcpHonoApp } from "@modelcontextprotocol/hono";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { Caller, Identify } from "../auth/caller.js";
 import { createRateLimiter, type RateLimitOptions } from "../http/rate-limit.js";
-import { buildMcpServer, type McpDeps } from "./server.js";
+import { buildMcpServer, type McpDeps, type TrackCall } from "./server.js";
 
 /** Reads the caller back out of the authInfo that mcpApp built from `identify`. */
 function callerFrom(authInfo: { clientId: string; extra?: Record<string, unknown> } | undefined) {
@@ -24,8 +24,19 @@ export function mcpApp({
   allowedHosts?: string[] | undefined;
   rateLimit?: RateLimitOptions | undefined;
 }) {
+  // Tool calls still running. A response can be under way, or its connection closed, before
+  // its call ends, so shutdown waits on the calls themselves, not on the HTTP requests.
+  const running = new Set<Promise<unknown>>();
+  const track: TrackCall = (call) => {
+    running.add(call);
+    const done = () => running.delete(call);
+    call.then(done, done);
+    return call;
+  };
   // Keep the default legacy "stateless": Codex opens with a 2025-06-18 initialize (https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#backward-compatibility).
-  const handler = createMcpHandler(({ authInfo }) => buildMcpServer(deps, callerFrom(authInfo)));
+  const handler = createMcpHandler(({ authInfo }) =>
+    buildMcpServer(deps, callerFrom(authInfo), track),
+  );
   const app = createMcpHonoApp(allowedHosts ? { allowedHosts } : {});
   const limiter = createRateLimiter(rateLimit);
 
@@ -64,5 +75,13 @@ export function mcpApp({
     });
   });
 
-  return { app, close: () => handler.close() };
+  return {
+    app,
+    close: () => handler.close(),
+    /** How many tool calls are running, and a promise that settles when those have ended. */
+    calls: () => ({
+      running: running.size,
+      ended: Promise.allSettled([...running]).then(() => {}),
+    }),
+  };
 }

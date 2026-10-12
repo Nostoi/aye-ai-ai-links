@@ -22,6 +22,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** Page snapshots run in the background (#30, PR C: C1–C4). The C1 entry below covers the store.
+  - **Runner (core).** `core/snapshot-runner.ts` runs at most 2 jobs at once, sweeps for due snapshots every 30 s, and refills a slot as soon as a job ends. A job leases its snapshot for 120 s, fetches, extracts and records. `core/snapshot-outcome.ts` maps each outcome to a status and a `lastError` of the form `<stage>:<kind>[:<detail>]`, and retries a retryable outcome after 1 min, 10 min, 1 h, 6 h and 24 h, then fails at 6 attempts.
+  - **Kick only on created.** Core `saveLink` sends a new link's snapshot ahead of the backlog; a repeat save never fetches. The kick never rejects, so a background failure cannot fail a committed save. #31's excerpt wait will use the kick's promise.
+  - **Shutdown order.** Stop taking work; drain HTTP (10 s); abort the jobs, which give their attempts back (a page already extracted ok is recorded), and wait for them and for running MCP tool calls (up to 5 s); close the fetcher, then the extractor; close MCP, then the database. That fits launchd's 20 s `ExitTimeOut`. A call that outlives the wait fails on the closed database, and the error is caught and logged.
+  - **`save_link` is `openWorldHint: true`**, since saving now fetches the page.
+  - **The first deploy fetches the backlog.** Every existing link has a pending snapshot, so the first start fetches the whole library, two pages at a time. The owner runs `deploy/deploy.sh main`; the orchestrator checks child cleanup, lease recovery and the backlog drain, and records the result on #30.
+
 - **2026-10-11:** Profile notes and focus log (#33).
   - **Tools (owner), a change to spec §5.** `get_profile` reads. `add_profile` adds notes and focus entries and is non-destructive. `edit_profile` edits and removes notes and is destructive. Spec §5 named a single `update_profile`; the split keeps routine adds from being gated as destructive. `save_link` also returns `profile` (notes and recent focus; the active projects stay in `filingContext`).
   - **Labels (owner).** Notes and focus entries both carry a source (`stated`, `asked`, `inferred`) and the writer from the agent key. This follows AGENTS.md "Label guesses" and goes beyond spec §4, which gave focus entries no source.

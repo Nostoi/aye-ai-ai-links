@@ -24,7 +24,7 @@ export async function changeTagKind(
     if (!current) {
       throw new CoreError(
         "not_found",
-        `No tag named "${name}" was found. The owner's tags are in save_link's filingContext; a tag is created by tagging a link.`,
+        `No tag named "${name}" was found. Ask the owner for the exact name; the tags on links from search_links show the names in use. A tag is created by tagging a link.`,
       );
     }
     if (current.kind === kind) return current;
@@ -33,6 +33,6 @@ export async function changeTagKind(
   }
   throw new CoreError(
     "conflict",
-    `The tag "${name}" was changed by someone else while this ran. Look at its kind in save_link's filingContext and try again if it is still wrong.`,
+    `The tag "${name}" was changed by someone else while this ran. Call update_tag again if it should still change; it returns the tag as it is now.`,
   );
 }

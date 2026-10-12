@@ -43,6 +43,8 @@ describe("changeTagKind when the write keeps missing", () => {
     const error = await failure(changeTagKind({ store }, "a", { name: "solar", kind: "project" }));
     expect(error.code).toBe("conflict");
     expect(error.message).toContain("solar");
+    expect(error.message).toContain("update_tag again");
+    expect(error.message).not.toContain("save_link");
     expect([reads, writes]).toEqual([2, 2]);
   });
 
@@ -56,5 +58,7 @@ describe("changeTagKind when the write keeps missing", () => {
     } as unknown as LinkStore;
     const error = await failure(changeTagKind({ store }, "a", { name: "solar", kind: "project" }));
     expect(error.code).toBe("not_found");
+    expect(error.message).toContain("search_links");
+    expect(error.message).not.toContain("save_link");
   });
 });

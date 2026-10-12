@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 export interface Embedder {
-  embedQuery(text: string): Promise<Float32Array>;
+  /** Rejects with the signal's reason, without running, if `signal` has aborted by its turn. */
+  embedQuery(text: string, signal?: AbortSignal): Promise<Float32Array>;
   embedDocuments(texts: string[]): Promise<Float32Array[]>;
 }
 
@@ -9,7 +10,8 @@ export interface Embedder {
 export class FakeEmbedder implements Embedder {
   constructor(readonly dims: number) {}
 
-  embedQuery(text: string): Promise<Float32Array> {
+  embedQuery(text: string, signal?: AbortSignal): Promise<Float32Array> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     return Promise.resolve(this.vector(text));
   }
 

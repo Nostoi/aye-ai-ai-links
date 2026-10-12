@@ -7,6 +7,7 @@ import { SqliteStore } from "../store/sqlite-store.js";
 import type { Embedder } from "./embedder.js";
 import { FtsSearch } from "./fts-search.js";
 import { HybridSearch } from "./hybrid-search.js";
+import { createQueuedEmbedder } from "./transformers-embedder.js";
 
 const KEY = "test-model";
 const OWNER = "o";
@@ -389,5 +390,74 @@ describe("HybridSearch over a real database", () => {
       5,
     );
     expect(none.traces[0]).toMatchObject({ mode: "hybrid", meaningCandidates: 0 });
+  });
+});
+
+describe("HybridSearch query timeout (D-T11)", () => {
+  /** Collects unhandled rejections while a test runs. */
+  function rejections() {
+    const seen: unknown[] = [];
+    const record = (e: unknown) => seen.push(e);
+    process.on("unhandledRejection", record);
+    return { seen, dispose: () => process.off("unhandledRejection", record) };
+  }
+
+  it("falls back to keyword results after 2 s when the embedding never comes, and passes a signal", async () => {
+    const signals: (AbortSignal | undefined)[] = [];
+    const embedder: Embedder = {
+      embedQuery: (_t, signal) => {
+        signals.push(signal);
+        return new Promise<Float32Array>(() => {});
+      },
+      embedDocuments: async () => [],
+    };
+    const log = vi.fn();
+    const keyword = fakeKeyword({ fields: ["F"], pageOnly: ["P"] });
+    const started = performance.now();
+    const { ids, traces } = await run(make(keyword, fakeVectors(["M"]), embedder, log), "w", 3);
+    const took = performance.now() - started;
+    expect(took).toBeGreaterThanOrEqual(1900);
+    expect(took).toBeLessThan(3000);
+    expect(ids).toEqual(["F", "P"]);
+    expect(traces).toEqual([
+      {
+        mode: "fallback",
+        embedded: "w",
+        modelKey: KEY,
+        similarity: {},
+        meaningCandidates: 0,
+        ranks: { F: { field: 1 }, P: { page: 1 } },
+      },
+    ]);
+    expect(log).toHaveBeenCalledOnce();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("an expired query behind a stuck document never runs, and its late rejection is handled", async () => {
+    const faults = rejections();
+    try {
+      const seen: string[][] = [];
+      let release = () => {};
+      const held = new Promise<void>((r) => {
+        release = r;
+      });
+      const queue = createQueuedEmbedder(async (texts) => {
+        seen.push(texts);
+        if (texts[0] === "doc") await held;
+        return texts.map(() => Float32Array.of(1, 0));
+      });
+      const doc = queue.embedDocuments(["doc"]);
+      const keyword = fakeKeyword({ fields: [], pageOnly: ["P"] });
+      const { ids, traces } = await run(make(keyword, fakeVectors(["M"]), queue), "w", 3);
+      expect(ids).toEqual(["P"]);
+      expect(traces[0]?.mode).toBe("fallback");
+      release();
+      await doc;
+      await new Promise((r) => setTimeout(r, 20));
+      expect(seen).toEqual([["doc"]]);
+      expect(faults.seen).toEqual([]);
+    } finally {
+      faults.dispose();
+    }
   });
 });

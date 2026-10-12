@@ -10,6 +10,12 @@ type Vectors = Pick<VectorSearch, "nearest">;
 
 /** Code points of the query that are embedded. */
 const QUERY_CHARS = 500;
+/**
+ * How long a search waits for its query embedding before using the keyword results. It bounds
+ * waiting on async work (a queue stuck behind a hung inference) only: a timer cannot interrupt
+ * an inference that holds the thread.
+ */
+export const QUERY_EMBED_MS = 2_000;
 const RRF_K = 60;
 const DEPTH_FACTOR = 3;
 const MAX_DEPTH = 150;
@@ -23,10 +29,24 @@ const capQuery = (query: string): string => {
 };
 
 /**
+ * `work`, or a rejection with the signal's reason once it aborts, whichever comes first. A
+ * rejection `work` makes after losing is handled here, so it cannot crash the process.
+ */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  work.catch(() => undefined);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) return abort();
+    signal.addEventListener("abort", abort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+/**
  * Keyword search with meaning search behind it. Links whose own fields match keep their keyword
  * order at the top; the rest (page-text hits and nearest-by-meaning hits) are ranked by
- * reciprocal rank fusion. If the embedding or the vector lookup fails, the answer is the
- * keyword search's.
+ * reciprocal rank fusion. If the embedding fails or takes over `QUERY_EMBED_MS`, or the vector
+ * lookup fails, the answer is the keyword search's.
  */
 export class HybridSearch implements LinkSearch {
   constructor(
@@ -67,7 +87,8 @@ export class HybridSearch implements LinkSearch {
     let meaningCandidates: number;
     try {
       embedded = capQuery(query);
-      const vector = await this.embedder.embedQuery(embedded);
+      const signal = AbortSignal.timeout(QUERY_EMBED_MS);
+      const vector = await untilAborted(this.embedder.embedQuery(embedded, signal), signal);
       const nearest = this.vectors.nearest(owner, vector, filters, depth);
       meaningCandidates = nearest.length;
       fused = fuse(fields, pageOnly, nearest, limit);

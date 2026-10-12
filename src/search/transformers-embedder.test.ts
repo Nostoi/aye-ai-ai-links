@@ -71,6 +71,30 @@ describe("createQueuedEmbedder", () => {
     await expect(new FakeEmbedder(4).embedDocuments([])).resolves.toEqual([]);
   });
 
+  it("D-T11b: a query whose signal aborted while it waited is rejected at its turn without running", async () => {
+    const seen: string[][] = [];
+    let release = () => {};
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const e = createQueuedEmbedder(async (texts) => {
+      seen.push(texts);
+      if (texts[0] === "doc") await held;
+      return texts.map(() => unit(4));
+    });
+    const doc = e.embedDocuments(["doc"]);
+    const expired = [new AbortController(), new AbortController(), new AbortController()];
+    const queries = expired.map((c, i) => e.embedQuery(`q${i}`, c.signal));
+    for (const q of queries) q.catch(() => undefined);
+    const live = e.embedQuery("live", new AbortController().signal);
+    for (const c of expired) c.abort(new Error("expired"));
+    release();
+    await doc;
+    for (const q of queries) await expect(q).rejects.toThrow("expired");
+    await expect(live).resolves.toHaveLength(4);
+    expect(seen).toEqual([["doc"], [`${QUERY_PREFIX}live`]]);
+  });
+
   it("returns one vector per document, in order", async () => {
     const e = createQueuedEmbedder(async (texts) => texts.map((t) => Float32Array.of(t.length)));
     const out = await e.embedDocuments(["a", "bbb", "cc"]);

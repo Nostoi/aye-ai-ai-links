@@ -87,8 +87,10 @@ describe("linkDocument (D-T1)", () => {
   });
 
   it("never splits a surrogate pair in the summary", () => {
-    const doc = linkDocument(input({ summary: "😀".repeat(SUMMARY_CHARS + 1) }));
+    // The leading "a" puts a code-unit cut at 1,000 in the middle of a pair.
+    const doc = linkDocument(input({ summary: `a${"😀".repeat(SUMMARY_CHARS)}` }));
     expect(doc).not.toMatch(loneSurrogate);
+    expect(doc).toContain(`\na${"😀".repeat(SUMMARY_CHARS - 1)}\nhttps://ex.com/a`);
   });
 
   it("D-T1b: long owner fields are kept whole; why and tags survive a 1,000-char title and summary", () => {

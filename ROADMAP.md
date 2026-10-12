@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-11:** MCP output schemas (#39). Sources and quotes: `docs/specs/2026-10-11-output-schema-sources.md`.
+  - **Every tool declares an `outputSchema`** (`src/mcp/output-schemas.ts`), with timestamps as plain strings because a valid `Date` can serialize outside four-digit ISO years. A test enumerates `tools/list`, so a tool without a schema or samples fails; it runs the advertised schemas with Ajv against real results in both protocol eras.
+  - **Errors stay text-only.** An unknown tool is a JSON-RPC -32602 error.
+  - **Strict in the server, open in `tools/list`.** `guarded` checks the exact shape; `tools/list` allows extra keys, so a validating client holding an earlier list still accepts a result with a field added later. #30's `snapshot` and #33's `profile` are the first added fields. Each tool states its schema once, through `register` in `server.ts`.
+  - **Adding an enum value is still a breaking change:** a validating client holding an earlier list refuses the new value. #30's snapshot statuses are the first case.
+  - **A result that breaks its schema after a write** is logged, and the agent is told the change was saved and not to retry.
+  - **#33:** its tools are `get_profile`, `add_profile` and `edit_profile`; each declares a schema from these exports, and its "no `outputSchema`" decision is superseded.
+  - **Unverified until the real-client check (#7, #27):** that Claude Code, Codex and Claude Desktop accept the new `tools/list` and still call every tool.
 - **2026-10-11:** Phase 1 done; deploy hardening (#27).
   - **Phase 1 done.** Claude Code and Codex both save, search and get links through `https://<mac>.ts.net:8444/mcp` with their own keys. Neither sends a foreign Origin, and both work with the stateless 2025 serving. The evidence is #7's closing comment.
   - **Stopping waits.** Real `launchctl bootout` returns before the process exits, so `deploy.sh` now waits for every process using `aye.env` to stop before the backup, a restore or a start. If one will not stop within 25 s, or `pgrep` fails, nothing is started (#27).

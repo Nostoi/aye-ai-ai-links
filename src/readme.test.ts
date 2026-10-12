@@ -101,4 +101,14 @@ describe("README stays current", () => {
       `AGENTS.md's folder map still marks these existing src/ folders (planned): ${built.join(", ")}`,
     ).toEqual([]);
   });
+
+  it("AGENTS.md's folder map names exactly the non-test .ts files directly in src/", () => {
+    const block = AGENTS.match(/## Folder map[\s\S]*?```\n([\s\S]*?)```/)?.[1] ?? "";
+    const mapped = [...block.matchAll(/^ {3}[├└]─ ([\w.-]+\.ts)\s/gm)].map((m) => m[1] as string);
+    expect(mapped).toContain("server.ts");
+    const actual = readdirSync(join(ROOT, "src"), { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".test.ts"))
+      .map((e) => e.name);
+    expect(mapped.sort(), "AGENTS.md's folder map and src/*.ts disagree").toEqual(actual.sort());
+  });
 });

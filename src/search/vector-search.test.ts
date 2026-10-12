@@ -185,6 +185,14 @@ describe("VectorSearch inputs", () => {
     expect(s.ids()).toEqual([good]);
   });
 
+  it("keeps an identical vector whose distance rounds just below 0", async () => {
+    const s = setup();
+    const v = new Float32Array([1 / 3, 1 / 7, 0.77, 0.123]);
+    s.putVector("a", await s.save("a"), v);
+    const [hit] = s.nearest({}, 10, "a", v);
+    expect(hit?.similarity).toBe(1);
+  });
+
   it("returns nothing for a zero query vector", async () => {
     const s = setup();
     await s.save("a", { away: 0 });

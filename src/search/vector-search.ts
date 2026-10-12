@@ -4,6 +4,8 @@ import type { SearchFilters } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 import { scope } from "./scope.js";
 
+const ROUNDING = 1e-6;
+
 /** Add sqlite-vec's functions (`vec_distance_cosine`) to a connection. */
 export function loadVectorFunctions(db: Database): void {
   load(db);
@@ -34,13 +36,16 @@ export class VectorSearch {
         `SELECT l.id AS id, CASE WHEN v.dims = ? THEN vec_distance_cosine(v.embedding, ?) END AS distance
          FROM links l
          JOIN link_vectors v ON v.owner_id = l.owner_id AND v.link_id = l.id AND v.model_key = ?
-         WHERE ${q.where} AND distance BETWEEN 0 AND 2
+         WHERE ${q.where} AND distance BETWEEN ${-ROUNDING} AND ${2 + ROUNDING}
          ORDER BY distance ASC, l.saved_at DESC, l.id DESC LIMIT ?`,
       )
       .all(vector.length, blob, this.modelKey, ...q.params, k) as {
       id: number;
       distance: number;
     }[];
-    return rows.map((r) => ({ id: String(r.id), similarity: 1 - r.distance }));
+    return rows.map((r) => ({
+      id: String(r.id),
+      similarity: Math.min(1, Math.max(-1, 1 - r.distance)),
+    }));
   }
 }

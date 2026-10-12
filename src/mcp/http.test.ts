@@ -8,6 +8,8 @@ import { addProfile, editProfile, getProfile, profileContext } from "../core/pro
 import { searchLinks } from "../core/search-links.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { createDeps } from "../deps.js";
+import { FakeEmbedder } from "../search/embedder.js";
+import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import { linkOutput } from "./output-schemas.js";
 
@@ -24,7 +26,7 @@ const identify: Identify = async (request) => {
 
 function freshDeps() {
   const db = openDatabase(":memory:");
-  const deps = { ...createDeps(db), now: () => NOW };
+  const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => NOW };
   for (const o of [A.owner, B.owner]) deps.store.ensureUser(o, o);
   return { db, deps };
 }

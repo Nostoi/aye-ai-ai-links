@@ -18,6 +18,8 @@ import type { searchLinks } from "../core/search-links.js";
 import type { changeTagKind } from "../core/tag-kind.js";
 import type { Link, Tag } from "../core/types.js";
 import { createDeps } from "../deps.js";
+import { FakeEmbedder } from "../search/embedder.js";
+import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import {
   type addProfileOutput,
@@ -43,7 +45,7 @@ const ERAS: Era[] = ["2025", "2026"];
 
 function freshApp() {
   const db = openDatabase(":memory:");
-  const deps = { ...createDeps(db), now: () => NOW };
+  const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => NOW };
   deps.store.ensureUser(A.owner, A.owner);
   const app = createApp({ deps, identify: async () => A }).app;
   return { db, deps, app };

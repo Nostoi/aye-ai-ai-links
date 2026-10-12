@@ -22,13 +22,16 @@ Dated 2026-10-11, for #39. Quotes are verbatim, fetched on 2026-10-11. This is a
 - The tests save both values and then read them back through `get_link`, `search_links` and a repeat `save_link`.
 - The compile-time tie checks field names, nullability and enums. It cannot see the values a field may take, so nothing here claims a mismatch is unreachable.
 
-## Strict objects, and what adding a field costs
+## Strict in the server, open in `tools/list`
 
-**Decision:** every object in an output schema is `z.strictObject`.
+**Decision** (issue comment 6115694120, superseding point 2 of comment 6115445970): every object in an output schema is `z.strictObject`, and `guarded` checks each result against it. `tools/list` shows the same schema with every `additionalProperties: false` removed (`advertisedOpen` in `output-schemas.ts`), so a client accepts extra keys. Enums are left closed.
 
-- zod advertises `additionalProperties: false` for `z.object` output too, but SDK 2.3.1 lets extra keys through when it checks a result. Probe: a result with extra keys returned success, Ajv run on the advertised schema refused it ("data must NOT have additional properties"), and `z.strictObject` made the SDK refuse it too ("Unrecognized key"). A lenient schema would silently break the spec's MUST.
-- **The cost:** adding a field to a result changes `tools/list`. A client that validates and still holds an earlier list will refuse a result with the new field until it lists tools again. The server is stateless, so the exposure is the window between a deploy and a client's refresh; how and when each client refreshes is not checked here. OpenAI's guide says: "Keep published tool names and schemas backward compatible. Add fields or tools without breaking existing contracts." and "If metadata changes, refresh the custom MCP server connection and rerun the evaluation set before submission." Source: https://developers.openai.com/plugins/build/mcp-server.md.
-- #33's `profile` key on `save_link` is the first such addition.
+- zod advertises `additionalProperties: false` for `z.object` output too, but SDK 2.3.1 lets extra keys through when it checks a result. Probe: a result with extra keys returned success, Ajv run on the advertised schema refused it ("data must NOT have additional properties"), and `z.strictObject` made the SDK refuse it too ("Unrecognized key").
+- **Why open:** per comment 6115694120, the TS SDK v1 client caches each tool's output validator when it lists tools. Ajv with that client's options as the reviewer's probe set them (`strict: false`, `validateFormats: true`, `validateSchema: false`, `allErrors: true`, plus `ajv-formats`; the same options SDK 2.3.1's `createDefaultAjvInstance` uses) refused a real `save_link` result with a key added to each object, under the strict schema: "data must NOT have additional properties". A field added in a deploy would then break each such session opened before it, after any write had committed. Whether Claude Code, Codex and Claude Desktop validate this way is not checked. OpenAI's guide says: "Keep published tool names and schemas backward compatible. Add fields or tools without breaking existing contracts." Source: https://developers.openai.com/plugins/build/mcp-server.md.
+- **One definition per shape:** SDK 2.3.1 builds the `tools/list` schema from `~standard.jsonSchema.output` (`convertOutputSchemaJson`, `mcp-DIH4cS6P.mjs`) and checks results with `~standard.validate` (`validateStandardSchema`, `src-Cqbh3MYc.mjs`). `advertisedOpen` changes only the first, so the SDK's own check stays strict. In `server.ts`, `register` takes each tool's schema once and passes it to both `registerTool` and `guarded`.
+- **Added fields:** #30's `snapshot` on `Link` and #33's `profile` key on `save_link` are the first. Each still updates the strict schema, but a validating client holding an earlier list still accepts the result.
+- **Enums:** adding an enum value still changes the contract, because a validating client holding an earlier list refuses the new value. #30's snapshot statuses are the first case.
+- **Tests:** in both eras, Ajv with the v1 client's options, compiled from `tools/list`, accepts a real result of every tool with a key added to every object in it, and the `get_link` schema refuses an unknown `state`.
 
 ## Errors stay text-only
 
@@ -46,10 +49,10 @@ Dated 2026-10-11, for #39. Quotes are verbatim, fetched on 2026-10-11. This is a
 - The SDK runs the handler, then `validateToolOutput`, then projects the result (`mcp-DIH4cS6P.mjs`, the `tools/call` handler). A mismatch there comes back as the SDK's "Output validation error: …" text, is not logged, and arrives after the write has committed (probe: `writes delta 1`).
 - Our check returns an `isError` result, which the SDK then skips, so the agent never sees that bare message after a committed write.
 - The message is the same for read tools, so it says "any change you asked for was saved".
-- A test forces a mismatch on `update_link` and asserts the log, the message, one store write, and the committed row.
+- A test forces an extra key on `update_link`'s link, and in a second case inside a tag, and asserts the log names the key, the message, one store write, and the committed row.
 
 ## Hand-off to #33
 
-- #33's tools are `get_profile`, `add_profile` and `edit_profile`. Each declares a strict schema from the exports of `output-schemas.ts`, and `save_link`'s `profile` key extends `saveLinkOutput`.
+- #33's tools are `get_profile`, `add_profile` and `edit_profile`. Each declares a strict schema from the exports of `output-schemas.ts` and registers through `register`, and `save_link`'s `profile` key extends `saveLinkOutput`.
 - #33's earlier decision of "no `outputSchema`" is superseded by this issue.
 - The test enumerates `tools/list`, so a new tool without an `outputSchema` or without samples fails it.

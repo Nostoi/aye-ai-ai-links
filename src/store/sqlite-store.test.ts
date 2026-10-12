@@ -472,4 +472,23 @@ describe("SqliteStore atomicity", () => {
     await expect(p).rejects.toThrow(/boom/);
     expect(await state(s)).toEqual(before);
   });
+
+  it("claimSurfaced marks nothing when a later mark in the same call fails", async () => {
+    const s = setup();
+    await s.h.addOwner("a");
+    const first = await saveLink(s.deps, "a", { url: "https://ex.com/1", savedBy: "x" });
+    const second = await saveLink(s.deps, "a", { url: "https://ex.com/2", savedBy: "x" });
+    const before = await state(s);
+    s.db.exec(
+      `CREATE TRIGGER boom BEFORE UPDATE OF last_surfaced_at ON links WHEN NEW.id = ${second.link.id}
+       BEGIN SELECT RAISE(ABORT, 'boom'); END`,
+    );
+    const p = s.h.store.claimSurfaced("a", [first.link.id, second.link.id], {
+      at: NOW,
+      notSurfacedAfter: NOW,
+      now: NOW,
+    });
+    await expect(p).rejects.toThrow(/boom/);
+    expect(await state(s)).toEqual(before);
+  });
 });

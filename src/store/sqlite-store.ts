@@ -5,7 +5,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "../core/snapshot-store.js";
-import type { LinkStore } from "../core/store.js";
+import type { LinkStore, SurfacedClaim } from "../core/store.js";
 import type {
   Labelled,
   Link,
@@ -137,6 +137,19 @@ export class SqliteStore implements LinkStore, SnapshotStore {
       )
       .get(...values, owner, key, expectedKind) as TagRow | undefined;
     return row ? { ...row, pinned: row.pinned === 1 } : null;
+  }
+
+  async listLinks(owner: OwnerId) {
+    return this.db.transaction(() => this.readAll(owner))();
+  }
+
+  async claimSurfaced(
+    owner: OwnerId,
+    ids: string[],
+    when: { at: Date; notSurfacedAfter: Date; now: Date },
+  ): Promise<SurfacedClaim[]> {
+    const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
+    return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
   }
 
   async dueSnapshots(now: Date, limit: number) {
@@ -311,6 +324,35 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     return this.read(owner, id);
   }
 
+  private claimSync(
+    owner: OwnerId,
+    ids: number[],
+    { at, notSurfacedAfter, now }: { at: Date; notSurfacedAfter: Date; now: Date },
+  ): SurfacedClaim[] {
+    const previous = this.db.prepare(
+      `SELECT last_surfaced_at FROM links
+       WHERE id = ? AND owner_id = ? AND state = 'active'
+         AND (snoozed_until IS NULL OR snoozed_until <= ?)
+         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)`,
+    );
+    const mark = this.db.prepare(
+      "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ?",
+    );
+    const claimed: SurfacedClaim[] = [];
+    for (const id of ids) {
+      const row = previous.get(id, owner, toMs(now), toMs(notSurfacedAfter)) as
+        | { last_surfaced_at: number | null }
+        | undefined;
+      if (!row) continue;
+      mark.run(toMs(at), id, owner);
+      claimed.push({
+        link: this.mustRead(owner, id),
+        previousSurfacedAt: fromMs(row.last_surfaced_at),
+      });
+    }
+    return claimed;
+  }
+
   private attachTags(owner: OwnerId, linkId: number, tags: LinkTag[]): void {
     const create = this.db.prepare(
       `INSERT INTO tags (owner_id, key, name, kind, kind_source, pinned) VALUES (?, ?, ?, ?, ?, 0)
@@ -338,45 +380,80 @@ export class SqliteStore implements LinkStore, SnapshotStore {
       .get(id, owner) as LinkRow | undefined;
     if (!row) return null;
     const tags = this.db
-      .prepare(
-        `SELECT t.key AS key, t.name AS name, lt.source AS source, t.kind AS kind,
-           t.kind_source AS kindSource
-         FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id
-         WHERE lt.link_id = ? AND lt.owner_id = ? ORDER BY lt.position`,
-      )
+      .prepare(`${TAG_SELECT} WHERE lt.link_id = ? AND lt.owner_id = ? ORDER BY lt.position`)
       .all(id, owner) as LinkTag[];
     const snap = this.db
-      .prepare(
-        `SELECT fetch_status, fetched_at, title, description, image_url
-         FROM snapshots WHERE link_id = ? AND owner_id = ?`,
-      )
+      .prepare(`${SNAPSHOT_SELECT} WHERE link_id = ? AND owner_id = ?`)
       .get(id, owner) as SnapshotRow | undefined;
-    return {
-      id: String(row.id),
-      url: row.url,
-      urlKey: row.url_key,
-      title: row.title,
-      summary: row.summary,
-      why:
-        row.why_text !== null && row.why_source !== null
-          ? { text: row.why_text, source: row.why_source }
-          : null,
-      tags,
-      savedAt: new Date(row.saved_at),
-      savedBy: row.saved_by,
-      lastOpenedAt: fromMs(row.last_opened_at),
-      lastSurfacedAt: fromMs(row.last_surfaced_at),
-      snoozedUntil: fromMs(row.snoozed_until),
-      state: row.state,
-      snapshot: snap
-        ? {
-            status: snap.fetch_status,
-            fetchedAt: fromMs(snap.fetched_at),
-            title: snap.title,
-            description: snap.description,
-            imageUrl: snap.image_url,
-          }
-        : null,
-    };
+    return toLink(row, tags, snap);
   }
+
+  /** The owner's links in three queries, not three per link. */
+  private readAll(owner: OwnerId): Link[] {
+    const rows = this.db
+      .prepare("SELECT * FROM links WHERE owner_id = ? ORDER BY id")
+      .all(owner) as LinkRow[];
+    const tags = new Map<number, LinkTag[]>();
+    const tagRows = this.db
+      .prepare(`${TAG_SELECT} WHERE lt.owner_id = ? ORDER BY lt.link_id, lt.position`)
+      .all(owner) as (LinkTag & { linkId: number })[];
+    for (const tag of tagRows) {
+      const list = tags.get(tag.linkId) ?? [];
+      list.push(tag);
+      tags.set(tag.linkId, list);
+    }
+    const snaps = new Map(
+      (
+        this.db.prepare(`${SNAPSHOT_SELECT} WHERE owner_id = ?`).all(owner) as (SnapshotRow & {
+          link_id: number;
+        })[]
+      ).map((s) => [s.link_id, s]),
+    );
+    return rows.map((row) => toLink(row, tags.get(row.id) ?? [], snaps.get(row.id)));
+  }
+}
+
+const TAG_SELECT = `SELECT lt.link_id AS linkId, t.key AS key, t.name AS name, lt.source AS source,
+    t.kind AS kind, t.kind_source AS kindSource
+  FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id`;
+
+const SNAPSHOT_SELECT = `SELECT link_id, fetch_status, fetched_at, title, description, image_url
+  FROM snapshots`;
+
+/** Only the LinkTag fields of `tagRows` are kept; TAG_SELECT also reads the link id. */
+function toLink(row: LinkRow, tagRows: LinkTag[], snap: SnapshotRow | undefined): Link {
+  const tags = tagRows.map(({ key, name, source, kind, kindSource }) => ({
+    key,
+    name,
+    source,
+    kind,
+    kindSource,
+  }));
+  return {
+    id: String(row.id),
+    url: row.url,
+    urlKey: row.url_key,
+    title: row.title,
+    summary: row.summary,
+    why:
+      row.why_text !== null && row.why_source !== null
+        ? { text: row.why_text, source: row.why_source }
+        : null,
+    tags,
+    savedAt: new Date(row.saved_at),
+    savedBy: row.saved_by,
+    lastOpenedAt: fromMs(row.last_opened_at),
+    lastSurfacedAt: fromMs(row.last_surfaced_at),
+    snoozedUntil: fromMs(row.snoozed_until),
+    state: row.state,
+    snapshot: snap
+      ? {
+          status: snap.fetch_status,
+          fetchedAt: fromMs(snap.fetched_at),
+          title: snap.title,
+          description: snap.description,
+          imageUrl: snap.image_url,
+        }
+      : null,
+  };
 }

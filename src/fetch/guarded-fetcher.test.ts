@@ -1,3 +1,4 @@
+import diagnosticsChannel from "node:diagnostics_channel";
 import type { LookupAddress } from "node:dns";
 import http from "node:http";
 import net, { type AddressInfo } from "node:net";
@@ -34,7 +35,7 @@ const resolve: Resolve = async (hostname) => {
 
 const allowSite = (ip: string) => ip === "::1" || isPublicAddress(ip);
 
-// Ports that the Fetch standard blocks. Port 22 is blocked too but needs root to bind.
+// Ports that the Fetch standard blocks. Nothing binds them: a parallel test run may hold them.
 const BLOCKED_PORTS = [6000, 10080];
 
 let target: http.Server;
@@ -45,7 +46,6 @@ let site: http.Server;
 let sitePort = 0;
 let siteHits: string[] = [];
 let lastRequestHeaders: http.IncomingHttpHeaders = {};
-const extraSites: http.Server[] = [];
 
 const BOMB_BYTES = 20_000_000;
 const bomb = zlib.gzipSync(Buffer.alloc(BOMB_BYTES, 0x20));
@@ -139,12 +139,12 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   }
 }
 
-function listen(server: http.Server, host: string, port = 0): Promise<number> {
+function listen(server: http.Server, host: string): Promise<number> {
   return new Promise((done, fail) => {
     server.once("error", (err) =>
-      fail(new Error(`test server could not listen on [${host}]:${port}: ${err.message}`)),
+      fail(new Error(`test server could not listen on [${host}]: ${err.message}`)),
     );
-    server.listen(port, host, () => done((server.address() as AddressInfo).port));
+    server.listen(0, host, () => done((server.address() as AddressInfo).port));
   });
 }
 
@@ -162,15 +162,10 @@ beforeAll(async () => {
   targetPort = await listen(target, "127.0.0.1");
   site = http.createServer(handle);
   sitePort = await listen(site, "::1");
-  for (const port of BLOCKED_PORTS) {
-    const extra = http.createServer(handle);
-    await listen(extra, "::1", port);
-    extraSites.push(extra);
-  }
 });
 
 afterAll(async () => {
-  await Promise.all([target, site, ...extraSites].map(close));
+  await Promise.all([target, site].map(close));
 });
 
 beforeEach(() => {
@@ -221,17 +216,39 @@ describe("a page on an allowed address", () => {
     expect(lastRequestHeaders["accept-encoding"]).toBe("gzip, deflate, br");
   });
 
+  async function connectedPorts(host: string, run: () => Promise<FetchOutcome>) {
+    const ports: string[] = [];
+    const onConnect = (message: unknown) => {
+      const { hostname, port } = (message as { connectParams: { hostname: string; port: string } })
+        .connectParams;
+      if (hostname === host) ports.push(port);
+    };
+    diagnosticsChannel.subscribe("undici:client:beforeConnect", onConnect);
+    try {
+      return { outcome: await run(), ports };
+    } finally {
+      diagnosticsChannel.unsubscribe("undici:client:beforeConnect", onConnect);
+    }
+  }
+
   it.each(BLOCKED_PORTS)(
-    "is fetched on port %i, which the Fetch standard blocks (any port on a public address)",
+    "connects to port %i, which the Fetch standard blocks (any port on a public address)",
     async (port) => {
-      const page = await ok(fetcherWith().fetch(`http://site.test:${port}/ok`));
-      expect(page.html).toBe(html("ok"));
+      const { outcome, ports } = await connectedPorts("site.test", () =>
+        fetcherWith().fetch(`http://site.test:${port}/ok`),
+      );
+      expect(outcome.kind).not.toBe("refused");
+      expect(ports).toEqual([String(port)]);
     },
   );
 
-  it.each(BLOCKED_PORTS)("follows a redirect to port %i", async (port) => {
-    const page = await ok(fetcherWith().fetch(siteUrl(`/r-port/${port}`)));
-    expect(page.finalUrl).toBe(`http://site.test:${port}/ok`);
+  it.each(BLOCKED_PORTS)("follows a redirect to port %i and connects to it", async (port) => {
+    const { outcome, ports } = await connectedPorts("site.test", () =>
+      fetcherWith().fetch(siteUrl(`/r-port/${port}`)),
+    );
+    expect(siteHits).toEqual([`/r-port/${port}`]);
+    expect(outcome.kind).not.toBe("refused");
+    expect(ports).toEqual([String(sitePort), String(port)]);
   });
 
   it.each([

@@ -53,7 +53,7 @@ Write a fact in its home and link to it from elsewhere; don't copy it.
 
 ## Folder map
 
-Folders marked *(planned)* don't exist yet; create them in the phase that needs them.
+Folders marked *(planned)* don't exist yet; create them in the phase that needs them, and drop the mark.
 
 ```
 aye-ai-ai-links/
@@ -64,16 +64,22 @@ aye-ai-ai-links/
 ├─ .githooks/     pre-push runs `npm run check`
 ├─ .github/       CI: `npm run check` on pull requests
 ├─ deploy/        LaunchAgent plist and `deploy.sh`
-└─ src/ (planned)
+└─ src/
    ├─ core/       rules and use cases
    ├─ store/      SQLite persistence (swappable)
    ├─ search/     keyword + meaning search
-   ├─ fetch/      page snapshots
-   ├─ auth/       sessions, agent keys, OAuth
+   ├─ fetch/      page snapshots (has its own `AGENTS.md`)
+   ├─ auth/       agent keys and the caller identity (sessions, OAuth to come)
+   ├─ http/       request rate limiting
+   ├─ cli/        the `keys` command for agent keys
    ├─ mcp/        AI connector door
-   ├─ api/        JSON API door
-   ├─ web/        web page door
-   └─ server.ts
+   ├─ api/        JSON API door (planned)
+   ├─ web/        web page door (planned)
+   ├─ app.ts          mounts every door on one HTTP app
+   ├─ deps.ts         builds store, search and profile on one database
+   ├─ config.ts       reads `AYE_` settings from the environment
+   ├─ start-server.ts opens the database, starts the server and snapshot runner
+   └─ server.ts       process entry point: signals and shutdown
 ```
 
 Tests sit next to the code they test: `foo.ts` → `foo.test.ts`.
@@ -94,5 +100,5 @@ Use Node 22 (`nvm use` reads `.nvmrc`).
 - **Branch per issue**, pull request into `main`, and `npm run check` passing before push. Merge only when CI is green.
 - **Folder `AGENTS.md` files** are added only when a folder has rules that don't apply elsewhere (e.g. `src/web/` design rules, `src/mcp/` tool-description style). Keep them short. Update them in the same change that changes the rule.
 - **AGENTS.md only.** Do not add `CLAUDE.md` or `CLAUDE.local.md` anywhere in the repo. Claude Code reads `AGENTS.md` only when no `CLAUDE.md` or `CLAUDE.local.md` exists in the working directory or above it (Claude Code v2.1.277+). To confirm, an interactive session shows a line such as `no CLAUDE.md found; AGENTS.md loaded: <path>`. A `CLAUDE.md` in a folder above the clone also blocks it.
-- **README in the same PR.** A PR that changes what a user can do, how they set it up or connect an AI, or moves a feature out of "Still to come", updates `README.md` in the same PR. `src/readme.test.ts` catches a missing tool, or an `AYE_` setting read in `src/`; the rest is on the PR author and its reviewers.
+- **README in the same PR.** A PR that changes what a user can do, how they set it up or connect an AI, or moves a feature out of "Still to come", updates `README.md` in the same PR. `src/readme.test.ts` catches a missing tool, an `AYE_` setting read in `src/`, or a `src/` folder missing from the folder map (a new folder updates the map in the same PR); the rest is on the PR author and its reviewers.
 - **Secrets** go in `.env` (git-ignored), never in the repo.

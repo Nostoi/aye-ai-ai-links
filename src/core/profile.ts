@@ -122,6 +122,11 @@ export async function addProfile(
   writtenBy: string,
   input: { addNotes?: Labelled[]; addFocus?: Labelled[] },
 ): Promise<ProfileWrite> {
+  if (!input.addNotes?.length && !input.addFocus?.length) {
+    throw invalid(
+      "Nothing was given to add: send addNotes or addFocus. To edit or remove notes, use edit_profile. Nothing was changed.",
+    );
+  }
   const changes = noChanges();
   changes.addNotes = (input.addNotes ?? []).map((n) => labelled(n, MAX_NOTE_CHARS, "profile note"));
   changes.addFocus = (input.addFocus ?? []).map((f) => labelled(f, MAX_FOCUS_CHARS, "focus entry"));
@@ -135,6 +140,11 @@ export async function editProfile(
   writtenBy: string,
   input: { editNotes?: { id: string; text: string; source: Source }[]; removeNotes?: string[] },
 ): Promise<Profile> {
+  if (!input.editNotes?.length && !input.removeNotes?.length) {
+    throw invalid(
+      "Nothing was given to change: send editNotes or removeNotes. To add notes or focus, use add_profile. Nothing was changed.",
+    );
+  }
   const edits = (input.editNotes ?? []).map((e) => ({
     id: e.id,
     ...labelled(e, MAX_NOTE_CHARS, "profile note"),

@@ -109,6 +109,16 @@ describe("profile use cases", () => {
       expect(r.addedFocusIds).toEqual([r.recentFocus[0]?.id]);
     });
 
+    it("refuses an add with nothing to apply, names edit_profile, and writes nothing", async () => {
+      for (const input of [{}, { addNotes: [], addFocus: [] }]) {
+        const e = await code(addProfile(deps, A, W, input));
+        expect(e?.code).toBe("invalid_input");
+        expect(e?.message).toContain("edit_profile");
+      }
+      expect(await notes()).toEqual([]);
+      expect(await recentFocus(deps, A)).toEqual([]);
+    });
+
     it("refuses blank text and invalid sources and writes nothing", async () => {
       const bad = [
         {
@@ -344,10 +354,14 @@ describe("profile use cases", () => {
       expect((await notes()).map((n) => n.text)).toEqual(["keep", "other"]);
     });
 
-    it("returns the profile unchanged for an empty edit", async () => {
+    it("refuses an edit with nothing to apply, names add_profile, and changes nothing", async () => {
       await addNote("n");
-      const r = await editProfile(deps, A, W, {});
-      expect(r.notes.map((n) => n.text)).toEqual(["n"]);
+      for (const input of [{}, { editNotes: [], removeNotes: [] }]) {
+        const e = await code(editProfile(deps, A, W, input));
+        expect(e?.code).toBe("invalid_input");
+        expect(e?.message).toContain("add_profile");
+      }
+      expect((await notes()).map((n) => n.text)).toEqual(["n"]);
     });
 
     describe("when the note's source changes between the read and the write", () => {

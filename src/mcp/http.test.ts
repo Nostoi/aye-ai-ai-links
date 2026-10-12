@@ -709,6 +709,24 @@ describe("MCP door over HTTP", () => {
       expect(noteTexts(await profileOf("key-b"))).toEqual(["b-only"]);
     });
 
+    it("refuses a call carrying only the other tool's fields, names that tool, and writes nothing", async () => {
+      await call(app, "key-a", "add_profile", {
+        addNotes: [{ text: "n", source: "stated" }],
+        addFocus: [{ text: "f", source: "stated" }],
+      });
+      const wrongEdit = await call(app, "key-a", "edit_profile", {
+        addNotes: [{ text: "lost", source: "stated" }],
+      });
+      const wrongAdd = await call(app, "key-a", "add_profile", { removeNotes: ["1"] });
+      expect(wrongEdit.body.result.isError).toBe(true);
+      expect(wrongEdit.body.result.content[0].text).toContain("add_profile");
+      expect(wrongAdd.body.result.isError).toBe(true);
+      expect(wrongAdd.body.result.content[0].text).toContain("edit_profile");
+      const got = (await profileOf("key-a")).body.result.structuredContent;
+      expect(got.notes.map((n: Json) => n.text)).toEqual(["n"]);
+      expect(got.recentFocus.map((f: Json) => f.text)).toEqual(["f"]);
+    });
+
     it("refuses an inferred edit of a stated note and leaves it as it was", async () => {
       await call(app, "key-a", "add_profile", { addNotes: [{ text: "fact", source: "stated" }] });
       const res = await call(app, "key-a", "edit_profile", {

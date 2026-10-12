@@ -654,6 +654,61 @@ describe("startServer", () => {
       ]);
     });
 
+    it("starts no sweep or embedding when a poll tick lands during the drain", async () => {
+      await seed("https://example.com/backlog");
+      const pipeline = fakePipeline();
+      const embedded: string[][] = [];
+      const embedder = {
+        embedQuery: (t: string, s?: AbortSignal) => pipeline.embedder.embedQuery(t, s),
+        embedDocuments: (texts: string[]) => {
+          embedded.push(texts);
+          return pipeline.embedder.embedDocuments(texts);
+        },
+      };
+      const fast = gate();
+      const slow = gate();
+      const entered = { fast: gate(), slow: gate() };
+      const holdBy = (deps: AppDeps) => {
+        const store = Object.create(deps.store);
+        store.insertIfAbsent = async (...args: Parameters<AppDeps["store"]["insertIfAbsent"]>) => {
+          const which = args[1].url === "https://example.com/fast" ? "fast" : "slow";
+          entered[which].open();
+          await (which === "fast" ? fast : slow).opened;
+          return deps.store.insertIfAbsent(...args);
+        };
+        return { ...deps, store };
+      };
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { port, stop } = await start({
+          ...pipeline,
+          embedder,
+          drainMs: 60_000,
+          decorateDeps: holdBy,
+        });
+        while (vectorCount() !== 1) await new Promise((r) => setImmediate(r));
+        const save = (url: string) =>
+          post(port, {
+            ...SAVE,
+            params: { name: "save_link", arguments: { url } },
+          });
+        const saves = [save("https://example.com/fast"), save("https://example.com/slow")];
+        await Promise.all([entered.fast.opened, entered.slow.opened]);
+        const stopping = stop();
+        fast.open();
+        while (rows().length < 2) await new Promise((r) => setImmediate(r));
+        await vi.advanceTimersByTimeAsync(15_000);
+        for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+        expect(embedded).toHaveLength(1);
+        expect(vectorCount()).toBe(1);
+        slow.open();
+        await stopping;
+        await Promise.allSettled(saves);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("stops within the settle bound while a document embedding hangs, and embeds nothing more", async () => {
       await seed("https://example.com/one");
       await seed("https://example.com/two");

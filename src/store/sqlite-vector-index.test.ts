@@ -184,6 +184,18 @@ describe("SqliteVectorIndex.indexPage", () => {
     ]);
   });
 
+  it("returns tags in position order, not tag-id order", async () => {
+    const h = setup();
+    await h.save(A, { url: "https://ex.com/a", urlKey: "ex.com/a", tags: [tag("Alpha")] });
+    await h.save(A, {
+      url: "https://ex.com/b",
+      urlKey: "ex.com/b",
+      tags: [tag("Beta"), tag("Alpha")],
+    });
+    const rows = await h.index.indexPage(KEY, null, 10);
+    expect(rows.map((r) => r.tags)).toEqual([["Alpha"], ["Beta", "Alpha"]]);
+  });
+
   it("returns nulls and no tags for a bare link with a pending snapshot", async () => {
     const h = setup();
     await h.save(A);

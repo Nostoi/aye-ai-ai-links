@@ -341,6 +341,38 @@ describe("createVectorIndexer: failures (D-T7, D-T7b)", () => {
     expect(h.store.vectors.get("1")?.hash).toBe(h.hashOf(1));
   });
 
+  it("forgets a failure when the link's document is back to the one already stored", async () => {
+    const h = setup();
+    h.store.add(1, { title: "Alpha" });
+    await h.indexer.sweep();
+    h.store.edit(1, { title: "Beta" });
+    h.embedder.fail = "Beta";
+    await h.indexer.sweep();
+    h.store.edit(1, { title: "Alpha" });
+    await h.indexer.sweep();
+    expect(await h.scans(h.indexer.sweep)).toBe(0);
+  });
+
+  it("starts the backoff over when the document changes", async () => {
+    const h = setup();
+    h.store.add(1, { title: "Alpha" });
+    h.embedder.fail = "ex.com/1";
+    await h.indexer.sweep();
+    for (const wait of [1, 2]) {
+      h.clock.ms += wait * RETRY_BASE_MS;
+      await h.indexer.sweep();
+    }
+    h.store.edit(1, { title: "Beta" });
+    await h.indexer.sweep();
+    const tries = h.embedder.calls.length;
+    h.clock.ms += RETRY_BASE_MS - 1;
+    await h.indexer.sweep();
+    expect(h.embedder.calls).toHaveLength(tries);
+    h.clock.ms += 1;
+    await h.indexer.sweep();
+    expect(h.embedder.calls).toHaveLength(tries + 1);
+  });
+
   it("doubles the wait after each failure, up to an hour", async () => {
     const h = setup();
     h.store.add(1);
@@ -488,6 +520,25 @@ describe("createVectorIndexer: lifecycle", () => {
     await stopping;
     expect(h.embedded()).toEqual([["1"]]);
     expect([...h.store.vectors.keys()]).toEqual(["1"]);
+  });
+
+  it("D-T9: a sweep that ends after stop arms no timer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const h = setup({ pollMs: 1000 });
+    h.store.add(1);
+    h.embedder.hold = "ex.com/1";
+    h.indexer.start();
+    await vi.waitFor(() => expect(h.embedder.held).not.toBeNull());
+    const stopping = h.indexer.stop();
+    h.embedder.release();
+    await stopping;
+    await flush();
+    expect(vi.getTimerCount()).toBe(0);
+    h.store.changes++;
+    const reads = h.store.pageCalls.length;
+    await vi.advanceTimersByTimeAsync(5000);
+    await flush();
+    expect(h.store.pageCalls).toHaveLength(reads);
   });
 
   it("D-T9: after quiesce nothing new starts, and start does nothing", async () => {

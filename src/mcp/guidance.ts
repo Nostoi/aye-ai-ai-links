@@ -12,7 +12,7 @@ Saving:
 
 Dates are full ISO-8601 timestamps with an offset or Z, such as 2026-10-01T09:30:00Z.
 
-Searching: describe the link as the owner remembers it. A vague description works, not only words the link contains, because links are also matched by meaning. A blank query lists the newest links.
+Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link, because links are also matched by meaning. Results are ranked, not filtered, so check that each one fits and say so when none does. A blank query lists the newest links.
 
 Profile: get_profile (or save_link's profile) has notes about the owner and what they are working on. Read it before you infer a why or tags. Label what you add with the same stated, asked or inferred rule, and present inferred notes to the owner as guesses. When the owner says what they are working on, add a focus entry with add_profile. Change or remove a note with edit_profile only when the owner asks or confirms.`;
 
@@ -42,7 +42,7 @@ Changing the kind clears a project's done status, so turning a project into a to
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
-Describe what you remember about the link. Exact words and a vague description ("that article about home batteries") both work: links are matched by their words and by meaning. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back.`;
+Use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link: links are matched by their words and by meaning. Results are ranked, not filtered: check that each one fits, and say so when none does. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back.`;
 
 export const GET_LINK = `Get one saved link by its id, with its why, tags, state and page snapshot. Use search_links to find an id.
 

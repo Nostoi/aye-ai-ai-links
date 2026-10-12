@@ -13,7 +13,7 @@ describe("guidance on a tag's kindSource", () => {
 
   it("tells agents in the shared instructions and save_link that a tag's source also labels its kind", () => {
     const rule =
-      'When you send kind, source also labels the kind: send kind with "stated" only if the owner said what kind it is; otherwise leave kind out, or send it with source "inferred".';
+      'When you send kind, source also labels the kind: send kind with "stated" or "asked" only if the owner gave the kind; otherwise leave kind out, or send it with source "inferred".';
     for (const text of [INSTRUCTIONS, SAVE_LINK]) expect(text).toContain(rule);
   });
 

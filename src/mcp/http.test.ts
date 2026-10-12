@@ -133,6 +133,20 @@ describe("MCP door over HTTP", () => {
     expect(head).toMatch(/reuse/i);
   });
 
+  it("tells agents on both tag-writing tools that only the owner's word may label a kind", async () => {
+    const list = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
+    for (const name of ["save_link", "update_link"]) {
+      const tool = list.body.result.tools.find((t: Json) => t.name === name);
+      const kind = tool.inputSchema.properties.tags.anyOf
+        ? tool.inputSchema.properties.tags.anyOf.find((s: Json) => s.type === "array").items
+            .properties.kind
+        : tool.inputSchema.properties.tags.items.properties.kind;
+      expect(kind.description, name).toContain(
+        '"stated" or "asked" only if the owner gave the kind',
+      );
+    }
+  });
+
   it("includes instructions in the modern server/discover result", async () => {
     const res = await post(
       app,

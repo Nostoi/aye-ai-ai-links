@@ -70,7 +70,9 @@ const tags = z.array(
     kind: z
       .enum(TAG_KINDS)
       .optional()
-      .describe('If sent, source also labels the kind: "stated" only if the owner said the kind.'),
+      .describe(
+        'If sent, source also labels the kind: "stated" or "asked" only if the owner gave the kind.',
+      ),
   }),
 );
 

@@ -2,7 +2,7 @@
 
 import { TEXT_CHARS } from "../core/snapshot-text.js";
 
-const KIND_SOURCE_RULE = `When you send kind, source also labels the kind: send kind with "stated" only if the owner said what kind it is; otherwise leave kind out, or send it with source "inferred".`;
+const KIND_SOURCE_RULE = `When you send kind, source also labels the kind: send kind with "stated" or "asked" only if the owner gave the kind; otherwise leave kind out, or send it with source "inferred".`;
 
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 

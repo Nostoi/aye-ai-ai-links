@@ -92,10 +92,13 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    keys() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/keys-main.js" "$@"; }
    keys create codex
    keys list
-   keys revoke codex
    ```
 
-   `create` prints the key once, so store it straight away.
+   `create` prints the key once, so store it straight away. To stop a key working, revoke it:
+
+   ```sh
+   keys revoke codex
+   ```
 
    New keys belong to the owner named by `AYE_OWNER` and `AYE_OWNER_NAME`, which default to `owner` and `Owner`. Leave them unset for a library of your own.
 

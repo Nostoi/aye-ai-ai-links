@@ -1,7 +1,12 @@
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { updateLink } from "../core/links.js";
-import { at, describeSnapshotStoreContract, record } from "../core/snapshot-store-contract.js";
+import {
+  at,
+  describeSnapshotStoreContract,
+  newLink,
+  record,
+} from "../core/snapshot-store-contract.js";
 import { FtsSearch } from "../search/fts-search.js";
 import { openDatabase } from "./database.js";
 import { MIGRATIONS, migrate } from "./migrations.js";
@@ -24,6 +29,36 @@ function fresh(): { db: Db; store: SqliteStore } {
 describeSnapshotStoreContract("SqliteStore snapshots", () => {
   const { store } = fresh();
   return { store, addOwner: (o) => store.ensureUser(o, o) };
+});
+
+describe("lease columns", () => {
+  const row = (db: Db) =>
+    db.prepare("SELECT attempts, lease_token AS token FROM snapshots WHERE link_id = 1").get();
+
+  it("holds the attempt and moves the token at lease, record and release, before any record", async () => {
+    const { db, store } = fresh();
+    await store.ensureUser("a", "a");
+    await store.insertIfAbsent("a", newLink(1, at(0)));
+    expect(row(db)).toEqual({ attempts: 0, token: 0 });
+    const l = await store.leaseSnapshot("a", "1", at(1), at(100));
+    expect(row(db)).toEqual({ attempts: 1, token: 1 });
+    expect(l?.claim).toBe(1);
+    await store.releaseSnapshot("a", "1", 1, at(2));
+    expect(row(db)).toEqual({ attempts: 0, token: 2 });
+    await store.leaseSnapshot("a", "1", at(2), at(100));
+    await store.recordSnapshot("a", "1", 3, record());
+    expect(row(db)).toEqual({ attempts: 1, token: 4 });
+  });
+
+  it("migration 6 adds the token to existing snapshots as 0, keeping their rows", () => {
+    const db = legacy();
+    migrate(db, MIGRATIONS.slice(0, 5));
+    const before = db.prepare("SELECT * FROM snapshots ORDER BY link_id").all();
+    migrate(db);
+    const after = db.prepare("SELECT * FROM snapshots ORDER BY link_id").all();
+    expect(after).toEqual(before.map((r) => ({ ...(r as object), lease_token: 0 })));
+    expect(after).toHaveLength(2);
+  });
 });
 
 /** The migration that adds `snapshots`; everything before it is the schema it starts from. */

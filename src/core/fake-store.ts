@@ -1,4 +1,9 @@
-import type { SnapshotLease, SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
+import {
+  hasConsistentSchedule,
+  type SnapshotLease,
+  type SnapshotRecord,
+  type SnapshotStore,
+} from "./snapshot-store.js";
 import type { LinkStore } from "./store.js";
 import type {
   Labelled,
@@ -14,6 +19,8 @@ import type {
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
 export class FakeStore implements LinkStore, SnapshotStore {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
+  /** The lease token of each snapshot, by owner then link id; absent means 0. */
+  private tokens = new Map<OwnerId, Map<string, number>>();
   private links = new Map<OwnerId, Map<string, Link>>();
   private tags = new Map<OwnerId, Map<string, Tag>>();
   private nextId = 1;
@@ -132,15 +139,43 @@ export class FakeStore implements LinkStore, SnapshotStore {
     const due = s?.nextFetchAt && s.nextFetchAt.getTime() <= now.getTime();
     if (!s || !due || !["pending", "retrying"].includes(s.status)) return null;
     s.nextFetchAt = new Date(until);
+    s.attempts += 1;
     const url = (this.owned(owner).get(linkId) as Link).url;
-    return { url, attempts: s.attempts, claim: until.getTime() };
+    return { url, attempts: s.attempts, claim: this.bumpToken(owner, linkId) };
   }
 
   async recordSnapshot(owner: OwnerId, linkId: string, claim: number, result: SnapshotRecord) {
     const mine = this.snapshotsOf(owner);
-    if (mine.get(linkId)?.nextFetchAt?.getTime() !== claim) return false;
+    if (!mine.has(linkId) || this.tokenOf(owner, linkId) !== claim) return false;
+    if (!hasConsistentSchedule(result)) return false;
     mine.set(linkId, structuredClone(result));
+    this.bumpToken(owner, linkId);
     return true;
+  }
+
+  async releaseSnapshot(owner: OwnerId, linkId: string, claim: number, now: Date) {
+    const s = this.snapshots.get(owner)?.get(linkId);
+    if (!s || this.tokenOf(owner, linkId) !== claim) return false;
+    if (!["pending", "retrying"].includes(s.status)) return false;
+    s.attempts -= 1;
+    s.nextFetchAt = new Date(now);
+    this.bumpToken(owner, linkId);
+    return true;
+  }
+
+  private tokenOf(owner: OwnerId, linkId: string): number {
+    return this.tokens.get(owner)?.get(linkId) ?? 0;
+  }
+
+  private bumpToken(owner: OwnerId, linkId: string): number {
+    let m = this.tokens.get(owner);
+    if (!m) {
+      m = new Map();
+      this.tokens.set(owner, m);
+    }
+    const next = this.tokenOf(owner, linkId) + 1;
+    m.set(linkId, next);
+    return next;
   }
 
   async getSnapshotText(owner: OwnerId, linkId: string) {

@@ -1,3 +1,4 @@
+import type { SnapshotLease, SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
 import type { LinkStore } from "./store.js";
 import type {
   Labelled,
@@ -11,7 +12,8 @@ import type {
 } from "./types.js";
 
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
-export class FakeStore implements LinkStore {
+export class FakeStore implements LinkStore, SnapshotStore {
+  private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   private links = new Map<OwnerId, Map<string, Link>>();
   private tags = new Map<OwnerId, Map<string, Tag>>();
   private nextId = 1;
@@ -54,6 +56,16 @@ export class FakeStore implements LinkStore {
   private view(owner: OwnerId, link: Link): Link {
     const catalog = this.catalogOf(owner);
     const out = structuredClone(link);
+    const s = this.snapshots.get(owner)?.get(link.id);
+    out.snapshot = s
+      ? {
+          status: s.status,
+          fetchedAt: s.fetchedAt && new Date(s.fetchedAt),
+          title: s.title,
+          description: s.description,
+          imageUrl: s.imageUrl,
+        }
+      : null;
     for (const t of out.tags) {
       const entry = catalog.get(t.key);
       t.name = entry?.name ?? t.name;
@@ -70,9 +82,69 @@ export class FakeStore implements LinkStore {
       }
     }
     this.ensureTags(owner, link.tags);
-    const stored: Link = { ...structuredClone(link), id: `link-${this.nextId++}` };
+    const stored: Link = { ...structuredClone(link), id: `link-${this.nextId++}`, snapshot: null };
     mine.set(stored.id, stored);
+    this.snapshotsOf(owner).set(stored.id, {
+      status: "pending",
+      attempts: 0,
+      nextFetchAt: new Date(link.savedAt),
+      fetchedAt: null,
+      title: null,
+      description: null,
+      imageUrl: null,
+      text: null,
+      lastError: null,
+    });
     return { link: this.view(owner, stored), created: true };
+  }
+
+  private snapshotsOf(owner: OwnerId): Map<string, SnapshotRecord> {
+    let m = this.snapshots.get(owner);
+    if (!m) {
+      m = new Map();
+      this.snapshots.set(owner, m);
+    }
+    return m;
+  }
+
+  async dueSnapshots(now: Date, limit: number) {
+    const due: { owner: OwnerId; linkId: string; at: number }[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [linkId, s] of mine) {
+        const at = s.nextFetchAt?.getTime();
+        if (at !== undefined && at <= now.getTime() && ["pending", "retrying"].includes(s.status)) {
+          due.push({ owner, linkId, at });
+        }
+      }
+    }
+    due.sort((a, b) => a.at - b.at);
+    return due.slice(0, limit).map(({ owner, linkId }) => ({ owner, linkId }));
+  }
+
+  async leaseSnapshot(
+    owner: OwnerId,
+    linkId: string,
+    now: Date,
+    until: Date,
+  ): Promise<SnapshotLease | null> {
+    if (until.getTime() <= now.getTime()) throw new RangeError("A lease must end after it starts.");
+    const s = this.snapshots.get(owner)?.get(linkId);
+    const due = s?.nextFetchAt && s.nextFetchAt.getTime() <= now.getTime();
+    if (!s || !due || !["pending", "retrying"].includes(s.status)) return null;
+    s.nextFetchAt = new Date(until);
+    const url = (this.owned(owner).get(linkId) as Link).url;
+    return { url, attempts: s.attempts, claim: until.getTime() };
+  }
+
+  async recordSnapshot(owner: OwnerId, linkId: string, claim: number, result: SnapshotRecord) {
+    const mine = this.snapshotsOf(owner);
+    if (mine.get(linkId)?.nextFetchAt?.getTime() !== claim) return false;
+    mine.set(linkId, structuredClone(result));
+    return true;
+  }
+
+  async getSnapshotText(owner: OwnerId, linkId: string) {
+    return this.snapshots.get(owner)?.get(linkId)?.text ?? null;
   }
 
   async get(owner: OwnerId, id: string) {

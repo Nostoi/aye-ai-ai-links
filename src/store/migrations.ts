@@ -7,9 +7,8 @@ import type { Database } from "better-sqlite3";
  * migration may rebuild a table (SQLite's 12-step procedure, steps 3-9). Two rules:
  * - Cascades do not run during a migration. One that removes parent rows must delete
  *   their child rows itself, or the foreign-key check refuses it.
- * - A rebuild of `links`, `tags` or `link_tags` must drop the 7 `link_search_*`
- *   triggers before the DROP and recreate them after the RENAME (frozen SQL, never
- *   `searchIndex()`), and refresh `link_search` if the rebuild changes searchable text.
+ * - A rebuild of a table must drop every trigger whose SQL names it before the DROP and
+ *   recreate them after the RENAME, copied from `sqlite_master` at the previous version
  */
 export const MIGRATIONS: string[] = [
   `
@@ -83,6 +82,7 @@ export const MIGRATIONS: string[] = [
 
   CREATE UNIQUE INDEX agent_keys_live_name ON agent_keys (owner_id, name) WHERE revoked_at IS NULL;
   `,
+  snapshots(),
 ];
 
 /**
@@ -117,6 +117,51 @@ function searchIndex(): string {
   ${trigger("link_search_lt_upd", "UPDATE ON link_tags", "SELECT OLD.link_id UNION SELECT NEW.link_id")}
   ${trigger("link_search_lt_del", "DELETE ON link_tags", "SELECT OLD.link_id")}
   ${trigger("link_search_tags_upd", "UPDATE OF name ON tags", tagLinks)}
+  `;
+}
+
+/** Page snapshots, and `snapshot_search`, a keyword index over the page's own text. */
+function snapshots(): string {
+  const row = (
+    r: string,
+  ) => `INSERT INTO snapshot_search (rowid, owner_id, title, description, text)
+    VALUES (${r}.link_id, ${r}.owner_id, coalesce(${r}.title, ''), coalesce(${r}.description, ''), coalesce(${r}.text, ''));`;
+  return `
+  CREATE TABLE snapshots (
+    link_id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    fetch_status TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_fetch_at INTEGER,
+    fetched_at INTEGER,
+    title TEXT,
+    description TEXT,
+    image_url TEXT,
+    text TEXT,
+    last_error TEXT,
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (fetch_status IN ('pending', 'retrying', 'ok', 'failed', 'refused', 'not_html',
+      'extract_timeout', 'extract_out_of_memory', 'extract_crashed'))
+  );
+  CREATE INDEX snapshots_due ON snapshots (next_fetch_at) WHERE next_fetch_at IS NOT NULL;
+
+  CREATE VIRTUAL TABLE snapshot_search USING fts5(
+    owner_id UNINDEXED, title, description, text,
+    tokenize = 'porter unicode61 remove_diacritics 2'
+  );
+  CREATE TRIGGER snapshot_search_ins AFTER INSERT ON snapshots BEGIN
+    ${row("NEW")}
+  END;
+  CREATE TRIGGER snapshot_search_upd AFTER UPDATE OF title, description, text ON snapshots BEGIN
+    DELETE FROM snapshot_search WHERE rowid = NEW.link_id;
+    ${row("NEW")}
+  END;
+  CREATE TRIGGER snapshot_search_del AFTER DELETE ON snapshots BEGIN
+    DELETE FROM snapshot_search WHERE rowid = OLD.link_id;
+  END;
+
+  INSERT INTO snapshots (link_id, owner_id, fetch_status, next_fetch_at)
+    SELECT id, owner_id, 'pending', 0 FROM links;
   `;
 }
 

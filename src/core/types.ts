@@ -6,6 +6,27 @@ export const STATES = ["active", "archived"] as const;
 export type LinkState = (typeof STATES)[number];
 export type Labelled = { text: string; source: Source };
 export type OwnerId = string;
+export const SNAPSHOT_STATUSES = [
+  "pending",
+  "retrying",
+  "ok",
+  "failed",
+  "refused",
+  "not_html",
+  "extract_timeout",
+  "extract_out_of_memory",
+  "extract_crashed",
+] as const;
+export type SnapshotStatus = (typeof SNAPSHOT_STATUSES)[number];
+
+/** What a fetch of the page produced, without its text (see SnapshotStore.getSnapshotText). */
+export type SnapshotSummary = {
+  status: SnapshotStatus;
+  fetchedAt: Date | null;
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+};
 
 /** key is the identity (lower-cased name); name is for display. */
 export type LinkTag = { key: string; name: string; source: Source; kind: TagKind };
@@ -24,6 +45,8 @@ export type Link = {
   lastSurfacedAt: Date | null;
   snoozedUntil: Date | null;
   state: LinkState;
+  /** Null only for a link that has no snapshot row. */
+  snapshot: SnapshotSummary | null;
 };
 
 export type Tag = {
@@ -39,7 +62,7 @@ export type Tag = {
 /** Catalog fields a tag patch may set; an absent field is left untouched. */
 export type TagPatch = Partial<Pick<Tag, "kind" | "projectStatus">>;
 
-export type NewLink = Omit<Link, "id">;
+export type NewLink = Omit<Link, "id" | "snapshot">;
 
 /** Fields a patch may set; an absent (undefined) field is left untouched. */
 export type LinkPatch = Partial<

@@ -77,6 +77,8 @@ describe("FtsSearch.parts", () => {
     await search.search("o", "?!", {}, 5, trace);
     expect(traces).toEqual([]);
     await search.search("o", "solar", {}, 5, trace);
-    expect(traces).toEqual([{ mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 }]);
+    expect(traces).toEqual([
+      { mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 },
+    ]);
   });
 });

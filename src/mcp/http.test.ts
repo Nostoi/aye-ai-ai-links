@@ -288,17 +288,19 @@ describe("MCP door over HTTP", () => {
 
     const got = await call(app, "key-a", "get_link", { id: "1" });
     expect(got.body.result.structuredContent).toEqual(
-      wire(await getLinkWithText(direct, A.owner, "1")),
+      wire(await getLinkWithText(direct, A.owner, "1", A.savedBy)),
     );
 
     const found = await call(app, "key-a", "search_links", {
       query: "parity",
       savedFrom: "2026-10-11T00:00:00+00:00",
     });
-    const foundDirect = await searchLinks(direct, A.owner, {
-      query: "parity",
-      savedFrom: new Date("2026-10-11T00:00:00Z"),
-    });
+    const foundDirect = await searchLinks(
+      direct,
+      A.owner,
+      { query: "parity", savedFrom: new Date("2026-10-11T00:00:00Z") },
+      A.savedBy,
+    );
     expect(foundDirect).toHaveLength(1);
     expect(found.body.result.structuredContent).toEqual(wire({ links: foundDirect }));
   });
@@ -462,6 +464,41 @@ describe("MCP door over HTTP", () => {
     expect(bad.body.error?.message ?? bad.body.result?.content?.[0]?.text).toBeTruthy();
     expect(bad.body.result?.isError ?? Boolean(bad.body.error)).toBe(true);
     expect((await deps.store.listTags(A.owner)).map((t) => t.kind)).toEqual(["topic"]);
+  });
+
+  it("C2-T5: search_links and get_link log under the key's agent name, and pair per owner", async () => {
+    await call(app, "key-a", "save_link", { url: "https://ex.com/s", title: "Solar panels" });
+    const log = () =>
+      db
+        .prepare(
+          "SELECT owner_id, searched_by, query, mode, meaning_candidates, opened_link_id, opened_url_key FROM search_log",
+        )
+        .all();
+
+    await call(app, "key-a", "search_links", { query: "" });
+    await call(app, "key-a", "search_links", { query: "?!" });
+    expect(log()).toEqual([]);
+
+    const found = await call(app, "key-a", "search_links", { query: "solar" });
+    expect(found.body.result.structuredContent.links).toHaveLength(1);
+    expect(log()).toEqual([
+      {
+        owner_id: A.owner,
+        searched_by: A.savedBy,
+        query: "solar",
+        mode: "hybrid",
+        meaning_candidates: 0,
+        opened_link_id: null,
+        opened_url_key: null,
+      },
+    ]);
+
+    const foreign = await call(app, "key-b", "get_link", { id: "1" });
+    expect(foreign.body.result.isError).toBe(true);
+    expect(log()).toMatchObject([{ opened_link_id: null }]);
+
+    await call(app, "key-a", "get_link", { id: "1" });
+    expect(log()).toMatchObject([{ opened_link_id: 1, opened_url_key: expect.any(String) }]);
   });
 
   describe("page text", () => {

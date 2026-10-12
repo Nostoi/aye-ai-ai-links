@@ -44,7 +44,7 @@ The tools your AI uses:
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine.
 
 ## Run it on your Mac
 

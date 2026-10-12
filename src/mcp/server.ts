@@ -263,11 +263,12 @@ export function buildMcpServer(
       },
     },
     async ({ savedFrom, savedTo, ...rest }) => ({
-      links: await searchLinks(deps, owner, {
-        ...rest,
-        savedFrom: toDate(savedFrom),
-        savedTo: toDate(savedTo),
-      }),
+      links: await searchLinks(
+        deps,
+        owner,
+        { ...rest, savedFrom: toDate(savedFrom), savedTo: toDate(savedTo) },
+        savedBy,
+      ),
     }),
   );
 
@@ -284,7 +285,7 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    ({ id }) => getLinkWithText(deps, owner, id),
+    ({ id }) => getLinkWithText(deps, owner, id, savedBy),
   );
 
   register(

@@ -129,6 +129,28 @@ export const MIGRATIONS: string[] = [
     CHECK (typeof(embedding) = 'blob' AND length(embedding) = dims * 4)
   );
   `,
+  // The search log (#32): each word search and the link the same agent opened next, for tuning
+  // meaning search. Additive; rebuilds nothing. No foreign key on the opened link: the log
+  // outlives a deleted link, and the stored url keys show when an id was reused.
+  `
+  CREATE TABLE search_log (
+    id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES users(id),
+    searched_by TEXT NOT NULL,
+    query TEXT NOT NULL CHECK (query <> ''),
+    filters TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('keyword', 'hybrid', 'fallback')),
+    embedded TEXT,
+    model_key TEXT,
+    meaning_candidates INTEGER NOT NULL,
+    results TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    opened_link_id INTEGER,
+    opened_url_key TEXT,
+    opened_at INTEGER
+  );
+  CREATE INDEX search_log_pairing ON search_log (owner_id, searched_by, id);
+  `,
 ];
 
 /**

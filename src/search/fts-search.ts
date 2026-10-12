@@ -45,7 +45,13 @@ export class FtsSearch implements LinkSearch {
       );
     }
     const { fields, pageOnly } = this.parts(owner, query, filters, limit, limit);
-    trace?.({ mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 });
+    trace?.({
+      mode: "keyword",
+      embedded: null,
+      modelKey: null,
+      similarity: {},
+      meaningCandidates: 0,
+    });
     return [...fields, ...pageOnly].slice(0, limit);
   }
 

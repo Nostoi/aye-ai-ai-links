@@ -207,7 +207,9 @@ describe("HybridSearch", () => {
     expect(ids).toEqual(["a", "b"]);
     expect(texts).toEqual([]);
     expect(vectors.asked).toEqual([]);
-    expect(traces).toEqual([{ mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 }]);
+    expect(traces).toEqual([
+      { mode: "keyword", embedded: null, modelKey: null, similarity: {}, meaningCandidates: 0 },
+    ]);
   });
 
   it("C1-T7: the embedded text is at most 500 code points and never splits a surrogate pair", async () => {
@@ -234,13 +236,15 @@ describe("HybridSearch", () => {
     expect(ids).toEqual(["F", "P1", "P2"]);
     expect(log).toHaveBeenCalledOnce();
     expect(log.mock.calls[0]).toContain(boom);
-    expect(traces).toEqual([{
+    expect(traces).toEqual([
+      {
         mode: "fallback",
         embedded: "w",
         modelKey: KEY,
         similarity: {},
         meaningCandidates: 0,
-      }]);
+      },
+    ]);
   });
 
   it("a trace callback that throws on the hybrid call does not cause a fallback or a second trace", async () => {

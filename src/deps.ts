@@ -16,15 +16,13 @@ import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
  */
 export function createDeps(db: Database, embedder: Embedder) {
   const store = new SqliteStore(db);
+  const keywordSearch = new FtsSearch(db);
   loadVectorFunctions(db);
   return {
     store,
-    search: new HybridSearch(
-      new FtsSearch(db),
-      new VectorSearch(db, MODEL_KEY),
-      embedder,
-      MODEL_KEY,
-    ),
+    search: new HybridSearch(keywordSearch, new VectorSearch(db, MODEL_KEY), embedder, MODEL_KEY),
+    /** The keyword half of `search` alone, for the digest's focus matching until #68. */
+    keywordSearch,
     searchLog: new SqliteSearchLog(db),
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     profile: new SqliteProfileStore(db),

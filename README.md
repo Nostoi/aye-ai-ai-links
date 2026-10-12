@@ -16,6 +16,7 @@ You talk to your AI; it uses the library for you.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by. Every tag records who decided its kind: you, or your AI's guess. A project your AI only guessed is presented as a guess until you confirm it. Tags from before this was recorded count as guesses too.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
 - **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
+- **Digests.** Ask "anything I should look at?" and your AI gets up to five saved links worth another look, each with its reasons: it shares words with something you're working on, it has no why yet, it was saved over 30 days ago and no AI has recorded you opening it in that time, or it has never come up before. Your AI turns those into a short nudge, and can ask why you saved one, snooze it or archive it. A link that comes up in a digest stays out of digests for two weeks, so the next digest brings different links. Snoozed links stay out until the snooze ends, and archived links never come up.
 
 Each AI has its own key, and every link records which AI saved it.
 
@@ -31,10 +32,10 @@ The tools your AI uses:
 | `get_profile` | Reads the notes about you and your active projects. |
 | `add_profile` | Adds a note about you, or what you're working on now. |
 | `edit_profile` | Changes or removes notes, when you ask. |
+| `get_digest` | Picks a few links worth another look, with the reasons, and marks them shown. |
 
 ### Still to come
 
-- **Digests** that bring back old links that match what you're working on now.
 - **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something.
 - **ChatGPT and the Claude phone and web apps**, once login is built.
 - **A JSON API** for scripts and shortcuts.

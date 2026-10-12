@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import type { Caller, Identify } from "../auth/caller.js";
+import { getDigest } from "../core/digest.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
@@ -168,12 +169,13 @@ describe("MCP door over HTTP", () => {
     expect(res.body.result.instructions).toContain("inferred");
   });
 
-  it("lists the eight tools with their annotations and string dates", async () => {
+  it("lists the nine tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
       "add_profile",
       "edit_profile",
+      "get_digest",
       "get_link",
       "get_profile",
       "save_link",
@@ -202,7 +204,10 @@ describe("MCP door over HTTP", () => {
     expect(tools.get_profile.annotations).toEqual(hints(true, false, true));
     expect(tools.add_profile.annotations).toEqual(hints(false, false, false));
     expect(tools.edit_profile.annotations).toEqual(hints(false, true, false));
+    // Each call marks the links it returns as surfaced, so a repeat returns others.
+    expect(tools.get_digest.annotations).toEqual(hints(false, false, false));
     expect(tools.get_profile.inputSchema.additionalProperties).toBe(false);
+    expect(tools.get_digest.inputSchema.additionalProperties).toBe(false);
     expect(tools.search_links.inputSchema.properties.savedFrom.type).toBe("string");
     expect(JSON.stringify(tools.update_link.inputSchema.properties.snoozedUntil)).toContain(
       '"string"',
@@ -330,6 +335,21 @@ describe("MCP door over HTTP", () => {
     );
     expect(foundDirect).toHaveLength(1);
     expect(found.body.result.structuredContent).toEqual(wire({ links: foundDirect }));
+
+    const digest = await call(app, "key-a", "get_digest", {});
+    const digestDirect = await getDigest(direct, A.owner);
+    expect(digestDirect.links).toHaveLength(1);
+    expect(digest.body.result.structuredContent).toEqual(wire(digestDirect));
+  });
+
+  it("get_digest neither returns nor marks another owner's links", async () => {
+    await call(app, "key-b", "save_link", { url: "https://example.com/b-only" });
+    const a = await call(app, "key-a", "get_digest", {});
+    expect(a.body.result.structuredContent).toEqual({ links: [] });
+    const b = await call(app, "key-b", "get_digest", {});
+    expect(b.body.result.structuredContent.links.map((l: Json) => l.reasons)).toEqual([
+      [{ kind: "no_why" }, { kind: "never_surfaced" }],
+    ]);
   });
 
   it("ignores owner and savedBy arguments", async () => {

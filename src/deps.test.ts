@@ -1,7 +1,9 @@
 import type { Database } from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getDigest } from "./core/digest.js";
 import { documentHash } from "./core/link-document.js";
 import { saveLink, updateLink } from "./core/links.js";
+import { addProfile } from "./core/profile.js";
 import type { SearchTrace } from "./core/search.js";
 import { searchLinks } from "./core/search-links.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
@@ -191,5 +193,58 @@ describe("the vector indexer on createDeps' index store", () => {
     const [urlOnly] = await h.fake.embedDocuments(["https://ex.com/1"]);
     expect(row && new Float32Array(new Uint8Array(row.embedding).buffer)).toEqual(urlOnly);
     expect(h.db.prepare("SELECT count(*) AS n FROM link_vectors").get()).toEqual({ n: 1 });
+  });
+});
+
+describe("the digest on createDeps", () => {
+  it("matches focus words in page text through the keyword engine, logs nothing, and claims in SQLite", async () => {
+    const db = openDatabase(":memory:");
+    const now = new Date("2026-06-01T00:00:00Z");
+    const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => now };
+    deps.store.ensureUser(OWNER, OWNER);
+    const why = { text: "w", source: "stated" as const };
+    const save = async (n: number) =>
+      (await saveLink(deps, OWNER, { url: `https://ex.com/${n}`, savedBy: "t", why })).link;
+    const links = [];
+    for (let n = 1; n <= 7; n++) links.push(await save(n));
+    const paged = links[6] as (typeof links)[number];
+    const lease = await deps.store.leaseSnapshot(OWNER, paged.id, now, new Date(now.getTime() + 1));
+    if (!lease) throw new Error("expected a lease");
+    await deps.store.recordSnapshot(OWNER, paged.id, lease.claim, {
+      status: "ok",
+      attempts: 1,
+      nextFetchAt: null,
+      fetchedAt: now,
+      title: null,
+      description: null,
+      imageUrl: null,
+      text: "all about the quokka",
+      lastError: null,
+    });
+    const { recentFocus } = await addProfile(deps, OWNER, "t", {
+      addFocus: [{ text: "quokka", source: "inferred" }],
+    });
+    const traces: SearchTrace[] = [];
+    expect(await deps.keywordSearch.search(OWNER, "quokka", {}, 5, (t) => traces.push(t))).toEqual([
+      paged.id,
+    ]);
+    expect(traces.map((t) => t.mode)).toEqual(["keyword"]);
+
+    const first = await getDigest(deps, OWNER);
+
+    expect(first.links.map((l) => l.link.id)).toEqual([
+      paged.id,
+      ...links.slice(0, 4).map((l) => l.id),
+    ]);
+    expect(first.links[0]?.reasons).toEqual([
+      { kind: "focus_words", focus: recentFocus[0] },
+      { kind: "never_surfaced" },
+    ]);
+    expect(first.links[0]?.link.lastSurfacedAt).toEqual(now);
+    expect(db.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
+    expect((await getDigest(deps, OWNER)).links.map((l) => l.link.id)).toEqual(
+      links.slice(4, 6).map((l) => l.id),
+    );
+    db.close();
   });
 });

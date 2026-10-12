@@ -4,7 +4,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
-import type { LinkStore } from "./store.js";
+import type { LinkStore, SurfacedClaim } from "./store.js";
 import type {
   Labelled,
   Link,
@@ -220,6 +220,32 @@ export class FakeStore implements LinkStore, SnapshotStore {
     if (patch.kindSource !== undefined) entry.kindSource = patch.kindSource;
     if (patch.projectStatus !== undefined) entry.projectStatus = patch.projectStatus;
     return structuredClone(entry);
+  }
+
+  async listLinks(owner: OwnerId) {
+    return [...this.owned(owner).values()].map((l) => this.view(owner, l));
+  }
+
+  async claimSurfaced(
+    owner: OwnerId,
+    ids: string[],
+    { at, notSurfacedAfter, now }: { at: Date; notSurfacedAfter: Date; now: Date },
+  ): Promise<SurfacedClaim[]> {
+    const claimed: SurfacedClaim[] = [];
+    for (const id of new Set(ids)) {
+      const found = this.owned(owner).get(id);
+      if (
+        found?.state !== "active" ||
+        (found.snoozedUntil !== null && found.snoozedUntil > now) ||
+        (found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
+      ) {
+        continue;
+      }
+      const previousSurfacedAt = found.lastSurfacedAt;
+      found.lastSurfacedAt = new Date(at);
+      claimed.push({ link: this.view(owner, found), previousSurfacedAt });
+    }
+    return claimed;
   }
 
   seedTag(owner: OwnerId, tag: Tag): void {

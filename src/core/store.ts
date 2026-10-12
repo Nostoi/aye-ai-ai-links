@@ -74,4 +74,26 @@ export interface LinkStore {
     patch: TagPatch,
     expectedKind: TagKind,
   ): Promise<Tag | null>;
+
+  /**
+   * Every one of the owner's links, in every state, each as `get` returns it, in the order the
+   * store issued their ids. An owner with no links (or an unknown one) yields [].
+   */
+  listLinks(owner: OwnerId): Promise<Link[]>;
+
+  /**
+   * Conditional write, in one atomic step: for each id in input order that is the owner's, active,
+   * not snoozed at `now` (snoozedUntil null or <= now) and has lastSurfacedAt null or <=
+   * `notSurfacedAfter`, set lastSurfacedAt to `at` and return the link as read inside that step,
+   * with the value it replaced. Core supplies the cutoffs, as with updateTag's `expectedKind`.
+   * Foreign, unknown, malformed and no-longer-eligible ids are skipped, never an error; an id
+   * given twice is claimed once. On an error nothing is written.
+   */
+  claimSurfaced(
+    owner: OwnerId,
+    ids: string[],
+    when: { at: Date; notSurfacedAfter: Date; now: Date },
+  ): Promise<SurfacedClaim[]>;
 }
+
+export type SurfacedClaim = { link: Link; previousSurfacedAt: Date | null };

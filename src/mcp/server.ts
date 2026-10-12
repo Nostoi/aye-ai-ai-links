@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Caller } from "../auth/caller.js";
+import { getDigest } from "../core/digest.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
@@ -22,6 +23,7 @@ import * as guidance from "./guidance.js";
 import {
   addProfileOutput,
   advertisedOpen,
+  getDigestOutput,
   getLinkOutput,
   getProfileOutput,
   linkResultOutput,
@@ -34,6 +36,7 @@ import {
 export type McpDeps = {
   store: LinkStore;
   search: LinkSearch;
+  keywordSearch: LinkSearch;
   profile: ProfileStore;
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
@@ -105,6 +108,7 @@ const updateTagInput = z.object({ name: z.string(), kind: z.enum(TAG_KINDS) });
 const getLinkInput = z.object({ id: z.string() });
 // A strict empty object advertises additionalProperties: false, the schema MCP recommends for a tool with no parameters.
 const getProfileInput = z.strictObject({});
+const getDigestInput = z.strictObject({});
 const labelledText = z.object({ text: z.string(), source });
 const addProfileInput = z.object({
   addNotes: z.array(labelledText).optional(),
@@ -345,6 +349,23 @@ export function buildMcpServer(
       },
     },
     (args) => editProfile(deps, owner, savedBy, args),
+  );
+
+  register(
+    "get_digest",
+    {
+      description: guidance.GET_DIGEST,
+      inputSchema: getDigestInput,
+      outputSchema: getDigestOutput,
+      // Not read-only or idempotent: each call marks the links it returns as surfaced.
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    () => getDigest(deps, owner),
   );
 
   return server;

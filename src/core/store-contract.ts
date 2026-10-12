@@ -41,6 +41,8 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
     listTags: (owner) => inner.listTags(owner),
     updateTag: (owner, key, patch, expected) => inner.updateTag(owner, key, patch, expected),
+    listLinks: (owner) => inner.listLinks(owner),
+    claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
     ...over,
   };
 }
@@ -954,6 +956,162 @@ export function describeStoreContract(
           expect(await snapshot()).toEqual(before);
         });
       }
+    });
+
+    describe("listLinks", () => {
+      it("returns every link of the owner in every state, as get does, oldest id first", async () => {
+        const first = await saveLink(deps(), A, {
+          url: "https://ex.com/1",
+          savedBy: "a",
+          why: { text: "w", source: "asked" },
+          tags: [
+            { name: "Wind", source: "stated" },
+            { name: "Solar", source: "stated" },
+          ],
+        });
+        const second = await saveLink(deps(), A, { url: "https://ex.com/2", savedBy: "a" });
+        const third = await saveLink(deps(), A, {
+          url: "https://ex.com/3",
+          savedBy: "a",
+          tags: [{ name: "solar", source: "inferred" }],
+        });
+        await saveLink(deps(), B, { url: "https://ex.com/b", savedBy: "b" });
+        await updateLink(deps(), A, second.link.id, { state: "archived" });
+        // A catalog change after attaching must show, as it does through get.
+        await h.store.updateTag(A, "solar", { kind: "project", kindSource: "stated" }, "topic");
+
+        const listed = await h.store.listLinks(A);
+
+        const ids = [first.link.id, second.link.id, third.link.id];
+        expect(listed.map((l) => l.id)).toEqual(ids);
+        expect(listed).toEqual(await Promise.all(ids.map((id) => h.store.get(A, id))));
+        expect(listed[0]?.tags.map((t) => t.key)).toEqual(["wind", "solar"]);
+        expect(listed[1]?.state).toBe("archived");
+        expect(listed[2]?.tags).toEqual([
+          {
+            key: "solar",
+            name: "Solar",
+            source: "inferred",
+            kind: "project",
+            kindSource: "stated",
+          },
+        ]);
+      });
+
+      it("never returns another owner's links, and an owner with none gets []", async () => {
+        await saveLink(deps(), B, { url: "https://ex.com/b", savedBy: "b" });
+        expect(await h.store.listLinks(A)).toEqual([]);
+        expect(await h.store.listLinks("nobody")).toEqual([]);
+        expect((await h.store.listLinks(B)).map((l) => l.url)).toEqual(["https://ex.com/b"]);
+      });
+    });
+
+    describe("claimSurfaced", () => {
+      const now = new Date("2026-03-01T00:00:00Z");
+      const cutoff = new Date(now.getTime() - 14 * 86_400_000);
+      const when = { at: now, notSurfacedAfter: cutoff, now };
+      const ms = (d: Date, delta: number) => new Date(d.getTime() + delta);
+
+      /** Insert straight through the store, so lastSurfacedAt can be seeded. */
+      const insert = async (owner: string, n: number, over: Partial<Link> = {}) =>
+        (
+          await h.store.insertIfAbsent(owner, {
+            url: `https://ex.com/${n}`,
+            urlKey: `https://ex.com/${n}`,
+            title: null,
+            summary: null,
+            why: null,
+            tags: [],
+            savedAt: new Date("2026-01-01T00:00:00Z"),
+            savedBy: "t",
+            lastOpenedAt: null,
+            lastSurfacedAt: null,
+            snoozedUntil: null,
+            state: "active",
+            ...over,
+          })
+        ).link;
+
+      it("claims only active, unsnoozed links outside the cutoff, at the exact boundaries, in input order", async () => {
+        const never = await insert(A, 1);
+        const atCutoff = await insert(A, 2, { lastSurfacedAt: cutoff });
+        const inside = await insert(A, 3, { lastSurfacedAt: ms(cutoff, 1) });
+        const snoozeEnded = await insert(A, 4, { snoozedUntil: now });
+        const snoozed = await insert(A, 5, { snoozedUntil: ms(now, 1) });
+        const archived = await insert(A, 6, { state: "archived" });
+        const theirs = await insert(B, 7);
+        const absent = theirs.id.replace(/\d+$/, (n) => String(Number(n) + 1000));
+        const beforeB = structuredClone(await h.all(B));
+
+        const claimed = await h.store.claimSurfaced(
+          A,
+          [
+            snoozed.id,
+            snoozeEnded.id,
+            never.id,
+            atCutoff.id,
+            inside.id,
+            archived.id,
+            theirs.id,
+            absent,
+            "zzz",
+            "",
+            never.id,
+          ],
+          when,
+        );
+
+        expect(claimed.map((c) => [c.link.id, c.previousSurfacedAt])).toEqual([
+          [snoozeEnded.id, null],
+          [never.id, null],
+          [atCutoff.id, cutoff],
+        ]);
+        for (const c of claimed) {
+          expect(c.link.lastSurfacedAt).toEqual(now);
+          expect(c.link).toEqual(await h.store.get(A, c.link.id));
+        }
+        expect((await h.store.get(A, inside.id))?.lastSurfacedAt).toEqual(ms(cutoff, 1));
+        expect((await h.store.get(A, snoozed.id))?.lastSurfacedAt).toBeNull();
+        expect((await h.store.get(A, archived.id))?.lastSurfacedAt).toBeNull();
+        expect(await h.all(B)).toEqual(beforeB);
+      });
+
+      it("reads back the link as it is at the claim, with tags from the catalog", async () => {
+        const { link } = await saveLink(deps(), A, {
+          url: "https://ex.com/a",
+          savedBy: "a",
+          tags: [{ name: "Solar", source: "stated" }],
+        });
+        await updateLink(deps(), A, link.id, { why: { text: "late", source: "asked" } });
+        await h.store.updateTag(A, "solar", { kind: "project" }, "topic");
+
+        const [claim] = await h.store.claimSurfaced(A, [link.id], when);
+
+        expect(claim?.link.why).toEqual({ text: "late", source: "asked" });
+        expect(claim?.link.tags.map((t) => t.kind)).toEqual(["project"]);
+        expect(claim?.link.snapshot?.status).toBe("pending");
+      });
+
+      it("makes two claims over the same links disjoint, even when they start together", async () => {
+        const links = await Promise.all([1, 2, 3, 4].map((n) => insert(A, n)));
+        const ids = links.map((l) => l.id);
+
+        const [one, two] = await Promise.all([
+          h.store.claimSurfaced(A, ids, when),
+          h.store.claimSurfaced(A, [...ids].reverse(), when),
+        ]);
+        const got = [...(one ?? []), ...(two ?? [])].map((c) => c.link.id);
+
+        expect([...got].sort()).toEqual([...ids].sort());
+        expect(await h.store.claimSurfaced(A, ids, when)).toEqual([]);
+      });
+
+      it("claims nothing for an empty list, and never for another owner", async () => {
+        const mine = await insert(A, 1);
+        expect(await h.store.claimSurfaced(A, [], when)).toEqual([]);
+        expect(await h.store.claimSurfaced(B, [mine.id], when)).toEqual([]);
+        expect((await h.store.get(A, mine.id))?.lastSurfacedAt).toBeNull();
+      });
     });
 
     describe("updateLink", () => {

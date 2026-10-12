@@ -62,6 +62,18 @@ export const ADD_PROFILE = `Record something about the owner: a note about them,
 
 Give each as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context. A note is at most 1000 characters and a focus entry at most 500; longer text is refused, not cut. Send several in one call. The result is the profile after the write, with the new ids.`;
 
+export const GET_DIGEST = `Get a few saved links worth bringing back to the owner now, each with the reasons it was picked. The server picks the links; you write a short nudge from the reasons, in your own words.
+
+Reasons:
+- focus_words: the link shares words with that focus entry (something the owner is working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave the link out of your nudge if it doesn't fit. Present a focus entry whose source is "inferred" as a guess.
+- no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
+- not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded only when an agent sends opened: true, so never tell the owner they haven't opened it.
+- never_surfaced: no digest has shown it before.
+
+Offer to snooze a link (update_link with snoozedUntil) or archive it (state "archived"). Send opened: true if the owner opens one.
+
+Each call marks the links it returns as shown, so the next call returns others. Don't call it again to "refresh": that uses links up before the owner sees them. An empty list means nothing is due.`;
+
 export const EDIT_PROFILE = `Change or remove existing profile notes. Use it only when the owner asks for the change or confirms it. To record something new, use add_profile.
 
 editNotes REPLACES a note's text and source, so send both. A note the owner stated can only be edited with source "stated"; to add your own guess, call add_profile instead. removeNotes deletes notes permanently by id: remove a stated note only on the owner's instruction. Call get_profile for the ids. All changes in one call apply together or not at all.`;

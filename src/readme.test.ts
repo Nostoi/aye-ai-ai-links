@@ -95,5 +95,10 @@ describe("README stays current", () => {
       gone,
       `AGENTS.md's folder map lists these src/ folders, which do not exist and are not marked (planned): ${gone.join(", ")}`,
     ).toEqual([]);
+    const built = mapped.filter((f) => f.planned && actual.includes(f.name)).map((f) => f.name);
+    expect(
+      built,
+      `AGENTS.md's folder map still marks these existing src/ folders (planned): ${built.join(", ")}`,
+    ).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@
     "moduleResolution": "NodeNext",
     "target": "ES2023",
     "noEmit": true,
+    "rewriteRelativeImportExtensions": true,
     "skipLibCheck": true,
     "types": ["node"]
   },

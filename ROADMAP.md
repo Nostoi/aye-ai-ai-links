@@ -26,7 +26,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **A local folder replaces cache-plus-revision.** transformers.js 4.3.1 drops the tokenizer when it loads a pinned revision from its cache offline, so the first embedding fails. With an absolute folder as the model id and remote loading off, it loads with no network access.
   - **Hashes are checked twice:** at deploy, and every time the server loads the model. A canary sentence must also embed to its recorded values (first 8 within 1e-4, 384 finite values, length near 1). The canary alone did not notice a changed `model_max_length`.
   - **One serialized queue** inside the embedder: at most one inference runs at a time across queries and documents, and a failed call does not block the next.
-  - **`.npmrc` sets `onnxruntime-node-install=skip`**, so installs on Linux CI do not download the CUDA build.
+  - **CI sets `ONNXRUNTIME_NODE_INSTALL=skip`** on `npm ci`, so Linux CI does not download onnxruntime's CUDA build, and a CI step fails if it is there. It is an environment variable rather than an `.npmrc` key because npm warns that unknown `.npmrc` keys will become errors. The macOS build needs no CUDA files.
   - **`deploy.sh` runs the prefetch** (`dist/cli/prefetch-model-main.js`) after the build and before it stops anything, on every deploy. A failure leaves the running install unchanged.
   - **There is no `AYE_MODEL_DIR`.** The models always live in `~/.aye-links/models`, beside `releases/`, so pruning releases cannot reach them.
 

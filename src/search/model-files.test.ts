@@ -113,6 +113,15 @@ describe("installModelFiles", () => {
     expect(allFiles(dir)).toEqual(["sub/b.bin"]);
   });
 
+  it("removes temp files an interrupted install left beside the manifest files", async () => {
+    mkdirSync(join(dir, "sub"), { recursive: true });
+    writeFileSync(join(dir, "a.json.1234.part"), "x");
+    writeFileSync(join(dir, "sub/b.bin.5678.part"), "x");
+    writeFileSync(join(dir, "keep.part"), "x");
+    await installModelFiles(dir, manifest, servingFetch().fn);
+    expect(allFiles(dir).sort()).toEqual(["a.json", "keep.part", "sub/b.bin"]);
+  });
+
   it("rejects an HTTP error status without writing the error page", async () => {
     const f = servingFetch({ "a.json": () => new Response("nope", { status: 404 }) });
     await expect(installModelFiles(dir, manifest, f.fn)).rejects.toThrow(/a\.json/);

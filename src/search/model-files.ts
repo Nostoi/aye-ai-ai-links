@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { Manifest, ManifestFile } from "./model.js";
@@ -80,6 +80,14 @@ export async function installModelFiles(
 ): Promise<void> {
   const failed: string[] = [];
   for (const file of manifest) {
+    const final = join(dir, file.path);
+    const prefix = `${basename(final)}.`;
+    const siblings = await readdir(dirname(final)).catch(() => []);
+    for (const name of siblings) {
+      if (name.startsWith(prefix) && name.endsWith(".part")) {
+        await rm(join(dirname(final), name), { force: true });
+      }
+    }
     if ((await problem(dir, file)) === null) continue;
     try {
       await download(dir, file, fetchFn);

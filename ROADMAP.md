@@ -2,7 +2,7 @@
 
 **Goal:** save links by talking to any AI, find them again from a vague memory, get nudged back to the ones that matter now, and see them on a calm, visual page. Full design: `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 
-**Current phase:** Phase 2 · Smart
+**Current phase:** Phase 3 · Phone
 
 Tasks live in GitHub issues under each phase's milestone: https://github.com/Nostoi/aye-ai-ai-links/milestones
 
@@ -12,15 +12,21 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 |---|---|---|
 | Phase 0 · Setup | Repo, README, AGENTS.md, this roadmap, `npm run check`, pre-push hook, CI | done |
 | Phase 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | done |
-| Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | not started |
-| Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | in progress |
-| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then Tailscale Funnel on. ChatGPT and Claude apps connect | not started |
+| Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | done |
+| Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
+| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then Tailscale Funnel on. ChatGPT and Claude apps connect | in progress |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | not started |
 | Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-12:** ChatGPT spike done (#9; results in its comments 6133666210 and 6133682051). Phase 3 is now current. Phase 2's features are done (#10 closed, comment 6131333429); #68 stays open in Phase 2 until the search log has enough real searches.
+  - **Port 443 only.** A custom MCP plugin on a Funnel address at port 10000 was never contacted ("Couldn't reach the MCP server", with no request in the server log). The same server on 443 was added at once. OpenAI's docs do not state this. Phase 3 must serve the app on 443 before Funnel goes on. This Mac's 443 is used by another tailnet service today, so giving it up or using another node or hostname is an owner decision for #11.
+  - **Answers.** A Business workspace can add a no-auth plugin with a write tool (chatgpt.com/plugins → + → Add custom MCP server). It works in the iPhone app. ChatGPT speaks MCP 2026-07-28 and opens with `server/discover`.
+  - **No confirmations.** Neither the read-only tool nor the write tool asked the owner to confirm, on the web or the phone, so the effect of `readOnlyHint` could not be seen. The app cannot rely on ChatGPT's confirmation; the rules in `core/` stay the safeguard.
+  - "No Funnel before auth" still holds for the real app; the spike's one-time exception (2026-10-10 entry) is used up.
 
 - **2026-10-12:** Digests (#34; decisions in its comment 6128904723).
   - **Tool.** `get_digest` takes no input and returns up to 5 links, each with every reason that applies. The server picks; the calling agent writes the nudge. It is not read-only or idempotent, because each call marks what it returns as surfaced.

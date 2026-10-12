@@ -34,7 +34,7 @@ export class VectorSearch {
         `SELECT l.id AS id, CASE WHEN v.dims = ? THEN vec_distance_cosine(v.embedding, ?) END AS distance
          FROM links l
          JOIN link_vectors v ON v.owner_id = l.owner_id AND v.link_id = l.id AND v.model_key = ?
-         WHERE ${q.where} AND distance IS NOT NULL
+         WHERE ${q.where} AND distance BETWEEN 0 AND 2
          ORDER BY distance ASC, l.saved_at DESC, l.id DESC LIMIT ?`,
       )
       .all(vector.length, blob, this.modelKey, ...q.params, k) as {

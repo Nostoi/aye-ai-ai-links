@@ -156,10 +156,10 @@ describe("VectorSearch ordering", () => {
 
   it("falls back to newest first when distances are equal", async () => {
     const s = setup();
+    const newest = await s.save("a", { away: 1, at: 300 });
     const older = await s.save("a", { away: 1, at: 100 });
-    const newer = await s.save("a", { away: 1, at: 200 });
-    const same = await s.save("a", { away: 1, at: 200 });
-    expect(s.ids()).toEqual([same, newer, older]);
+    const same = await s.save("a", { away: 1, at: 100 });
+    expect(s.ids()).toEqual([newest, same, older]);
   });
 
   it("returns at most k", async () => {
@@ -175,6 +175,13 @@ describe("VectorSearch inputs", () => {
     const good = await s.save("a", { away: 0.5 });
     s.putVector("a", await s.save("a"), new Float32Array(4));
     s.putVector("a", await s.save("a"), new Float32Array([1, Number.NaN, 0, 0]));
+    expect(s.ids()).toEqual([good]);
+  });
+
+  it("leaves out a stored vector too small to score", async () => {
+    const s = setup();
+    const good = await s.save("a", { away: 0.5 });
+    s.putVector("a", await s.save("a"), new Float32Array([1e-30, 0, 0, 0]));
     expect(s.ids()).toEqual([good]);
   });
 

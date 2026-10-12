@@ -7,6 +7,7 @@ import { getLink, saveLink, updateLink } from "../core/links.js";
 import type { LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { LinkStore } from "../core/store.js";
+import { changeTagKind } from "../core/tag-kind.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
 
@@ -57,6 +58,7 @@ const searchLinksInput = z.object({
   savedTo: timestamp.optional(),
   limit: z.number().optional(),
 });
+const updateTagInput = z.object({ name: z.string(), kind: z.enum(TAG_KINDS) });
 const getLinkInput = z.object({ id: z.string() });
 
 const toDate = (s: string | undefined) => (s === undefined ? undefined : new Date(s));
@@ -145,6 +147,22 @@ export function buildMcpServer(deps: McpDeps, caller: Caller): McpServer {
           }),
         }),
       })),
+  );
+
+  server.registerTool(
+    "update_tag",
+    {
+      description: guidance.UPDATE_TAG,
+      inputSchema: updateTagInput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    ({ name, kind }) =>
+      guarded(async () => ({ tag: await changeTagKind(deps, owner, { name, kind }) })),
   );
 
   server.registerTool(

@@ -1,6 +1,16 @@
 import type { Database } from "better-sqlite3";
 import type { LinkStore } from "../core/store.js";
-import type { Labelled, Link, LinkPatch, LinkTag, NewLink, OwnerId, Tag } from "../core/types.js";
+import type {
+  Labelled,
+  Link,
+  LinkPatch,
+  LinkTag,
+  NewLink,
+  OwnerId,
+  Tag,
+  TagKind,
+  TagPatch,
+} from "../core/types.js";
 
 export class StoreError extends Error {
   constructor(
@@ -87,6 +97,27 @@ export class SqliteStore implements LinkStore {
       )
       .all(owner) as TagRow[];
     return rows.map((r): Tag => ({ ...r, pinned: r.pinned === 1 }));
+  }
+
+  async updateTag(owner: OwnerId, key: string, patch: TagPatch, expectedKind: TagKind) {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    if (patch.kind !== undefined) {
+      sets.push("kind = ?");
+      values.push(patch.kind);
+    }
+    if (patch.projectStatus !== undefined) {
+      sets.push("project_status = ?");
+      values.push(patch.projectStatus);
+    }
+    if (sets.length === 0) sets.push("key = key");
+    const row = this.db
+      .prepare(
+        `UPDATE tags SET ${sets.join(", ")} WHERE owner_id = ? AND key = ? AND kind = ?
+         RETURNING key, name, kind, color, pinned, description, project_status AS projectStatus`,
+      )
+      .get(...values, owner, key, expectedKind) as TagRow | undefined;
+    return row ? { ...row, pinned: row.pinned === 1 } : null;
   }
 
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {

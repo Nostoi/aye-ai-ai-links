@@ -1,6 +1,6 @@
 import { CoreError } from "./errors.js";
 import type { LinkStore } from "./store.js";
-import { normalizeTags } from "./tags.js";
+import { isTagKind, normalizeTags } from "./tags.js";
 import {
   type Labelled,
   type Link,
@@ -10,7 +10,6 @@ import {
   SOURCES,
   type Source,
   STATES,
-  TAG_KINDS,
   type TagKind,
 } from "./types.js";
 import { urlKey } from "./url-key.js";
@@ -34,7 +33,6 @@ export type UpdateLinkInput = Omit<LinkPatch, "tags" | "lastOpenedAt"> & {
 };
 
 const isSource = (s: string): s is Source => (SOURCES as readonly string[]).includes(s);
-const isKind = (k: string): k is TagKind => (TAG_KINDS as readonly string[]).includes(k);
 const isState = (s: string): s is LinkState => (STATES as readonly string[]).includes(s);
 
 function invalid(message: string): CoreError {
@@ -51,7 +49,7 @@ function checkSources(why: Labelled | null | undefined, tags: TagInput | undefin
         `The source "${t.source}" on tag "${t.name}" is not valid. Use stated, asked or inferred.`,
       );
     }
-    if (t.kind !== undefined && !isKind(t.kind)) {
+    if (t.kind !== undefined && !isTagKind(t.kind)) {
       throw invalid(`The kind "${t.kind}" on tag "${t.name}" is not valid. Use topic or project.`);
     }
   }

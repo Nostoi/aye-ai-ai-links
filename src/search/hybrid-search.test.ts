@@ -231,6 +231,24 @@ describe("HybridSearch", () => {
     expect(traces).toEqual([{ mode: "fallback", embedded: "w", modelKey: KEY, similarity: {} }]);
   });
 
+  it("a trace callback that throws on the hybrid call does not cause a fallback or a second trace", async () => {
+    const { embedder } = countingEmbedder();
+    const log = vi.fn();
+    const modes: string[] = [];
+    const search = make(
+      fakeKeyword({ fields: ["F"], pageOnly: [] }),
+      fakeVectors(["M"]),
+      embedder,
+      log,
+    ).search(OWNER, "w", {}, 3, (t) => {
+      modes.push(t.mode);
+      throw new Error("trace sink down");
+    });
+    await expect(search).rejects.toThrow("trace sink down");
+    expect(modes).toEqual(["hybrid"]);
+    expect(log).not.toHaveBeenCalled();
+  });
+
   it("C1-T5: when nearest throws, falls back with the embedded text recorded", async () => {
     const { embedder } = countingEmbedder();
     const vectors = {

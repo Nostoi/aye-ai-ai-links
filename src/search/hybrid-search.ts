@@ -55,18 +55,19 @@ export class HybridSearch implements LinkSearch {
     }
 
     let embedded: string | null = null;
+    let fused: { ids: string[]; similarity: Record<string, number> };
     try {
       embedded = capQuery(query);
       const vector = await this.embedder.embedQuery(embedded);
       const nearest = this.vectors.nearest(owner, vector, filters, depth);
-      const { ids, similarity } = fuse(fields, pageOnly, nearest, limit);
-      trace?.({ mode: "hybrid", embedded, modelKey: this.modelKey, similarity });
-      return ids;
+      fused = fuse(fields, pageOnly, nearest, limit);
     } catch (error) {
       this.log("[search] meaning search failed; using keyword results:", error);
       trace?.({ mode: "fallback", embedded, modelKey: this.modelKey, similarity: {} });
       return [...fields, ...pageOnly].slice(0, limit);
     }
+    trace?.({ mode: "hybrid", embedded, modelKey: this.modelKey, similarity: fused.similarity });
+    return fused.ids;
   }
 }
 

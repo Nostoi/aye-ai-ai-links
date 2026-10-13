@@ -108,7 +108,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aye-links.plist
    ```
 
-   The password must be 8 to 128 characters. Then sign in at `https://<your-mac>.<tailnet>.ts.net:8444/login`. Run the same commands to change the email or password; that also signs out every session. Sign-up is closed: this is the only way to make a login, and it belongs to the owner named by `AYE_OWNER` (default `owner`), so you see the same library as your AIs. Sign-in allows 10 attempts per 15 minutes in total, from everyone together.
+   The password must be 8 to 128 characters. Then sign in at `https://<your-mac>.<tailnet>.ts.net:8444/login`. Run the same commands to change the email or password; that also signs out every session. Sign-up is closed: this is the only way to make a login, and it belongs to the owner named by `AYE_OWNER` (default `owner`), so you see the same library as your AIs. Sign-in allows 10 attempts per 15 minutes from everyone together, and a separate 10 for sign-ins from your tailnet, so strangers using up the first can't lock you out from your own devices.
 
 5. Make a key for each AI. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
 

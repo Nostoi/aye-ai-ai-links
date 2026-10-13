@@ -3,7 +3,10 @@ import { createRateLimiter, type RateLimiter, type RateLimitOptions } from "../h
 import type { WithAuthLock } from "./auth-lock.js";
 import { AUTH_BASE_PATH } from "./better-auth.js";
 
-/** The global limits that apply before the lock, each counted for everyone together. */
+/**
+ * The global limits that apply before the lock, each counted for everyone together, except that
+ * tailnet sign-ins have their own login bucket.
+ */
 export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register";
 
 /**
@@ -69,6 +72,18 @@ const TOO_MANY: Record<RouteLimit, string> = {
   token: "Too many token requests. Try again later.",
   revoke: "Too many revocation requests. Try again later.",
 };
+
+/**
+ * The login bucket a sign-in counts against. Tailscale serve sets `Tailscale-User-Login` on
+ * tailnet requests; Funnel strips it and sets `Tailscale-Funnel-Request` (#79 comment 6154988441).
+ * Either sign of Funnel keeps the request in the public bucket.
+ */
+function loginBucket(request: Request): string {
+  const { headers } = request;
+  return headers.has("tailscale-user-login") && !headers.has("tailscale-funnel-request")
+    ? "login:tailnet"
+    : "login";
+}
 
 export class BodyTooLarge extends Error {}
 
@@ -170,7 +185,8 @@ export function authApp({
       return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
     }
     if (policy.limit) {
-      const verdict = limiters[policy.limit](policy.limit);
+      const key = policy.limit === "login" ? loginBucket(raw) : policy.limit;
+      const verdict = limiters[policy.limit](key);
       if (!verdict.allowed) {
         return c.json({ code: "TOO_MANY_REQUESTS", message: TOO_MANY[policy.limit] }, 429, {
           "Retry-After": String(verdict.retryAfterSeconds),

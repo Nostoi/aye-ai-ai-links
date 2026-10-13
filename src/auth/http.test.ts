@@ -42,10 +42,14 @@ async function setup({
     if (init.method && init.method !== "GET") headers.set("origin", TEST_BASE_URL);
     return app.fetch(new Request(`${TEST_BASE_URL}/api/auth${path}`, { ...init, headers }));
   };
-  const signIn = (password: string, extra: Record<string, unknown> = {}) =>
+  const signIn = (
+    password: string,
+    extra: Record<string, unknown> = {},
+    headers: Record<string, string> = {},
+  ) =>
     send("/sign-in/email", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify({ email: TEST_EMAIL, password, ...extra }),
     });
   return { ...t, app, send, signIn, handled };
@@ -238,6 +242,43 @@ describe("auth routes", () => {
     expect(t.hashing.verify).toBe(2);
     expect(t.handled.length).toBe(handled);
     expect(t.count("session")).toBe(0);
+  });
+
+  // Tailscale serve sets the user header on tailnet requests; Funnel strips it and sets the marker.
+  const tailnet = { "tailscale-user-login": "owner@example.com" };
+
+  it("keeps tailnet sign-ins working after public ones use up the login limit", async () => {
+    const t = await setup({ loginLimit: { limit: 2, windowMs: 60_000, now: () => 0 } });
+    expect((await t.signIn("Wrong-password-1")).status).toBe(401);
+    expect((await t.signIn("Wrong-password-2")).status).toBe(401);
+    expect((await t.signIn(TEST_PASSWORD)).status).toBe(429);
+    expect((await t.signIn(TEST_PASSWORD, {}, tailnet)).status).toBe(200);
+    expect(t.count("session")).toBe(1);
+  });
+
+  it.each([["?1"], ["?0"], [""]])(
+    "counts a sign-in carrying the Funnel marker %j against the public limit, even with a user header",
+    async (marker) => {
+      const t = await setup({ loginLimit: { limit: 1, windowMs: 60_000, now: () => 0 } });
+      expect((await t.signIn("Wrong-password-1")).status).toBe(401);
+      const verified = t.hashing.verify;
+      const res = await t.signIn(
+        TEST_PASSWORD,
+        {},
+        { ...tailnet, "tailscale-funnel-request": marker },
+      );
+      expect(res.status).toBe(429);
+      expect(t.hashing.verify).toBe(verified);
+      expect(t.count("session")).toBe(0);
+    },
+  );
+
+  it("keeps public sign-ins working after tailnet ones use up their limit", async () => {
+    const t = await setup({ loginLimit: { limit: 1, windowMs: 60_000, now: () => 0 } });
+    expect((await t.signIn("Wrong-password-1", {}, tailnet)).status).toBe(401);
+    expect((await t.signIn(TEST_PASSWORD, {}, tailnet)).status).toBe(429);
+    expect((await t.signIn(TEST_PASSWORD)).status).toBe(200);
+    expect(t.count("session")).toBe(1);
   });
 
   it("does not count other auth routes against the login limit", async () => {

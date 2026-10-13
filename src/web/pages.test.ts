@@ -136,17 +136,62 @@ const PAGES: [string, string][] = [
   ["home", homePage([])],
 ];
 
+function outsideRefs(html: string): string[] {
+  const markup = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3");
+  const tag =
+    /<([a-z][\w:-]*)((?:\s+[^\s"'<>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+))?)*)\s*\/?>/gi;
+  const attribute = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>]+)))?/g;
+  const outside = /(?:^|[\s,;=(])(?:https?:)?\/\//i;
+  const found: string[] = [];
+  for (const [, name = "", attributes = ""] of markup.matchAll(tag)) {
+    if (name.toLowerCase() === "a") continue;
+    for (const [, key = "", ...quoted] of attributes.matchAll(attribute)) {
+      const value = quoted.find((v) => v !== undefined) ?? "";
+      if (/^xmlns(:|$)/i.test(key) || /^\s*data:/i.test(value)) continue;
+      if (outside.test(value)) found.push(`<${name} ${key}=${value}>`);
+    }
+  }
+  for (const [, ref = ""] of html.matchAll(/url\(\s*['"]?([^)'"]*)/gi)) {
+    if (!/^data:/.test(ref)) found.push(`url(${ref})`);
+  }
+  if (/@import\b/i.test(html)) found.push("@import");
+  return found;
+}
+
+describe("the outside-request scan", () => {
+  it.each([
+    ["single-quoted src", "<img src='https://x.example/a.png'>"],
+    ["single-quoted link href", "<link rel='preload' href='https://x.example/f.woff2'>"],
+    ["unquoted src", "<img src=https://x.example/a.png>"],
+    ["unquoted link href", "<link rel=preload href=https://x.example/f.woff2>"],
+    ["poster", '<video poster="https://x.example/p.png"></video>'],
+    ["second srcset candidate", '<img srcset="/a.png 1x, https://x.example/b.png 2x">'],
+    ["object data", '<object data="https://x.example/o.svg"></object>'],
+    ["svg image href", '<svg><image href="https://x.example/i.png"/></svg>'],
+    ["svg image xlink:href", '<svg><image xlink:href="//x.example/i.png"/></svg>'],
+    ["protocol-relative script", '<script src="//x.example/s.js"></script>'],
+    ["form action", '<form action="https://x.example/post"></form>'],
+    ["meta refresh", '<meta http-equiv="refresh" content="0; url=https://x.example/">'],
+    ["css url()", "<style>a{background:url(https://x.example/a.png)}</style>"],
+    ["css @import", "<style>@import 'https://x.example/a.css';</style>"],
+  ])("flags %s", (_, html) => {
+    expect(outsideRefs(html)).not.toEqual([]);
+  });
+
+  it("lets navigation links, namespaces and data: values through", () => {
+    const html = [
+      '<a href="https://claude.ai/cb" target=_blank>go</a>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><use href="#m"/></svg>',
+      '<link rel="icon" href="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">',
+      '<img src="/logo.png" srcset="/a.png 1x, /b.png 2x">',
+    ].join("");
+    expect(outsideRefs(html)).toEqual([]);
+  });
+});
+
 describe.each(PAGES)("the %s page", (_, html) => {
   it("makes no outside request", () => {
-    const outside = /^\s*(https?:|\/\/)/i;
-    const values = (re: RegExp) => [...html.matchAll(re)].map((m) => m[1] ?? "");
-    const refs = [
-      ...values(/\s(?:src|srcset)\s*=\s*"([^"]*)"/gi),
-      ...values(/<link\b[^>]*\shref\s*=\s*"([^"]*)"/gi),
-    ];
-    for (const ref of refs) expect(ref).not.toMatch(outside);
-    for (const ref of values(/url\(\s*['"]?([^)'"]*)/gi)) expect(ref).toMatch(/^data:/);
-    expect(html).not.toMatch(/@import\b/i);
+    expect(outsideRefs(html)).toEqual([]);
   });
 
   it("carries the theme and a data: favicon", () => {

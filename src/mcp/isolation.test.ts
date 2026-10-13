@@ -418,8 +418,18 @@ describe("owner isolation coverage", () => {
   const WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"];
   /** Paths served elsewhere and covered by their own suites. */
   const ELSEWHERE = /^\/(api\/auth|\.well-known|mcp)(\/|$)/;
-  const webRoutes = (world: World) =>
-    world.app.routes.filter((r) => !ELSEWHERE.test(r.path) && !r.path.includes("*"));
+  const webRoutes = (world: World) => world.app.routes.filter((r) => !ELSEWHERE.test(r.path));
+
+  /** A path a request can name: `:id{[0-9]+}` gets a value its pattern accepts, `*` any segment. */
+  const fillPath = (path: string, linkId: string) =>
+    path
+      .replace(/:\w+(?:\{((?:[^{}]|\{[^}]*\})*)\})?/g, (_, pattern?: string) => {
+        if (pattern === undefined) return linkId;
+        const fits = [linkId, "1", "a"].find((v) => new RegExp(`^(?:${pattern})$`).test(v));
+        if (fits === undefined) throw new Error(`no sample fits the path parameter {${pattern}}`);
+        return fits;
+      })
+      .replaceAll("*", "x");
 
   it("a signed-in B reaches none of A's data through any web path", async () => {
     const world = await oauthWorld();
@@ -433,12 +443,33 @@ describe("owner isolation coverage", () => {
       world.links.prepare("SELECT id FROM links WHERE owner_id = ?").get(A) as { id: string }
     ).id;
     const browser = await addSecondUser(world);
+    const owner = world.agent();
+    await owner.signIn();
+    const aHome = await owner.send("/");
+    expect(aHome.status).toBe(200);
+    expect(String(aHome.body)).toContain(A_URL);
+    expect((await browser.send("/")).status).toBe(200);
     const before = rowsOf(world, A);
-    const paths = [...new Set(webRoutes(world).map((r) => r.path))];
+    const routes = webRoutes(world);
+    const paths = [...new Set(routes.map((r) => r.path))];
     expect(paths).toContain("/connections");
+    const readable = new Set(
+      routes
+        .filter(
+          (r) =>
+            r.method === "GET" ||
+            (r.method === "ALL" &&
+              routes.filter((o) => o.path === r.path).every((o) => o.method === "ALL")),
+        )
+        .map((r) => r.path),
+    );
 
     for (const path of paths) {
-      const res = await browser.send(path.replace(/:\w+/g, aLinkId));
+      const filled = fillPath(path, aLinkId);
+      if (readable.has(path)) {
+        expect((await owner.send(filled)).status, `A's GET ${path}`).not.toBe(404);
+      }
+      const res = await browser.send(filled);
       const body = typeof res.body === "string" ? res.body : JSON.stringify(res.body);
       expect(body, `GET ${path}`).not.toContain(A_URL);
       expect(body, `GET ${path}`).not.toContain(note);

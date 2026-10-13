@@ -143,8 +143,7 @@ describe("the internal client and the startup prune", () => {
       authorizePath(INTERNAL_CLIENT_ID, "https://e.example/cb", pkce().challenge),
     );
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toMatch(
-      new RegExp(`^${TEST_BASE_URL}/api/auth/error\\?error=invalid_redirect&`),
-    );
+    // The app's own error page (onAPIError.errorURL), not the client's redirect.
+    expect(res.headers.get("location")).toMatch(/^\/oauth-error\?error=invalid_redirect&/);
   });
 });

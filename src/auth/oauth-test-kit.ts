@@ -14,6 +14,7 @@ import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import { SqliteKeyStore } from "../store/key-store.js";
+import { SqliteStore } from "../store/sqlite-store.js";
 import { keyIdentify } from "./agent-keys.js";
 import { insideAuthLock } from "./auth-lock.js";
 import { mcpResource } from "./better-auth.js";
@@ -341,6 +342,61 @@ export async function saveLinkWith(world: World, token: string, url: string) {
   );
   await res.text();
   return res;
+}
+
+export const SECOND_USER = { id: "owner-b", email: "b@example.com" };
+
+export async function addSecondUser(world: World) {
+  const ctx = await world.auth.$context;
+  const now = new Date();
+  await ctx.adapter.create({
+    model: "user",
+    data: {
+      id: SECOND_USER.id,
+      name: "B",
+      email: SECOND_USER.email,
+      emailVerified: false,
+      createdAt: now,
+      updatedAt: now,
+    },
+    forceAllowId: true,
+  });
+  await ctx.adapter.create({
+    model: "account",
+    data: {
+      userId: SECOND_USER.id,
+      providerId: "credential",
+      accountId: SECOND_USER.id,
+      password: await ctx.password.hash(TEST_PASSWORD),
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+  new SqliteStore(world.links).ensureUser(SECOND_USER.id, "B");
+  const browser = world.agent();
+  const signedIn = await browser.send("/api/auth/sign-in/email", {
+    method: "POST",
+    json: { email: SECOND_USER.email, password: TEST_PASSWORD },
+  });
+  if (signedIn.status !== 200) throw new Error(`second user sign-in gave ${signedIn.status}`);
+  return browser;
+}
+
+export async function connectClaudeAs(world: World, browser: Agent) {
+  const p = pkce();
+  const az = await browser.send(authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, p.challenge));
+  const consent = new URL(az.headers.get("location") ?? "", TEST_BASE_URL);
+  if (consent.pathname !== "/consent") throw new Error(`authorize went to ${consent.pathname}`);
+  const accepted = await browser.send("/api/auth/oauth2/consent", {
+    method: "POST",
+    json: { accept: true, oauth_query: consent.search.slice(1) },
+  });
+  const code = new URL(field(accepted, "url")).searchParams.get("code") ?? "";
+  const tokens = await exchange(world, code, p.verifier, {
+    client_id: CLAUDE_ID,
+    redirect_uri: CLAUDE_REDIRECT,
+  });
+  return field(tokens, "access_token");
 }
 
 /** Connects Claude end to end and returns its tokens. */

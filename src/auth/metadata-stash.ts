@@ -4,7 +4,7 @@ import {
   validateClientIdUrl,
 } from "@better-auth/cimd";
 import { validatePublicClientJwks } from "@better-auth/oauth-provider/internal";
-import { insideAuthLock } from "./auth-lock.js";
+import { insideAuthLock, type WithAuthLock } from "./auth-lock.js";
 import { CIMD_METADATA_PROFILE } from "./client-admission.js";
 
 /**
@@ -26,8 +26,12 @@ export type JsonFetch = (
 type Resource = { url: string; body: string; etag: string | null; lastModified: string | null };
 type Snapshot = { document: Resource; jwks: Resource | null; fetchedAt: number };
 
-/** `gone`: withdrawn (404, 410) or invalid; the snapshot is dropped at once. */
-export type RefreshResult = "ok" | "gone" | "failed";
+/**
+ * - `gone`: withdrawn (404, 410) or invalid; the snapshot is dropped at once.
+ * - `dropped`: fetched, but the client was forgotten since the refresh began, or is neither
+ *   pinned nor connected; nothing is published. Unlike `failed`, it brings no early retry.
+ */
+export type RefreshResult = "ok" | "gone" | "failed" | "dropped";
 export type PrefetchResult = RefreshResult | "full" | "refused";
 
 const JSON_TYPE = /^application\/(?:[-\w.]+\+)?json\s*(?:;|$)/i;
@@ -56,10 +60,15 @@ const served = (body: string) =>
  */
 export function createMetadataStash({
   fetch,
+  withAuthLock,
+  isConnected,
   now = Date.now,
   freshnessMs = FRESHNESS_MS,
 }: {
   fetch: JsonFetch;
+  withAuthLock: WithAuthLock;
+  /** Whether any user has the client connected: a plain read of the auth database. */
+  isConnected: (clientId: string) => boolean;
   now?: () => number;
   freshnessMs?: number;
 }) {
@@ -69,8 +78,11 @@ export function createMetadataStash({
   let connected = new Set<string>();
   const inFlight = new Map<AbortController, Promise<unknown>>();
   const prefetching = new Map<string, Promise<PrefetchResult>>();
+  /** Bumped when a client is forgotten, so a refresh started before then cannot publish. */
+  const generations = new Map<string, number>();
   let closed = false;
 
+  const generationOf = (clientId: string) => generations.get(clientId) ?? 0;
   const current = (s: Snapshot | undefined): s is Snapshot =>
     s !== undefined && now() - s.fetchedAt < freshnessMs;
   const pinned = (clientId: string) => (pins.get(clientId) ?? 0) > now();
@@ -144,17 +156,23 @@ export function createMetadataStash({
 
   /**
    * Fetches a client's snapshot afresh. A withdrawn or invalid document drops it at once; any
-   * other failure leaves it, so it stops being current F after its last success.
+   * other failure leaves it, so it stops being current F after its last success. The result is
+   * applied in one auth-lock section (condition 11), so it cannot interleave with a disconnect.
    */
   async function refresh(clientId: string): Promise<RefreshResult> {
+    const generation = generationOf(clientId);
     const result = await fetchSnapshot(clientId, snapshots.get(clientId));
-    if (result === "gone") {
-      snapshots.delete(clientId);
-      return "gone";
-    }
-    if (result === "failed" || !wanted(clientId)) return "failed";
-    snapshots.set(clientId, result);
-    return "ok";
+    if (result === "failed") return "failed";
+    return withAuthLock(async () => {
+      if (generationOf(clientId) !== generation) return "dropped";
+      if (result === "gone") {
+        snapshots.delete(clientId);
+        return "gone";
+      }
+      if (!pinned(clientId) && !isConnected(clientId)) return "dropped";
+      snapshots.set(clientId, result);
+      return "ok";
+    });
   }
 
   const pendingCount = () =>
@@ -212,10 +230,22 @@ export function createMetadataStash({
      * pinned, and returns the client ids to keep refreshed.
      */
     sync(connectedNow: Set<string>): string[] {
-      connected = connectedNow;
+      connected = new Set(connectedNow);
       for (const id of [...pins.keys()]) if (!pinned(id) || connected.has(id)) pins.delete(id);
       for (const id of [...snapshots.keys()]) if (!wanted(id)) snapshots.delete(id);
       return [...new Set([...connected, ...pins.keys()])];
+    },
+
+    /**
+     * Drops a disconnected client: its snapshot, its pin and its connected entry. Called inside
+     * the auth lock, in the same section that deleted its last consent.
+     */
+    forget(clientId: string) {
+      if (!insideAuthLock()) throw new Error("forget must run inside the auth lock");
+      generations.set(clientId, generationOf(clientId) + 1);
+      snapshots.delete(clientId);
+      pins.delete(clientId);
+      connected.delete(clientId);
     },
 
     /** Refuses new fetches, aborts those in flight, and waits for them to settle. */

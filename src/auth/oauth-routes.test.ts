@@ -321,6 +321,47 @@ describe("the named limits on authorize, token and revoke", () => {
   );
 });
 
+describe("the authorize gate and a session due for refresh", () => {
+  async function dueSession(world: World) {
+    const browser = world.agent();
+    await browser.signIn();
+    // A session more than a day old is extended on its next use.
+    const soon = new Date(Date.now() + 3_600_000);
+    world.db.prepare(`UPDATE "session" SET expiresAt = ?`).run(soon.toISOString());
+    return { browser, soon };
+  }
+
+  it.each([
+    ["a connected client, handled by better-auth", "connected"],
+    ["a new CIMD client, pending the owner's approval", "pending"],
+    ["a CIMD client whose document does not load", "error"],
+  ])("forwards the refreshed session cookie for %s", async (_, kind) => {
+    const world = await oauthWorld();
+    if (kind === "connected") await connectClaude(world);
+    const x = otherClientDocument(6);
+    if (kind === "pending") world.net.json(x.id, x.document);
+    const { browser, soon } = await dueSession(world);
+    const res = await browser.send(
+      kind === "connected"
+        ? authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, pkce().challenge)
+        : authorizePath(x.id, x.redirect, pkce().challenge),
+    );
+    expect(res.status).toBe(302);
+    const expected = {
+      connected: /^https:\/\/claude\.ai\//,
+      pending: /^\/consent\?/,
+      error: /^\/oauth-error\?/,
+    };
+    expect(res.headers.get("location")).toMatch(expected[kind as keyof typeof expected]);
+    const cookies = res.headers.getSetCookie();
+    expect(cookies.some((c) => c.startsWith("__Secure-better-auth.session_token="))).toBe(true);
+    const row = world.db.prepare(`SELECT max(expiresAt) AS expiresAt FROM "session"`).get() as {
+      expiresAt: string;
+    };
+    expect(new Date(row.expiresAt).getTime()).toBeGreaterThan(soon.getTime());
+  });
+});
+
 describe("the consent page", () => {
   async function signedConsentQuery() {
     const world = await oauthWorld();

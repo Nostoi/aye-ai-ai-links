@@ -1,10 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAuthLock, insideAuthLock } from "./auth-lock.js";
 import { createMetadataRefresher } from "./metadata-refresher.js";
-import { createMetadataStash, FRESHNESS_MS, type JsonFetch } from "./metadata-stash.js";
+import {
+  createMetadataStash,
+  FRESHNESS_MS,
+  type JsonFetch,
+  MAX_PENDING,
+} from "./metadata-stash.js";
 import { CHATGPT_ID, chatgptDocument, otherClientDocument, signingKey } from "./oauth-test-kit.js";
 
 const JWKS_URI = "https://chatgpt.com/oauth/test-client/jwks.json";
 const MIN = 60_000;
+
+type StashOptions = { fetch: JsonFetch; now?: () => number };
+
+/** A stash on its own auth lock, whose database holds exactly the set it was last synced with. */
+function stashOn(options: StashOptions) {
+  let db = new Set<string>();
+  const stash = createMetadataStash({
+    ...options,
+    withAuthLock: createAuthLock(),
+    isConnected: (id) => db.has(id),
+  });
+  return {
+    ...stash,
+    sync: (connected: Set<string>) => {
+      db = new Set(connected);
+      return stash.sync(connected);
+    },
+  };
+}
 
 function clock() {
   let t = 1_000_000;
@@ -29,7 +54,7 @@ describe("the metadata stash", () => {
       if (url === CHATGPT_ID) return json(chatgptDocument(JWKS_URI), { etag: '"doc-1"' });
       return json(keys, { "last-modified": "Tue, 13 Oct 2026 00:00:00 GMT" });
     };
-    const stash = createMetadataStash({ fetch, now: c.now });
+    const stash = stashOn({ fetch, now: c.now });
     stash.sync(new Set([CHATGPT_ID]));
     expect(await stash.refresh(CHATGPT_ID)).toBe("ok");
 
@@ -77,7 +102,7 @@ describe("the metadata stash", () => {
 
   it("aborts a hanging fetch on close, waits for it to settle, and fetches nothing afterwards", async () => {
     const { net, fetch } = hangingNetwork();
-    const stash = createMetadataStash({ fetch });
+    const stash = stashOn({ fetch });
     stash.sync(new Set([CHATGPT_ID]));
     const refreshing = stash.refresh(CHATGPT_ID);
     await Promise.resolve();
@@ -93,7 +118,7 @@ describe("the metadata stash", () => {
 
   it("stops the refresher only once a fill still running past its bound has been aborted and settled", async () => {
     const { net, fetch } = hangingNetwork();
-    const stash = createMetadataStash({ fetch });
+    const stash = stashOn({ fetch });
     const refresher = createMetadataRefresher({
       stash,
       readConnected: async () => new Set([CHATGPT_ID]),
@@ -136,7 +161,7 @@ describe("pending clients", () => {
           (s) => () => (s === 200 ? json(x.document, {}) : new Response("", { status: s })),
         ),
       );
-      const stash = createMetadataStash({ fetch: net.fetch });
+      const stash = stashOn({ fetch: net.fetch });
       const a = stash.prefetch(x.id);
       const b = stash.prefetch(x.id);
       await new Promise((r) => setTimeout(r, 10));
@@ -154,7 +179,7 @@ describe("pending clients", () => {
 
   it("reports a refresh whose client is neither connected nor pinned as not ok, and keeps nothing", async () => {
     const x = otherClientDocument(2);
-    const stash = createMetadataStash({ fetch: async () => json(x.document, {}) });
+    const stash = stashOn({ fetch: async () => json(x.document, {}) });
     stash.sync(new Set());
     expect(await stash.refresh(x.id)).not.toBe("ok");
     expect(stash.isCurrent(x.id)).toBe(false);
@@ -181,7 +206,7 @@ describe("refresh outcomes", () => {
     const keys = { keys: [signingKey("k1").jwk] };
     net.routes.set(CHATGPT_ID, () => json(chatgptDocument(JWKS_URI), {}));
     net.routes.set(JWKS_URI, () => json(keys, {}));
-    const stash = createMetadataStash({ fetch: net.fetch, now: c.now });
+    const stash = stashOn({ fetch: net.fetch, now: c.now });
     stash.sync(new Set([CHATGPT_ID]));
     expect(await stash.refresh(CHATGPT_ID)).toBe("ok");
     return { c, net, keys, stash };
@@ -226,7 +251,7 @@ describe("refresh outcomes", () => {
   );
 
   it("does not take a 304 as success when it holds no earlier copy", async () => {
-    const stash = createMetadataStash({ fetch: async () => new Response(null, { status: 304 }) });
+    const stash = stashOn({ fetch: async () => new Response(null, { status: 304 }) });
     stash.sync(new Set([CHATGPT_ID]));
     expect(await stash.refresh(CHATGPT_ID)).not.toBe("ok");
     expect(stash.isCurrent(CHATGPT_ID)).toBe(false);
@@ -240,10 +265,149 @@ describe("refresh outcomes", () => {
     "https://127.0.0.1/oauth/metadata.json",
   ])("refuses to prefetch %s, fetching and pinning nothing", async (id) => {
     const net = routed();
-    const stash = createMetadataStash({ fetch: net.fetch });
+    const stash = stashOn({ fetch: net.fetch });
     expect(await stash.prefetch(id)).toBe("refused");
     expect(net.urls).toEqual([]);
     expect(stash.sync(new Set())).toEqual([]);
+  });
+});
+
+describe("a refresh that finishes after a disconnect (condition 11)", () => {
+  const x = otherClientDocument(4);
+  const doc = () => json(x.document, {});
+
+  /** Every fetch waits until the test answers it, in order. */
+  function heldNetwork() {
+    const held: Array<(res: Response) => void> = [];
+    const fetch: JsonFetch = () => new Promise((resolve) => held.push(resolve));
+    const next = async () => {
+      while (held.length === 0) await new Promise((r) => setTimeout(r, 0));
+      return held.shift() as (res: Response) => void;
+    };
+    return { fetch, next };
+  }
+
+  /** A stash whose database is `db`, recording whether each connected check ran under the lock. */
+  function world(db = new Set<string>()) {
+    const net = heldNetwork();
+    const withAuthLock = createAuthLock();
+    const checks: boolean[] = [];
+    const stash = createMetadataStash({
+      fetch: net.fetch,
+      withAuthLock,
+      isConnected: (id) => {
+        checks.push(insideAuthLock());
+        return db.has(id);
+      },
+    });
+    /** What disconnect does: the last consent goes and the stash forgets, in one lock section. */
+    const disconnect = () =>
+      withAuthLock(async () => {
+        db.delete(x.id);
+        stash.forget(x.id);
+      });
+    return { net, db, stash, checks, disconnect, withAuthLock };
+  }
+
+  it("drops a connected client's refresh that was in flight across its disconnect", async () => {
+    const w = world(new Set([x.id]));
+    w.stash.sync(new Set([x.id]));
+    const refreshing = w.stash.refresh(x.id);
+    const answer = await w.net.next();
+    await w.disconnect();
+    answer(doc());
+    expect(await refreshing).toBe("dropped");
+    expect(w.stash.isCurrent(x.id)).toBe(false);
+  });
+
+  it("drops a refresh for a client whose consent went since the last sync, checking under the lock", async () => {
+    const w = world(new Set([x.id]));
+    w.stash.sync(new Set([x.id]));
+    const refreshing = w.stash.refresh(x.id);
+    const answer = await w.net.next();
+    w.db.delete(x.id);
+    answer(doc());
+    expect(await refreshing).toBe("dropped");
+    expect(w.stash.isCurrent(x.id)).toBe(false);
+    expect(w.checks).toEqual([true]);
+  });
+
+  it("drops the refresh of a client disconnected while still pinned from its connection", async () => {
+    const w = world();
+    const prefetching = w.stash.prefetch(x.id);
+    (await w.net.next())(doc());
+    expect(await prefetching).toBe("ok");
+    w.db.add(x.id);
+    const refreshing = w.stash.refresh(x.id);
+    const answer = await w.net.next();
+    await w.disconnect();
+    answer(doc());
+    expect(await refreshing).toBe("dropped");
+    expect(w.stash.isCurrent(x.id)).toBe(false);
+  });
+
+  it("does not let an old refresh publish through a new connection's pin", async () => {
+    const w = world(new Set([x.id]));
+    w.stash.sync(new Set([x.id]));
+    const old = w.stash.refresh(x.id);
+    const answerOld = await w.net.next();
+    await w.disconnect();
+    const replacement = w.stash.prefetch(x.id);
+    const answerReplacement = await w.net.next();
+    answerOld(doc());
+    expect(await old).toBe("dropped");
+    expect(w.stash.isCurrent(x.id)).toBe(false);
+    answerReplacement(new Response("", { status: 503 }));
+    expect(await replacement).toBe("failed");
+    expect(w.stash.isCurrent(x.id)).toBe(false);
+  });
+
+  it("does not let an old 404 erase the snapshot of a newer connection", async () => {
+    const w = world(new Set([x.id]));
+    w.stash.sync(new Set([x.id]));
+    const old = w.stash.refresh(x.id);
+    const answerOld = await w.net.next();
+    await w.disconnect();
+    const reconnecting = w.stash.prefetch(x.id);
+    (await w.net.next())(doc());
+    expect(await reconnecting).toBe("ok");
+    w.db.add(x.id);
+    answerOld(new Response("", { status: 404 }));
+    expect(await old).toBe("dropped");
+    expect(w.stash.isCurrent(x.id)).toBe(true);
+  });
+
+  it("still publishes a pending client's prefetch, which nobody has connected yet", async () => {
+    const w = world();
+    const prefetching = w.stash.prefetch(x.id);
+    (await w.net.next())(doc());
+    expect(await prefetching).toBe("ok");
+    expect(w.stash.isCurrent(x.id)).toBe(true);
+  });
+
+  it("refuses forget outside the auth lock", async () => {
+    const w = world();
+    expect(() => w.stash.forget(x.id)).toThrow(/inside the auth lock/);
+  });
+
+  it("counts a forgotten client that is reconnecting as pending, like any new one", async () => {
+    const others = [10, 11, 12, 13, 14].map(otherClientDocument);
+    const docs = new Map([x, ...others].map((c) => [c.id, c.document]));
+    const db = new Set([x.id]);
+    const withAuthLock = createAuthLock();
+    const stash = createMetadataStash({
+      fetch: async (url) => json(docs.get(url), {}),
+      withAuthLock,
+      isConnected: (id) => db.has(id),
+    });
+    stash.sync(new Set([x.id]));
+    for (const c of others.slice(0, MAX_PENDING - 1)) expect(await stash.prefetch(c.id)).toBe("ok");
+    await withAuthLock(async () => {
+      db.delete(x.id);
+      stash.forget(x.id);
+    });
+    expect(await stash.prefetch(x.id)).toBe("ok");
+    expect(await stash.prefetch((others[MAX_PENDING - 1] as { id: string }).id)).toBe("full");
   });
 });
 
@@ -275,7 +439,7 @@ describe("the metadata refresher's schedule", () => {
     net: { fetch: JsonFetch },
     readConnected: () => Promise<Set<string>> = async () => new Set([CHATGPT_ID]),
   ) {
-    const stash = createMetadataStash({ fetch: net.fetch });
+    const stash = stashOn({ fetch: net.fetch });
     const refresher = createMetadataRefresher({ stash, readConnected, log: () => {} });
     return { stash, refresher };
   }
@@ -329,6 +493,40 @@ describe("the metadata refresher's schedule", () => {
     expect(net.urls.length).toBe(afterFill);
     await vi.advanceTimersByTimeAsync(INTERVAL_MS);
     expect(net.urls.length).toBeGreaterThan(afterFill);
+    await refresher.stop();
+  });
+
+  it("comes back at the retry time when one client fails and another is healthy", async () => {
+    vi.useFakeTimers();
+    const OTHER_ID = "https://other.example/oauth/metadata.json";
+    const net = network((url) =>
+      url === OTHER_ID ? new Response("", { status: 503 }) : healthy(url),
+    );
+    const { refresher } = connectedRefresher(net, async () => new Set([CHATGPT_ID, OTHER_ID]));
+    await Promise.all([refresher.fill(), vi.advanceTimersByTimeAsync(4 * LATENCY_MS)]);
+    refresher.start();
+    const afterFill = net.urls.length;
+
+    await vi.advanceTimersByTimeAsync(RETRY_MS + 4 * LATENCY_MS);
+    expect(net.urls.length).toBeGreaterThan(afterFill);
+    await refresher.stop();
+  });
+
+  it("comes back at the retry time when reading the connected set fails, then makes the client current", async () => {
+    vi.useFakeTimers();
+    const net = network(healthy);
+    let reads = 0;
+    const { stash, refresher } = connectedRefresher(net, async () => {
+      if (reads++ === 0) throw new Error("database busy");
+      return new Set([CHATGPT_ID]);
+    });
+    await refresher.fill();
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(false);
+
+    refresher.start();
+    await vi.advanceTimersByTimeAsync(RETRY_MS + 2 * LATENCY_MS + 100);
+    expect(reads).toBe(2);
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(true);
     await refresher.stop();
   });
 

@@ -97,7 +97,7 @@ function handle(req: IncomingMessage, res: ServerResponse) {
       return res.end(body);
     }
     case "stacked":
-      res.writeHead(200, { ...type, "content-encoding": "gzip, gzip, gzip" });
+      res.writeHead(200, { ...type, "content-encoding": "gzip, br" });
       return res.end("{}");
     case "hang":
       return; // never answers
@@ -215,7 +215,7 @@ describe("body size", () => {
     },
   );
 
-  it("refuses three stacked content-encodings without trying to decode", async () => {
+  it("refuses two stacked content-encodings without trying to decode", async () => {
     await expect(fetcherWith().fetch(siteUrl("/stacked"))).rejects.toThrow(/content-encoding/);
   });
 

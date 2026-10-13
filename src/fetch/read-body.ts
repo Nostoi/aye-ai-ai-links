@@ -13,9 +13,9 @@ const DECODERS: Record<string, () => zlib.Gunzip | zlib.Inflate | zlib.BrotliDec
 };
 
 /** Every decoder is built before the first byte is read, so a header stacking thousands would cost memory per request. */
-const MAX_CODINGS = 2;
+const MAX_CODINGS = 1;
 
-/** The `Content-Encoding` header as decoder names in the order to apply them, or undefined if any is unknown or there are more than two. */
+/** The `Content-Encoding` header as decoder names in the order to apply them, or undefined if any is unknown or there is more than one. */
 export function decodersFor(header: string | undefined): string[] | undefined {
   const applied = (header ?? "")
     .toLowerCase()

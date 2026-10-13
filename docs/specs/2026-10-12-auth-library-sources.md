@@ -66,9 +66,14 @@ Codex also found that a token with only the `offline_access` scope is active for
    - A deliberate await inside a better-auth transaction rolled back app writes on a shared handle.
    - On a second connection to the same file, it gave `SQLITE_BUSY`.
    - No real flow kept a transaction open across an await, so a shared file is a latent risk.
-   - `deploy.sh` must back up and roll back this file too.
-3. **One lock in the app for every `/api/auth/*` request.** This fixes case 1: with the lock, the replay waits, and afterwards the whole family is dead. Eight concurrent flows and eight concurrent refreshes all completed. It relies on a single process.
-4. **Disconnect is one transaction under that lock.**
+   - `deploy.sh` must back up and roll back this file too. Its current restore check compares `user_version`, which better-auth never sets, so the auth file needs its own way to tell that a restore is needed.
+3. **One lock in the server process for every better-auth call that writes tokens, codes or consent.**
+   - This covers both `/api/auth/*` requests and server-side `auth.api` calls.
+   - It fixes case 1: with the lock, the replay waits, and afterwards the whole family is dead. Eight concurrent flows and eight concurrent refreshes all completed.
+   - In the spike the lock was Hono middleware on the request path, so `auth.api` calls skipped it.
+   - It relies on a single process. A CLI command must ask the running server to act; it never writes the auth file itself.
+   - The lock is held during a CIMD fetch of up to 5 s, so #77's rate limits must stop unauthenticated authorize requests from queuing the owner's own requests behind it.
+4. **Disconnect is one transaction under that lock, run inside the server.**
    - For one client and owner, it deletes the `oauthAccessToken`, `oauthRefreshToken` and `oauthConsent` rows, and the `verification` rows holding that pair's authorization codes. This fixes case 2.
    - It writes into better-auth's tables directly, so its tests re-run on every upgrade.
 5. **Case 3 is an accepted residual risk** (owner ruling, #75 comment 6136036644).
@@ -78,7 +83,11 @@ Codex also found that a token with only the `offline_access` scope is active for
 6. **`/mcp` requires the `links` scope.**
 7. **Refresh-token reuse window of 0.** `mcp()` defaults to 30 s, and within that window a replay gets a 200 with the same response.
 8. **`mcp()` together with `cimd()`, and never also `oauthProvider()`.** Registering both logs 29 path conflicts and starts anyway.
-9. **CIMD documents are fetched through a new JSON fetcher built on `isPublicAddress`.** It refuses redirects, has a 5 s limit and a 5 KB cap, and also serves `jwks_uri`. better-auth refuses only private hosts written as literal addresses (READ). The page fetcher returns `not_html` for JSON, so it can't be reused as it is.
+9. **CIMD documents are fetched through a new JSON fetcher built on `isPublicAddress`.**
+   - **Addresses.** It connects through the page fetcher's `guardedLookup`, so the address that passed the check is the one it connects to. cimd requires the transport to "resolve the hostname exactly once … pin the approved address for the connection, and refuse redirects" (READ `@better-auth/cimd/dist/index.d.mts`). better-auth refuses only private hosts written as literal addresses (READ), so for hostnames this fetcher is the only defence.
+   - **Limits.** It refuses redirects and has a 5 s limit.
+   - **Size.** It also serves `jwks_uri`. better-auth allows a key set up to 64 KiB (`MAX_JWKS_RESPONSE_BYTES`, READ), and cimd enforces its own 5 KB cap on metadata documents, so the fetcher's cap is 64 KiB. #77 checks the size of ChatGPT's key set.
+   - **Reuse.** The page fetcher returns `not_html` for JSON, so it can't be reused as it is.
 10. **`savedBy` is the client's registered name, falling back to its `client_id`.** Introspection returns no client name. A CIMD `client_id` is its stable URL; DCR issues a new one on each registration.
 
 ## Security record

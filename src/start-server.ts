@@ -46,6 +46,7 @@ export type StartOptions = {
   extractor?: PageExtractor;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
   jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
+  refresherIntervalMs?: number;
 };
 
 /**
@@ -81,6 +82,7 @@ export async function startServer(
     extractor = createChildExtractor(),
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher(),
+    refresherIntervalMs,
   }: StartOptions = {},
 ) {
   // Loading first means a missing or tampered model fails the start with nothing to close.
@@ -123,6 +125,7 @@ export async function startServer(
       fetch: jsonFetcher.fetch,
       keys: keyIdentify(new SqliteKeyStore(db)),
       wrapMigrations: wrapAuthMigrations,
+      refresherOptions: { intervalMs: refresherIntervalMs },
     });
     refresher = auth.refresher;
     const built = createApp({

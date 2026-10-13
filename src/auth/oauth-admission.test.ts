@@ -196,6 +196,28 @@ describe("pending connections", () => {
     expect(new URL(field(accepted, "url")).searchParams.has("code")).toBe(true);
   });
 
+  it("extends a pending client's pin when the owner reopens its authorize, so approving later with the new query works", async () => {
+    const clock = stashClock();
+    const world = await oauthWorld({ now: clock.now });
+    const browser = world.agent();
+    await browser.signIn();
+    await startPending(world, 8, browser);
+    clock.advance(400_000);
+    const reopened = await startPending(world, 8, browser);
+    expect(reopened.res.headers.get("location")).toMatch(/^\/consent\?/);
+
+    clock.advance(300_000);
+    await world.refresher.cycle();
+    const query = new URL(reopened.res.headers.get("location") ?? "", "https://links.example")
+      .search;
+    const accepted = await browser.send("/api/auth/oauth2/consent", {
+      method: "POST",
+      json: { accept: true, oauth_query: query.slice(1) },
+    });
+    expect(accepted.status).toBe(200);
+    expect(new URL(field(accepted, "url")).searchParams.has("code")).toBe(true);
+  });
+
   it("recovers when consent is written but its re-run authorize fails: the refresher picks the client up and a retry succeeds", async () => {
     const clock = stashClock();
     const world = await oauthWorld({ now: clock.now });

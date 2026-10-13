@@ -96,6 +96,9 @@ function handle(req: IncomingMessage, res: ServerResponse) {
       }
       return res.end(body);
     }
+    case "stacked":
+      res.writeHead(200, { ...type, "content-encoding": "gzip, gzip, gzip" });
+      return res.end("{}");
     case "hang":
       return; // never answers
     case "stall":
@@ -155,8 +158,12 @@ describe("addresses that must never be connected to", () => {
   it.each([
     ["127.0.0.1", "evil.test"],
     ["10.0.0.5", "lan.test"],
-  ])("refuses a hostname that resolves to %s, with no connection", async (_ip, host) => {
-    await expect(fetcherWith().fetch(`https://${host}:${targetPort}/`)).rejects.toThrow();
+  ])("refuses a hostname that resolves to %s, with no connection", async (ip, host) => {
+    const started = performance.now();
+    await expect(fetcherWith().fetch(`https://${host}:${targetPort}/`)).rejects.toThrow(
+      `resolves to ${ip}`,
+    );
+    expect(performance.now() - started).toBeLessThan(1000);
     expect(targetHits).toBe(0);
   });
 
@@ -207,6 +214,10 @@ describe("body size", () => {
       await expect(fetcher.fetch(siteUrl(`/size/${CAP + 1}/${mode}`))).rejects.toThrow();
     },
   );
+
+  it("refuses three stacked content-encodings without trying to decode", async () => {
+    await expect(fetcherWith().fetch(siteUrl("/stacked"))).rejects.toThrow(/content-encoding/);
+  });
 
   it("counts decoded bytes, so a tiny compressed bomb is refused", async () => {
     // 20 MB of spaces gzips to a few KB, far under the cap on the wire.

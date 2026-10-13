@@ -17,7 +17,7 @@ async function listedToolNames(): Promise<string[]> {
   try {
     const deps = createDeps(db, new FakeEmbedder(DIMS));
     deps.store.ensureUser(OWNER.owner, OWNER.owner);
-    const { app } = createApp({ deps, identify: async () => OWNER });
+    const { app } = createApp({ deps, identify: async () => ({ ...OWNER, rateKey: "owner" }) });
     const res = await app.fetch(
       new Request("http://localhost/mcp", {
         method: "POST",

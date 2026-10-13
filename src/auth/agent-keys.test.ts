@@ -87,8 +87,16 @@ describe("parseBearer", () => {
 describe("keyIdentify", () => {
   it("returns the owner and agent name for a valid key", async () => {
     const { identify, key } = setup();
-    expect(await identify(asRequest(`Bearer ${key}`))).toEqual({ owner: "mark", savedBy: "codex" });
-    expect(await identify(asRequest(`bearer ${key}`))).toEqual({ owner: "mark", savedBy: "codex" });
+    expect(await identify(asRequest(`Bearer ${key}`))).toEqual({
+      owner: "mark",
+      savedBy: "codex",
+      rateKey: "key:mark/codex",
+    });
+    expect(await identify(asRequest(`bearer ${key}`))).toEqual({
+      owner: "mark",
+      savedBy: "codex",
+      rateKey: "key:mark/codex",
+    });
   });
 
   it("returns null for every invalid credential", async () => {
@@ -130,7 +138,11 @@ describe("keyIdentify", () => {
     const cli = new SqliteKeyStore(openAt(path));
     const identify = keyIdentify(server);
     const key = createAgentKey(cli, { owner: "mark", ownerName: "Mark", agent: "codex" });
-    expect(await identify(asRequest(`Bearer ${key}`))).toEqual({ owner: "mark", savedBy: "codex" });
+    expect(await identify(asRequest(`Bearer ${key}`))).toEqual({
+      owner: "mark",
+      savedBy: "codex",
+      rateKey: "key:mark/codex",
+    });
     revokeAgentKey(cli, "mark", "codex");
     expect(await identify(asRequest(`Bearer ${key}`))).toBeNull();
   });

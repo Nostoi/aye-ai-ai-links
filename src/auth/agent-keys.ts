@@ -23,19 +23,32 @@ export const hashKey = (key: string): string => createHash("sha256").update(key)
  * The token from `Authorization: Bearer <token>` (RFC 9110 §11.1, RFC 6750 §2.1): scheme matched
  * case-insensitively, one or more spaces, then exactly one token, taken as given.
  */
-export function parseBearer(header: string | null): string | null {
+export function bearerToken(header: string | null): string | null {
   const [, scheme, token] = /^([A-Za-z]+) +(\S+)$/.exec(header ?? "") ?? [];
-  if (scheme?.toLowerCase() !== "bearer") return null;
-  return token !== undefined && /^aak_[A-Za-z0-9_-]+$/.test(token) ? token : null;
+  return scheme?.toLowerCase() === "bearer" && token !== undefined ? token : null;
 }
 
-/** Looks the key up afresh on every request, so a revocation applies to the next one. */
+/** Agent keys start with this; any other bearer token is an OAuth access token. */
+export const AGENT_KEY_PREFIX = "aak_";
+
+/** The bearer token when it has an agent key's shape, else null. */
+export function parseBearer(header: string | null): string | null {
+  const token = bearerToken(header);
+  return token !== null && /^aak_[A-Za-z0-9_-]+$/.test(token) ? token : null;
+}
+
+/**
+ * Looks the key up afresh on every request, so a revocation applies to the next one. Agent keys
+ * are rate limited per owner and agent, in a bucket no OAuth client can share.
+ */
 export const keyIdentify =
   (keys: SqliteKeyStore): Identify =>
   async (request) => {
     const token = parseBearer(request.headers.get("authorization"));
     const found = token === null ? null : keys.findLiveByHash(hashKey(token));
-    return found ? { owner: found.owner, savedBy: found.name } : null;
+    return found
+      ? { owner: found.owner, savedBy: found.name, rateKey: `key:${found.owner}/${found.name}` }
+      : null;
   };
 
 /** Returns the new key's plaintext, which is not stored and cannot be shown again. */

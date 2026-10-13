@@ -49,7 +49,7 @@ function freshApp() {
   const db = openDatabase(":memory:");
   const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => NOW };
   deps.store.ensureUser(A.owner, A.owner);
-  const app = createApp({ deps, identify: async () => A }).app;
+  const app = createApp({ deps, identify: async () => ({ ...A, rateKey: "a" }) }).app;
   return { db, deps, app };
 }
 

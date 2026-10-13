@@ -25,6 +25,21 @@ const tempPath = () => {
   return join(d, "auth.db");
 };
 
+/** better-auth's tables with `mcp()`; no `jwks` table, because tokens are opaque. */
+const AUTH_TABLES = [
+  "account",
+  "oauthAccessToken",
+  "oauthClient",
+  "oauthClientAssertion",
+  "oauthClientResource",
+  "oauthConsent",
+  "oauthRefreshToken",
+  "oauthResource",
+  "session",
+  "user",
+  "verification",
+];
+
 const tables = (db: Database.Database) =>
   (
     db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as {
@@ -33,7 +48,7 @@ const tables = (db: Database.Database) =>
   ).map((t) => t.name);
 
 describe("authOptions", () => {
-  it("closes sign-up, turns off better-auth's limiter, telemetry and cookie cache, and has no social or plugins", () => {
+  it("closes sign-up, turns off better-auth's limiter, telemetry and cookie cache, and has no social provider", () => {
     const db = new Database(":memory:");
     const o = authOptions({ db, secret: SECRET, baseUrl: BASE });
     expect(o.emailAndPassword).toMatchObject({ enabled: true, disableSignUp: true });
@@ -41,14 +56,14 @@ describe("authOptions", () => {
     expect(o.telemetry).toEqual({ enabled: false });
     expect(o.advanced).toMatchObject({ useSecureCookies: true });
     expect(o).not.toHaveProperty("socialProviders");
-    expect(o).not.toHaveProperty("plugins");
+    expect(o.plugins.map((p) => p.id)).toEqual(["oauth-provider", "aye-client-admission"]);
     expect(o).not.toHaveProperty("session.cookieCache");
     db.close();
   });
 
   it("gives better-auth the password lengths the CLI checks, and the base URL as the only trusted origin", async () => {
     const db = new Database(":memory:");
-    const ctx = await createAuth(authOptions({ db, secret: SECRET, baseUrl: BASE })).$context;
+    const ctx = await createAuth(authOptions({ db, secret: SECRET, baseUrl: BASE })).auth.$context;
     expect(ctx.password.config).toEqual({
       minPasswordLength: PASSWORD_LENGTH.min,
       maxPasswordLength: PASSWORD_LENGTH.max,
@@ -62,7 +77,7 @@ describe("authOptions", () => {
     const db = new Database(":memory:");
     const options = authOptions({ db, secret: SECRET, baseUrl: BASE });
     await migrateAuth(options);
-    const auth = createAuth(options);
+    const { auth } = createAuth(options);
     await expect(
       auth.api.signUpEmail({
         body: { email: "new@example.com", password: "Correct-horse-1", name: "New" },
@@ -161,7 +176,7 @@ describe("migrateAuth", () => {
     const db = new Database(":memory:");
     const options = authOptions({ db, secret: SECRET, baseUrl: BASE });
     await migrateAuth(options);
-    expect(tables(db)).toEqual(["account", "session", "user", "verification"]);
+    expect(tables(db)).toEqual(AUTH_TABLES);
     const schema = db.prepare("SELECT sql FROM sqlite_master ORDER BY name").all();
     await migrateAuth(options);
     expect(db.prepare("SELECT sql FROM sqlite_master ORDER BY name").all()).toEqual(schema);

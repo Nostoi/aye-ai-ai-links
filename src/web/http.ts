@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import type { WithAuthLock } from "../auth/auth-lock.js";
 import type { Auth } from "../auth/better-auth.js";
+import type { ConsentDetails } from "../auth/consent.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
-import { homePage, loginPage } from "./pages.js";
+import { consentExpiredPage, consentPage, homePage, loginPage } from "./pages.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
@@ -13,10 +14,13 @@ export function webApp({
   deps,
   auth,
   withAuthLock,
+  consent,
 }: {
   deps: SearchLinksDeps;
   auth: Auth;
   withAuthLock: WithAuthLock;
+  /** What to show for a signed authorize query; without it there is no consent page. */
+  consent?: ((query: string) => Promise<ConsentDetails | null>) | undefined;
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
@@ -28,6 +32,15 @@ export function webApp({
     const links = await searchLinks(deps, caller.owner, { query: "" }, caller.savedBy);
     return c.html(homePage(links), 200, NO_STORE);
   });
+
+  if (consent) {
+    app.get("/consent", session, async (c) => {
+      const details = await consent(new URL(c.req.url).search.slice(1));
+      return details
+        ? c.html(consentPage(details), 200, NO_STORE)
+        : c.html(consentExpiredPage(), 400, NO_STORE);
+    });
+  }
 
   return app;
 }

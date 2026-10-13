@@ -25,5 +25,7 @@ export async function readSession(
 /** The session's owner as a caller, or null; for doors that need no cookie forwarded. */
 export const sessionIdentify =
   (auth: Auth, withAuthLock: WithAuthLock): Identify =>
-  async (request) =>
-    (await readSession(auth, withAuthLock, request.headers)).caller;
+  async (request) => {
+    const { caller } = await readSession(auth, withAuthLock, request.headers);
+    return caller && { ...caller, rateKey: `session:${caller.owner}` };
+  };

@@ -47,7 +47,7 @@ export async function run(
     try {
       const options = authOptions({ db, secret: config.secret, baseUrl: config.baseUrl });
       await migrateAuth(options);
-      const { created } = await setOwnerLogin(createAuth(options), {
+      const { created } = await setOwnerLogin(createAuth(options).auth, {
         id: env.AYE_OWNER || "owner",
         name: env.AYE_OWNER_NAME || "Owner",
         email,

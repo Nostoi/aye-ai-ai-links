@@ -18,7 +18,7 @@ You talk to your AI; it uses the library for you.
 - **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
 - **Digests.** Ask "anything I should look at?" and your AI gets up to five saved links worth another look, each with its reasons: it shares words with something you're working on, it has no why yet, it was saved over 30 days ago and no AI has recorded you opening it in that time, or it has never come up before. Your AI turns those into a short nudge, and can ask why you saved one, snooze it or archive it. A link that comes up in a digest stays out of digests for two weeks, so the next digest brings different links. Snoozed links stay out until the snooze ends, and archived links never come up.
 
-Each AI has its own key, and every link records which AI saved it.
+Each AI has its own key or its own app connection, and every link records which AI saved it.
 
 The tools your AI uses:
 
@@ -37,14 +37,15 @@ The tools your AI uses:
 ### Still to come
 
 - **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a plain list of your newest links.
-- **ChatGPT and the Claude phone and web apps**, once they can sign in through OAuth. The web login they will use is built.
+- **ChatGPT and the Claude phone and web apps** in daily use. They sign in through OAuth (step 7 below), but their servers can only reach the server once it is on the public internet, which waits for the owner-isolation tests and port 443.
+- **A page listing connected apps**, with a way to disconnect one.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login and its sessions live in a second SQLite file beside it.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
 
 ## Run it on your Mac
 
@@ -87,7 +88,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    - If the old service is not confirmed stopped within 25 s, the deploy ends there without changing or starting anything, so the service may be left down. An interruption during that wait rolls back as below.
    - After the stop is confirmed, until the new release is listening, any failure or interruption rolls back: the previous release starts again (before the switch, only if its plist is installed), or, if there is no previous release, `current` and the plist are removed and the service stays stopped.
    - If the schema changed or there was no database before, the failed release's database, with any writes it accepted, is moved to `~/.aye-links/data/backups/failed-links-*.db` and not merged back, and the backup, if any, is restored; otherwise the database is left as it is, writes included.
-   - The login database follows the same rule, set aside as `failed-auth-*.db`. When its backup is restored, every session in it is deleted, so you sign in again; a restored backup would otherwise bring back sessions you signed out since.
+   - The login database follows the same rule, set aside as `failed-auth-*.db`. When its backup is restored, every session, every app connection (its tokens and your approval) and every unused sign-in code in it is deleted, so you sign in and connect your AI apps again; a restored backup would otherwise bring back sessions you signed out and apps you disconnected since. Agent keys live in the links database and are not affected.
    - If a rollback step fails, the script stops the service (and says if it could not confirm that), moves the plist to `~/.aye-links/com.aye-links.plist.disabled` so nothing starts at login, and writes `~/.aye-links/recovery-pending`; deploys refuse to run until you delete it.
    - Once the new release is listening, the deploy has succeeded; the script then removes old releases and backups, and interrupting that leaves the new release running. Only the current and previous releases and the 10 newest backups of each database are kept.
 
@@ -160,6 +161,16 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
      }
    }
    ```
+
+7. **Not yet:** do not put the server on the public internet, or follow this step, until the owner-isolation tests (#78) and the lockout fix (#79) are done.
+
+   Connect ChatGPT or the Claude apps through OAuth. Instead of a key, they sign you in on the server and ask you to approve them. Their servers call yours, so the server must be reachable from the internet on port 443, and `AYE_BASE_URL` must be that public address (for example `https://<your-public-host>`), with its host in `AYE_ALLOWED_HOSTS`.
+
+   **Claude** (web, desktop and phone apps): add a custom connector with the URL `https://<your-public-host>/mcp`.
+
+   **ChatGPT:** add a custom MCP server with the URL `https://<your-public-host>/mcp` and OAuth as its authentication.
+
+   Each app opens the server's sign-in page, then asks you to allow it to read and save links in your library. Once you allow it, every link it saves records the app's own name (for example "Claude"). Claude and ChatGPT identify themselves with a client document they publish; the server reloads it every few minutes, and refuses the app while it is gone or has not loaded for 5 minutes. At most 5 new apps can wait for your approval at once.
 
 A LaunchAgent runs only while your account is logged in, so keep it logged in. Whether the Mac sleeps is your setting to choose.
 

@@ -5,8 +5,8 @@ import { join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
-import { createAuthLock } from "../auth/auth-lock.js";
-import { authOptions, createAuth, openAuthDatabase, PASSWORD_LENGTH } from "../auth/better-auth.js";
+import { openAuthDatabase, PASSWORD_LENGTH } from "../auth/better-auth.js";
+import { buildAuth } from "../auth/build-auth.js";
 import { saveLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -83,12 +83,16 @@ async function server(vars: Record<string, string | undefined>) {
   const deps = createDeps(db, new FakeEmbedder(DIMS));
   deps.store.ensureUser("owner", "Owner");
   await saveLink(deps, "owner", { url: "https://example.com/mine", savedBy: "codex" });
-  const auth = createAuth(authOptions({ db: authDb, secret: SECRET, baseUrl: BASE }));
-  const { app } = createApp({
-    deps,
-    identify: async () => null,
-    auth: { auth, withAuthLock: createAuthLock() },
+  const auth = await buildAuth({
+    db: authDb,
+    secret: SECRET,
+    baseUrl: BASE,
+    fetch: async () => {
+      throw new Error("no network");
+    },
+    keys: async () => null,
   });
+  const { app } = createApp({ deps, identify: async () => null, auth });
   const signIn = async (password: string, email = EMAIL) => {
     const res = await app.fetch(
       new Request(`${BASE}/api/auth/sign-in/email`, {

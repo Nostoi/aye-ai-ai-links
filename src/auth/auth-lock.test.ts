@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAuthLock } from "./auth-lock.js";
+import { createAuthLock, insideAuthLock } from "./auth-lock.js";
 
 function gate() {
   let open!: () => void;
@@ -42,6 +42,25 @@ describe("createAuthLock", () => {
     const next = withAuthLock(async () => "next");
     await expect(failed).rejects.toBe(boom);
     expect(await next).toBe("next");
+  });
+
+  it("marks the code it runs, and only that code, as inside the lock", async () => {
+    const withAuthLock = createAuthLock();
+    const seen: boolean[] = [];
+    const outside = gate();
+    const background = (async () => {
+      await outside.opened;
+      seen.push(insideAuthLock());
+    })();
+    await withAuthLock(async () => {
+      seen.push(insideAuthLock());
+      outside.open();
+      await tick();
+      seen.push(insideAuthLock());
+    });
+    await background;
+    expect(seen).toEqual([true, false, true]);
+    expect(insideAuthLock()).toBe(false);
   });
 
   it("gives each lock its own queue", async () => {

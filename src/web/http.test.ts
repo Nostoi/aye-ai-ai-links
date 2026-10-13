@@ -20,7 +20,7 @@ async function setup() {
   const { app } = createApp({
     deps,
     identify: async () => null,
-    auth: { auth: a.auth, withAuthLock: a.withAuthLock },
+    auth: a,
   });
   const get = (path: string, cookie?: string) =>
     app.fetch(

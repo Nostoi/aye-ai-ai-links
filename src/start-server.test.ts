@@ -7,6 +7,8 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentKey } from "./auth/agent-keys.js";
 import { authOptions, createAuth, migrateAuth, openAuthDatabase } from "./auth/better-auth.js";
+import type { JsonFetch } from "./auth/metadata-stash.js";
+import { connectClaude, oauthWorld } from "./auth/oauth-test-kit.js";
 import { setOwnerLogin } from "./auth/owner-login.js";
 import type { ServerConfig } from "./config.js";
 import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
@@ -506,7 +508,7 @@ describe("startServer", () => {
       const { stop } = await start();
       expect(() => authTables()).toThrow(expect.objectContaining({ code: "SQLITE_BUSY" }));
       await stop();
-      expect(authTables()).toEqual(["account", "session", "user", "verification"]);
+      expect(authTables()).toEqual(expect.arrayContaining(["oauthClient", "session", "user"]));
     });
 
     it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves / with the session", async () => {
@@ -514,7 +516,7 @@ describe("startServer", () => {
       const auth = openAuthDatabase(authPath());
       const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
       await migrateAuth(options);
-      await setOwnerLogin(createAuth(options), {
+      await setOwnerLogin(createAuth(options).auth, {
         id: "owner",
         name: "Owner",
         email: "you@example.com",
@@ -539,6 +541,78 @@ describe("startServer", () => {
       expect(await home.text()).toContain("https://example.com/served-home");
       await stop();
       expect(authRows("SELECT userId FROM session")).toEqual([{ userId: "owner" }]);
+    });
+
+    const claudeBeforeStart = async () => {
+      const authDb = openAuthDatabase(authPath());
+      const world = await oauthWorld({ authDb });
+      const claude = await connectClaude(world);
+      await world.refresher.stop();
+      authDb.close();
+      return { net: world.net, claude };
+    };
+
+    const fetchesReach = async (net: { calls: unknown[] }, n: number) => {
+      for (let i = 0; i < 200 && net.calls.length < n; i++) await sleep(10);
+      expect(net.calls.length).toBeGreaterThanOrEqual(n);
+    };
+
+    it("keeps refreshing connected clients while it runs, so a token still works well past F", async () => {
+      const { net, claude } = await claudeBeforeStart();
+      vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
+      try {
+        const { port } = await start({
+          jsonFetcher: { fetch: net.fetch, close: async () => {} },
+          refresherIntervalMs: 20,
+        });
+        for (let step = 0; step < 4; step++) {
+          vi.setSystemTime(Date.now() + 2 * 60_000);
+          await fetchesReach(net, net.calls.length + 1);
+        }
+        const res = await post(port, SAVE, `Bearer ${claude.access}`);
+        expect(res.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("on stop, aborts a metadata fetch in flight and waits for it before closing the JSON fetcher, then fetches nothing more", async () => {
+      const { net } = await claudeBeforeStart();
+      const events: string[] = [];
+      let hang = false;
+      const fetch: JsonFetch = (url, init) => {
+        if (!hang) return net.fetch(url, init);
+        events.push("fetching");
+        return new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () =>
+            setTimeout(() => {
+              events.push("aborted");
+              reject(new Error("aborted"));
+            }, 20),
+          );
+        });
+      };
+      const { stop } = await start({
+        jsonFetcher: { fetch, close: async () => void events.push("fetcher closed") },
+        refresherIntervalMs: 20,
+      });
+      hang = true;
+      for (let i = 0; i < 200 && !events.includes("fetching"); i++) await sleep(10);
+      await stop();
+      expect(events).toEqual(["fetching", "aborted", "fetcher closed"]);
+      await sleep(100);
+      expect(events).toEqual(["fetching", "aborted", "fetcher closed"]);
+    });
+
+    it("fills the metadata stash before it listens, so a connected client's token works on the first request", async () => {
+      const { net, claude } = await claudeBeforeStart();
+      const before = net.calls.length;
+
+      const { port } = await start({ jsonFetcher: { fetch: net.fetch, close: async () => {} } });
+      expect(net.calls.length).toBe(before + 1);
+      const res = await post(port, SAVE, `Bearer ${claude.access}`);
+      expect(res.status).toBe(200);
+      expect(rows()).toEqual([{ url: URL_A, savedBy: "Claude" }]);
     });
   });
 

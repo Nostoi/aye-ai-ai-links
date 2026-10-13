@@ -89,22 +89,41 @@ async function refused(world: World, token: string, name: string, args: unknown,
 const NO_LINK = /No link with id/;
 const NO_NOTE = /No profile note with id/;
 
-// Every table that holds A's rows. SELECT * so a change to any column shows.
-const OWNED = [
-  "links",
-  "tags",
-  "link_tags",
-  "profile_notes",
+const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
+  "add_profile",
+  "edit_profile",
+  "get_digest",
+  "get_link",
+  "get_profile",
+  "save_link",
+  "search_links",
+  "update_link",
+  "update_tag",
+];
+const KNOWN_OWNED_TABLES = [
   "focus_log",
+  "link_tags",
+  "link_vectors",
+  "links",
+  "profile_notes",
   "search_log",
   "snapshots",
-  "link_vectors",
+  "tags",
 ];
+const ownedTablesOf = (world: World): string[] =>
+  (
+    world.links
+      .prepare(
+        `SELECT m.name AS name FROM sqlite_master m, pragma_table_info(m.name) c
+         WHERE m.type = 'table' AND c.name = 'owner_id' ORDER BY m.name`,
+      )
+      .all() as { name: string }[]
+  ).map((r) => r.name);
 const rowsOf = (world: World, owner: string) =>
   Object.fromEntries(
-    OWNED.map((t) => [
+    ownedTablesOf(world).map((t) => [
       t,
-      world.links.prepare(`SELECT * FROM ${t} WHERE owner_id = ? ORDER BY rowid`).all(owner),
+      world.links.prepare(`SELECT * FROM "${t}" WHERE owner_id = ? ORDER BY rowid`).all(owner),
     ]),
   );
 const grantsOf = (world: World, userId: string) =>
@@ -365,6 +384,35 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     expect(saved.profile.notes.map((n) => n.text)).toEqual(["B private note"]);
     expect(saved.profile.recentFocus).toEqual([]);
     expect(snapA()).toEqual(before);
+  });
+});
+
+describe("owner isolation coverage", () => {
+  it("the door lists exactly the tools this suite exercises across two owners", async () => {
+    const { world } = await fixture();
+    const token = createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" });
+    const res = await world.app.fetch(
+      new Request("https://links.example/mcp", {
+        method: "POST",
+        headers: {
+          host: "links.example",
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method: "tools/list", params: {} }),
+      }),
+    );
+    const data = (await res.text()).split("\n").find((l) => l.startsWith("data:"));
+    const listed = (JSON.parse((data ?? "data:{}").slice(5)).result?.tools ?? []) as {
+      name: string;
+    }[];
+    expect(listed.map((t) => t.name).sort()).toEqual([...TOOLS_EXERCISED_ACROSS_TWO_OWNERS].sort());
+  });
+
+  it("the owner_id tables snapshotted for A include every table the suite first knew", async () => {
+    const { world } = await fixture();
+    expect(ownedTablesOf(world)).toEqual(expect.arrayContaining(KNOWN_OWNED_TABLES));
   });
 });
 

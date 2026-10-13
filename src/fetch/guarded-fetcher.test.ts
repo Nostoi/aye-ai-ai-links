@@ -118,6 +118,12 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return send("text/html", html("stacked"), { "content-encoding": "gzip, br" });
     case "zstd":
       return send("text/html", html("zstd"), { "content-encoding": "zstd" });
+    case "lines-identity-gzip":
+      res.setHeader("content-encoding", ["identity", "gzip"]);
+      return send("text/html", zlib.gzipSync(html("lines")));
+    case "lines-gzip-gzip":
+      res.setHeader("content-encoding", ["gzip", "gzip"]);
+      return send("text/html", zlib.gzipSync(zlib.gzipSync(html("lines"))));
     case "truncated":
       return send("text/html", zlib.gzipSync(html("cut")).subarray(0, 12), {
         "content-encoding": "gzip",
@@ -259,6 +265,12 @@ describe("a page on an allowed address", () => {
     ["br", "/br"],
   ])("decodes Content-Encoding %s", async (name, path) => {
     expect((await ok(fetcherWith().fetch(siteUrl(path)))).html).toBe(html(name));
+  });
+
+  it("reads every Content-Encoding header line, decoding identity plus gzip", async () => {
+    expect((await ok(fetcherWith().fetch(siteUrl("/lines-identity-gzip")))).html).toBe(
+      html("lines"),
+    );
   });
 
   it("decodes the charset the server declared", async () => {
@@ -436,6 +448,13 @@ describe("what comes back", () => {
 
   it("returns not_html for two stacked Content-Encodings, without decoding", async () => {
     expect(await fetcherWith().fetch(siteUrl("/stacked"))).toEqual({
+      kind: "not_html",
+      contentType: "text/html",
+    });
+  });
+
+  it("returns not_html for two codings sent on separate header lines, without decoding", async () => {
+    expect(await fetcherWith().fetch(siteUrl("/lines-gzip-gzip"))).toEqual({
       kind: "not_html",
       contentType: "text/html",
     });

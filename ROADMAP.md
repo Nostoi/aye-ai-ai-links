@@ -22,6 +22,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** Phase 3 auth uses better-auth 1.7.7, pinned exactly, with its `mcp` and `cimd` plugins (#75). Rulings: #11 comment 6134986546 and #75 comment 6136036644. Sources: `docs/specs/2026-10-12-auth-library-sources.md`.
+  - **Agent keys stay** next to OAuth, for Claude Code, Codex and Claude Desktop. This deliberately departs from the MCP spec's "MUST NOT accept or transit any other tokens".
+  - **Revoking an app works on the next request**, as it does for agent keys. Access tokens are opaque, one app lock runs auth requests one at a time, and disconnect deletes the app's tokens, consent and unused codes in one transaction.
+  - **Auth lives in its own SQLite file.** Sign-up is closed, and the CLI creates the owner with id `owner`.
+  - **Accepted risk:** a database write failing partway through invalidating a stolen refresh token's family leaves its successor working (better-auth #11629).
+  - **Real-client tests wait for the isolation tests (#78).** "No Funnel before auth" holds with no new exception.
+
 - **2026-10-12:** ChatGPT spike done (#9; results in its comments 6133666210 and 6133682051). Phase 3 is now current. Phase 2's features are done (#10 closed, comment 6131333429); #68 stays open in Phase 2 until the search log has enough real searches.
   - **Port 443 only.** A custom MCP plugin on a Funnel address at port 10000 was never contacted ("Couldn't reach the MCP server", with no request in the server log). The same server on 443 was added at once. OpenAI's docs do not state this, and 8443 was not tried. Claude's backend connects only on 443 (anthropics/claude-ai-mcp #125), so 443 is needed whatever ChatGPT accepts. Phase 3 must serve the app on 443 before Funnel goes on. This Mac's 443 is used by another tailnet service today, so giving it up or using another node or hostname is an owner decision for #11.
   - **Answers.** A Business workspace can add a no-auth plugin with a write tool (chatgpt.com/plugins → + → Add custom MCP server). It works in the iPhone app. ChatGPT speaks MCP 2026-07-28 and opens with `server/discover`.

@@ -160,3 +160,89 @@ describe("pending clients", () => {
     expect(stash.isCurrent(x.id)).toBe(false);
   });
 });
+
+describe("refresh outcomes", () => {
+  const V2 = "https://chatgpt.com/oauth/test-client/jwks-v2.json";
+
+  function routed() {
+    const routes = new Map<string, () => Response>();
+    const urls: string[] = [];
+    const fetch: JsonFetch = async (url) => {
+      urls.push(url);
+      const route = routes.get(url);
+      return route ? route() : new Response("", { status: 404 });
+    };
+    return { routes, urls, fetch };
+  }
+
+  async function connectedChatgpt() {
+    const c = clock();
+    const net = routed();
+    const keys = { keys: [signingKey("k1").jwk] };
+    net.routes.set(CHATGPT_ID, () => json(chatgptDocument(JWKS_URI), {}));
+    net.routes.set(JWKS_URI, () => json(keys, {}));
+    const stash = createMetadataStash({ fetch: net.fetch, now: c.now });
+    stash.sync(new Set([CHATGPT_ID]));
+    expect(await stash.refresh(CHATGPT_ID)).toBe("ok");
+    return { c, net, keys, stash };
+  }
+
+  it.each([
+    [
+      "an invalid document",
+      () => json({ ...chatgptDocument(JWKS_URI), client_id: "https://other.example/x" }, {}),
+    ],
+    [
+      "a body that is not JSON",
+      () =>
+        new Response("<html></html>", { status: 200, headers: { "content-type": "text/html" } }),
+    ],
+  ])("drops the snapshot at once for %s", async (_, answer) => {
+    const { net, stash } = await connectedChatgpt();
+    net.routes.set(CHATGPT_ID, answer);
+    expect(await stash.refresh(CHATGPT_ID)).toBe("gone");
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(false);
+    await expect(stash.transport(CHATGPT_ID)).rejects.toThrow();
+  });
+
+  it.each([
+    ["does not load", () => new Response("", { status: 503 })],
+    ["is not a valid key set", () => json({ keys: [{ kty: "oct", k: "c2VjcmV0" }] }, {})],
+  ])(
+    "keeps the v1 snapshot until F when the document moves to a v2 key set that %s",
+    async (_, answer) => {
+      const { c, net, keys, stash } = await connectedChatgpt();
+      net.routes.set(CHATGPT_ID, () => json(chatgptDocument(V2), {}));
+      net.routes.set(V2, answer);
+      c.advance(4 * MIN);
+      expect(await stash.refresh(CHATGPT_ID)).toBe("failed");
+      expect(stash.isCurrent(CHATGPT_ID)).toBe(true);
+      expect(await (await stash.transport(CHATGPT_ID)).json()).toEqual(chatgptDocument(JWKS_URI));
+      expect(await (await stash.transport(JWKS_URI)).json()).toEqual(keys);
+      await expect(stash.transport(V2)).rejects.toThrow();
+      c.advance(MIN);
+      expect(stash.isCurrent(CHATGPT_ID)).toBe(false);
+    },
+  );
+
+  it("does not take a 304 as success when it holds no earlier copy", async () => {
+    const stash = createMetadataStash({ fetch: async () => new Response(null, { status: 304 }) });
+    stash.sync(new Set([CHATGPT_ID]));
+    expect(await stash.refresh(CHATGPT_ID)).not.toBe("ok");
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(false);
+  });
+
+  it.each([
+    "http://client.example/oauth/metadata.json",
+    "https://user@client.example/oauth/metadata.json",
+    "https://client.example/a/../metadata.json",
+    "https://client.example/oauth/metadata.json#x",
+    "https://127.0.0.1/oauth/metadata.json",
+  ])("refuses to prefetch %s, fetching and pinning nothing", async (id) => {
+    const net = routed();
+    const stash = createMetadataStash({ fetch: net.fetch });
+    expect(await stash.prefetch(id)).toBe("refused");
+    expect(net.urls).toEqual([]);
+    expect(stash.sync(new Set())).toEqual([]);
+  });
+});

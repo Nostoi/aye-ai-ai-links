@@ -72,11 +72,10 @@ button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink
 [role=alert]{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:10px 14px}
 .card{background:var(--surface);border-radius:20px;padding:32px;box-shadow:0 4px 18px #0000000f}
 .card-narrow{max-width:420px;margin:24px auto 0}
-.card-narrow .mark{display:block;height:48px;width:auto;margin:0 auto 16px}
 .card-narrow h1{text-align:center}
 .actions{display:flex;flex-wrap:wrap;gap:10px}
 .connections{list-style:none;padding:0}
 .connections li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border-radius:18px;padding:16px 20px;max-width:none}
 ${spaceClasses}
-@media (max-width:600px){.column{padding:0 16px}.card{padding:24px 20px}h1{font-size:26px}}
+@media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;

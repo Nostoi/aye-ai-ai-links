@@ -46,7 +46,6 @@ export const loginPage = ({ next }: { next: string }) =>
   page(
     "Sign in · Aye-AI-AI Links",
     `<main class="card card-narrow">
-${inlineLogo('class="mark" aria-hidden="true"')}
 <h1>Sign in</h1>
 <form id="login" data-next="${escapeHtml(next)}">
 <p><label>Email <input name="email" type="email" autocomplete="username" required></label></p>
@@ -137,7 +136,7 @@ export const consentExpiredPage = () =>
 export type ConnectionRow = { clientId: string; name: string | null; connectedAt: Date };
 
 function connectionItem(c: ConnectionRow): string {
-  return `<li><strong>${escapeHtml(c.name ?? c.clientId)}</strong>, connected ${c.connectedAt.toISOString().slice(0, 10)} <button type="button" data-client-id="${escapeHtml(c.clientId)}">Disconnect</button></li>`;
+  return `<li><span><strong>${escapeHtml(c.name ?? c.clientId)}</strong>, connected ${c.connectedAt.toISOString().slice(0, 10)}</span> <button type="button" data-client-id="${escapeHtml(c.clientId)}">Disconnect</button></li>`;
 }
 
 /**

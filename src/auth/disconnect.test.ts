@@ -14,6 +14,7 @@ import {
   exchange,
   field,
   oauthWorld,
+  otherClientDocument,
   pkce,
   refresh,
   saveLinkWith,
@@ -180,6 +181,15 @@ describe("disconnect", () => {
     expect(await end(world)("owner", "https://never.example/metadata.json")).toBe(false);
     expect(rows(world, CLAUDE_ID)).toEqual(before);
     expect(world.stash.isCurrent(CLAUDE_ID)).toBe(true);
+  });
+
+  it("leaves a pending client, which nobody has approved yet, current", async () => {
+    const world = await oauthWorld();
+    const x = otherClientDocument(7);
+    world.net.json(x.id, x.document);
+    expect(await world.stash.prefetch(x.id)).toBe("ok");
+    expect(await end(world)("owner", x.id)).toBe(false);
+    expect(world.stash.isCurrent(x.id)).toBe(true);
   });
 });
 

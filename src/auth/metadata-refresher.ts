@@ -7,7 +7,7 @@ const RETRY_MS = 30_000;
 
 /**
  * Keeps the stash current for connected and pending clients: every F/2 it reads the connected
- * set afresh, then refreshes each client outside the auth lock. Each fetch gets its own abort
+ * set afresh, then fetches each client outside the auth lock. Each fetch gets its own abort
  * controller from the stash; nothing holds a signal for the life of the process.
  */
 export function createMetadataRefresher({

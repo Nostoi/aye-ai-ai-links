@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuthLock, insideAuthLock } from "./auth-lock.js";
 import { createMetadataRefresher } from "./metadata-refresher.js";
-import { createMetadataStash, FRESHNESS_MS, type JsonFetch } from "./metadata-stash.js";
+import {
+  createMetadataStash,
+  FRESHNESS_MS,
+  type JsonFetch,
+  MAX_PENDING,
+} from "./metadata-stash.js";
 import { CHATGPT_ID, chatgptDocument, otherClientDocument, signingKey } from "./oauth-test-kit.js";
 
 const JWKS_URI = "https://chatgpt.com/oauth/test-client/jwks.json";
@@ -383,6 +388,26 @@ describe("a refresh that finishes after a disconnect (condition 11)", () => {
   it("refuses forget outside the auth lock", async () => {
     const w = world();
     expect(() => w.stash.forget(x.id)).toThrow(/inside the auth lock/);
+  });
+
+  it("counts a forgotten client that is reconnecting as pending, like any new one", async () => {
+    const others = [10, 11, 12, 13, 14].map(otherClientDocument);
+    const docs = new Map([x, ...others].map((c) => [c.id, c.document]));
+    const db = new Set([x.id]);
+    const withAuthLock = createAuthLock();
+    const stash = createMetadataStash({
+      fetch: async (url) => json(docs.get(url), {}),
+      withAuthLock,
+      isConnected: (id) => db.has(id),
+    });
+    stash.sync(new Set([x.id]));
+    for (const c of others.slice(0, MAX_PENDING - 1)) expect(await stash.prefetch(c.id)).toBe("ok");
+    await withAuthLock(async () => {
+      db.delete(x.id);
+      stash.forget(x.id);
+    });
+    expect(await stash.prefetch(x.id)).toBe("ok");
+    expect(await stash.prefetch((others[MAX_PENDING - 1] as { id: string }).id)).toBe("full");
   });
 });
 

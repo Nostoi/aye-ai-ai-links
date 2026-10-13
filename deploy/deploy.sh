@@ -109,6 +109,21 @@ prune() {
 # release migrated the auth file.
 schema_hash() { sqlite3 "$1" .schema | shasum -a 256 | cut -d ' ' -f 1; }
 
+# clear_grants <auth file>: deletes every sign-in and grant a restored file would bring back:
+# sessions, OAuth tokens and consents, and authorization codes. Only from the tables the file
+# has, since a backup can predate them.
+clear_grants() {
+  local t tables sql=""
+  tables="$(sqlite3 "$1" "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('session', 'oauthAccessToken', 'oauthRefreshToken', 'oauthConsent', 'verification')")" || return 1
+  for t in $tables; do
+    case "$t" in
+      verification) sql="$sql DELETE FROM verification WHERE CASE WHEN json_valid(value) THEN json_extract(value, '\$.type') END = 'authorization_code';" ;;
+      *) sql="$sql DELETE FROM \"$t\";" ;;
+    esac
+  done
+  sqlite3 -bail "$1" "BEGIN;$sql COMMIT;"
+}
+
 # set_aside <file> <links|auth> <variable>: moves the file and its -wal and -shm to
 # failed-<kind>-<time>-<pid>.db, and names the new place in <variable>.
 set_aside() {
@@ -173,14 +188,14 @@ rollback() {
   elif [ -f "$db" ]; then
     set_aside "$db" links failed_db || give_up "rename the database"
   fi
-  # A restored auth file would bring back sessions signed out since the backup, so it is
-  # restored with none: the owner signs in again.
+  # A restored auth file would bring back sessions signed out and apps disconnected since the
+  # backup, so it is restored with none: the owner signs in and connects their AIs again.
   if [ -n "$auth_backup" ]; then
     [ -f "$auth_backup" ] || give_up "read the auth backup"
     if [ -f "$auth" ]; then live_schema="$(schema_hash "$auth")" || give_up "read the auth database"; fi
     if [ "$live_schema" != "$auth_schema" ]; then
       set_aside "$auth" auth failed_auth || give_up "rename the auth database"
-      if ! sqlite3 "$auth" ".restore \"$auth_backup\"" || [ "$(schema_hash "$auth")" != "$auth_schema" ] || ! sqlite3 "$auth" 'DELETE FROM session'; then
+      if ! sqlite3 "$auth" ".restore \"$auth_backup\"" || [ "$(schema_hash "$auth")" != "$auth_schema" ] || ! clear_grants "$auth"; then
         give_up "restore the auth backup"
       fi
     fi

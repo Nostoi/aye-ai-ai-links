@@ -7,7 +7,7 @@ import { authorizeGate } from "./auth/authorize-gate.js";
 import { AUTH_BASE_PATH, type Auth, mcpResource } from "./auth/better-auth.js";
 import type { Identify } from "./auth/caller.js";
 import { consentDetails } from "./auth/consent.js";
-import { authApp, type RouteLimit, rootMetadataApp } from "./auth/http.js";
+import { authApp, originRefused, type RouteLimit, rootMetadataApp } from "./auth/http.js";
 import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
@@ -72,6 +72,12 @@ export function createApp({
       }
     }
     const origin = new URL(baseUrl).origin;
+    app.use("/consent", async (c, next) => {
+      if (originRefused(c.req.raw, origin, { origin: "optional" })) {
+        return c.json({ code: "INVALID_ORIGIN", message: "Invalid origin." }, 403);
+      }
+      await next();
+    });
     const { auth: betterAuth, withAuthLock, stash, clients } = auth;
     const handle = (request: Request) => betterAuth.handler(request);
     app.route(

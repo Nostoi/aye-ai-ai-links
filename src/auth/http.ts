@@ -46,18 +46,15 @@ async function readCapped(request: Request, max: number): Promise<Uint8Array<Arr
   return body;
 }
 
-/**
- * better-auth's handler behind the app's guards, in this order: the route list, the body cap
- * (the body is buffered before the lock, so a slow upload holds only its own connection), the
- * login limit, then the auth lock around the handler.
- */
 export function authApp({
   handle,
   withAuthLock,
+  origin,
   loginLimit = LOGIN_LIMIT,
 }: {
   handle: (request: Request) => Promise<Response>;
   withAuthLock: WithAuthLock;
+  origin: string;
   loginLimit?: RateLimitOptions | undefined;
 }) {
   const app = new Hono();
@@ -69,6 +66,9 @@ export function authApp({
     const route = `${raw.method} ${pathname.slice(AUTH_BASE_PATH.length)}`;
     if (!pathname.startsWith(`${AUTH_BASE_PATH}/`) || !AUTH_ROUTES.has(route)) {
       return c.json({ code: "NOT_FOUND", message: "Not found." }, 404);
+    }
+    if (raw.method === "POST" && raw.headers.get("origin") !== origin) {
+      return c.json({ code: "INVALID_ORIGIN", message: "Invalid origin." }, 403);
     }
     let body: Uint8Array<ArrayBuffer> | null;
     try {

@@ -30,7 +30,12 @@ async function setup({
   const app = new Hono();
   app.route(
     "/api/auth",
-    authApp({ handle: wrap ? wrap(real) : real, withAuthLock: t.withAuthLock, loginLimit }),
+    authApp({
+      handle: wrap ? wrap(real) : real,
+      withAuthLock: t.withAuthLock,
+      origin: TEST_BASE_URL,
+      loginLimit,
+    }),
   );
   const send = (path: string, init: RequestInit = {}) => {
     const headers = new Headers(init.headers);
@@ -47,6 +52,67 @@ async function setup({
 }
 
 describe("auth routes", () => {
+  it.each([
+    ["another site's", "https://evil.example"],
+    ["the base URL's host over http as", "http://links.example"],
+    ["no", null],
+  ])(
+    "refuses sign-in POSTs with %s Origin with 403, using none of the login limit",
+    async (_, origin) => {
+      const t = await setup({ loginLimit: { limit: 10, windowMs: 60_000, now: () => 0 } });
+      for (let i = 0; i < 12; i++) {
+        const headers = new Headers({ "content-type": "application/json" });
+        if (origin) headers.set("origin", origin);
+        const res = await t.app.fetch(
+          new Request(`${TEST_BASE_URL}/api/auth/sign-in/email`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+          }),
+        );
+        expect(res.status).toBe(403);
+        expect(res.headers.getSetCookie()).toEqual([]);
+      }
+      expect(t.handled).toEqual([]);
+      expect(t.hashing.verify).toBe(0);
+      expect(t.count("session")).toBe(0);
+      expect((await t.signIn(TEST_PASSWORD)).status).toBe(200);
+      for (let i = 0; i < 9; i++) expect((await t.signIn("Wrong-password-1")).status).toBe(401);
+      expect((await t.signIn(TEST_PASSWORD)).status).toBe(429);
+    },
+  );
+
+  it("refuses a cross-origin sign-out with 403 before better-auth, keeping the session", async () => {
+    const t = await setup();
+    const cookie = (await t.signIn(TEST_PASSWORD)).headers.getSetCookie()[0]?.split(";")[0] ?? "";
+    const handled = t.handled.length;
+    const res = await t.app.fetch(
+      new Request(`${TEST_BASE_URL}/api/auth/sign-out`, {
+        method: "POST",
+        headers: { cookie, origin: "https://evil.example" },
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(t.handled.length).toBe(handled);
+    expect(t.count("session")).toBe(1);
+  });
+
+  it("answers a cross-origin POST with 403 without waiting for the lock", async () => {
+    const t = await setup();
+    let release!: () => void;
+    const held = t.withAuthLock(() => new Promise<void>((r) => (release = r)));
+    const res = await t.app.fetch(
+      new Request(`${TEST_BASE_URL}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://evil.example" },
+        body: "{}",
+      }),
+    );
+    expect(res.status).toBe(403);
+    release();
+    await held;
+  });
+
   it("refuses a wrong password with 401, sets no cookie and creates no session", async () => {
     const t = await setup();
     const res = await t.signIn("Wrong-password-1");

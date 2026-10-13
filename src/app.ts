@@ -43,6 +43,7 @@ export function createApp({
       authApp({
         handle: auth.auth.handler,
         withAuthLock: auth.withAuthLock,
+        origin: new URL(auth.auth.options.baseURL).origin,
         loginLimit: auth.loginLimit,
       }),
     );

@@ -48,7 +48,7 @@ export function authOptions({
     },
     rateLimit: { enabled: false },
     telemetry: { enabled: false },
-    advanced: { useSecureCookies: true },
+    advanced: { useSecureCookies: true, disableOriginCheck: false, disableCSRFCheck: false },
     logger: { level: "error" as const },
   };
 }

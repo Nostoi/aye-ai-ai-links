@@ -10,6 +10,7 @@ import {
   openAuthDatabase,
   PASSWORD_LENGTH,
 } from "./better-auth.js";
+import { memoryAuth, TEST_BASE_URL, TEST_EMAIL, TEST_PASSWORD } from "./memory-auth.js";
 
 const BASE = "https://links.example";
 const SECRET = "test-secret-0123456789abcdef0123456789";
@@ -69,6 +70,28 @@ describe("authOptions", () => {
     ).rejects.toMatchObject({ body: { code: "EMAIL_PASSWORD_SIGN_UP_DISABLED" } });
     expect(db.prepare("SELECT count(*) AS n FROM user").get()).toEqual({ n: 0 });
     db.close();
+  });
+
+  it("keeps better-auth's own origin check on under vitest, so it refuses a cross-origin sign-out", async () => {
+    expect(process.env.TEST ?? process.env.NODE_ENV).toBeTruthy();
+    const t = await memoryAuth();
+    const signIn = await t.auth.handler(
+      new Request(`${TEST_BASE_URL}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: TEST_BASE_URL },
+        body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+      }),
+    );
+    const cookie = signIn.headers.getSetCookie()[0]?.split(";")[0] ?? "";
+    expect(t.count("session")).toBe(1);
+    const res = await t.auth.handler(
+      new Request(`${TEST_BASE_URL}/api/auth/sign-out`, {
+        method: "POST",
+        headers: { cookie, origin: "https://evil.example" },
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(t.count("session")).toBe(1);
   });
 });
 

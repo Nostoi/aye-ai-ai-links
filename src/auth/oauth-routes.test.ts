@@ -286,3 +286,77 @@ describe("the auth lock and the network", () => {
     expect(world.net.calls).toEqual([]);
   });
 });
+
+describe("the named limits on authorize, token and revoke", () => {
+  const requests = {
+    authorize: (world: World) =>
+      world.agent().send(authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, pkce().challenge)),
+    token: (world: World) =>
+      world.agent().send("/api/auth/oauth2/token", {
+        method: "POST",
+        origin: false,
+        form: { grant_type: "authorization_code", code: "x", client_id: CLAUDE_ID },
+      }),
+    revoke: (world: World) =>
+      world.agent().send("/api/auth/oauth2/revoke", {
+        method: "POST",
+        origin: false,
+        form: { token: "x", client_id: CLAUDE_ID },
+      }),
+  };
+  const routes = Object.keys(requests) as Array<keyof typeof requests>;
+
+  it.each(routes)(
+    "answers %s with 429 once its own limit is used up, and leaves the others alone",
+    async (route) => {
+      const world = await oauthWorld({ limits: { [route]: { limit: 2, windowMs: 60_000 } } });
+      const first = await requests[route](world);
+      expect(first.status).not.toBe(429);
+      expect((await requests[route](world)).status).toBe(first.status);
+      expect((await requests[route](world)).status).toBe(429);
+      for (const other of routes.filter((r) => r !== route)) {
+        expect((await requests[other](world)).status).not.toBe(429);
+      }
+    },
+  );
+});
+
+describe("the consent page", () => {
+  async function signedConsentQuery() {
+    const world = await oauthWorld();
+    const c = otherClientDocument(3);
+    world.net.json(c.id, c.document);
+    const browser = world.agent();
+    await browser.signIn();
+    const res = await browser.send(authorizePath(c.id, c.redirect, pkce().challenge));
+    const location = res.headers.get("location") ?? "";
+    expect(location).toMatch(/^\/consent\?/);
+    return { browser, params: new URLSearchParams(location.slice("/consent?".length)) };
+  }
+
+  it("shows the client and where it returns for a signed query", async () => {
+    const { browser, params } = await signedConsentQuery();
+    const res = await browser.send(`/consent?${params}`);
+    expect(res.status).toBe(200);
+    const html = String(res.body);
+    expect(html).toContain("Client 3");
+    expect(html).toContain("client3.example");
+  });
+
+  it.each([
+    ["without its signature", (p: URLSearchParams) => p.delete("sig")],
+    ["with a bad signature", (p: URLSearchParams) => p.set("sig", "AAAA")],
+    [
+      "with a redirect the signature does not cover",
+      (p: URLSearchParams) => p.set("redirect_uri", "https://evil.example/cb"),
+    ],
+  ])("refuses a query %s and shows nothing from it", async (_, tamper) => {
+    const { browser, params } = await signedConsentQuery();
+    tamper(params);
+    const res = await browser.send(`/consent?${params}`);
+    expect(res.status).toBe(400);
+    const html = String(res.body);
+    expect(html).not.toContain("Client 3");
+    expect(html).not.toContain("example");
+  });
+});

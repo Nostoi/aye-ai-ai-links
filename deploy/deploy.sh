@@ -3,10 +3,10 @@
 #   deploy/deploy.sh <git-ref>
 # Builds the commit in ~/.aye-links/releases/<sha> and tests it there, then downloads and checks
 # the meaning-search model in ~/.aye-links/models. Only if both succeed does it stop the service,
-# wait for every process using aye.env to exit, back up the database, point ~/.aye-links/current
+# wait for every process using aye.env to exit, back up both databases, point ~/.aye-links/current
 # at the new release and start the service again. A failed build or model check leaves the
 # running install untouched.
-# Run it from the source checkout, or set AYE_SOURCE to one. Run deploys and key commands one at a time.
+# Run it from the source checkout, or set AYE_SOURCE to one. Run deploys, key commands and owner commands one at a time.
 set -eEuo pipefail
 
 ref="${1:?Usage: deploy/deploy.sh <git-ref>}"
@@ -89,28 +89,36 @@ listening() {
 point_to() { ln -sfn "$2" "$1.new" && mv -fh "$1.new" "$1"; }
 
 prune() {
-  local r f backups rc=0
+  local r f kind backups rc=0
   for r in "$home"/releases/*; do
     [ -e "$r" ] || continue
     [ "$r" = "$release" ] || [ "$r" = "$previous" ] || { rm -f "$r/.ready" && rm -rf "$r"; } || rc=1
   done
-  backups=("$home"/data/backups/links-*.db)
-  if [ -e "${backups[0]}" ] && [ "${#backups[@]}" -gt 10 ]; then
-    for f in "${backups[@]:0:${#backups[@]}-10}"; do
-      rm -f -- "$f" "$f-wal" "$f-shm" || rc=1
-    done
-  fi
+  for kind in links auth; do
+    backups=("$home"/data/backups/"$kind"-*.db)
+    if [ -e "${backups[0]}" ] && [ "${#backups[@]}" -gt 10 ]; then
+      for f in "${backups[@]:0:${#backups[@]}-10}"; do
+        rm -f -- "$f" "$f-wal" "$f-shm" || rc=1
+      done
+    fi
+  done
   return "$rc"
 }
 
+# better-auth never sets user_version, so a changed schema is how a rollback tells the failed
+# release migrated the auth file.
+schema_hash() { sqlite3 "$1" .schema | shasum -a 256 | cut -d ' ' -f 1; }
+
+# set_aside <file> <links|auth> <variable>: moves the file and its -wal and -shm to
+# failed-<kind>-<time>-<pid>.db, and names the new place in <variable>.
 set_aside() {
   local f target
-  target="$home/data/backups/failed-$(date +%Y%m%d-%H%M%S)-$$.db"
+  target="$home/data/backups/failed-$2-$(date +%Y%m%d-%H%M%S)-$$.db"
   for f in "" -wal -shm; do
     if [ -e "$target$f" ]; then return 1; fi
   done
   for f in "" -wal -shm; do
-    if [ -e "$db$f" ]; then mv "$db$f" "$target$f" || return 1; failed_db="$target"; fi
+    if [ -e "$1$f" ]; then mv "$1$f" "$target$f" || return 1; printf -v "$3" '%s' "$target"; fi
   done
 }
 
@@ -123,7 +131,9 @@ failed step: $1
 previous release: ${previous:-none}
 current: $(readlink "$home/current" || echo none)
 backup: ${backup:-none}
+auth backup: ${auth_backup:-none}
 failed database: ${failed_db:-none}
+failed auth database: ${failed_auth:-none}
 plist moved to: $moved"
   printf '%s\n' "$note" > "$pending" || echo "Could not write $pending." >&2
   echo "The deploy failed and the rollback failed at: $1. $stop_note" >&2
@@ -133,7 +143,7 @@ plist moved to: $moved"
 }
 
 rollback() {
-  local failed_db="" live_uv="-" kept=""
+  local failed_db="" failed_auth="" live_uv="-" live_schema="-" kept=""
   [ "$BASH_SUBSHELL" = 0 ] || exit 1
   [ "$rolling_back" = 0 ] || return 0
   rolling_back=1
@@ -155,15 +165,30 @@ rollback() {
     [ -f "$backup" ] || give_up "read the backup"
     if [ -f "$db" ]; then live_uv="$(sqlite3 "$db" 'pragma user_version')" || give_up "read the database"; fi
     if [ "$live_uv" != "$backup_uv" ]; then
-      set_aside || give_up "rename the database"
+      set_aside "$db" links failed_db || give_up "rename the database"
       if ! sqlite3 "$db" ".restore \"$backup\"" || [ "$(sqlite3 "$db" 'pragma user_version')" != "$backup_uv" ]; then
         give_up "restore the backup"
       fi
     fi
   elif [ -f "$db" ]; then
-    set_aside || give_up "rename the database"
+    set_aside "$db" links failed_db || give_up "rename the database"
+  fi
+  # A restored auth file would bring back sessions signed out since the backup, so it is
+  # restored with none: the owner signs in again.
+  if [ -n "$auth_backup" ]; then
+    [ -f "$auth_backup" ] || give_up "read the auth backup"
+    if [ -f "$auth" ]; then live_schema="$(schema_hash "$auth")" || give_up "read the auth database"; fi
+    if [ "$live_schema" != "$auth_schema" ]; then
+      set_aside "$auth" auth failed_auth || give_up "rename the auth database"
+      if ! sqlite3 "$auth" ".restore \"$auth_backup\"" || [ "$(schema_hash "$auth")" != "$auth_schema" ] || ! sqlite3 "$auth" 'DELETE FROM session'; then
+        give_up "restore the auth backup"
+      fi
+    fi
+  elif [ -f "$auth" ]; then
+    set_aside "$auth" auth failed_auth || give_up "rename the auth database"
   fi
   [ -z "$failed_db" ] || kept=" Writes accepted by the failed release are kept in $failed_db and were not merged back."
+  [ -z "$failed_auth" ] || kept="$kept The failed release's auth database is kept in $failed_auth."
   if [ -z "$previous" ]; then
     rm -f "$home/current" "$plist" || give_up "remove current and the plist"
     echo "The deploy failed and there is no previous release, so $home/current and the plist were removed. The service is stopped.$kept" >&2
@@ -178,8 +203,10 @@ rollback() {
 }
 
 db="$(read_env AYE_DB "")"
+auth="$(read_env AYE_AUTH_DB "")"
 port="$(read_env AYE_PORT 3002)"
 [ -n "$db" ] || { echo "AYE_DB is not set in $env_file." >&2; exit 1; }
+[ -n "$auth" ] || { echo "AYE_AUTH_DB is not set in $env_file." >&2; exit 1; }
 
 own_pid="$(service_pid)"
 for pid in $(lsof -iTCP:"$port" -sTCP:LISTEN -t || true); do
@@ -194,6 +221,8 @@ sed -e "s#@NODE@#$node_path#g" -e "s#@HOME@#$HOME#g" "$release/deploy/$label.pli
 
 backup=""
 backup_uv=""
+auth_backup=""
+auth_schema=""
 switched=0
 rolling_back=0
 trap rollback ERR INT TERM HUP
@@ -204,10 +233,17 @@ if ! stop_and_wait; then
   exit 1
 fi
 
+# One timestamp for both backups, so a rollback restores a matching pair.
+ts="$(date +%Y%m%d-%H%M%S)"
 if [ -f "$db" ]; then
-  backup="$home/data/backups/links-$(date +%Y%m%d-%H%M%S).db"
+  backup="$home/data/backups/links-$ts.db"
   sqlite3 "$db" ".backup \"$backup\""
   backup_uv="$(sqlite3 "$backup" 'pragma user_version')"
+fi
+if [ -f "$auth" ]; then
+  auth_backup="$home/data/backups/auth-$ts.db"
+  sqlite3 "$auth" ".backup \"$auth_backup\""
+  auth_schema="$(schema_hash "$auth_backup")"
 fi
 
 switched=1

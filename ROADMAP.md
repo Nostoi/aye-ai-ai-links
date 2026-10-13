@@ -22,6 +22,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-12:** Web login for the owner (#76; comments 6137957312 and 6138128752).
+  - **The `owner` CLI changes the login only while the server is stopped.** The server holds the auth file with `locking_mode=EXCLUSIVE` for its whole life, so the CLI cannot open it while the server runs; it then changes nothing and says to stop the server. A password reset racing an in-flight sign-in or password change could otherwise lose.
+  - **Only three auth routes are served:** `POST /api/auth/sign-in/email`, `POST /api/auth/sign-out` and `GET /api/auth/get-session`. Every other `/api/auth/*` path gets 404 before it reaches better-auth, so `/sign-in/email` is the only route that checks a password. #77 adds the OAuth routes to the list (`AUTH_ROUTES` in `src/auth/http.ts`).
+  - **Our own global login limit**, 10 sign-in attempts per 15 minutes for everyone together, and better-auth's limiter turned off. better-auth's is on only when `NODE_ENV=production` and keys on a client-sent `X-Forwarded-For`, so rotating that header gets past it.
+  - **A deploy rollback that restores the auth backup deletes every session**, so the owner signs in again. Without that, a restored file would bring back sessions signed out since the backup.
+  - **Lockout risk.** Anyone who can reach the sign-in route can use up the global limit and keep the owner out. Until Funnel is on, only tailnet devices can reach it. Tracked on #79, to settle before Funnel goes on.
+
 - **2026-10-12:** Phase 3 auth uses better-auth 1.7.7, pinned exactly, with its `mcp` and `cimd` plugins (#75). Rulings: #11 comment 6134986546 and #75 comments 6136036644 and 6136212307. Sources: `docs/specs/2026-10-12-auth-library-sources.md`.
   - **Agent keys stay** next to OAuth, for Claude Code, Codex and Claude Desktop. This deliberately departs from the MCP spec's "MUST NOT accept or transit any other tokens".
   - **Revoking an app works on the next request**, as it does for agent keys. Access tokens are opaque, one lock in the server process serializes every auth request and every server-side token, code or consent write, and disconnect runs inside the server and deletes the app's tokens, consent and unused codes in one transaction.

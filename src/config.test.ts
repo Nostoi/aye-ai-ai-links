@@ -1,7 +1,8 @@
-import { homedir } from "node:os";
+import { linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { databasePath, modelRoot, serverConfig } from "./config.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { authConfig, databasePath, modelRoot, serverConfig } from "./config.js";
 
 describe("modelRoot", () => {
   it("is ~/.aye-links/models", () => {
@@ -28,15 +29,148 @@ describe("databasePath", () => {
   });
 });
 
+const SECRET = "s".repeat(32);
+const AUTH = {
+  AYE_DB: "/data/links.db",
+  AYE_AUTH_DB: "/data/auth.db",
+  AYE_AUTH_SECRET: SECRET,
+  AYE_BASE_URL: "https://mac.tailnet.ts.net:8444",
+};
+
+describe("authConfig", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  const scratch = () => {
+    const d = mkdtempSync(join(tmpdir(), "aye-config-"));
+    dirs.push(d);
+    return d;
+  };
+
+  it("reads the three settings", () => {
+    expect(authConfig(AUTH)).toEqual({
+      dbPath: "/data/auth.db",
+      secret: SECRET,
+      baseUrl: "https://mac.tailnet.ts.net:8444",
+    });
+  });
+
+  it.each([undefined, "", ":memory:", "auth.db", "~/auth.db"])(
+    "refuses the auth database %j",
+    (AYE_AUTH_DB) => {
+      expect(() => authConfig({ ...AUTH, AYE_AUTH_DB })).toThrow(
+        "Set AYE_AUTH_DB to the absolute path of the auth database file (not :memory:).",
+      );
+    },
+  );
+
+  it.each([undefined, "", "s".repeat(31)])("refuses the secret %j", (AYE_AUTH_SECRET) => {
+    expect(() => authConfig({ ...AUTH, AYE_AUTH_SECRET })).toThrow(
+      "Set AYE_AUTH_SECRET to a random string of at least 32 characters.",
+    );
+  });
+
+  it("accepts a secret of exactly 32 characters", () => {
+    expect(authConfig({ ...AUTH, AYE_AUTH_SECRET: "x".repeat(32) }).secret).toBe("x".repeat(32));
+  });
+
+  it.each([
+    undefined,
+    "",
+    "http://mac.tailnet.ts.net",
+    "https://mac.tailnet.ts.net/",
+    "https://mac.tailnet.ts.net/app",
+    "https://mac.tailnet.ts.net?x=1",
+    "https://user@mac.tailnet.ts.net",
+    "mac.tailnet.ts.net",
+  ])("refuses the base URL %j", (AYE_BASE_URL) => {
+    expect(() => authConfig({ ...AUTH, AYE_BASE_URL })).toThrow(
+      "Set AYE_BASE_URL to the https origin the browser uses, such as https://<your-mac>.<tailnet>.ts.net:8444, with no path or trailing slash.",
+    );
+  });
+
+  it("needs AYE_DB, so it can tell the two files apart", () => {
+    const { AYE_DB: _, ...noDb } = AUTH;
+    expect(() => authConfig(noDb)).toThrow("AYE_DB");
+  });
+
+  it("refuses the same path for both databases", () => {
+    expect(() => authConfig({ ...AUTH, AYE_AUTH_DB: "/data/links.db" })).toThrow(
+      "AYE_AUTH_DB must be a different file from AYE_DB.",
+    );
+  });
+
+  it("refuses a path that only differs by . or ..", () => {
+    expect(() => authConfig({ ...AUTH, AYE_AUTH_DB: "/data/x/../links.db" })).toThrow(
+      "AYE_AUTH_DB must be a different file from AYE_DB.",
+    );
+  });
+
+  it("refuses a symlink to the links database", () => {
+    const d = scratch();
+    writeFileSync(join(d, "links.db"), "");
+    symlinkSync(join(d, "links.db"), join(d, "auth.db"));
+    expect(() =>
+      authConfig({ ...AUTH, AYE_DB: join(d, "links.db"), AYE_AUTH_DB: join(d, "auth.db") }),
+    ).toThrow("AYE_AUTH_DB must be a different file from AYE_DB.");
+  });
+
+  it("refuses a hard link to the links database", () => {
+    const d = scratch();
+    writeFileSync(join(d, "links.db"), "");
+    linkSync(join(d, "links.db"), join(d, "auth.db"));
+    expect(() =>
+      authConfig({ ...AUTH, AYE_DB: join(d, "links.db"), AYE_AUTH_DB: join(d, "auth.db") }),
+    ).toThrow("AYE_AUTH_DB must be a different file from AYE_DB.");
+  });
+
+  it("refuses a not-yet-created auth path that reaches the links file through a symlinked folder", () => {
+    const d = scratch();
+    symlinkSync(d, join(d, "alias"));
+    expect(() =>
+      authConfig({ ...AUTH, AYE_DB: join(d, "links.db"), AYE_AUTH_DB: join(d, "alias/links.db") }),
+    ).toThrow("AYE_AUTH_DB must be a different file from AYE_DB.");
+  });
+
+  it("accepts two distinct files in the same folder", () => {
+    const d = scratch();
+    writeFileSync(join(d, "links.db"), "");
+    writeFileSync(join(d, "auth.db"), "");
+    const env = { ...AUTH, AYE_DB: join(d, "links.db"), AYE_AUTH_DB: join(d, "auth.db") };
+    expect(authConfig(env).dbPath).toBe(join(d, "auth.db"));
+  });
+
+  it.each(["BETTER_AUTH_TRUSTED_ORIGINS", "BETTER_AUTH_URL", "BETTER_AUTH_SECRET"])(
+    "refuses to run with %s set, even when empty",
+    (name) => {
+      expect(() => authConfig({ ...AUTH, [name]: "" })).toThrow(
+        `Unset ${name}: better-auth reads BETTER_AUTH_* variables, and this server takes its auth settings only from AYE_ variables.`,
+      );
+    },
+  );
+});
+
 describe("serverConfig", () => {
-  const base = { AYE_DB: "/data/links.db" };
+  const base = AUTH;
+  const auth = authConfig(AUTH);
 
   it("defaults the port to 3002 and leaves allowed hosts unset", () => {
-    expect(serverConfig(base)).toEqual({ dbPath: "/data/links.db", port: 3002 });
+    expect(serverConfig(base)).toEqual({ dbPath: "/data/links.db", port: 3002, auth });
   });
 
   it("refuses a missing database like the key CLI does", () => {
     expect(() => serverConfig({})).toThrow("AYE_DB");
+  });
+
+  it("refuses to start without the auth settings", () => {
+    expect(() => serverConfig({ AYE_DB: "/data/links.db" })).toThrow("AYE_AUTH_DB");
+  });
+
+  it("refuses to start with a BETTER_AUTH_ variable set", () => {
+    expect(() =>
+      serverConfig({ ...base, BETTER_AUTH_TRUSTED_ORIGINS: "https://x.example" }),
+    ).toThrow("Unset BETTER_AUTH_TRUSTED_ORIGINS");
   });
 
   it("reads the port", () => {

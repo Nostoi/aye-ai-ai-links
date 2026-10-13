@@ -2,5 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "noEmit": false, "noEmitOnError": true, "outDir": "dist", "rootDir": "src" },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/store-contract.ts", "src/**/fake-store.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/store-contract.ts",
+    "src/**/fake-store.ts",
+    "src/**/memory-auth.ts"
+  ]
 }

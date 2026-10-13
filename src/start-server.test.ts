@@ -6,6 +6,9 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentKey } from "./auth/agent-keys.js";
+import { authOptions, createAuth, migrateAuth, openAuthDatabase } from "./auth/better-auth.js";
+import { setOwnerLogin } from "./auth/owner-login.js";
+import type { ServerConfig } from "./config.js";
 import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
 import type { FetchOutcome, PageFetcher } from "./core/fetch.js";
 import { saveLink } from "./core/links.js";
@@ -13,6 +16,10 @@ import { type AppDeps, createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
 import { DIMS } from "./search/model.js";
 import { type StartOptions, startServer } from "./start-server.js";
+
+const BASE = "https://links.example";
+const SECRET = "test-secret-0123456789abcdef0123456789";
+
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
 
@@ -190,6 +197,29 @@ describe("startServer", () => {
 
   const rows = () => read("SELECT url, saved_by AS savedBy FROM links");
 
+  const authPath = () => join(dir, "auth.db");
+  const cfg = (links: string, port: number): ServerConfig => ({
+    dbPath: links,
+    port,
+    auth: { dbPath: authPath(), secret: SECRET, baseUrl: BASE },
+  });
+
+  /** Read through a second connection, which fails while the server holds the auth file. */
+  const authRows = (sql: string) => {
+    const db = new Database(authPath(), { timeout: 0 });
+    try {
+      return db.prepare(sql).all();
+    } finally {
+      db.close();
+    }
+  };
+  const authTables = () =>
+    (
+      authRows("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name") as {
+        name: string;
+      }[]
+    ).map((t) => t.name);
+
   const snapshots = () =>
     read<Snapshot>(
       `SELECT l.url, s.fetch_status AS status, s.attempts, s.next_fetch_at AS nextFetchAt,
@@ -217,11 +247,12 @@ describe("startServer", () => {
   };
 
   /** Starts with a fake pipeline unless the test passes one, so no test reaches the network. */
-  const start = async (options: StartOptions = {}) => {
-    const s = await startServer(
-      { dbPath, port: 0 },
-      { ...fakePipeline(), settleMs: 200, ...options },
-    );
+  const start = async (options: StartOptions = {}, port = 0) => {
+    const s = await startServer(cfg(dbPath, port), {
+      ...fakePipeline(),
+      settleMs: 200,
+      ...options,
+    });
     started.push(s);
     return s;
   };
@@ -409,7 +440,7 @@ describe("startServer", () => {
       const fresh = join(dir, "fresh.db");
       const port = await freePort();
       const { fetcher, extractor } = fakePipeline();
-      await expect(startServer({ dbPath: fresh, port }, { fetcher, extractor })).rejects.toThrow();
+      await expect(startServer(cfg(fresh, port), { fetcher, extractor })).rejects.toThrow();
       expect(existsSync(fresh)).toBe(false);
       expect(await listening(port)).toBe(false);
       vi.unstubAllEnvs();
@@ -420,19 +451,94 @@ describe("startServer", () => {
       const pipeline = fakePipeline();
       const boom = new Error("deps failed");
       await expect(
-        startServer(
-          { dbPath: fresh, port: 0 },
-          {
-            ...pipeline,
-            decorateDeps: () => {
-              throw boom;
-            },
+        startServer(cfg(fresh, 0), {
+          ...pipeline,
+          decorateDeps: () => {
+            throw boom;
           },
-        ),
+        }),
       ).rejects.toBe(boom);
       expect(existsSync(fresh)).toBe(true);
       expect(existsSync(`${fresh}-wal`)).toBe(false);
       expect(pipeline.closed).toEqual({ fetcher: 1, extractor: 1 });
+    });
+
+    it("does not listen until the auth migrations have finished", async () => {
+      const port = await freePort();
+      const entered = gate();
+      const release = gate();
+      const starting = start(
+        {
+          wrapAuthMigrations: async (migrate) => {
+            entered.open();
+            await release.opened;
+            await migrate();
+          },
+        },
+        port,
+      );
+      await entered.opened;
+      await sleep(50);
+      expect(await listening(port)).toBe(false);
+      release.open();
+      await starting;
+      expect(await listening(port)).toBe(true);
+    });
+
+    it("fails the start when the auth schema has problems, with both databases and the pipeline closed", async () => {
+      const port = await freePort();
+      const before = new Database(authPath());
+      before.exec(`CREATE TABLE "user" (id text primary key, surprise text not null)`);
+      before.close();
+      const pipeline = fakePipeline();
+      await expect(startServer(cfg(dbPath, port), pipeline)).rejects.toThrow(
+        /auth database schema has problems.*surprise/,
+      );
+      expect(await listening(port)).toBe(false);
+      expect(pipeline.closed).toEqual({ fetcher: 1, extractor: 1 });
+      expect(existsSync(`${dbPath}-wal`)).toBe(false);
+      expect(authTables()).toEqual(["user"]);
+    });
+  });
+
+  describe("auth", () => {
+    it("holds the auth database while running, and releases it, migrated, on stop", async () => {
+      const { stop } = await start();
+      expect(() => authTables()).toThrow(expect.objectContaining({ code: "SQLITE_BUSY" }));
+      await stop();
+      expect(authTables()).toEqual(["account", "session", "user", "verification"]);
+    });
+
+    it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves / with the session", async () => {
+      await seed("https://example.com/served-home");
+      const auth = openAuthDatabase(authPath());
+      const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
+      await migrateAuth(options);
+      await setOwnerLogin(createAuth(options), {
+        id: "owner",
+        name: "Owner",
+        email: "you@example.com",
+        password: "Correct-horse-battery-1",
+      });
+      auth.close();
+
+      const { port, stop } = await start();
+      const signIn = await fetch(`http://127.0.0.1:${port}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE },
+        body: JSON.stringify({ email: "you@example.com", password: "Correct-horse-battery-1" }),
+      });
+      expect(signIn.status).toBe(200);
+      const [cookie] = signIn.headers.getSetCookie();
+      expect(cookie).toMatch(/; Secure/);
+      const home = await fetch(`http://127.0.0.1:${port}/`, {
+        headers: { cookie: (cookie ?? "").split(";")[0] ?? "" },
+        redirect: "manual",
+      });
+      expect(home.status).toBe(200);
+      expect(await home.text()).toContain("https://example.com/served-home");
+      await stop();
+      expect(authRows("SELECT userId FROM session")).toEqual([{ userId: "owner" }]);
     });
   });
 
@@ -575,7 +681,7 @@ describe("startServer", () => {
       const port = (taken.address() as net.AddressInfo).port;
       const pipeline = fakePipeline();
       try {
-        await expect(startServer({ dbPath, port }, pipeline)).rejects.toThrow(/EADDRINUSE/);
+        await expect(startServer(cfg(dbPath, port), pipeline)).rejects.toThrow(/EADDRINUSE/);
       } finally {
         await new Promise((r) => taken.close(r));
       }

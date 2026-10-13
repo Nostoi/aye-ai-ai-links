@@ -288,6 +288,18 @@ describe("owner CLI", () => {
     expect(existsSync(vars.AYE_AUTH_DB as string)).toBe(false);
   });
 
+  it("refuses, changing nothing, when the login belongs to a different owner id", async () => {
+    const vars = env();
+    const path = vars.AYE_AUTH_DB as string;
+    await exec(["set", EMAIL], vars, FIRST);
+    const before = dump(path);
+    const r = await exec(["set", "new@example.com"], { ...vars, AYE_OWNER: "mark" }, SECOND);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('"owner"');
+    expect(r.out).toBe("");
+    expect(dump(path)).toEqual(before);
+  });
+
   it("uses AYE_OWNER as the user id", async () => {
     const vars = env({ AYE_OWNER: "mark" });
     await exec(["set", EMAIL], vars, FIRST);

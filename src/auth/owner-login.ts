@@ -32,6 +32,15 @@ export async function setOwnerLogin(
   // Sign-in looks the user up by the lowercased email, as better-auth's own user writes store it.
   const email = who.email.toLowerCase();
   return ctx.adapter.transaction(async (trx) => {
+    const other = await trx.findOne<{ id: string }>({
+      model: "user",
+      where: [{ field: "id", value: who.id, operator: "ne" }],
+    });
+    if (other) {
+      throw new OwnerLoginError(
+        `The login belongs to owner "${other.id}", not "${who.id}". Set AYE_OWNER to "${other.id}" to change it.`,
+      );
+    }
     const byId = [{ field: "id", value: who.id }];
     const existing = await trx.findOne({ model: "user", where: byId });
     if (existing) {

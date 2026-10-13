@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-13:** Login and app-connection rules live in `src/auth/`, not `core/` (owner, after the #77 B2 architecture review, comment 6145305789). They act on better-auth's tables and the metadata stash, which `core/` has no interface for; the doors still hold no rules. AGENTS.md's "Doors hold no rules" names the exception.
 - **2026-10-13:** Disconnecting an app, and the OAuth error page (#77 PR B2; plan in comment 6144294913, amended by comment 6144293276).
   - **Disconnect is web-only.** The signed-in page `/connections` lists the owner's apps; Disconnect deletes, under the auth lock and in one transaction, the owner's access tokens, refresh tokens, consent and unused authorization codes for that app. It answers 204 whether or not the app was connected. There is no CLI channel.
   - **The client row stays.** Deleting it would cascade to other users' grants and drop a DCR app's registration. A DCR client left with no consent is deleted by the startup prune once it is a day old; CIMD rows are never pruned, and admission refuses a CIMD client once its snapshot is gone.

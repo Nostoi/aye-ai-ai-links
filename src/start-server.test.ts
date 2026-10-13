@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentKey } from "./auth/agent-keys.js";
 import { authOptions, createAuth, migrateAuth, openAuthDatabase } from "./auth/better-auth.js";
+import { connectClaude, oauthWorld } from "./auth/oauth-test-kit.js";
 import { setOwnerLogin } from "./auth/owner-login.js";
 import type { ServerConfig } from "./config.js";
 import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
@@ -539,6 +540,23 @@ describe("startServer", () => {
       expect(await home.text()).toContain("https://example.com/served-home");
       await stop();
       expect(authRows("SELECT userId FROM session")).toEqual([{ userId: "owner" }]);
+    });
+
+    it("fills the metadata stash before it listens, so a connected client's token works on the first request", async () => {
+      const authDb = openAuthDatabase(authPath());
+      const world = await oauthWorld({ authDb });
+      const claude = await connectClaude(world);
+      await world.refresher.stop();
+      authDb.close();
+      const before = world.net.calls.length;
+
+      const { port } = await start({
+        jsonFetcher: { fetch: world.net.fetch, close: async () => {} },
+      });
+      expect(world.net.calls.length).toBe(before + 1);
+      const res = await post(port, SAVE, `Bearer ${claude.access}`);
+      expect(res.status).toBe(200);
+      expect(rows()).toEqual([{ url: URL_A, savedBy: "Claude" }]);
     });
   });
 

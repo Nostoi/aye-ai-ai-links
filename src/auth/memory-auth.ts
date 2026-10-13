@@ -17,21 +17,22 @@ const noNetwork: JsonFetch = async (url) => {
 };
 
 /**
- * For tests: a migrated in-memory auth, built as the server builds it, whose password hashing is
- * counted. `fetch` stands in for the metadata network.
+ * For tests: a migrated auth, built as the server builds it, whose password hashing is counted.
+ * In memory unless `db` is given. `fetch` stands in for the metadata network.
  */
 export async function memoryAuth({
   owner = "owner",
   fetch = noNetwork,
   now,
   keys = async () => null,
+  db = new Database(":memory:"),
 }: {
   owner?: string | null;
   fetch?: JsonFetch;
   now?: () => number;
   keys?: Identify;
+  db?: Database.Database;
 } = {}) {
-  const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   const hashing = { hash: 0, verify: 0 };
   const password: PasswordHasher = {

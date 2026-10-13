@@ -6,6 +6,7 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
+import type Database from "better-sqlite3";
 import { createApp } from "../app.js";
 import { createDeps } from "../deps.js";
 import type { RateLimitOptions } from "../http/rate-limit.js";
@@ -49,6 +50,21 @@ export const chatgptDocument = (jwksUri: string) => ({
 });
 
 export const DCR_REDIRECT = "https://dcr-client.example/callback";
+
+/** Another CIMD client, the `i`th, with no client secret. */
+export function otherClientDocument(i: number) {
+  const id = `https://client${i}.example/oauth/metadata.json`;
+  const redirect = `https://client${i}.example/cb`;
+  const document = {
+    client_id: id,
+    client_name: `Client ${i}`,
+    redirect_uris: [redirect],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+  };
+  return { id, redirect, document };
+}
 
 const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
@@ -186,18 +202,23 @@ export async function oauthWorld({
   now,
   rateLimit,
   limits,
+  authDb,
+  net = fakeNetwork(),
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
   limits?: Partial<Record<RouteLimit, RateLimitOptions>>;
+  /** The auth database; in memory when left out. */
+  authDb?: Database.Database;
+  net?: ReturnType<typeof fakeNetwork>;
 } = {}) {
-  const net = fakeNetwork();
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
   const auth = await memoryAuth({
     fetch: net.fetch,
     keys: keyIdentify(keyStore),
     ...(now && { now }),
+    ...(authDb && { db: authDb }),
   });
   const deps = createDeps(links, new FakeEmbedder(DIMS));
   deps.store.ensureUser("owner", "Owner");

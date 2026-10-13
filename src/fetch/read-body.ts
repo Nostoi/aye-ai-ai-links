@@ -12,14 +12,17 @@ const DECODERS: Record<string, () => zlib.Gunzip | zlib.Inflate | zlib.BrotliDec
   br: zlib.createBrotliDecompress,
 };
 
-/** The `Content-Encoding` header as decoder names in the order to apply them, or undefined if any is unknown. */
+/** Every decoder is built before the first byte is read, so a header stacking thousands would cost memory per request. */
+const MAX_CODINGS = 1;
+
+/** The `Content-Encoding` header as decoder names in the order to apply them, or undefined if any is unknown or there is more than one. */
 export function decodersFor(header: string | undefined): string[] | undefined {
   const applied = (header ?? "")
     .toLowerCase()
     .split(",")
     .map((name) => name.trim())
     .filter((name) => name !== "" && name !== "identity");
-  if (!applied.every((name) => name in DECODERS)) return undefined;
+  if (applied.length > MAX_CODINGS || !applied.every((name) => name in DECODERS)) return undefined;
   return applied.reverse();
 }
 

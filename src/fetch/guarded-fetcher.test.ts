@@ -114,6 +114,8 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       });
     case "br":
       return send("text/html", zlib.brotliCompressSync(html("br")), { "content-encoding": "br" });
+    case "stacked":
+      return send("text/html", html("stacked"), { "content-encoding": "gzip, br" });
     case "zstd":
       return send("text/html", html("zstd"), { "content-encoding": "zstd" });
     case "truncated":
@@ -427,6 +429,13 @@ describe("what comes back", () => {
 
   it("returns not_html for a Content-Encoding it cannot decode", async () => {
     expect(await fetcherWith().fetch(siteUrl("/zstd"))).toEqual({
+      kind: "not_html",
+      contentType: "text/html",
+    });
+  });
+
+  it("returns not_html for two stacked Content-Encodings, without decoding", async () => {
+    expect(await fetcherWith().fetch(siteUrl("/stacked"))).toEqual({
       kind: "not_html",
       contentType: "text/html",
     });

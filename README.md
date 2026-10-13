@@ -104,7 +104,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    ```sh
    owner() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/owner-main.js" "$@"; }
    launchctl bootout gui/$(id -u)/com.aye-links
-   read -rs PASSWORD && printf '%s\n' "$PASSWORD" | owner set you@example.com; unset PASSWORD
+   IFS= read -rs PASSWORD && printf '%s\n' "$PASSWORD" | owner set you@example.com; unset PASSWORD
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aye-links.plist
    ```
 

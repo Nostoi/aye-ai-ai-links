@@ -22,7 +22,9 @@ async function run(html: string, search: string, answer: Answer, click?: string)
       handlers.set(id, fn),
   });
   const elements = new Map<string, ReturnType<typeof element>>();
+  const next = /data-next="([^"]*)"/.exec(html)?.[1]?.replaceAll("&amp;", "&");
   const form = Object.assign(element("login"), {
+    dataset: { next },
     email: element("email"),
     password: element("pw"),
   });
@@ -53,7 +55,7 @@ async function run(html: string, search: string, answer: Answer, click?: string)
 describe("the login page's script", () => {
   it("follows the url sign-in returns when it resumes an authorization", async () => {
     const signed = "?client_id=c&exp=1&sig=abc";
-    const r = await run(loginPage(), signed, {
+    const r = await run(loginPage({ next: "/" }), signed, {
       status: 200,
       body: { redirect: true, url: "/consent?client_id=c&sig=abc" },
     });
@@ -66,9 +68,9 @@ describe("the login page's script", () => {
     expect(r.location.href).toBe("/consent?client_id=c&sig=abc");
   });
 
-  it("returns to a same-origin authorize URL named by next", async () => {
-    const next = "/api/auth/oauth2/authorize?client_id=https%3A%2F%2Fclaude.ai%2Fx&state=s";
-    const r = await run(loginPage(), `?next=${encodeURIComponent(next)}`, {
+  it("goes to the form's data-next after a sign-in that is not a resume", async () => {
+    const next = "/api/auth/oauth2/authorize?client_id=c&state=s";
+    const r = await run(loginPage({ next }), "?next=ignored", {
       status: 200,
       body: { redirect: false },
     });
@@ -76,24 +78,16 @@ describe("the login page's script", () => {
     expect(r.location.href).toBe(next);
   });
 
-  it.each([
-    ["another origin", "https://evil.example/api/auth/oauth2/authorize?x=1"],
-    ["a protocol-relative URL", "//evil.example/api/auth/oauth2/authorize?x=1"],
-    ["a longer path", "/api/auth/oauth2/authorizeX?x=1"],
-    ["a path below it", "/api/auth/oauth2/authorize/x?x=1"],
-    ["a dot segment", "/api/auth/oauth2/../sign-out"],
-    ["another page", "/consent?x=1"],
-    ["a javascript URL", "javascript:alert(1)"],
-  ])("goes home instead of to %s", async (_, next) => {
-    const r = await run(loginPage(), `?next=${encodeURIComponent(next)}`, {
+  it("still follows the returned url on a resume, whatever data-next says", async () => {
+    const r = await run(loginPage({ next: "/api/auth/oauth2/authorize?x=1" }), "?sig=abc", {
       status: 200,
-      body: { redirect: false },
+      body: { redirect: true, url: "/consent?sig=abc" },
     });
-    expect(r.location.href).toBe("/");
+    expect(r.location.href).toBe("/consent?sig=abc");
   });
 
   it("stays on the page and says so when the password is wrong", async () => {
-    const r = await run(loginPage(), "", { status: 401, body: {} });
+    const r = await run(loginPage({ next: "/" }), "", { status: 401, body: {} });
     expect(r.location.href).toBe(`${ORIGIN}/page`);
     expect(r.text("error")).toBe("That email and password did not match.");
   });

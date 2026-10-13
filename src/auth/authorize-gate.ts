@@ -1,6 +1,7 @@
 import { isCimdClientIdUrlCandidate } from "@better-auth/cimd";
 import type { WithAuthLock } from "./auth-lock.js";
 import type { Auth } from "./better-auth.js";
+import { loginRedirect } from "./login-return.js";
 import type { MetadataStash } from "./metadata-stash.js";
 import type { OAuthClients } from "./oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./oauth-error.js";
@@ -39,10 +40,9 @@ export function authorizeGate({
     const connected = await withAuthLock(async () => clients.isConnected(clientId));
     let response: Response | undefined;
     if (!connected && !caller) {
-      const next = encodeURIComponent(`${url.pathname}${url.search}`);
       response = new Response(null, {
         status: 302,
-        headers: { location: `/login?next=${next}`, ...NO_STORE },
+        headers: { location: loginRedirect(url), ...NO_STORE },
       });
     } else {
       let pending = false;

@@ -4,6 +4,7 @@ import type { WithAuthLock } from "../auth/auth-lock.js";
 import type { Auth } from "../auth/better-auth.js";
 import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
+import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import type { OwnerId } from "../core/types.js";
@@ -66,7 +67,9 @@ export function webApp({
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
 
-  app.get("/login", (c) => c.html(loginPage(), 200, NO_STORE));
+  app.get("/login", (c) =>
+    c.html(loginPage({ next: returnAfterLogin(c.req.query("next") ?? null) }), 200, NO_STORE),
+  );
 
   app.get(OAUTH_ERROR_PATH, (c) =>
     c.html(oauthErrorPage(oauthErrorMessage(c.req.query("error"))), 200, NO_STORE),

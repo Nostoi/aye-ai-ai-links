@@ -74,7 +74,7 @@ function baseUrl(raw: string | undefined): string {
   } catch {}
   if (url?.protocol !== "https:" || url.origin !== raw) {
     throw new Error(
-      "Set AYE_BASE_URL to the https origin the browser uses, such as https://<your-mac>.<tailnet>.ts.net:8444, with no path or trailing slash.",
+      "Set AYE_BASE_URL to the https origin the browser uses, such as https://<your-mac>.<tailnet>.ts.net, with no path or trailing slash.",
     );
   }
   return raw;

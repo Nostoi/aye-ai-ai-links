@@ -355,6 +355,29 @@ describe("SqliteStore constraints", () => {
     }
   });
 
+  it("returns the caller's own link when another owner saved the same URL, and changes nothing of the other's", async () => {
+    const { db, h } = setup();
+    await h.addOwner("a");
+    await h.addOwner("b");
+    const first = await h.store.insertIfAbsent("a", baseLink());
+    const mine = await h.store.insertIfAbsent("b", baseLink());
+    const owned = (owner: string) =>
+      ["links", "tags", "link_tags", "snapshots"].map((t) =>
+        db.prepare(`SELECT * FROM ${t} WHERE owner_id = ? ORDER BY rowid`).all(owner),
+      );
+    const before = owned("a");
+
+    const again = await h.store.insertIfAbsent("b", { ...baseLink(), savedBy: "other" });
+
+    expect(first.created).toBe(true);
+    expect(mine.created).toBe(true);
+    expect(again.created).toBe(false);
+    expect(again.link.id).toBe(mine.link.id);
+    expect(again.link.id).not.toBe(first.link.id);
+    expect(again.link.savedBy).toBe("x");
+    expect(owned("a")).toEqual(before);
+  });
+
   it("refuses an unknown owner and writes nothing", async () => {
     const { db, h } = setup();
     const link = baseLink();

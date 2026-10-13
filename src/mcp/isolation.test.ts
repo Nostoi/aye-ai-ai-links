@@ -344,6 +344,28 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     expect(theirs.links.map((d) => d.link.id)).toEqual([aId]);
     expect(theirs.links[0]?.reasons.map((r) => r.kind)).toContain("focus_words");
   });
+
+  it("T13: B's save_link response holds only B's tags, notes and focus, though A has others", async () => {
+    const { world, door, snapA } = await open();
+    await tool(world, door.a, "save_link", {
+      url: "https://a.example/second",
+      tags: [{ name: "Zulu", source: "stated" }],
+    });
+    const before = snapA();
+
+    const saved = await tool<{
+      filingContext: { tags: { name: string }[]; activeProjects: { name: string }[] };
+      profile: Profile;
+    }>(world, door.b, "save_link", {
+      url: "https://b.example/another",
+      tags: [{ name: "Bravo", source: "stated" }],
+    });
+
+    expect(saved.filingContext.tags.map((t) => t.name).sort()).toEqual(["Alpha", "Bravo"]);
+    expect(saved.profile.notes.map((n) => n.text)).toEqual(["B private note"]);
+    expect(saved.profile.recentFocus).toEqual([]);
+    expect(snapA()).toEqual(before);
+  });
 });
 
 describe("owner isolation in search", () => {

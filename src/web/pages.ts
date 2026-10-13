@@ -26,15 +26,15 @@ ${body}
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
  * was opened with a signed OAuth query (`sig`), passes that query on as `oauth_query`, which is
  * how better-auth resumes an authorization after login. After sign-in it goes, in order, to the
- * url better-auth returns with `redirect: true`, to `next` if that is this site's authorize path
- * (where the authorize gate sends a browser without a session), or home.
+ * url better-auth returns with `redirect: true`, or to `next`, the already-checked page the door
+ * passes in (`returnAfterLogin`: this site's authorize path, or home), held in `data-next`.
  */
-export const loginPage = () =>
+export const loginPage = ({ next }: { next: string }) =>
   page(
     "Sign in · Aye-AI-AI Links",
     `<main>
 <h1>Sign in</h1>
-<form id="login">
+<form id="login" data-next="${escapeHtml(next)}">
 <p><label>Email <input name="email" type="email" autocomplete="username" required></label></p>
 <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
 <p><button type="submit">Sign in</button></p>
@@ -44,18 +44,6 @@ export const loginPage = () =>
 <script>
 const form = document.getElementById("login");
 const error = document.getElementById("error");
-const afterSignIn = (query) => {
-  const next = query.get("next");
-  if (next === null) return "/";
-  let url;
-  try {
-    url = new URL(next, location.origin);
-  } catch {
-    return "/";
-  }
-  const authorize = url.origin === location.origin && url.pathname === "/api/auth/oauth2/authorize";
-  return authorize ? url.pathname + url.search : "/";
-};
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   error.textContent = "";
@@ -70,7 +58,7 @@ form.addEventListener("submit", async (event) => {
   if (res.ok) {
     const data = await res.json().catch(() => null);
     const resume = data !== null && data.redirect === true && typeof data.url === "string";
-    location.href = resume ? data.url : afterSignIn(query);
+    location.href = resume ? data.url : form.dataset.next;
   } else {
     error.textContent = res.status === 429
       ? "Too many sign-in attempts. Wait a few minutes and try again."

@@ -73,10 +73,25 @@ describe("web door", () => {
     expect(res.headers.get("content-type")).toMatch(/^text\/html/);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const html = await res.text();
-    expect(html).toContain('<form id="login">');
+    expect(html).toContain('<form id="login" data-next="/">');
     expect(html).toContain('fetch("/api/auth/sign-in/email"');
     expect(html).toContain("body.oauth_query = query.toString()");
     expect(t.hashing.verify).toBe(0);
+  });
+
+  it("renders data-next as home for a next that is not the authorize path", async () => {
+    const t = await setup();
+    const next = encodeURIComponent("https://evil.example/api/auth/oauth2/authorize?x=1");
+    const html = await (await t.get(`/login?next=${next}`)).text();
+    expect(html).toContain('data-next="/"');
+    expect(html).not.toContain("evil.example");
+  });
+
+  it("renders an authorize next escaped in data-next", async () => {
+    const t = await setup();
+    const next = encodeURIComponent('/api/auth/oauth2/authorize?client_id=c&state="x"');
+    const html = await (await t.get(`/login?next=${next}`)).text();
+    expect(html).toContain('data-next="/api/auth/oauth2/authorize?client_id=c&amp;state=%22x%22"');
   });
 
   it("sends a request without a session from / to /login", async () => {

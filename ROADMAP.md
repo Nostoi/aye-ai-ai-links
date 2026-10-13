@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-13:** Rules about who may call and as whom live in `src/auth/`, not `core/` (owner rulings, #77 comments 6146659143 and 6147438487, after the B2 architecture review): the web login, agent keys, app connections and their tokens, and the recorded `savedBy`. AGENTS.md's "Doors hold no rules" names the exception. Which `next` page sign-in returns to is decided in `src/auth/login-return.ts`, moved there from the login page's script (comment 6146659143).
 - **2026-10-13:** Disconnecting an app, and the OAuth error page (#77 PR B2; plan in comment 6144294913, amended by comment 6144293276).
   - **Disconnect is web-only.** The signed-in page `/connections` lists the owner's apps; Disconnect deletes, under the auth lock and in one transaction, the owner's access tokens, refresh tokens, consent and unused authorization codes for that app. It answers 204 whether or not the app was connected. There is no CLI channel.
   - **The client row stays.** Deleting it would cascade to other users' grants and drop a DCR app's registration. A DCR client left with no consent is deleted by the startup prune once it is a day old; CIMD rows are never pruned, and admission refuses a CIMD client once its snapshot is gone.

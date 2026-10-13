@@ -29,6 +29,8 @@ export async function setOwnerLogin(
   checkOwnerLogin(who.email, who.password);
   const ctx = await auth.$context;
   const hash = await ctx.password.hash(who.password);
+  // Sign-in looks the user up by the lowercased email, as better-auth's own user writes store it.
+  const email = who.email.toLowerCase();
   return ctx.adapter.transaction(async (trx) => {
     const byId = [{ field: "id", value: who.id }];
     const existing = await trx.findOne({ model: "user", where: byId });
@@ -36,7 +38,7 @@ export async function setOwnerLogin(
       await trx.update({
         model: "user",
         where: byId,
-        update: { email: who.email, updatedAt: now },
+        update: { email, updatedAt: now },
       });
     } else {
       await trx.create({
@@ -44,7 +46,7 @@ export async function setOwnerLogin(
         data: {
           id: who.id,
           name: who.name,
-          email: who.email,
+          email,
           emailVerified: false,
           createdAt: now,
           updatedAt: now,

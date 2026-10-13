@@ -89,12 +89,12 @@ async function server(vars: Record<string, string | undefined>) {
     identify: async () => null,
     auth: { auth, withAuthLock: createAuthLock() },
   });
-  const signIn = async (password: string) => {
+  const signIn = async (password: string, email = EMAIL) => {
     const res = await app.fetch(
       new Request(`${BASE}/api/auth/sign-in/email`, {
         method: "POST",
         headers: { "content-type": "application/json", origin: BASE },
-        body: JSON.stringify({ email: EMAIL, password }),
+        body: JSON.stringify({ email, password }),
       }),
     );
     return {
@@ -131,6 +131,25 @@ describe("owner CLI", () => {
       s.close();
     }
   });
+
+  it.each([
+    ["a first run", false],
+    ["a re-run", true],
+  ])(
+    "on %s, stores an email typed with capitals so sign-in finds it however it is typed",
+    async (_, rerun) => {
+      const vars = env();
+      if (rerun) await exec(["set", "old@example.com"], vars, FIRST);
+      expect((await exec(["set", "You@Example.COM"], vars, FIRST)).code).toBe(0);
+      const s = await server(vars);
+      try {
+        expect((await s.signIn(FIRST, "you@example.com")).status).toBe(200);
+        expect((await s.signIn(FIRST, "You@Example.COM")).status).toBe(200);
+      } finally {
+        s.close();
+      }
+    },
+  );
 
   it("strips exactly one trailing newline from the password", async () => {
     const vars = env();
@@ -294,7 +313,9 @@ describe("owner CLI", () => {
 
     it("reads the password from stdin", async () => {
       const vars = env();
-      const { BETTER_AUTH_URL: _, ...parent } = process.env;
+      const parent = Object.fromEntries(
+        Object.entries(process.env).filter(([name]) => !name.startsWith("BETTER_AUTH_")),
+      );
       const stdout = execFileSync("node", [join(root, "dist/cli/owner-main.js"), "set", EMAIL], {
         env: { ...parent, ...vars },
         input: `${FIRST}\n`,

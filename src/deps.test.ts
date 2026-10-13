@@ -177,6 +177,33 @@ describe("the vector indexer on createDeps' index store", () => {
     expect(await h.sweep()).toEqual({ scanned: 0, embedded: [] });
   });
 
+  it("stores each vector under its link's owner, and a meaning search never returns another owner's identical link", async () => {
+    const h = setup();
+    h.deps.store.ensureUser("p", "p");
+    const twin = (owner: string) =>
+      saveLink(h.deps, owner, { url: "https://ex.com/1", title: "twin", savedBy: "t" });
+    const mine = (await twin("p")).link;
+    const theirs = (await twin(OWNER)).link;
+
+    await h.sweep();
+
+    expect(
+      h.db
+        .prepare(
+          `SELECT l.owner_id AS link, v.owner_id AS vector FROM link_vectors v
+           JOIN links l ON l.id = v.link_id ORDER BY l.id`,
+        )
+        .all(),
+    ).toEqual([
+      { link: "p", vector: "p" },
+      { link: OWNER, vector: OWNER },
+    ]);
+    const query = await h.fake.embedQuery(h.docs[0]?.[0] as string);
+    const vs = new VectorSearch(h.db, MODEL_KEY);
+    expect(vs.nearest("p", query, {}, 1).map((r) => r.id)).toEqual([mine.id]);
+    expect(vs.nearest(OWNER, query, {}, 1).map((r) => r.id)).toEqual([theirs.id]);
+  });
+
   it("replaces the vector when every owner field is cleared: the document becomes the URL", async () => {
     const h = setup();
     const a = await h.save(1, "Car maintenance");

@@ -100,7 +100,7 @@ describe("the internal client and the startup prune", () => {
         consented,
         fresh,
         "https://claude.ai/oauth/mcp-oauth-client-metadata",
-        // CIMD rows are bounded by the pending cap and admission, not by the prune.
+        // The prune covers DCR clients only.
         abandonedCimd.id,
       ].sort(),
     );
@@ -137,16 +137,14 @@ describe("the internal client and the startup prune", () => {
       redirectUris: "[]",
       tokenEndpointAuthMethod: "client_secret_post",
     });
-    const res = await world.agent().send("/api/auth/oauth2/token", {
-      method: "POST",
-      origin: false,
-      form: {
-        grant_type: "client_credentials",
-        client_id: INTERNAL_CLIENT_ID,
-        client_secret: world.internal.clientSecret,
-        resource: "https://links.example/mcp",
-      },
-    });
-    expect(res.status).toBe(400);
+    const browser = world.agent();
+    await browser.signIn();
+    const res = await browser.send(
+      authorizePath(INTERNAL_CLIENT_ID, "https://e.example/cb", pkce().challenge),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toMatch(
+      new RegExp(`^${TEST_BASE_URL}/api/auth/error\\?error=invalid_redirect&`),
+    );
   });
 });

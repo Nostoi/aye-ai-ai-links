@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { SqliteStore } from "../store/sqlite-store.js";
 import { disconnect, listConnections } from "./disconnect.js";
 import { INTERNAL_CLIENT_ID } from "./internal-client.js";
-import { TEST_BASE_URL, TEST_PASSWORD } from "./memory-auth.js";
 import {
   type Agent,
+  addSecondUser,
   approve,
   authorizePath,
   CLAUDE_ID,
   CLAUDE_REDIRECT,
   connectClaude,
+  connectClaudeAs,
   DCR_REDIRECT,
   exchange,
   field,
@@ -17,6 +17,7 @@ import {
   otherClientDocument,
   pkce,
   refresh,
+  SECOND_USER,
   saveLinkWith,
   type World,
 } from "./oauth-test-kit.js";
@@ -193,62 +194,7 @@ describe("disconnect", () => {
   });
 });
 
-const B = { id: "owner-b", email: "b@example.com" };
-
-/** A second user with a password login: the multi-user foundation, which the owner CLI never makes. */
-async function addSecondUser(world: World) {
-  const ctx = await world.auth.$context;
-  const now = new Date();
-  await ctx.adapter.create({
-    model: "user",
-    data: {
-      id: B.id,
-      name: "B",
-      email: B.email,
-      emailVerified: false,
-      createdAt: now,
-      updatedAt: now,
-    },
-    forceAllowId: true,
-  });
-  await ctx.adapter.create({
-    model: "account",
-    data: {
-      userId: B.id,
-      providerId: "credential",
-      accountId: B.id,
-      password: await ctx.password.hash(TEST_PASSWORD),
-      createdAt: now,
-      updatedAt: now,
-    },
-  });
-  new SqliteStore(world.links).ensureUser(B.id, "B");
-  const browser = world.agent();
-  const signedIn = await browser.send("/api/auth/sign-in/email", {
-    method: "POST",
-    json: { email: B.email, password: TEST_PASSWORD },
-  });
-  expect(signedIn.status).toBe(200);
-  return browser;
-}
-
-/** User B approves the already-connected Claude for themselves and exchanges the code. */
-async function connectClaudeAs(world: World, browser: Agent) {
-  const p = pkce();
-  const az = await browser.send(authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, p.challenge));
-  const consent = new URL(az.headers.get("location") ?? "", TEST_BASE_URL);
-  expect(consent.pathname).toBe("/consent");
-  const accepted = await browser.send("/api/auth/oauth2/consent", {
-    method: "POST",
-    json: { accept: true, oauth_query: consent.search.slice(1) },
-  });
-  const code = new URL(field(accepted, "url")).searchParams.get("code") ?? "";
-  const tokens = await exchange(world, code, p.verifier, {
-    client_id: CLAUDE_ID,
-    redirect_uri: CLAUDE_REDIRECT,
-  });
-  return field(tokens, "access_token");
-}
+const B = SECOND_USER;
 
 describe("disconnect with two users", () => {
   it("leaves the other user's connection to a shared CIMD client working, and forgets it after the last", async () => {
@@ -268,6 +214,39 @@ describe("disconnect with two users", () => {
     expect(await end(world)(B.id, CLAUDE_ID)).toBe(true);
     expect(world.stash.isCurrent(CLAUDE_ID)).toBe(false);
     expect((await saveLinkWith(world, bAccess, "https://example.com/b2")).status).toBe(401);
+  });
+
+  it("keeps the other user's unused code for the same client, which still exchanges", async () => {
+    const world = await oauthWorld();
+    const aBrowser = world.agent();
+    await connectClaude(world);
+    await aBrowser.signIn();
+    const bBrowser = await addSecondUser(world);
+    await connectClaudeAs(world, bBrowser);
+    const aCode = await unusedCode(aBrowser, CLAUDE_ID, CLAUDE_REDIRECT);
+    const bCode = await unusedCode(bBrowser, CLAUDE_ID, CLAUDE_REDIRECT);
+    expect(rows(world, CLAUDE_ID).codes).toBe(2);
+
+    expect(await end(world)("owner", CLAUDE_ID)).toBe(true);
+
+    expect(rows(world, CLAUDE_ID).codes).toBe(1);
+    const survivors = world.db
+      .prepare(
+        `SELECT json_extract(value, '$.userId') AS userId FROM verification
+         WHERE CASE WHEN json_valid(value) THEN json_extract(value, '$.type') = 'authorization_code' END`,
+      )
+      .all();
+    expect(survivors).toEqual([{ userId: B.id }]);
+    const aExchange = await exchange(world, aCode.code, aCode.verifier, {
+      client_id: CLAUDE_ID,
+      redirect_uri: CLAUDE_REDIRECT,
+    });
+    expect(aExchange.status).not.toBe(200);
+    const bExchange = await exchange(world, bCode.code, bCode.verifier, {
+      client_id: CLAUDE_ID,
+      redirect_uri: CLAUDE_REDIRECT,
+    });
+    expect(bExchange.status).toBe(200);
   });
 });
 

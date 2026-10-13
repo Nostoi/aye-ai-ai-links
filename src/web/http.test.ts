@@ -3,14 +3,17 @@ import { createApp } from "../app.js";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { memoryAuth, TEST_BASE_URL, TEST_EMAIL, TEST_PASSWORD } from "../auth/memory-auth.js";
 import {
+  addSecondUser,
   approve,
   CLAUDE_ID,
   connectClaude,
+  connectClaudeAs,
   DCR_REDIRECT,
   exchange,
   field,
   oauthWorld,
   pkce,
+  SECOND_USER,
   saveLinkWith,
   type World,
 } from "../auth/oauth-test-kit.js";
@@ -224,6 +227,43 @@ describe("the connections page", () => {
     expect(html).toContain('fetch("/connections/disconnect"');
   });
 
+  it("escapes a client id holding a quote and an angle bracket, and the attribute reads back as the id", async () => {
+    const world = await oauthWorld();
+    const id = 'https://evil.example/x"onmouseover=alert(1)<b/metadata.json';
+    const redirect = "https://evil.example/cb";
+    world.net.json(id, {
+      client_id: id,
+      client_name: "Evil",
+      redirect_uris: [redirect],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    });
+    const p = pkce();
+    const { code } = await approve(world, id, redirect, { challenge: p.challenge });
+    const tokens = await exchange(world, code, p.verifier, {
+      client_id: id,
+      redirect_uri: redirect,
+    });
+    expect(tokens.status).toBe(200);
+
+    const res = await (await signedIn(world)).send("/connections");
+
+    expect(res.status).toBe(200);
+    const html = String(res.body);
+    expect(html).not.toContain('x"onmouseover');
+    expect(html).not.toContain("<b/metadata.json");
+    const values = [...html.matchAll(/data-client-id="([^"]*)"/g)].map((m) =>
+      (m[1] ?? "")
+        .replaceAll("&lt;", "<")
+        .replaceAll("&gt;", ">")
+        .replaceAll("&quot;", '"')
+        .replaceAll("&#39;", "'")
+        .replaceAll("&amp;", "&"),
+    );
+    expect(values).toEqual([id]);
+  });
+
   it("is linked from the home page", async () => {
     const world = await oauthWorld();
     const res = await (await signedIn(world)).send("/");
@@ -264,6 +304,37 @@ describe("the connections page", () => {
     const res = await (await signedIn(world)).send("/connections/disconnect", disconnecting(id));
     expect(res.status).toBe(204);
     expect(grantRows(world)).toEqual([]);
+  });
+
+  it("acts for the signed-in user: a second user's disconnect and list leave the owner's grants alone", async () => {
+    const world = await oauthWorld();
+    await connectClaude(world);
+    const dcrId = await connectNamed(world, "Owner Only");
+    const bBrowser = await addSecondUser(world);
+    await connectClaudeAs(world, bBrowser);
+    const held = (userId: string) =>
+      ["oauthAccessToken", "oauthRefreshToken", "oauthConsent"].map(
+        (table) =>
+          world.db.prepare(`SELECT id FROM ${table} WHERE userId = ? ORDER BY id`).all(userId) as {
+            id: string;
+          }[],
+      );
+    const ownerBefore = held("owner");
+    expect(ownerBefore.every((r) => r.length > 0)).toBe(true);
+    expect(held(SECOND_USER.id).every((r) => r.length > 0)).toBe(true);
+    const listed = String((await bBrowser.send("/connections")).body);
+    expect(listed).toContain(`data-client-id="${CLAUDE_ID}"`);
+    expect(listed).not.toContain(dcrId);
+
+    const res = await bBrowser.send("/connections/disconnect", disconnecting(CLAUDE_ID));
+
+    expect(res.status).toBe(204);
+    expect(held("owner")).toEqual(ownerBefore);
+    expect(held(SECOND_USER.id)).toEqual([[], [], []]);
+    const after = String((await bBrowser.send("/connections")).body);
+    expect(after).not.toContain(CLAUDE_ID);
+    expect(after).not.toContain(dcrId);
+    expect(after).toContain("No apps are connected");
   });
 
   it("answers 204 for an app that is not connected, changing nothing", async () => {

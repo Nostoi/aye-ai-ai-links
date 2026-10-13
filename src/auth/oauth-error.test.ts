@@ -102,4 +102,20 @@ describe("authorize errors end on the error page", () => {
     expect(page.status).toBe(200);
     expect(String(page.body)).toContain("This app is not connected");
   });
+
+  it("sends the owner to the error page for a CIMD client whose host answers 503, creating no consent or token", async () => {
+    const world = await oauthWorld();
+    const x = otherClientDocument(6);
+    world.net.status(x.id, 503);
+    const browser = world.agent();
+    await browser.signIn();
+    const res = await browser.send(authorizePath(x.id, x.redirect, pkce().challenge));
+    expect(res.status).toBe(302);
+    const to = location(res);
+    expect(`${to.pathname}${to.search}`).toBe("/oauth-error?error=invalid_client");
+    expect(world.stash.isCurrent(x.id)).toBe(false);
+    expect(world.count("oauthConsent")).toBe(0);
+    expect(world.count("oauthAccessToken")).toBe(0);
+    expect(world.count("oauthRefreshToken")).toBe(0);
+  });
 });

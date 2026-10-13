@@ -22,9 +22,9 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
-- **2026-10-12:** Phase 3 auth uses better-auth 1.7.7, pinned exactly, with its `mcp` and `cimd` plugins (#75). Rulings: #11 comment 6134986546 and #75 comment 6136036644. Sources: `docs/specs/2026-10-12-auth-library-sources.md`.
+- **2026-10-12:** Phase 3 auth uses better-auth 1.7.7, pinned exactly, with its `mcp` and `cimd` plugins (#75). Rulings: #11 comment 6134986546 and #75 comments 6136036644 and 6136212307. Sources: `docs/specs/2026-10-12-auth-library-sources.md`.
   - **Agent keys stay** next to OAuth, for Claude Code, Codex and Claude Desktop. This deliberately departs from the MCP spec's "MUST NOT accept or transit any other tokens".
-  - **Revoking an app works on the next request**, as it does for agent keys. Access tokens are opaque, one lock in the server process runs every auth write one at a time, and disconnect runs inside the server and deletes the app's tokens, consent and unused codes in one transaction.
+  - **Revoking an app works on the next request**, as it does for agent keys. Access tokens are opaque, one lock in the server process serializes every auth request and every server-side token, code or consent write, and disconnect runs inside the server and deletes the app's tokens, consent and unused codes in one transaction.
   - **Auth lives in its own SQLite file.** Sign-up is closed, and the CLI creates the owner with id `owner`.
   - **Accepted risk:** a database write failing partway through invalidating a stolen refresh token's family leaves its successor working (better-auth #11629).
   - **Real-client tests wait for the isolation tests (#78).** "No Funnel before auth" holds with no new exception.

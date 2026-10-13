@@ -87,6 +87,7 @@ Codex also found that a token with only the `offline_access` scope is active for
    - **Limits.** It refuses redirects and has a 5 s limit.
    - **Size.** It also serves `jwks_uri`. better-auth allows a key set up to 64 KiB (`MAX_JWKS_RESPONSE_BYTES`, READ), and cimd enforces its own 5 KB cap on metadata documents, so the fetcher's cap is 64 KiB. #77 checks the size of ChatGPT's key set.
    - **Revalidation.** It forwards cimd's request headers (`If-None-Match`, `If-Modified-Since`) and returns a 304 unchanged. Introspection re-fetches a document once cimd's cached copy goes stale, and a failed re-fetch makes the token inactive (READ). How long a copy stays fresh depends on the document's own caching headers, so #77 checks the real Claude and ChatGPT documents' headers.
+   - **Fetch budget.** Unauthenticated requests must not be able to use up the fetch budget that the owner's connected clients need to revalidate. In a review probe, 30 requests a minute naming junk `client_id`s on claude.ai's origin made the owner's Claude token inactive while its document was stale. cimd spends budget before it validates the URL (READ). #77 chooses how to prevent this.
    - **Reuse.** The page fetcher returns `not_html` for JSON, so it can't be reused as it is.
 10. **`savedBy` is the client's registered name, falling back to its `client_id`.** Introspection returns no client name. A CIMD `client_id` is its stable URL; DCR issues a new one on each registration.
 

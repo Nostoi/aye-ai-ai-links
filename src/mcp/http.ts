@@ -18,11 +18,14 @@ export function mcpApp({
   identify,
   allowedHosts,
   rateLimit,
+  challenge = "Bearer",
 }: {
   deps: McpDeps;
   identify: Identify;
   allowedHosts?: string[] | undefined;
   rateLimit?: RateLimitOptions | undefined;
+  /** The `WWW-Authenticate` value of a 401; with OAuth it names the resource metadata. */
+  challenge?: string | undefined;
 }) {
   // Tool calls still running. A response can be under way, or its connection closed, before
   // its call ends, so shutdown waits on the calls themselves, not on the HTTP requests.
@@ -50,10 +53,10 @@ export function mcpApp({
           id: null,
         },
         401,
-        { "WWW-Authenticate": "Bearer" },
+        { "WWW-Authenticate": challenge },
       );
     }
-    const verdict = limiter(`${caller.owner}/${caller.savedBy}`);
+    const verdict = limiter(caller.rateKey);
     if (!verdict.allowed) {
       return c.json(
         {

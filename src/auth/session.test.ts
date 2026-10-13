@@ -21,7 +21,11 @@ async function setup() {
 describe("sessionIdentify", () => {
   it("names the session's user as the owner, saving as web", async () => {
     const t = await setup();
-    expect(await t.ask({ cookie: t.cookie })).toEqual({ owner: "owner", savedBy: "web" });
+    expect(await t.ask({ cookie: t.cookie })).toEqual({
+      owner: "owner",
+      savedBy: "web",
+      rateKey: "session:owner",
+    });
   });
 
   it("returns null without a cookie, or with a forged one", async () => {

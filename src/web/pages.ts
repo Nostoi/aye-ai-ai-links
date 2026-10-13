@@ -25,7 +25,9 @@ ${body}
 /**
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
  * was opened with a signed OAuth query (`sig`), passes that query on as `oauth_query`, which is
- * how better-auth resumes an authorization after login.
+ * how better-auth resumes an authorization after login. After sign-in it goes, in order, to the
+ * url better-auth returns with `redirect: true`, to `next` if that is this site's authorize path
+ * (where the authorize gate sends a browser without a session), or home.
  */
 export const loginPage = () =>
   page(
@@ -42,6 +44,18 @@ export const loginPage = () =>
 <script>
 const form = document.getElementById("login");
 const error = document.getElementById("error");
+const afterSignIn = (query) => {
+  const next = query.get("next");
+  if (next === null) return "/";
+  let url;
+  try {
+    url = new URL(next, location.origin);
+  } catch {
+    return "/";
+  }
+  const authorize = url.origin === location.origin && url.pathname === "/api/auth/oauth2/authorize";
+  return authorize ? url.pathname + url.search : "/";
+};
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   error.textContent = "";
@@ -54,7 +68,9 @@ form.addEventListener("submit", async (event) => {
     body: JSON.stringify(body),
   });
   if (res.ok) {
-    location.href = "/";
+    const data = await res.json().catch(() => null);
+    const resume = data !== null && data.redirect === true && typeof data.url === "string";
+    location.href = resume ? data.url : afterSignIn(query);
   } else {
     error.textContent = res.status === 429
       ? "Too many sign-in attempts. Wait a few minutes and try again."
@@ -62,6 +78,57 @@ form.addEventListener("submit", async (event) => {
   }
 });
 </script>`,
+  );
+
+/**
+ * Asks the owner to approve a new connection. Its buttons post `{accept, oauth_query}` (the
+ * page's own signed query) to better-auth's consent route, then follow the url it returns: the
+ * client's redirect, carrying a code or `access_denied`.
+ */
+export const consentPage = ({
+  clientName,
+  redirectHost,
+}: {
+  clientName: string;
+  redirectHost: string;
+}) =>
+  page(
+    "Approve a connection · Aye-AI-AI Links",
+    `<main>
+<h1>Connect ${escapeHtml(clientName)}?</h1>
+<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>.</p>
+<p><button id="accept" type="button">Allow</button> <button id="deny" type="button">Deny</button></p>
+<p id="error" role="alert"></p>
+</main>
+<script>
+const error = document.getElementById("error");
+const answer = async (accept) => {
+  error.textContent = "";
+  const res = await fetch("/api/auth/oauth2/consent", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ accept, oauth_query: location.search.slice(1) }),
+  });
+  const data = await res.json().catch(() => null);
+  if (res.ok && data !== null && typeof data.url === "string") {
+    location.href = data.url;
+  } else {
+    error.textContent = "That did not work. The request may have expired: start the connection again from the app.";
+  }
+};
+document.getElementById("accept").addEventListener("click", () => answer(true));
+document.getElementById("deny").addEventListener("click", () => answer(false));
+</script>`,
+  );
+
+/** Shown when the consent page's signed query is missing, tampered with or expired. */
+export const consentExpiredPage = () =>
+  page(
+    "Approval expired · Aye-AI-AI Links",
+    `<main>
+<h1>This approval link is not valid</h1>
+<p>It may have expired. Start the connection again from the app.</p>
+</main>`,
   );
 
 function linkItem(link: Link): string {

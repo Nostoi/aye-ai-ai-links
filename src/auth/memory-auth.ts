@@ -1,15 +1,36 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import Database from "better-sqlite3";
-import { createAuthLock } from "./auth-lock.js";
-import { authOptions, createAuth, migrateAuth, type PasswordHasher } from "./better-auth.js";
+import type { PasswordHasher } from "./better-auth.js";
+import { buildAuth } from "./build-auth.js";
+import type { Identify } from "./caller.js";
+import type { JsonFetch } from "./metadata-stash.js";
 import { setOwnerLogin } from "./owner-login.js";
 
 export const TEST_BASE_URL = "https://links.example";
 export const TEST_EMAIL = "you@example.com";
 export const TEST_PASSWORD = "Correct-horse-battery-1";
+export const TEST_SECRET = "test-secret-0123456789abcdef0123456789";
 
-/** For tests: a migrated in-memory auth whose password hashing is counted. */
-export async function memoryAuth({ owner = "owner" }: { owner?: string | null } = {}) {
+/** A metadata network with nothing on it. */
+const noNetwork: JsonFetch = async (url) => {
+  throw new Error(`no network in this test: ${url}`);
+};
+
+/**
+ * For tests: a migrated in-memory auth, built as the server builds it, whose password hashing is
+ * counted. `fetch` stands in for the metadata network.
+ */
+export async function memoryAuth({
+  owner = "owner",
+  fetch = noNetwork,
+  now,
+  keys = async () => null,
+}: {
+  owner?: string | null;
+  fetch?: JsonFetch;
+  now?: () => number;
+  keys?: Identify;
+} = {}) {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   const hashing = { hash: 0, verify: 0 };
@@ -23,16 +44,17 @@ export async function memoryAuth({ owner = "owner" }: { owner?: string | null } 
       return verifyPassword(data);
     },
   };
-  const options = authOptions({
+  const built = await buildAuth({
     db,
-    secret: "test-secret-0123456789abcdef0123456789",
+    secret: TEST_SECRET,
     baseUrl: TEST_BASE_URL,
+    fetch,
+    keys,
     password,
+    ...(now && { now }),
   });
-  await migrateAuth(options);
-  const auth = createAuth(options);
   if (owner !== null) {
-    await setOwnerLogin(auth, {
+    await setOwnerLogin(built.auth, {
       id: owner,
       name: "Owner",
       email: TEST_EMAIL,
@@ -40,7 +62,7 @@ export async function memoryAuth({ owner = "owner" }: { owner?: string | null } 
     });
   }
   hashing.hash = 0;
-  const count = (table: "user" | "session" | "account") =>
+  const count = (table: string) =>
     (db.prepare(`SELECT count(*) AS n FROM "${table}"`).get() as { n: number }).n;
-  return { db, auth, withAuthLock: createAuthLock(), hashing, count };
+  return { db, ...built, hashing, count };
 }

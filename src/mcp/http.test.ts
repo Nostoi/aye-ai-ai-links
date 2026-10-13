@@ -22,7 +22,8 @@ const B: Caller = { owner: "owner-b", savedBy: "codex" };
 const KEYS: Record<string, Caller> = { "key-a": A, "key-b": B };
 const identify: Identify = async (request) => {
   const key = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-  return KEYS[key] ?? null;
+  const caller = KEYS[key];
+  return caller ? { ...caller, rateKey: `${caller.owner}/${caller.savedBy}` } : null;
 };
 
 function freshDeps() {
@@ -402,7 +403,10 @@ describe("MCP door over HTTP", () => {
   });
 
   it("tells an operator when the owner record is missing", async () => {
-    const ghost = appFor({ deps, identify: async () => ({ owner: "ghost", savedBy: "x" }) });
+    const ghost = appFor({
+      deps,
+      identify: async () => ({ owner: "ghost", savedBy: "x", rateKey: "ghost/x" }),
+    });
     const res = await call(ghost, "any", "save_link", { url: "https://example.com/g" });
     expect(res.body.result.isError).toBe(true);
     expect(res.body.result.content[0].text).toContain("owner record");
@@ -724,7 +728,10 @@ describe("MCP door over HTTP", () => {
   });
 
   it("refuses to serve a request whose caller has no owner", async () => {
-    const blank = appFor({ deps, identify: async () => ({ owner: "", savedBy: "x" }) });
+    const blank = appFor({
+      deps,
+      identify: async () => ({ owner: "", savedBy: "x", rateKey: "/x" }),
+    });
     const res = await call(blank, "any", "save_link", { url: "https://example.com/blank" });
     expect(JSON.stringify(res.body)).not.toContain("owner record");
     expect(res.body.result?.structuredContent).toBeUndefined();

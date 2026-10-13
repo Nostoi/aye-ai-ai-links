@@ -18,7 +18,7 @@ async function setup({
   loginLimit,
   wrap,
 }: {
-  loginLimit?: RateLimitOptions;
+  loginLimit?: RateLimitOptions | undefined;
   wrap?: (handle: (r: Request) => Promise<Response>) => (r: Request) => Promise<Response>;
 } = {}) {
   const t = await memoryAuth();
@@ -34,7 +34,7 @@ async function setup({
       handle: wrap ? wrap(real) : real,
       withAuthLock: t.withAuthLock,
       origin: TEST_BASE_URL,
-      loginLimit,
+      limits: { login: loginLimit },
     }),
   );
   const send = (path: string, init: RequestInit = {}) => {

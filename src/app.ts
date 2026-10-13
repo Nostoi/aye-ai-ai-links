@@ -1,25 +1,45 @@
+import { createResourceServerChallenge } from "@better-auth/oauth-provider";
+import { hostHeaderValidation } from "@modelcontextprotocol/hono";
+import { APIError } from "better-auth/api";
 import { Hono } from "hono";
 import type { WithAuthLock } from "./auth/auth-lock.js";
-import { AUTH_BASE_PATH, type Auth } from "./auth/better-auth.js";
+import { authorizeGate } from "./auth/authorize-gate.js";
+import { AUTH_BASE_PATH, type Auth, mcpResource } from "./auth/better-auth.js";
 import type { Identify } from "./auth/caller.js";
-import { authApp } from "./auth/http.js";
+import { consentDetails } from "./auth/consent.js";
+import { authApp, type RouteLimit, rootMetadataApp } from "./auth/http.js";
+import type { MetadataStash } from "./auth/metadata-stash.js";
+import type { OAuthClients } from "./auth/oauth-clients.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import { webApp } from "./web/http.js";
 
-/** better-auth and the lock every call into it goes through. */
+/** better-auth, the lock every call into it goes through, and the OAuth state around it. */
 export type AuthDeps = {
   auth: Auth;
   withAuthLock: WithAuthLock;
-  /** The global sign-in limit; 10 per 15 minutes when left out. */
-  loginLimit?: RateLimitOptions | undefined;
+  stash: MetadataStash;
+  clients: OAuthClients;
+  /** Overrides of the global route limits (`ROUTE_LIMITS`), for tests. */
+  limits?: Partial<Record<RouteLimit, RateLimitOptions>> | undefined;
 };
+
+/** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
+export function resourceChallenge(baseUrl: string): string {
+  const error = createResourceServerChallenge(
+    new APIError("UNAUTHORIZED", { message: "Missing or invalid access token." }),
+    mcpResource(baseUrl),
+  );
+  const value = new Headers(error?.headers).get("www-authenticate");
+  if (!value) throw new Error("better-auth gave no WWW-Authenticate challenge");
+  return value;
+}
 
 /**
  * The whole HTTP surface. Every door is mounted here, so tests drive the real composition. The
- * server always passes `auth`; without it, as in tests of the MCP door alone, the auth routes
- * and the web door are not mounted.
+ * server always passes `auth`; without it, as in tests of the MCP door alone, the auth routes,
+ * the root metadata and the web door are not mounted. `allowedHosts` covers every door.
  */
 export function createApp({
   deps,
@@ -35,19 +55,45 @@ export function createApp({
   rateLimit?: RateLimitOptions | undefined;
 }) {
   const app = new Hono();
-  const mcp = mcpApp({ deps, identify, allowedHosts, rateLimit });
+  const baseUrl = auth?.auth.options.baseURL;
+  const mcp = mcpApp({
+    deps,
+    identify,
+    allowedHosts,
+    rateLimit,
+    challenge: baseUrl ? resourceChallenge(baseUrl) : undefined,
+  });
   app.route("/mcp", mcp.app);
-  if (auth) {
+  if (auth && baseUrl) {
+    if (allowedHosts) {
+      const hosts = hostHeaderValidation(allowedHosts);
+      for (const path of [`${AUTH_BASE_PATH}/*`, "/.well-known/*", "/", "/login", "/consent"]) {
+        app.use(path, hosts);
+      }
+    }
+    const origin = new URL(baseUrl).origin;
+    const { auth: betterAuth, withAuthLock, stash, clients } = auth;
+    const handle = (request: Request) => betterAuth.handler(request);
     app.route(
       AUTH_BASE_PATH,
       authApp({
-        handle: auth.auth.handler,
-        withAuthLock: auth.withAuthLock,
-        origin: new URL(auth.auth.options.baseURL).origin,
-        loginLimit: auth.loginLimit,
+        handle,
+        withAuthLock,
+        origin,
+        limits: auth.limits,
+        authorize: authorizeGate({ auth: betterAuth, withAuthLock, clients, stash, handle }),
       }),
     );
-    app.route("/", webApp({ deps, auth: auth.auth, withAuthLock: auth.withAuthLock }));
+    app.route("/.well-known", rootMetadataApp({ handle, withAuthLock, origin }));
+    app.route(
+      "/",
+      webApp({
+        deps,
+        auth: betterAuth,
+        withAuthLock,
+        consent: consentDetails({ auth: betterAuth, withAuthLock, clients }),
+      }),
+    );
   }
   return { app, close: mcp.close, calls: mcp.calls };
 }

@@ -506,7 +506,7 @@ describe("startServer", () => {
       const { stop } = await start();
       expect(() => authTables()).toThrow(expect.objectContaining({ code: "SQLITE_BUSY" }));
       await stop();
-      expect(authTables()).toEqual(["account", "session", "user", "verification"]);
+      expect(authTables()).toEqual(expect.arrayContaining(["oauthClient", "session", "user"]));
     });
 
     it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves / with the session", async () => {
@@ -514,7 +514,7 @@ describe("startServer", () => {
       const auth = openAuthDatabase(authPath());
       const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
       await migrateAuth(options);
-      await setOwnerLogin(createAuth(options), {
+      await setOwnerLogin(createAuth(options).auth, {
         id: "owner",
         name: "Owner",
         email: "you@example.com",

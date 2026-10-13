@@ -16,7 +16,8 @@ const KEYS: Record<string, Caller> = {
 };
 const identify: Identify = async (request) => {
   const key = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-  return KEYS[key] ?? null;
+  const caller = KEYS[key];
+  return caller ? { ...caller, rateKey: `${caller.owner}/${caller.savedBy}` } : null;
 };
 
 const LIST = { jsonrpc: "2.0", id: 1, method: "tools/list" };

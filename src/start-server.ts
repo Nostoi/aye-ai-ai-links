@@ -3,8 +3,10 @@ import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
 import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
-import { createAuthLock } from "./auth/auth-lock.js";
-import { authOptions, createAuth, migrateAuth, openAuthDatabase } from "./auth/better-auth.js";
+import { openAuthDatabase } from "./auth/better-auth.js";
+import { buildAuth } from "./auth/build-auth.js";
+import type { MetadataRefresher } from "./auth/metadata-refresher.js";
+import type { JsonFetch } from "./auth/metadata-stash.js";
 import { modelRoot, type ServerConfig } from "./config.js";
 import type { PageExtractor } from "./core/extract.js";
 import type { PageFetcher } from "./core/fetch.js";
@@ -13,6 +15,7 @@ import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { createChildExtractor } from "./fetch/extract-runner.js";
 import { createGuardedFetcher } from "./fetch/guarded-fetcher.js";
+import { createJsonFetcher } from "./fetch/json-fetcher.js";
 import type { Embedder } from "./search/embedder.js";
 import { MODEL_KEY, revisionDir } from "./search/model.js";
 import { loadTransformersEmbedder } from "./search/transformers-embedder.js";
@@ -28,7 +31,8 @@ const SETTLE_MS = 5_000;
  * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
  * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
  * fetcher (5 MiB cap) and the child extractor. `wrapAuthMigrations` runs around the auth
- * migrations, so a test can hold them.
+ * migrations, so a test can hold them. `jsonFetcher` replaces the guarded JSON fetcher that
+ * fetches OAuth client metadata.
  */
 export type StartOptions = {
   decorateDeps?: (deps: AppDeps) => AppDeps;
@@ -41,15 +45,17 @@ export type StartOptions = {
   fetcher?: PageFetcher;
   extractor?: PageExtractor;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
+  jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
 };
 
 /**
- * Loads the model, opens the database and the auth database, runs the auth migrations and serves
- * on loopback; Tailscale Serve is what reaches it from the tailnet. The auth database stays
- * locked against every other process until it closes, so the owner CLI runs only while the
- * server is stopped.
- * The snapshot runner and the vector indexer start once the server is listening. Any failure
- * before that closes what was already opened.
+ * Loads the model, opens the database and the auth database, builds the auth side (migrations,
+ * internal client, and the client metadata of every connected OAuth client) and serves on
+ * loopback; Tailscale Serve is what reaches it from the tailnet. The auth database stays locked
+ * against every other process until it closes, so the owner CLI runs only while the server is
+ * stopped.
+ * The snapshot runner, the vector indexer and the metadata refresher start once the server is
+ * listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
  * 1. The runner and the indexer take no new work; running jobs and an embedding in flight
@@ -57,7 +63,8 @@ export type StartOptions = {
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
  * 3. The runner aborts its jobs, which give their attempts back, and stop waits for them, for
  *    the indexer's sweep and for any tool call still running, up to the settle limit.
- * 4. The fetcher closes, then the extractor (killing any child).
+ * 4. The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
+ *    Then the JSON fetcher closes, the page fetcher, and the extractor (killing any child).
  * 5. The MCP handler closes, then the database, then the auth database.
  * A call or job still running after step 3 fails on the closed database; the error is caught
  * and logged.
@@ -73,6 +80,7 @@ export async function startServer(
     fetcher = createGuardedFetcher(),
     extractor = createChildExtractor(),
     wrapAuthMigrations = (migrate) => migrate(),
+    jsonFetcher = createJsonFetcher(),
   }: StartOptions = {},
 ) {
   // Loading first means a missing or tampered model fails the start with nothing to close.
@@ -81,7 +89,10 @@ export async function startServer(
   let db: Database | undefined;
   let authDb: Database | undefined;
   let closeApp: (() => Promise<void>) | undefined;
+  let refresher: MetadataRefresher | undefined;
   const closeAll = async () => {
+    await refresher?.stop();
+    await jsonFetcher.close();
     await fetcher.close();
     await extractor.close();
     await closeApp?.();
@@ -105,16 +116,19 @@ export async function startServer(
       now: deps.now,
     });
     authDb = openAuthDatabase(config.auth.dbPath);
-    const options = authOptions({
+    const auth = await buildAuth({
       db: authDb,
       secret: config.auth.secret,
       baseUrl: config.auth.baseUrl,
+      fetch: jsonFetcher.fetch,
+      keys: keyIdentify(new SqliteKeyStore(db)),
+      wrapMigrations: wrapAuthMigrations,
     });
-    await wrapAuthMigrations(() => migrateAuth(options));
+    refresher = auth.refresher;
     const built = createApp({
       deps: { ...deps, snapshots: runner, saveWaitMs },
-      identify: keyIdentify(new SqliteKeyStore(db)),
-      auth: { auth: createAuth(options), withAuthLock: createAuthLock() },
+      identify: auth.identify,
+      auth,
       allowedHosts: config.allowedHosts,
     });
     closeApp = built.close;
@@ -134,6 +148,7 @@ export async function startServer(
   }
   runner.start();
   indexer.start();
+  refresher.start();
 
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : config.port;

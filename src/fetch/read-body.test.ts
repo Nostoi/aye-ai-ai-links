@@ -17,6 +17,12 @@ describe("decodersFor", () => {
     expect(decodersFor(undefined)).toEqual([]);
   });
 
+  it("counts codings across every header line", () => {
+    expect(decodersFor(["identity", "gzip"])).toEqual(["gzip"]);
+    expect(decodersFor(["gzip", "gzip"])).toBeUndefined();
+    expect(decodersFor(["gzip", "br, identity"])).toBeUndefined();
+  });
+
   it("refuses an unknown coding", () => {
     expect(decodersFor("zstd")).toBeUndefined();
   });

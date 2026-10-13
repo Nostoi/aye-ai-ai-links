@@ -132,7 +132,7 @@ export function createGuardedFetcher(options: GuardedFetcherOptions = {}): PageF
         return { kind: "http_error", status: res.statusCode };
       }
       const contentType = firstValue(res.headers["content-type"]) ?? "";
-      const decoders = decodersFor(firstValue(res.headers["content-encoding"]));
+      const decoders = decodersFor(res.headers["content-encoding"]);
       if (!HTML_TYPE.test(contentType) || !decoders) {
         discard(res.body);
         return { kind: "not_html", contentType };

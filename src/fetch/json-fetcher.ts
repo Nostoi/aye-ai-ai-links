@@ -85,7 +85,7 @@ export function createJsonFetcher(options: JsonFetcherOptions = {}) {
       return new Response(null, { status: res.statusCode, headers: out });
     }
     const encoding = res.headers["content-encoding"];
-    const decoders = decodersFor(Array.isArray(encoding) ? encoding.join(",") : encoding);
+    const decoders = decodersFor(encoding);
     if (!decoders) {
       discard(res.body);
       throw new Error(`unsupported content-encoding ${String(encoding)}`);

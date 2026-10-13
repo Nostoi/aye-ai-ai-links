@@ -41,7 +41,7 @@ Write a fact in its home and link to it from elsewhere; don't copy it.
 ## Guiding principles
 
 - **Simplest thing that fully works.** No speculative features, layers or settings. Each phase ships something usable.
-- **Doors hold no rules.** `mcp/`, `api/` and `web/` only translate requests. Every rule (dedupe, why labelling, digest selection) lives once in `core/`. The exception is rules about who may call and as whom: the web login, agent keys, app connections and their tokens (admission, consent, disconnect, the OAuth error text) and the recorded `savedBy`. They live once in `auth/`.
+- **Doors hold no rules.** `mcp/`, `api/` and `web/` only translate requests. Every rule (dedupe, why labelling, digest selection) lives once in `core/`. The exception is rules about who may call and as whom: the web login, agent keys, app connections and their tokens (admission, consent, disconnect, the OAuth error text) and the recorded `savedBy`. They belong in `auth/`. A new signed-in web POST must be added to `CHECKED_PAGES` in `src/app.ts`, which refuses requests from other sites.
 - **Core depends on interfaces.** `core/` uses `store/`, `search/` and `fetch/` through interfaces, never their implementations.
 - **Owner scoping lives in `store/`.** Every data call takes the owner; no door can skip it.
 - **The calling agent does the AI work.** The server never calls an AI model API and needs no API keys.

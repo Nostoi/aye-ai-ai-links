@@ -71,7 +71,7 @@ Codex also found that a token with only the `offline_access` scope is active for
    - It fixes case 1: with the lock, the replay waits, and afterwards the whole family is dead. Eight concurrent flows and eight concurrent refreshes all completed.
    - In the spike the lock was Hono middleware on the request path, so `auth.api` calls skipped it.
    - It relies on a single process. A CLI command never writes tokens, codes or consent; to do that it asks the running server. The CLI may create owners (user and account rows), which writes none of these.
-   - The lock is held during a CIMD fetch of up to 5 s, so #77's rate limits must stop unauthenticated authorize requests from queuing the owner's own requests behind it.
+   - No unauthenticated request may hold the lock while it waits on the network. In the spike, an authorize, token or revoke request naming an unknown CIMD `client_id` held it for up to 5 s while the document was fetched. #77 chooses how to prevent this.
 4. **Disconnect is one transaction under that lock, run inside the server.**
    - For one client and owner, it deletes the `oauthAccessToken`, `oauthRefreshToken` and `oauthConsent` rows, and the `verification` rows holding that pair's authorization codes. This fixes case 2.
    - It writes into better-auth's tables directly, so its tests re-run on every upgrade.
@@ -86,7 +86,7 @@ Codex also found that a token with only the `offline_access` scope is active for
    - **Addresses.** A hostname connects through the page fetcher's `guardedLookup`, so the address that passed the check is the one it connects to. An IP-literal host never reaches a lookup, so it is checked with `isPublicAddress` before connecting, as the page fetcher's `refusalFor` does. cimd requires the transport to "resolve the hostname exactly once … pin the approved address for the connection, and refuse redirects" (READ `@better-auth/cimd/dist/index.d.mts`). better-auth refuses only private hosts written as literal addresses (READ), so for hostnames this fetcher is the only defence.
    - **Limits.** It refuses redirects and has a 5 s limit.
    - **Size.** It also serves `jwks_uri`. better-auth allows a key set up to 64 KiB (`MAX_JWKS_RESPONSE_BYTES`, READ), and cimd enforces its own 5 KB cap on metadata documents, so the fetcher's cap is 64 KiB. #77 checks the size of ChatGPT's key set.
-   - **Revalidation.** It forwards cimd's request headers (`If-None-Match`, `If-Modified-Since`) and returns a 304 unchanged. cimd's cache expires after 60 minutes, and introspection then re-fetches the document (READ). A failed re-fetch makes the token inactive, so a fetcher that drops these would cut off every CIMD client about an hour after it connects.
+   - **Revalidation.** It forwards cimd's request headers (`If-None-Match`, `If-Modified-Since`) and returns a 304 unchanged. Introspection re-fetches a document once cimd's cached copy goes stale, and a failed re-fetch makes the token inactive (READ). How long a copy stays fresh depends on the document's own caching headers, so #77 checks the real Claude and ChatGPT documents' headers.
    - **Reuse.** The page fetcher returns `not_html` for JSON, so it can't be reused as it is.
 10. **`savedBy` is the client's registered name, falling back to its `client_id`.** Introspection returns no client name. A CIMD `client_id` is its stable URL; DCR issues a new one on each registration.
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMetadataRefresher } from "./metadata-refresher.js";
 import { createMetadataStash, FRESHNESS_MS, type JsonFetch } from "./metadata-stash.js";
 import { CHATGPT_ID, chatgptDocument, otherClientDocument, signingKey } from "./oauth-test-kit.js";
@@ -244,5 +244,131 @@ describe("refresh outcomes", () => {
     expect(await stash.prefetch(id)).toBe("refused");
     expect(net.urls).toEqual([]);
     expect(stash.sync(new Set())).toEqual([]);
+  });
+});
+
+describe("the metadata refresher's schedule", () => {
+  const LATENCY_MS = 200;
+  const INTERVAL_MS = FRESHNESS_MS / 2;
+  const RETRY_MS = 30_000;
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  afterEach(() => vi.useRealTimers());
+
+  /** A network where every request takes LATENCY_MS and `answer` decides what comes back. */
+  function network(answer: (url: string) => Response) {
+    const net = { urls: [] as string[], fetch: undefined as unknown as JsonFetch };
+    net.fetch = async (url) => {
+      net.urls.push(url);
+      await wait(LATENCY_MS);
+      return answer(url);
+    };
+    return net;
+  }
+
+  const healthy = (url: string) =>
+    url === CHATGPT_ID
+      ? json(chatgptDocument(JWKS_URI), {})
+      : json({ keys: [signingKey("k1").jwk] }, {});
+
+  function connectedRefresher(
+    net: { fetch: JsonFetch },
+    readConnected: () => Promise<Set<string>> = async () => new Set([CHATGPT_ID]),
+  ) {
+    const stash = createMetadataStash({ fetch: net.fetch });
+    const refresher = createMetadataRefresher({ stash, readConnected, log: () => {} });
+    return { stash, refresher };
+  }
+
+  it("never lets a connected client stop being current when one scheduled refresh fails", async () => {
+    vi.useFakeTimers();
+    let failing = false;
+    const net = network((url) => (failing ? new Response("", { status: 503 }) : healthy(url)));
+    const { stash, refresher } = connectedRefresher(net);
+    await Promise.all([refresher.fill(), vi.advanceTimersByTimeAsync(2 * LATENCY_MS + 100)]);
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(true);
+    refresher.start();
+
+    const lapses: number[] = [];
+    for (let elapsed = 0; elapsed < 2 * FRESHNESS_MS; elapsed += 1_000) {
+      failing = elapsed >= INTERVAL_MS - 1_000 && elapsed < INTERVAL_MS + 2 * LATENCY_MS;
+      await vi.advanceTimersByTimeAsync(1_000);
+      if (!stash.isCurrent(CHATGPT_ID)) lapses.push(elapsed);
+    }
+    await refresher.stop();
+    expect(lapses).toEqual([]);
+  });
+
+  it("makes a client current within the retry time after a failed startup fill", async () => {
+    vi.useFakeTimers();
+    let failing = true;
+    const net = network((url) => (failing ? new Response("", { status: 503 }) : healthy(url)));
+    const { stash, refresher } = connectedRefresher(net);
+    await Promise.all([refresher.fill(), vi.advanceTimersByTimeAsync(LATENCY_MS + 100)]);
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(false);
+
+    failing = false;
+    refresher.start();
+    await vi.advanceTimersByTimeAsync(RETRY_MS + 2 * LATENCY_MS + 100);
+    expect(stash.isCurrent(CHATGPT_ID)).toBe(true);
+    await refresher.stop();
+  });
+
+  it("waits the full interval when every result is ok or gone", async () => {
+    vi.useFakeTimers();
+    const OTHER_ID = "https://other.example/oauth/metadata.json";
+    const net = network((url) =>
+      url === OTHER_ID ? new Response("", { status: 404 }) : healthy(url),
+    );
+    const { refresher } = connectedRefresher(net, async () => new Set([CHATGPT_ID, OTHER_ID]));
+    await Promise.all([refresher.fill(), vi.advanceTimersByTimeAsync(4 * LATENCY_MS)]);
+    refresher.start();
+    const afterFill = net.urls.length;
+
+    await vi.advanceTimersByTimeAsync(RETRY_MS + 4 * LATENCY_MS);
+    expect(net.urls.length).toBe(afterFill);
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+    expect(net.urls.length).toBeGreaterThan(afterFill);
+    await refresher.stop();
+  });
+
+  describe("stop", () => {
+    async function stopAt(stopAtMs: number) {
+      vi.useFakeTimers();
+      const net = network(healthy);
+      let reads = 0;
+      let readsFinished = 0;
+      const { refresher } = connectedRefresher(net, async () => {
+        reads++;
+        await wait(100);
+        readsFinished++;
+        return new Set([CHATGPT_ID]);
+      });
+      refresher.start();
+      await vi.advanceTimersByTimeAsync(stopAtMs);
+      let finishedAtStop = false;
+      let readsAtStop = 0;
+      const stopping = refresher.stop().then(() => {
+        finishedAtStop = readsFinished === reads;
+        readsAtStop = reads;
+      });
+      await vi.advanceTimersByTimeAsync(2 * LATENCY_MS + 100);
+      await stopping;
+      await vi.advanceTimersByTimeAsync(10 * FRESHNESS_MS);
+      return { readsAtStop, readsAfter: reads - readsAtStop, finishedAtStop };
+    }
+
+    it("leaves no cycle running or armed when it arrives in the middle of one", async () => {
+      const r = await stopAt(INTERVAL_MS + 50);
+      expect(r.readsAtStop).toBe(1);
+      expect(r.finishedAtStop).toBe(true);
+      expect(r.readsAfter).toBe(0);
+    });
+
+    it("leaves no cycle armed when it arrives between cycles", async () => {
+      const r = await stopAt(INTERVAL_MS - 1_000);
+      expect(r.readsAtStop).toBe(0);
+      expect(r.readsAfter).toBe(0);
+    });
   });
 });

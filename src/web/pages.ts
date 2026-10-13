@@ -1,4 +1,6 @@
 import type { Link } from "../core/types.js";
+import { faviconHref, inlineLogo } from "./logo.js";
+import { themeCss } from "./theme.js";
 
 const escapeHtml = (s: string) =>
   s.replace(
@@ -9,15 +11,26 @@ const escapeHtml = (s: string) =>
 /** Only web links are made clickable; anything else is shown as text. */
 const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
-const page = (title: string, body: string) => `<!doctype html>
+const NAME = "Aye-AI-AI Links";
+const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</span>`;
+
+/** Every page renders through this. `home` links the header to `/`, for signed-in pages. */
+const page = (title: string, body: string, { home = false } = {}) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
+<link rel="icon" type="image/svg+xml" href="${faviconHref}">
+<style>
+${themeCss}
+</style>
 </head>
 <body>
+<header class="column site">${home ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}</header>
+<div class="column">
 ${body}
+</div>
 </body>
 </html>
 `;
@@ -32,12 +45,13 @@ ${body}
 export const loginPage = ({ next }: { next: string }) =>
   page(
     "Sign in · Aye-AI-AI Links",
-    `<main>
+    `<main class="card card-narrow">
+${inlineLogo('class="mark" aria-hidden="true"')}
 <h1>Sign in</h1>
 <form id="login" data-next="${escapeHtml(next)}">
 <p><label>Email <input name="email" type="email" autocomplete="username" required></label></p>
 <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
-<p><button type="submit">Sign in</button></p>
+<p><button class="primary" type="submit">Sign in</button></p>
 <p id="error" role="alert"></p>
 </form>
 </main>
@@ -85,7 +99,7 @@ export const consentPage = ({
     `<main>
 <h1>Connect ${escapeHtml(clientName)}?</h1>
 <p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>.</p>
-<p><button id="accept" type="button">Allow</button> <button id="deny" type="button">Deny</button></p>
+<p class="actions"><button class="primary" id="accept" type="button">Allow</button> <button id="deny" type="button">Deny</button></p>
 <p id="error" role="alert"></p>
 </main>
 <script>
@@ -107,6 +121,7 @@ const answer = async (accept) => {
 document.getElementById("accept").addEventListener("click", () => answer(true));
 document.getElementById("deny").addEventListener("click", () => answer(false));
 </script>`,
+    { home: true },
   );
 
 /** Shown when the consent page's signed query is missing, tampered with or expired. */
@@ -134,7 +149,7 @@ export const connectionsPage = (connections: ConnectionRow[]) =>
     "Connected apps · Aye-AI-AI Links",
     `<main>
 <h1>Connected apps</h1>
-${connections.length === 0 ? "<p>No apps are connected.</p>" : `<ul>\n${connections.map(connectionItem).join("\n")}\n</ul>`}
+${connections.length === 0 ? "<p>No apps are connected.</p>" : `<ul class="connections">\n${connections.map(connectionItem).join("\n")}\n</ul>`}
 <p>A disconnected app is refused from its next request. To use it again, connect it again from the app.</p>
 <p id="error" role="alert"></p>
 <p><a href="/">Back to your links</a></p>
@@ -154,6 +169,7 @@ for (const button of document.querySelectorAll("button[data-client-id]")) {
   });
 }
 </script>`,
+    { home: true },
   );
 
 /** Where an OAuth authorization that failed ends. `message` is always one of our own sentences. */
@@ -190,4 +206,5 @@ document.getElementById("sign-out").addEventListener("click", async () => {
   location.href = "/login";
 });
 </script>`,
+    { home: true },
   );

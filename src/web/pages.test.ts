@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { consentPage, loginPage } from "./pages.js";
+import {
+  connectionsPage,
+  consentExpiredPage,
+  consentPage,
+  homePage,
+  loginPage,
+  oauthErrorPage,
+} from "./pages.js";
 
 const ORIGIN = "https://links.example";
 
@@ -117,5 +124,48 @@ describe("the consent page", () => {
     expect(html).toContain("&lt;img src=x onerror=&quot;1&quot;&gt;");
     expect(html).toContain("a&amp;b");
     expect(html).not.toContain("<img");
+  });
+});
+
+const PAGES: [string, string][] = [
+  ["login", loginPage({ next: "/" })],
+  ["consent", consentPage({ clientName: "Claude", redirectHost: "claude.ai" })],
+  ["consent expired", consentExpiredPage()],
+  ["connections", connectionsPage([{ clientId: "c", name: "Claude", connectedAt: new Date(0) }])],
+  ["error", oauthErrorPage("It failed.")],
+  ["home", homePage([])],
+];
+
+describe.each(PAGES)("the %s page", (_, html) => {
+  it("makes no outside request", () => {
+    const outside = /^\s*(https?:|\/\/)/i;
+    const values = (re: RegExp) => [...html.matchAll(re)].map((m) => m[1] ?? "");
+    const refs = [
+      ...values(/\s(?:src|srcset)\s*=\s*"([^"]*)"/gi),
+      ...values(/<link\b[^>]*\shref\s*=\s*"([^"]*)"/gi),
+    ];
+    for (const ref of refs) expect(ref).not.toMatch(outside);
+    for (const ref of values(/url\(\s*['"]?([^)'"]*)/gi)) expect(ref).toMatch(/^data:/);
+    expect(html).not.toMatch(/@import\b/i);
+  });
+
+  it("carries the theme and a data: favicon", () => {
+    expect(html).toContain("prefers-color-scheme: dark");
+    expect(html).toMatch(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
+  });
+});
+
+describe("the header", () => {
+  it("links the mark home on signed-in pages only", () => {
+    const home = /<a class="brand" href="\/">/;
+    expect(homePage([])).toMatch(home);
+    expect(connectionsPage([])).toMatch(home);
+    expect(consentPage({ clientName: "C", redirectHost: "h" })).toMatch(home);
+    expect(loginPage({ next: "/" })).not.toMatch(home);
+    expect(oauthErrorPage("x")).not.toMatch(home);
+  });
+
+  it("labels the logo", () => {
+    expect(loginPage({ next: "/" })).toContain('role="img" aria-label="Aye-AI-AI Links"');
   });
 });

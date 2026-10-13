@@ -414,6 +414,55 @@ describe("owner isolation coverage", () => {
     const { world } = await fixture();
     expect(ownedTablesOf(world)).toEqual(expect.arrayContaining(KNOWN_OWNED_TABLES));
   });
+
+  const WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"];
+  /** Paths served elsewhere and covered by their own suites. */
+  const ELSEWHERE = /^\/(api\/auth|\.well-known|mcp)(\/|$)/;
+  const webRoutes = (world: World) =>
+    world.app.routes.filter((r) => !ELSEWHERE.test(r.path) && !r.path.includes("*"));
+
+  it("a signed-in B reaches none of A's data through any web path", async () => {
+    const world = await oauthWorld();
+    const a = await connectClaude(world);
+    await saveLinkWith(world, a.access, A_URL);
+    const note = "A private note for the route guard";
+    await addProfile(createDeps(world.links, new FakeEmbedder(DIMS)), A, "seed", {
+      addNotes: [{ text: note, source: "stated" }],
+    });
+    const aLinkId = (
+      world.links.prepare("SELECT id FROM links WHERE owner_id = ?").get(A) as { id: string }
+    ).id;
+    const browser = await addSecondUser(world);
+    const before = rowsOf(world, A);
+    const paths = [...new Set(webRoutes(world).map((r) => r.path))];
+    expect(paths).toContain("/connections");
+
+    for (const path of paths) {
+      const res = await browser.send(path.replace(/:\w+/g, aLinkId));
+      const body = typeof res.body === "string" ? res.body : JSON.stringify(res.body);
+      expect(body, `GET ${path}`).not.toContain(A_URL);
+      expect(body, `GET ${path}`).not.toContain(note);
+    }
+    expect(rowsOf(world, A)).toEqual(before);
+  });
+
+  /** Each web route that can change data, and the two-owner test that covers it. */
+  const WRITE_ROUTES_TESTED: Record<string, string> = {
+    "POST /connections/disconnect": "T9, T11 and the two-owner disconnect test in web/http.test.ts",
+  };
+
+  it("every web route that can write has a named two-owner test", async () => {
+    const routes = webRoutes(await oauthWorld());
+    const writes = new Set<string>();
+    for (const r of routes) {
+      const onlyAll = routes.filter((o) => o.path === r.path).every((o) => o.method === "ALL");
+      // A path registered only with ALL answers every method, writes included.
+      if (WRITE_METHODS.includes(r.method) || (r.method === "ALL" && onlyAll)) {
+        writes.add(`${r.method} ${r.path}`);
+      }
+    }
+    expect([...writes].sort()).toEqual(Object.keys(WRITE_ROUTES_TESTED).sort());
+  });
 });
 
 describe("owner isolation in search", () => {

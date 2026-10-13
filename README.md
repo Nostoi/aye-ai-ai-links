@@ -162,7 +162,9 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    }
    ```
 
-7. Connect ChatGPT or the Claude apps through OAuth. Instead of a key, they sign you in on the server and ask you to approve them. Their servers call yours, so the server must be reachable from the internet on port 443, and `AYE_BASE_URL` must be that public address (for example `https://<your-public-host>`), with its host in `AYE_ALLOWED_HOSTS`.
+7. **Not yet:** do not put the server on the public internet, or follow this step, until the owner-isolation tests (#78) and the lockout fix (#79) are done.
+
+   Connect ChatGPT or the Claude apps through OAuth. Instead of a key, they sign you in on the server and ask you to approve them. Their servers call yours, so the server must be reachable from the internet on port 443, and `AYE_BASE_URL` must be that public address (for example `https://<your-public-host>`), with its host in `AYE_ALLOWED_HOSTS`.
 
    **Claude** (web, desktop and phone apps): add a custom connector with the URL `https://<your-public-host>/mcp`.
 

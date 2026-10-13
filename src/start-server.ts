@@ -3,6 +3,8 @@ import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
 import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
+import { createAuthLock } from "./auth/auth-lock.js";
+import { authOptions, createAuth, migrateAuth, openAuthDatabase } from "./auth/better-auth.js";
 import { modelRoot, type ServerConfig } from "./config.js";
 import type { PageExtractor } from "./core/extract.js";
 import type { PageFetcher } from "./core/fetch.js";
@@ -25,7 +27,8 @@ const SETTLE_MS = 5_000;
  * Seams for tests: `decorateDeps` wraps the deps (the snapshot runner uses the wrapped store),
  * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
  * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
- * fetcher (5 MiB cap) and the child extractor.
+ * fetcher (5 MiB cap) and the child extractor. `wrapAuthMigrations` runs around the auth
+ * migrations, so a test can hold them.
  */
 export type StartOptions = {
   decorateDeps?: (deps: AppDeps) => AppDeps;
@@ -37,10 +40,14 @@ export type StartOptions = {
   embedder?: Embedder;
   fetcher?: PageFetcher;
   extractor?: PageExtractor;
+  wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
 };
 
 /**
- * Loads the model, opens the database and serves on loopback; Tailscale Serve is what reaches it from the tailnet.
+ * Loads the model, opens the database and the auth database, runs the auth migrations and serves
+ * on loopback; Tailscale Serve is what reaches it from the tailnet. The auth database stays
+ * locked against every other process until it closes, so the owner CLI runs only while the
+ * server is stopped.
  * The snapshot runner and the vector indexer start once the server is listening. Any failure
  * before that closes what was already opened.
  *
@@ -51,7 +58,7 @@ export type StartOptions = {
  * 3. The runner aborts its jobs, which give their attempts back, and stop waits for them, for
  *    the indexer's sweep and for any tool call still running, up to the settle limit.
  * 4. The fetcher closes, then the extractor (killing any child).
- * 5. The MCP handler closes, then the database.
+ * 5. The MCP handler closes, then the database, then the auth database.
  * A call or job still running after step 3 fails on the closed database; the error is caught
  * and logged.
  */
@@ -65,18 +72,21 @@ export async function startServer(
     embedder,
     fetcher = createGuardedFetcher(),
     extractor = createChildExtractor(),
+    wrapAuthMigrations = (migrate) => migrate(),
   }: StartOptions = {},
 ) {
   // Loading first means a missing or tampered model fails the start with nothing to close.
   const model = embedder ?? (await loadTransformersEmbedder(revisionDir(modelRoot())));
 
   let db: Database | undefined;
+  let authDb: Database | undefined;
   let closeApp: (() => Promise<void>) | undefined;
   const closeAll = async () => {
     await fetcher.close();
     await extractor.close();
     await closeApp?.();
     db?.close();
+    authDb?.close();
   };
 
   let runner: ReturnType<typeof createSnapshotRunner>;
@@ -94,9 +104,17 @@ export async function startServer(
       modelKey: MODEL_KEY,
       now: deps.now,
     });
+    authDb = openAuthDatabase(config.auth.dbPath);
+    const options = authOptions({
+      db: authDb,
+      secret: config.auth.secret,
+      baseUrl: config.auth.baseUrl,
+    });
+    await wrapAuthMigrations(() => migrateAuth(options));
     const built = createApp({
       deps: { ...deps, snapshots: runner, saveWaitMs },
       identify: keyIdentify(new SqliteKeyStore(db)),
+      auth: { auth: createAuth(options), withAuthLock: createAuthLock() },
       allowedHosts: config.allowedHosts,
     });
     closeApp = built.close;

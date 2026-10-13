@@ -36,9 +36,8 @@ The tools your AI uses:
 
 ### Still to come
 
-- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a plain list of your newest links.
+- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a plain list of your newest links, and a page of the apps you've connected, where you can disconnect one.
 - **ChatGPT and the Claude phone and web apps** in daily use. They sign in through OAuth (step 7 below), but their servers can only reach the server once it is on the public internet, which waits for the owner-isolation tests and port 443.
-- **A page listing connected apps**, with a way to disconnect one.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
@@ -171,6 +170,8 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    **ChatGPT:** add a custom MCP server with the URL `https://<your-public-host>/mcp` and OAuth as its authentication.
 
    Each app opens the server's sign-in page, then asks you to allow it to read and save links in your library. Once you allow it, every link it saves records the app's own name (for example "Claude"). Claude and ChatGPT identify themselves with a client document they publish; the server reloads it every few minutes, and refuses the app while it is gone or has not loaded for 5 minutes. At most 5 new apps can wait for your approval at once.
+
+   To disconnect an app, open **Connected apps** from the home page (`/connections`) and choose **Disconnect**. Its tokens, your approval and its unused sign-in codes are deleted, so it is refused from its next request; to use it again, connect it again and approve it.
 
 A LaunchAgent runs only while your account is logged in, so keep it logged in. Whether the Mac sleeps is your setting to choose.
 

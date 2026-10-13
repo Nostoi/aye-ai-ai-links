@@ -408,6 +408,52 @@ describe("snapshot runner", () => {
     expect((await s.store.get(B, b.id))?.snapshot?.status).toBe("ok");
   });
 
+  it("a sweep over two owners' due links leaves each page's title and text on its own link, and B's finish changes nothing of A's", async () => {
+    const s = setup();
+    s.fetch.hold = true;
+    s.extract.hold = true;
+    const a = await s.save(A, 1);
+    const b = await s.save(B, 2);
+    await s.runner.sweep();
+    await vi.waitFor(() => expect(s.fetch.calls).toHaveLength(2));
+    const read = async (owner: string, id: string) => ({
+      link: (await s.store.get(owner, id))?.snapshot,
+      text: await s.store.getSnapshotText(owner, id),
+    });
+    const finishPage = async (url: string) => {
+      s.fetch.calls
+        .find((c) => c.arg === url)
+        ?.finish({ kind: "ok", finalUrl: url, contentType: "text/html", html: url });
+      await vi.waitFor(() => expect(s.extract.calls.some((c) => c.arg === url)).toBe(true));
+      s.extract.calls
+        .find((c) => c.arg === url)
+        ?.finish({
+          kind: "ok",
+          metadata: { title: `title of ${url}`, description: null, imageUrl: null },
+          text: `text of ${url}`,
+        });
+    };
+
+    await finishPage(a.url);
+    await vi.waitFor(() => expect(s.records).toHaveLength(1));
+    const aDone = await read(A, a.id);
+    expect(aDone.text).toBe(`text of ${a.url}`);
+    expect((await read(B, b.id)).text).toBeNull();
+
+    await finishPage(b.url);
+    await vi.waitFor(() => expect(s.records).toHaveLength(2));
+
+    expect(s.records.map((r) => [r.owner, r.linkId]).sort()).toEqual([
+      [A, a.id],
+      [B, b.id],
+    ]);
+    expect(await read(A, a.id)).toEqual(aDone);
+    expect(await read(B, b.id)).toMatchObject({
+      link: { title: `title of ${b.url}` },
+      text: `text of ${b.url}`,
+    });
+  });
+
   it("a kick after stop resolves at once and leases nothing", async () => {
     const s = setup();
     const first = await s.save(A, 1);

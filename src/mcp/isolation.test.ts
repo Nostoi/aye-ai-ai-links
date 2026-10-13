@@ -19,6 +19,7 @@ import {
   type World,
 } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
+import { addProfile } from "../core/profile.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -148,10 +149,16 @@ async function seed(world: World, door: Door) {
     title: "secretword bravo",
     tags: [{ name: "Alpha", source: "stated" }],
   });
-  await tool(world, door.b, "add_profile", {
+  // Through core, not the door: only a call under test then depends on the owner the door supplies.
+  const bNote = await addProfile(createDeps(world.links, new FakeEmbedder(DIMS)), B, "seed-b", {
     addNotes: [{ text: "B private note", source: "stated" }],
   });
-  return { aId: a.link.id, aNoteId: added.addedNoteIds[0] as string, bId: b.link.id };
+  return {
+    aId: a.link.id,
+    aNoteId: added.addedNoteIds[0] as string,
+    bId: b.link.id,
+    bNoteId: bNote.addedNoteIds[0] as string,
+  };
 }
 
 describe.each(Object.keys(doors))("owner isolation through the %s door", (doorName) => {
@@ -267,10 +274,58 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
       )
       .all(B);
     expect(mine).toEqual([
-      { text: "B private note", writtenBy: door.savedByB },
+      { text: "B private note", writtenBy: "seed-b" },
       { text: "B second note", writtenBy: door.savedByB },
     ]);
     expect(snapA()).toEqual(before);
+  });
+
+  it("T12: owner, savedBy and writtenBy sent to any tool change nothing about whose data it reaches", async () => {
+    const { world, door, aId, bId, aNoteId, bNoteId, snapA } = await open();
+    const before = snapA();
+    const spoof = { owner: A, savedBy: "evil", writtenBy: "evil" };
+
+    const found = await tool<Found>(world, door.b, "search_links", {
+      query: "secretword",
+      ...spoof,
+    });
+    await refused(world, door.b, "get_link", { id: aId, ...spoof }, NO_LINK);
+    const own = await tool<{ link: Row }>(world, door.b, "get_link", { id: bId, ...spoof });
+    const tagged = await tool<Tagged>(world, door.b, "update_tag", {
+      name: "Alpha",
+      kind: "project",
+      ...spoof,
+    });
+    await refused(
+      world,
+      door.b,
+      "edit_profile",
+      { editNotes: [{ id: aNoteId, text: "hijack", source: "stated" }], ...spoof },
+      NO_NOTE,
+    );
+    await tool(world, door.b, "edit_profile", {
+      editNotes: [{ id: bNoteId, text: "B edited", source: "stated" }],
+      ...spoof,
+    });
+
+    expect(found.links.map((l) => l.id)).toEqual([bId]);
+    expect(own.link.id).toBe(bId);
+    expect(tagged.tag.kind).toBe("project");
+    expect(
+      world.links
+        .prepare("SELECT text, written_by AS writtenBy FROM profile_notes WHERE owner_id = ?")
+        .all(B),
+    ).toEqual([{ text: "B edited", writtenBy: door.savedByB }]);
+    expect(snapA()).toEqual(before);
+
+    // get_profile and get_digest take no arguments: an extra key is refused, and nothing is marked surfaced.
+    const strict = /unrecognized|invalid|validation/i;
+    await refused(world, door.b, "get_profile", spoof, strict);
+    await refused(world, door.b, "get_digest", spoof, strict);
+    expect(snapA()).toEqual(before);
+    expect(
+      world.links.prepare("SELECT last_surfaced_at FROM links WHERE owner_id = ?").all(B),
+    ).toEqual([{ last_surfaced_at: null }]);
   });
 
   it("T6: A's focus words surface only A's link, and B's digest never uses them", async () => {

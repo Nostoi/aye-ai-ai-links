@@ -68,6 +68,7 @@ export function createMetadataStash({
   const pins = new Map<string, number>();
   let connected = new Set<string>();
   const inFlight = new Map<AbortController, Promise<unknown>>();
+  const prefetching = new Map<string, Promise<PrefetchResult>>();
   let closed = false;
 
   const current = (s: Snapshot | undefined): s is Snapshot =>
@@ -151,8 +152,8 @@ export function createMetadataStash({
       snapshots.delete(clientId);
       return "gone";
     }
-    if (result === "failed") return "failed";
-    if (wanted(clientId)) snapshots.set(clientId, result);
+    if (result === "failed" || !wanted(clientId)) return "failed";
+    snapshots.set(clientId, result);
     return "ok";
   }
 
@@ -184,14 +185,21 @@ export function createMetadataStash({
       if (!isCimdClientIdUrlCandidate(clientId) || validateClientIdUrl(clientId) !== null) {
         return "refused";
       }
+      const running = prefetching.get(clientId);
+      if (running) return running;
       if (!pinned(clientId)) {
         if (pendingCount() >= MAX_PENDING) return "full";
         pins.set(clientId, now() + PENDING_MS);
       }
       if (current(snapshots.get(clientId))) return "ok";
-      const result = await refresh(clientId);
-      if (result !== "ok") pins.delete(clientId);
-      return result;
+      const fetching = refresh(clientId)
+        .then((result) => {
+          if (result !== "ok") pins.delete(clientId);
+          return result;
+        })
+        .finally(() => prefetching.delete(clientId));
+      prefetching.set(clientId, fetching);
+      return fetching;
     },
 
     /** Extends a pending client's pin to a full signed-query lifetime from now. */

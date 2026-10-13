@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMetadataRefresher } from "./metadata-refresher.js";
 import { createMetadataStash, FRESHNESS_MS, type JsonFetch } from "./metadata-stash.js";
-import { CHATGPT_ID, chatgptDocument, signingKey } from "./oauth-test-kit.js";
+import { CHATGPT_ID, chatgptDocument, otherClientDocument, signingKey } from "./oauth-test-kit.js";
 
 const JWKS_URI = "https://chatgpt.com/oauth/test-client/jwks.json";
 const MIN = 60_000;
@@ -107,5 +107,56 @@ describe("the metadata stash", () => {
     await refresher.stop();
     expect(net.signals[0]?.aborted).toBe(true);
     expect(net.settled).toBe(1);
+  });
+});
+
+describe("pending clients", () => {
+  /** A network whose fetches wait until the test releases them, in order. */
+  function gatedNetwork(answers: Array<() => Response>) {
+    const releases: Array<() => void> = [];
+    let calls = 0;
+    const fetch: JsonFetch = async () => {
+      const answer = answers[calls++] ?? answers[answers.length - 1];
+      await new Promise<void>((resolve) => releases.push(resolve));
+      if (!answer) throw new Error("no answer");
+      return answer();
+    };
+    return { fetch, releases };
+  }
+
+  it.each([
+    ["fails first", [503, 200]],
+    ["succeeds first", [200, 503]],
+  ])(
+    "never reports a concurrent prefetch as ok unless the client is pinned and current (%s)",
+    async (_, statuses) => {
+      const x = otherClientDocument(1);
+      const net = gatedNetwork(
+        statuses.map(
+          (s) => () => (s === 200 ? json(x.document, {}) : new Response("", { status: s })),
+        ),
+      );
+      const stash = createMetadataStash({ fetch: net.fetch });
+      const a = stash.prefetch(x.id);
+      const b = stash.prefetch(x.id);
+      await new Promise((r) => setTimeout(r, 10));
+      net.releases[0]?.();
+      const ra = await a;
+      net.releases[1]?.();
+      const rb = await b;
+      const reportedOk = ra === "ok" || rb === "ok";
+      expect(stash.isCurrent(x.id)).toBe(reportedOk);
+      expect(stash.sync(new Set()), "a client reported ok stays pinned").toEqual(
+        reportedOk ? [x.id] : [],
+      );
+    },
+  );
+
+  it("reports a refresh whose client is neither connected nor pinned as not ok, and keeps nothing", async () => {
+    const x = otherClientDocument(2);
+    const stash = createMetadataStash({ fetch: async () => json(x.document, {}) });
+    stash.sync(new Set());
+    expect(await stash.refresh(x.id)).not.toBe("ok");
+    expect(stash.isCurrent(x.id)).toBe(false);
   });
 });

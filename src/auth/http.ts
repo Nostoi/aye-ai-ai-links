@@ -70,10 +70,13 @@ const TOO_MANY: Record<RouteLimit, string> = {
   revoke: "Too many revocation requests. Try again later.",
 };
 
-class BodyTooLarge extends Error {}
+export class BodyTooLarge extends Error {}
 
 /** Reads the whole body, refusing it as soon as it passes `max` bytes, declared or streamed. */
-async function readCapped(request: Request, max: number): Promise<Uint8Array<ArrayBuffer> | null> {
+export async function readCapped(
+  request: Request,
+  max: number,
+): Promise<Uint8Array<ArrayBuffer> | null> {
   if (request.body === null) return null;
   if (Number(request.headers.get("content-length") ?? 0) > max) throw new BodyTooLarge();
   const reader = request.body.getReader();

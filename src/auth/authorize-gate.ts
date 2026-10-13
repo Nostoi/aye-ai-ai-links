@@ -3,6 +3,7 @@ import type { WithAuthLock } from "./auth-lock.js";
 import type { Auth } from "./better-auth.js";
 import type { MetadataStash } from "./metadata-stash.js";
 import type { OAuthClients } from "./oauth-clients.js";
+import { OAUTH_ERROR_PATH } from "./oauth-error.js";
 import { readSession } from "./session.js";
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -13,7 +14,8 @@ const NO_STORE = { "cache-control": "no-store" };
  *   `/login?next=<this authorize URL>`. better-auth never sees it, so it creates no client row.
  * - For a CIMD client that is not connected, with the owner's session: a new connection. Its
  *   snapshot is fetched outside the lock and pinned for the signed query's lifetime, so the
- *   consent step can resolve it; refused while too many others are pending.
+ *   consent step can resolve it; refused while too many others are pending. When no current
+ *   snapshot results, the browser goes to the OAuth error page.
  * - Anything else goes to better-auth under the lock.
  * This is a usability and database-growth guard. The admission check holds without it.
  */
@@ -51,6 +53,12 @@ export function authorizeGate({
             "Too many new connections are waiting for your approval. Approve or abandon one, then try again in a few minutes.",
             { status: 429, headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE } },
           );
+        } else if (result !== "ok") {
+          // Admission would refuse it with a JSON 400; the owner's browser gets the error page.
+          response = new Response(null, {
+            status: 302,
+            headers: { location: `${OAUTH_ERROR_PATH}?error=invalid_client`, ...NO_STORE },
+          });
         }
         pending = result === "ok";
       }

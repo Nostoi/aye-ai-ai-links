@@ -4,6 +4,7 @@ import { getMigrations } from "better-auth/db/migration";
 import Database from "better-sqlite3";
 import { createAuthLock } from "./auth-lock.js";
 import { type Admission, clientAdmission, NO_ADMISSION } from "./client-admission.js";
+import { OAUTH_ERROR_PATH } from "./oauth-error.js";
 
 /** Where better-auth's handler is mounted. */
 export const AUTH_BASE_PATH = "/api/auth";
@@ -65,6 +66,8 @@ export function authOptions({
     telemetry: { enabled: false },
     advanced: { useSecureCookies: true, disableOriginCheck: false, disableCSRFCheck: false },
     logger: { level: "error" as const },
+    // Authorize errors that cannot go back to the client come to our page, not better-auth's.
+    onAPIError: { errorURL: OAUTH_ERROR_PATH },
     plugins: [
       mcp({
         resource: mcpResource(baseUrl),

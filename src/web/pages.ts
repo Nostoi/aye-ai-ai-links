@@ -131,6 +131,53 @@ export const consentExpiredPage = () =>
 </main>`,
   );
 
+export type ConnectionRow = { clientId: string; name: string | null; connectedAt: Date };
+
+function connectionItem(c: ConnectionRow): string {
+  return `<li><strong>${escapeHtml(c.name ?? c.clientId)}</strong>, connected ${c.connectedAt.toISOString().slice(0, 10)} <button type="button" data-client-id="${escapeHtml(c.clientId)}">Disconnect</button></li>`;
+}
+
+/**
+ * The owner's connected apps. Each Disconnect button posts `{clientId}` (read from its data
+ * attribute, never written into the script) to `/connections/disconnect`, then reloads.
+ */
+export const connectionsPage = (connections: ConnectionRow[]) =>
+  page(
+    "Connected apps · Aye-AI-AI Links",
+    `<main>
+<h1>Connected apps</h1>
+${connections.length === 0 ? "<p>No apps are connected.</p>" : `<ul>\n${connections.map(connectionItem).join("\n")}\n</ul>`}
+<p>A disconnected app is refused from its next request. To use it again, connect it again from the app.</p>
+<p id="error" role="alert"></p>
+<p><a href="/">Back to your links</a></p>
+</main>
+<script>
+const error = document.getElementById("error");
+for (const button of document.querySelectorAll("button[data-client-id]")) {
+  button.addEventListener("click", async () => {
+    error.textContent = "";
+    const res = await fetch("/connections/disconnect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientId: button.dataset.clientId }),
+    });
+    if (res.ok) location.reload();
+    else error.textContent = "That did not work. Reload the page and try again.";
+  });
+}
+</script>`,
+  );
+
+/** Where an OAuth authorization that failed ends. `message` is always one of our own sentences. */
+export const oauthErrorPage = (message: string) =>
+  page(
+    "Connection failed · Aye-AI-AI Links",
+    `<main>
+<h1>This connection did not work</h1>
+<p>${escapeHtml(message)}</p>
+</main>`,
+  );
+
 function linkItem(link: Link): string {
   const label = escapeHtml(link.title ?? link.url);
   const target = isWebUrl(link.url)
@@ -146,6 +193,7 @@ export const homePage = (links: Link[]) =>
     `<main>
 <h1>Your newest links</h1>
 ${links.length === 0 ? "<p>No links saved yet.</p>" : `<ul>\n${links.map(linkItem).join("\n")}\n</ul>`}
+<p><a href="/connections">Connected apps</a></p>
 <p><button id="sign-out" type="button">Sign out</button></p>
 </main>
 <script>

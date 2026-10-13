@@ -7,9 +7,11 @@ import { authorizeGate } from "./auth/authorize-gate.js";
 import { AUTH_BASE_PATH, type Auth, mcpResource } from "./auth/better-auth.js";
 import type { Identify } from "./auth/caller.js";
 import { consentDetails } from "./auth/consent.js";
+import { disconnect, listConnections } from "./auth/disconnect.js";
 import { authApp, originRefused, type RouteLimit, rootMetadataApp } from "./auth/http.js";
 import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
+import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
@@ -24,6 +26,9 @@ export type AuthDeps = {
   /** Overrides of the global route limits (`ROUTE_LIMITS`), for tests. */
   limits?: Partial<Record<RouteLimit, RateLimitOptions>> | undefined;
 };
+
+/** Web pages whose Origin is checked here, before the web door. */
+const CHECKED_PAGES = ["/consent", "/connections", "/connections/disconnect", OAUTH_ERROR_PATH];
 
 /** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
 export function resourceChallenge(baseUrl: string): string {
@@ -67,17 +72,26 @@ export function createApp({
   if (auth && baseUrl) {
     if (allowedHosts) {
       const hosts = hostHeaderValidation(allowedHosts);
-      for (const path of [`${AUTH_BASE_PATH}/*`, "/.well-known/*", "/", "/login", "/consent"]) {
+      for (const path of [
+        `${AUTH_BASE_PATH}/*`,
+        "/.well-known/*",
+        "/",
+        "/login",
+        ...CHECKED_PAGES,
+      ]) {
         app.use(path, hosts);
       }
     }
     const origin = new URL(baseUrl).origin;
-    app.use("/consent", async (c, next) => {
-      if (originRefused(c.req.raw, origin, { origin: "optional" })) {
-        return c.json({ code: "INVALID_ORIGIN", message: "Invalid origin." }, 403);
-      }
-      await next();
-    });
+    // A foreign Origin is refused on each of these; a missing one only on the disconnect POST.
+    for (const path of CHECKED_PAGES) {
+      app.use(path, async (c, next) => {
+        if (originRefused(c.req.raw, origin, { origin: "same" })) {
+          return c.json({ code: "INVALID_ORIGIN", message: "Invalid origin." }, 403);
+        }
+        await next();
+      });
+    }
     const { auth: betterAuth, withAuthLock, stash, clients } = auth;
     const handle = (request: Request) => betterAuth.handler(request);
     app.route(
@@ -98,6 +112,10 @@ export function createApp({
         auth: betterAuth,
         withAuthLock,
         consent: consentDetails({ auth: betterAuth, withAuthLock, clients }),
+        connections: {
+          list: listConnections({ withAuthLock, clients }),
+          disconnect: disconnect({ withAuthLock, clients, stash }),
+        },
       }),
     );
   }

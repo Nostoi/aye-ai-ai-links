@@ -70,7 +70,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
 
    Don't set any `BETTER_AUTH_` variable. The login library reads them, so the server and the `owner` command refuse to run while one is set.
 
-   Upgrading an install from before the web login? Add these three settings first, then deploy, then set your login (step 4). A release with the login refuses to start without them, and the deploy rolls back.
+   Upgrading an install from before the web login? Add these three settings first, then deploy, then set your login (step 4). Without `AYE_AUTH_DB`, the deploy refuses before it stops anything. Without the secret or the base URL, the new release refuses to start and the deploy rolls back.
 
 2. Deploy a commit from `main`:
 
@@ -89,7 +89,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    - If the schema changed or there was no database before, the failed release's database, with any writes it accepted, is moved to `~/.aye-links/data/backups/failed-links-*.db` and not merged back, and the backup, if any, is restored; otherwise the database is left as it is, writes included.
    - The login database follows the same rule, set aside as `failed-auth-*.db`. When its backup is restored, every session in it is deleted, so you sign in again; a restored backup would otherwise bring back sessions you signed out since.
    - If a rollback step fails, the script stops the service (and says if it could not confirm that), moves the plist to `~/.aye-links/com.aye-links.plist.disabled` so nothing starts at login, and writes `~/.aye-links/recovery-pending`; deploys refuse to run until you delete it.
-   - Once the new release is listening, the deploy has succeeded; the script then removes old releases and backups, and interrupting that leaves the new release running. Only the current and previous releases and the 10 newest backups are kept.
+   - Once the new release is listening, the deploy has succeeded; the script then removes old releases and backups, and interrupting that leaves the new release running. Only the current and previous releases and the 10 newest backups of each database are kept.
 
    </details>
 
@@ -99,7 +99,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    tailscale serve --bg --https=8444 http://127.0.0.1:3002
    ```
 
-4. Set your web login. The `owner` command changes the login only while the server is stopped, and refuses while it runs. It reads the password from stdin, never from the command line:
+4. Set your web login. The `owner` command changes the login only while the server is stopped, and refuses while it runs. Like the key commands, run it from `current` and not at the same time as a deploy. It reads the password from stdin, never from the command line:
 
    ```sh
    owner() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/owner-main.js" "$@"; }

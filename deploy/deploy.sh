@@ -6,7 +6,7 @@
 # wait for every process using aye.env to exit, back up both databases, point ~/.aye-links/current
 # at the new release and start the service again. A failed build or model check leaves the
 # running install untouched.
-# Run it from the source checkout, or set AYE_SOURCE to one. Run deploys and key commands one at a time.
+# Run it from the source checkout, or set AYE_SOURCE to one. Run deploys, key commands and owner commands one at a time.
 set -eEuo pipefail
 
 ref="${1:?Usage: deploy/deploy.sh <git-ref>}"

@@ -382,9 +382,15 @@ export async function addSecondUser(world: World) {
   return browser;
 }
 
-export async function connectClaudeAs(world: World, browser: Agent) {
+/** Consent and code exchange for a browser that is already signed in, on a client the world can resolve. */
+export async function connectAs(
+  world: World,
+  browser: Agent,
+  clientId: string,
+  redirectUri: string,
+) {
   const p = pkce();
-  const az = await browser.send(authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, p.challenge));
+  const az = await browser.send(authorizePath(clientId, redirectUri, p.challenge));
   const consent = new URL(az.headers.get("location") ?? "", TEST_BASE_URL);
   if (consent.pathname !== "/consent") throw new Error(`authorize went to ${consent.pathname}`);
   const accepted = await browser.send("/api/auth/oauth2/consent", {
@@ -393,10 +399,14 @@ export async function connectClaudeAs(world: World, browser: Agent) {
   });
   const code = new URL(field(accepted, "url")).searchParams.get("code") ?? "";
   const tokens = await exchange(world, code, p.verifier, {
-    client_id: CLAUDE_ID,
-    redirect_uri: CLAUDE_REDIRECT,
+    client_id: clientId,
+    redirect_uri: redirectUri,
   });
-  return field(tokens, "access_token");
+  return { access: field(tokens, "access_token"), refresh: field(tokens, "refresh_token") };
+}
+
+export async function connectClaudeAs(world: World, browser: Agent) {
+  return (await connectAs(world, browser, CLAUDE_ID, CLAUDE_REDIRECT)).access;
 }
 
 /** Connects Claude end to end and returns its tokens. */

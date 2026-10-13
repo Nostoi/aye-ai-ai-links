@@ -86,7 +86,7 @@ describe("authConfig", () => {
     "mac.tailnet.ts.net",
   ])("refuses the base URL %j", (AYE_BASE_URL) => {
     expect(() => authConfig({ ...AUTH, AYE_BASE_URL })).toThrow(
-      "Set AYE_BASE_URL to the https origin the browser uses, such as https://<your-mac>.<tailnet>.ts.net:8444, with no path or trailing slash.",
+      "Set AYE_BASE_URL to the https origin the browser uses, such as https://<your-mac>.<tailnet>.ts.net, with no path or trailing slash.",
     );
   });
 

@@ -4,7 +4,7 @@
 
 You save a link, forget where, forget when, and forget why. Aye-AI-AI Links is a personal link library that your AI assistants run for you. It works with Claude Code, Codex, Claude Desktop, or any AI that speaks [MCP](https://modelcontextprotocol.io).
 
-> **Status: in use, still growing.** The server runs on a home Mac, and AIs on the same [tailnet](https://tailscale.com/kb/1136/tailnet) can save and find links. Some features are still to come; [ROADMAP.md](ROADMAP.md) has the phases.
+> **Status: in use, still growing.** The server runs on a home Mac. AIs on the same [tailnet](https://tailscale.com/kb/1136/tailnet) connect with keys, and the Claude and ChatGPT apps connect over the internet through [Tailscale Funnel](https://tailscale.com/kb/1223/funnel). Some features are still to come; [ROADMAP.md](ROADMAP.md) has the phases.
 
 ## What it does
 
@@ -37,7 +37,6 @@ The tools your AI uses:
 ### Still to come
 
 - **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a plain list of your newest links, and a page of the apps you've connected, where you can disconnect one.
-- **ChatGPT and the Claude phone and web apps** in daily use. They sign in through OAuth (step 7 below), but their servers can only reach the server once it is on the public internet, which waits for the owner-isolation tests and port 443.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
@@ -48,7 +47,7 @@ The AI you're talking to does the thinking: summaries, tags, the why. The server
 
 ## Run it on your Mac
 
-The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale Serve](https://tailscale.com/kb/1312/serve) makes it reachable on your tailnet. Replace `<your-mac>.<tailnet>.ts.net` with your Mac's tailnet name.
+The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve](https://tailscale.com/kb/1312/serve) makes it reachable on your tailnet at `https://<your-mac>.<tailnet>.ts.net`, and Tailscale Funnel later opens that same address to the internet for the Claude and ChatGPT apps (step 7). Replace `<your-mac>.<tailnet>.ts.net` with your Mac's tailnet name.
 
 1. Create `~/.aye-links/aye.env`:
 
@@ -58,7 +57,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    AYE_ALLOWED_HOSTS=<your-mac>.<tailnet>.ts.net
    AYE_AUTH_DB=/Users/<you>/.aye-links/data/auth.db
    AYE_AUTH_SECRET=<a random secret>
-   AYE_BASE_URL=https://<your-mac>.<tailnet>.ts.net:8444
+   AYE_BASE_URL=https://<your-mac>.<tailnet>.ts.net
    ```
 
    `AYE_DB` is required and must be an absolute path. `AYE_PORT` defaults to 3002. `AYE_ALLOWED_HOSTS` is a comma-separated list of the host names the server answers to; `localhost` and `127.0.0.1` are always allowed.
@@ -66,7 +65,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    The other three are for the web login, and the server will not start without them:
    - `AYE_AUTH_DB` is the absolute path of the login database. It must be a different file from `AYE_DB`.
    - `AYE_AUTH_SECRET` signs the session cookies and must be at least 32 characters. Make one with `openssl rand -base64 32`.
-   - `AYE_BASE_URL` is the address your browser uses, with `https://` and no path or trailing slash: the Tailscale Serve address from step 3.
+   - `AYE_BASE_URL` is the address your browser uses, with `https://` and no path or trailing slash: the port-443 address from step 3. The web login and app connections work only at this address.
 
    Don't set any `BETTER_AUTH_` variable. The login library reads them, so the server and the `owner` command refuse to run while one is set.
 
@@ -93,11 +92,13 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
 
    </details>
 
-3. Serve it on the tailnet:
+3. Serve it on the tailnet, on port 443:
 
    ```sh
-   tailscale serve --bg --https=8444 http://127.0.0.1:3002
+   tailscale serve --bg --https=443 http://127.0.0.1:3002
    ```
+
+   Installs from before used port 8444. Keep that serve if your AIs' keys point at it; to use the web login or connect apps, move `AYE_BASE_URL` to the 443 address and deploy again.
 
 4. Set your web login. The `owner` command changes the login only while the server is stopped, and refuses while it runs. Like the key commands, run it from `current` and not at the same time as a deploy. It reads the password from stdin, never from the command line:
 
@@ -108,7 +109,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aye-links.plist
    ```
 
-   The password must be 8 to 128 characters. Then sign in at `https://<your-mac>.<tailnet>.ts.net:8444/login`. Run the same commands to change the email or password; that also signs out every session. Sign-up is closed: this is the only way to make a login, and it belongs to the owner named by `AYE_OWNER` (default `owner`), so you see the same library as your AIs. Sign-in allows 10 attempts per 15 minutes from everyone together, and a separate 10 for sign-ins from your tailnet, so strangers using up the first can't lock you out from your own devices.
+   The password must be 8 to 128 characters. Then sign in at `https://<your-mac>.<tailnet>.ts.net/login`. Run the same commands to change the email or password; that also signs out every session. Sign-up is closed: this is the only way to make a login, and it belongs to the owner named by `AYE_OWNER` (default `owner`), so you see the same library as your AIs. Sign-in allows 10 attempts per 15 minutes from everyone together, and a separate 10 for sign-ins from your tailnet, so strangers using up the first can't lock you out from your own devices.
 
 5. Make a key for each AI. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
 
@@ -131,14 +132,14 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    **Claude Code:**
 
    ```sh
-   claude mcp add --transport http aye-links https://<your-mac>.<tailnet>.ts.net:8444/mcp --header "Authorization: Bearer <key>"
+   claude mcp add --transport http aye-links https://<your-mac>.<tailnet>.ts.net/mcp --header "Authorization: Bearer <key>"
    ```
 
    **Codex**, in `~/.codex/config.toml`, with the key in the `AYE_LINKS_KEY` environment variable:
 
    ```toml
    [mcp_servers.aye-links]
-   url = "https://<your-mac>.<tailnet>.ts.net:8444/mcp"
+   url = "https://<your-mac>.<tailnet>.ts.net/mcp"
    bearer_token_env_var = "AYE_LINKS_KEY"
    ```
 
@@ -151,7 +152,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
          "command": "/Users/<you>/.nvm/versions/node/<version>/bin/npx",
          "args": [
            "-y", "mcp-remote@0.14.3",
-           "https://<your-mac>.<tailnet>.ts.net:8444/mcp",
+           "https://<your-mac>.<tailnet>.ts.net/mcp",
            "--transport", "http-only",
            "--header-file", "/Users/<you>/.aye-links/claude-desktop.headers"
          ],
@@ -161,13 +162,17 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    }
    ```
 
-7. **Not yet:** do not put the server on the public internet, or follow this step, until the owner-isolation tests (#78) and the lockout fix (#79) are done.
+7. Connect ChatGPT or the Claude apps through OAuth. Instead of a key, they sign you in on the server and ask you to approve them. Their servers call yours, so first open the port-443 address to the internet with Funnel:
 
-   Connect ChatGPT or the Claude apps through OAuth. Instead of a key, they sign you in on the server and ask you to approve them. Their servers call yours, so the server must be reachable from the internet on port 443, and `AYE_BASE_URL` must be that public address (for example `https://<your-public-host>`), with its host in `AYE_ALLOWED_HOSTS`.
+   ```sh
+   tailscale funnel --bg --https=443 http://127.0.0.1:3002
+   ```
 
-   **Claude** (web, desktop and phone apps): add a custom connector with the URL `https://<your-public-host>/mcp`.
+   The first time, the address took over 40 minutes to appear in public DNS. Funnel strips Tailscale's identity headers from internet requests, which is how the server tells your tailnet sign-ins apart from strangers'.
 
-   **ChatGPT:** add a custom MCP server with the URL `https://<your-public-host>/mcp` and OAuth as its authentication.
+   **Claude** (web, desktop and phone apps): in Settings → Connectors, add a custom connector with the URL `https://<your-mac>.<tailnet>.ts.net/mcp`. Keep "Sign in now" and "Use Claude's published identity", and add no headers.
+
+   **ChatGPT:** add a custom MCP server with the URL `https://<your-mac>.<tailnet>.ts.net/mcp` and OAuth as its authentication. When tested, ChatGPT did not ask for confirmation before saving or editing.
 
    Each app opens the server's sign-in page, then asks you to allow it to read and save links in your library. Once you allow it, every link it saves records the app's own name (for example "Claude"). Claude and ChatGPT identify themselves with a client document they publish; the server reloads it every few minutes, and refuses the app while it is gone or has not loaded for 5 minutes. At most 5 new apps can wait for your approval at once.
 

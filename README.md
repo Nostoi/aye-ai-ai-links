@@ -36,15 +36,15 @@ The tools your AI uses:
 
 ### Still to come
 
-- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something.
-- **ChatGPT and the Claude phone and web apps**, once login is built.
+- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a plain list of your newest links.
+- **ChatGPT and the Claude phone and web apps**, once they can sign in through OAuth. The web login they will use is built.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login and its sessions live in a second SQLite file beside it.
 
 ## Run it on your Mac
 
@@ -56,9 +56,21 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    AYE_DB=/Users/<you>/.aye-links/data/links.db
    AYE_PORT=3002
    AYE_ALLOWED_HOSTS=<your-mac>.<tailnet>.ts.net
+   AYE_AUTH_DB=/Users/<you>/.aye-links/data/auth.db
+   AYE_AUTH_SECRET=<a random secret>
+   AYE_BASE_URL=https://<your-mac>.<tailnet>.ts.net:8444
    ```
 
    `AYE_DB` is required and must be an absolute path. `AYE_PORT` defaults to 3002. `AYE_ALLOWED_HOSTS` is a comma-separated list of the host names the server answers to; `localhost` and `127.0.0.1` are always allowed.
+
+   The other three are for the web login, and the server will not start without them:
+   - `AYE_AUTH_DB` is the absolute path of the login database. It must be a different file from `AYE_DB`.
+   - `AYE_AUTH_SECRET` signs the session cookies and must be at least 32 characters. Make one with `openssl rand -base64 32`.
+   - `AYE_BASE_URL` is the address your browser uses, with `https://` and no path or trailing slash: the Tailscale Serve address from step 3.
+
+   Don't set any `BETTER_AUTH_` variable. The login library reads them, so the server and the `owner` command refuse to run while one is set.
+
+   Upgrading an install from before the web login? Add these three settings first, then deploy, then set your login (step 4). A release with the login refuses to start without them, and the deploy rolls back.
 
 2. Deploy a commit from `main`:
 
@@ -66,15 +78,16 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    deploy/deploy.sh main
    ```
 
-   This builds and tests the commit, then downloads and checks the meaning-search model (about 35 MB, into `~/.aye-links/models`; only missing files are fetched) before it stops the service. It then backs up the database, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded. A failed build, test or model check leaves the running install alone, and a failure while switching rolls back to the previous release.
+   This builds and tests the commit, then downloads and checks the meaning-search model (about 35 MB, into `~/.aye-links/models`; only missing files are fetched) before it stops the service. It then backs up both databases, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded. A failed build, test or model check leaves the running install alone, and a failure while switching rolls back to the previous release.
 
    <details>
    <summary>Exactly what happens when a deploy fails</summary>
 
-   - The commit is built and tested under `~/.aye-links/releases/<sha>`. Then the script stops the service, backs up the database, switches `~/.aye-links/current` and starts the service.
+   - The commit is built and tested under `~/.aye-links/releases/<sha>`. Then the script stops the service, backs up both databases (`links-<time>.db` and `auth-<time>.db`, with the same time), switches `~/.aye-links/current` and starts the service.
    - If the old service is not confirmed stopped within 25 s, the deploy ends there without changing or starting anything, so the service may be left down. An interruption during that wait rolls back as below.
    - After the stop is confirmed, until the new release is listening, any failure or interruption rolls back: the previous release starts again (before the switch, only if its plist is installed), or, if there is no previous release, `current` and the plist are removed and the service stays stopped.
-   - If the schema changed or there was no database before, the failed release's database, with any writes it accepted, is moved to `~/.aye-links/data/backups/failed-*.db` and not merged back, and the backup, if any, is restored; otherwise the database is left as it is, writes included.
+   - If the schema changed or there was no database before, the failed release's database, with any writes it accepted, is moved to `~/.aye-links/data/backups/failed-links-*.db` and not merged back, and the backup, if any, is restored; otherwise the database is left as it is, writes included.
+   - The login database follows the same rule, set aside as `failed-auth-*.db`. When its backup is restored, every session in it is deleted, so you sign in again; a restored backup would otherwise bring back sessions you signed out since.
    - If a rollback step fails, the script stops the service (and says if it could not confirm that), moves the plist to `~/.aye-links/com.aye-links.plist.disabled` so nothing starts at login, and writes `~/.aye-links/recovery-pending`; deploys refuse to run until you delete it.
    - Once the new release is listening, the deploy has succeeded; the script then removes old releases and backups, and interrupting that leaves the new release running. Only the current and previous releases and the 10 newest backups are kept.
 
@@ -86,7 +99,18 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
    tailscale serve --bg --https=8444 http://127.0.0.1:3002
    ```
 
-4. Make a key for each AI. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
+4. Set your web login. The `owner` command changes the login only while the server is stopped, and refuses while it runs. It reads the password from stdin, never from the command line:
+
+   ```sh
+   owner() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/owner-main.js" "$@"; }
+   launchctl bootout gui/$(id -u)/com.aye-links
+   read -rs PASSWORD && printf '%s\n' "$PASSWORD" | owner set you@example.com; unset PASSWORD
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aye-links.plist
+   ```
+
+   The password must be 8 to 128 characters. Then sign in at `https://<your-mac>.<tailnet>.ts.net:8444/login`. Run the same commands to change the email or password; that also signs out every session. Sign-up is closed: this is the only way to make a login, and it belongs to the owner named by `AYE_OWNER` (default `owner`), so you see the same library as your AIs. Sign-in allows 10 attempts per 15 minutes in total, from everyone together.
+
+5. Make a key for each AI. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
 
    ```sh
    keys() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/keys-main.js" "$@"; }
@@ -102,7 +126,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`, and [Tailscale S
 
    New keys belong to the owner named by `AYE_OWNER` and `AYE_OWNER_NAME`, which default to `owner` and `Owner`. Leave them unset for a library of your own.
 
-5. Connect each AI with its own key.
+6. Connect each AI with its own key.
 
    **Claude Code:**
 

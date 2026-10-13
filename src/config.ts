@@ -1,5 +1,6 @@
+import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 
 export type Env = Record<string, string | undefined>;
 
@@ -40,7 +41,78 @@ function allowedHosts(raw: string | undefined): string[] | undefined {
   return hosts.length === 0 ? undefined : [...hosts, "localhost", "127.0.0.1"];
 }
 
-export type ServerConfig = { dbPath: string; port: number; allowedHosts?: string[] };
+export type AuthConfig = { dbPath: string; secret: string; baseUrl: string };
+
+const MIN_SECRET = 32;
+
+/**
+ * Two paths name the same file when they share an inode, or, when either is missing, the same
+ * real path (the folder resolved through its symlinks, then the name).
+ */
+function sameFile(a: string, b: string): boolean {
+  try {
+    const [sa, sb] = [statSync(a), statSync(b)];
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return canonical(a) === canonical(b);
+  }
+}
+
+function canonical(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    const dir = dirname(path);
+    return dir === path ? path : join(canonical(dir), basename(path));
+  }
+}
+
+function baseUrl(raw: string | undefined): string {
+  let url: URL | undefined;
+  try {
+    url = new URL(raw ?? "");
+  } catch {}
+  if (url?.protocol !== "https:" || url.origin !== raw) {
+    throw new Error(
+      "Set AYE_BASE_URL to the https origin the browser uses, such as https://<your-mac>.<tailnet>.ts.net:8444, with no path or trailing slash.",
+    );
+  }
+  return raw;
+}
+
+/**
+ * The auth settings, shared by the server and the owner CLI. better-auth also reads
+ * `BETTER_AUTH_*` variables (one adds trusted origins), so any of them refuses the start.
+ */
+export function authConfig(env: Env): AuthConfig {
+  const stray = Object.keys(env).find((name) => name.startsWith("BETTER_AUTH_"));
+  if (stray) {
+    throw new Error(
+      `Unset ${stray}: better-auth reads BETTER_AUTH_* variables, and this server takes its auth settings only from AYE_ variables.`,
+    );
+  }
+  const dbPath = env.AYE_AUTH_DB;
+  if (!dbPath || !isAbsolute(dbPath)) {
+    throw new Error(
+      "Set AYE_AUTH_DB to the absolute path of the auth database file (not :memory:).",
+    );
+  }
+  if (sameFile(dbPath, databasePath(env))) {
+    throw new Error("AYE_AUTH_DB must be a different file from AYE_DB.");
+  }
+  const secret = env.AYE_AUTH_SECRET ?? "";
+  if (secret.length < MIN_SECRET) {
+    throw new Error("Set AYE_AUTH_SECRET to a random string of at least 32 characters.");
+  }
+  return { dbPath, secret, baseUrl: baseUrl(env.AYE_BASE_URL) };
+}
+
+export type ServerConfig = {
+  dbPath: string;
+  port: number;
+  allowedHosts?: string[];
+  auth: AuthConfig;
+};
 
 export function serverConfig(env: Env): ServerConfig {
   const hosts = allowedHosts(env.AYE_ALLOWED_HOSTS);
@@ -48,5 +120,6 @@ export function serverConfig(env: Env): ServerConfig {
     dbPath: databasePath(env),
     port: port(env.AYE_PORT),
     ...(hosts && { allowedHosts: hosts }),
+    auth: authConfig(env),
   };
 }

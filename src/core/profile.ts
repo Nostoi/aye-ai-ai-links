@@ -16,6 +16,13 @@ export const RECENT_FOCUS = 10;
 /** Longer text is refused, never truncated. */
 export const MAX_NOTE_CHARS = 1000;
 export const MAX_FOCUS_CHARS = 500;
+/**
+ * How long a removed note can be restored. The only definition: restore refuses older removals,
+ * and the owner's next profile write purges them.
+ */
+export const NOTE_UNDO_WINDOW_MS = 60_000;
+
+const undoCutoff = (now: Date) => new Date(now.getTime() - NOTE_UNDO_WINDOW_MS);
 
 type ProfileDeps = { profile: ProfileStore; now: () => Date };
 type Profile = Pick<ProfileWrite, "notes" | "recentFocus">;
@@ -104,10 +111,12 @@ async function write(
   writtenBy: string,
   changes: ProfileChanges,
 ) {
+  const at = deps.now();
   const result = await deps.profile.apply(owner, changes, {
     writtenBy,
-    at: deps.now(),
+    at,
     focusLimit: RECENT_FOCUS,
+    purgeBefore: undoCutoff(at),
   });
   if (!result.ok) {
     if ("unknownId" in result) throw notFound(result.unknownId);

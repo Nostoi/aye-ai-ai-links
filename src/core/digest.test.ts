@@ -86,7 +86,7 @@ async function focus(text: string, created: Date, source: Source = "stated"): Pr
   const result = await profile.apply(
     OWNER,
     { addNotes: [], editNotes: [], removeNotes: [], addFocus: [{ text, source }] },
-    { writtenBy: "agent", at: created, focusLimit: 100 },
+    { writtenBy: "agent", at: created, focusLimit: 100, purgeBefore: new Date(0) },
   );
   if (!result.ok) throw new Error("the focus entry was not added");
   return result.recentFocus.find((f) => f.text === text) as FocusEntry;

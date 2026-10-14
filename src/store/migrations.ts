@@ -156,6 +156,9 @@ export const MIGRATIONS: string[] = [
   // origin was not recorded, so each is shown as a guess. Additive; rebuilds nothing.
   `ALTER TABLE tags ADD COLUMN kind_source TEXT NOT NULL DEFAULT 'inferred'
     CHECK (kind_source IN ('stated', 'asked', 'inferred'))`,
+  // When a profile note was removed (#98): removal is soft, so Undo can bring the note back
+  // until it is purged. NULL is a live note. Additive; rebuilds nothing.
+  "ALTER TABLE profile_notes ADD COLUMN removed_at INTEGER",
 ];
 
 /**

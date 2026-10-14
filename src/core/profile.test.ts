@@ -177,6 +177,7 @@ describe("profile use cases", () => {
     it("returns its result from the write itself: failing reads afterwards cannot make a committed write fail", async () => {
       const readsFail: ProfileStore = {
         apply: (...args) => profile.apply(...args),
+        restoreNote: (...args) => profile.restoreNote(...args),
         listNotes: async () => {
           throw new Error("read after write");
         },
@@ -308,7 +309,7 @@ describe("profile use cases", () => {
                 removeNotes: [],
                 addFocus: [],
               },
-              { writtenBy: "claude", at: NOW, focusLimit: RECENT_FOCUS },
+              { writtenBy: "claude", at: NOW, focusLimit: RECENT_FOCUS, purgeBefore: new Date(0) },
             );
           }
           return seen;
@@ -318,6 +319,7 @@ describe("profile use cases", () => {
           return profile.apply(...args);
         },
         recentFocus: (...args) => profile.recentFocus(...args),
+        restoreNote: (...args) => profile.restoreNote(...args),
       };
       const err = await code(
         editProfile({ profile: racing, now: () => NOW }, A, W, { removeNotes: [id] }),
@@ -372,6 +374,7 @@ describe("profile use cases", () => {
         let applies = 0;
         const stub: ProfileStore = {
           recentFocus: (o, l) => profile.recentFocus(o, l),
+          restoreNote: (...args) => profile.restoreNote(...args),
           listNotes: async (o) => {
             const seen = await profile.listNotes(o);
             if (reads++ < flips) {
@@ -391,7 +394,7 @@ describe("profile use cases", () => {
                     },
                   ],
                 },
-                { writtenBy: "owner", at: NOW, focusLimit: RECENT_FOCUS },
+                { writtenBy: "owner", at: NOW, focusLimit: RECENT_FOCUS, purgeBefore: new Date(0) },
               );
             }
             return seen;
@@ -434,10 +437,11 @@ describe("profile use cases", () => {
               removeNotes: [],
               editNotes: [{ id, text, source, expectedSource: "inferred" }],
             },
-            { writtenBy: "owner", at: NOW, focusLimit: RECENT_FOCUS },
+            { writtenBy: "owner", at: NOW, focusLimit: RECENT_FOCUS, purgeBefore: new Date(0) },
           );
         const stub: ProfileStore = {
           recentFocus: (o, l) => profile.recentFocus(o, l),
+          restoreNote: (...args) => profile.restoreNote(...args),
           listNotes: async (o) => {
             const seen = await profile.listNotes(o);
             if (reads++ === 0) {

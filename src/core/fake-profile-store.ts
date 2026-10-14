@@ -1,16 +1,30 @@
 import type { ProfileApplyResult, ProfileChanges, ProfileStore } from "./profile-store.js";
 import type { FocusEntry, OwnerId, ProfileNote } from "./types.js";
 
+type Stored = ProfileNote & { removedAt: Date | null };
+
+const shown = (notes: Stored[]): ProfileNote[] =>
+  notes
+    .filter((n) => n.removedAt === null)
+    .map(({ removedAt: _removedAt, ...note }) => structuredClone(note));
+
 /** In-memory ProfileStore for tests; honours the same contracts as the real store. */
 export class FakeProfileStore implements ProfileStore {
-  private notes = new Map<OwnerId, ProfileNote[]>();
+  private notes = new Map<OwnerId, Stored[]>();
   private focus = new Map<OwnerId, FocusEntry[]>();
   // Counters only go up, so a removed note's id is never issued again.
   private nextNoteId = 1;
   private nextFocusId = 1;
 
-  private notesOf(owner: OwnerId): ProfileNote[] {
+  private notesOf(owner: OwnerId): Stored[] {
     return this.notes.get(owner) ?? [];
+  }
+
+  private purge(owner: OwnerId, before: Date) {
+    this.notes.set(
+      owner,
+      this.notesOf(owner).filter((n) => n.removedAt === null || n.removedAt >= before),
+    );
   }
 
   private newestFocus(owner: OwnerId, limit: number): FocusEntry[] {
@@ -21,7 +35,7 @@ export class FakeProfileStore implements ProfileStore {
   }
 
   async listNotes(owner: OwnerId) {
-    return structuredClone(this.notesOf(owner));
+    return shown(this.notesOf(owner));
   }
 
   async recentFocus(owner: OwnerId, limit: number) {
@@ -31,27 +45,52 @@ export class FakeProfileStore implements ProfileStore {
   async apply(
     owner: OwnerId,
     changes: ProfileChanges,
-    { writtenBy, at, focusLimit }: { writtenBy: string; at: Date; focusLimit: number },
+    {
+      writtenBy,
+      at,
+      focusLimit,
+      purgeBefore,
+    }: { writtenBy: string; at: Date; focusLimit: number; purgeBefore: Date },
   ): Promise<ProfileApplyResult> {
-    const mine = this.notesOf(owner);
+    const live = this.notesOf(owner).filter((n) => n.removedAt === null);
     // Check every id first, so a failure writes nothing.
-    for (const { id, expectedSource } of [...changes.editNotes, ...changes.removeNotes]) {
-      const note = mine.find((n) => n.id === id);
+    for (const { id, expectedSource, expectedUpdatedAt } of [
+      ...changes.editNotes,
+      ...changes.removeNotes,
+    ]) {
+      const note = live.find((n) => n.id === id);
       if (!note) return { ok: false, unknownId: id };
-      if (note.source !== expectedSource) return { ok: false, conflictId: id };
+      if (
+        note.source !== expectedSource ||
+        (expectedUpdatedAt !== undefined &&
+          note.updatedAt.getTime() !== expectedUpdatedAt.getTime())
+      ) {
+        return { ok: false, conflictId: id };
+      }
     }
+    this.purge(owner, purgeBefore);
+    const mine = this.notesOf(owner);
     for (const e of changes.editNotes) {
-      const note = mine.find((n) => n.id === e.id) as ProfileNote;
+      const note = mine.find((n) => n.id === e.id) as Stored;
       Object.assign(note, { text: e.text, source: e.source, writtenBy, updatedAt: new Date(at) });
     }
-    const kept = mine.filter((n) => !changes.removeNotes.some((r) => r.id === n.id));
+    for (const r of changes.removeNotes) {
+      (mine.find((n) => n.id === r.id) as Stored).removedAt = new Date(at);
+    }
     const addedNoteIds: string[] = [];
     for (const n of changes.addNotes) {
       const id = String(this.nextNoteId++);
       addedNoteIds.push(id);
-      kept.push({ id, text: n.text, source: n.source, writtenBy, updatedAt: new Date(at) });
+      mine.push({
+        id,
+        text: n.text,
+        source: n.source,
+        writtenBy,
+        updatedAt: new Date(at),
+        removedAt: null,
+      });
     }
-    this.notes.set(owner, kept);
+    this.notes.set(owner, mine);
     const addedFocusIds: string[] = [];
     const log = this.focus.get(owner) ?? [];
     for (const f of changes.addFocus) {
@@ -62,10 +101,18 @@ export class FakeProfileStore implements ProfileStore {
     this.focus.set(owner, log);
     return {
       ok: true,
-      notes: structuredClone(kept),
+      notes: shown(mine),
       recentFocus: this.newestFocus(owner, focusLimit),
       addedNoteIds,
       addedFocusIds,
     };
+  }
+
+  async restoreNote(owner: OwnerId, id: string, removedSince: Date) {
+    this.purge(owner, removedSince);
+    const note = this.notesOf(owner).find((n) => n.id === id && n.removedAt !== null);
+    if (!note) return false;
+    note.removedAt = null;
+    return true;
   }
 }

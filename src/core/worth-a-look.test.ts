@@ -1,0 +1,257 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { DIGEST_SIZE, SURFACE_COOLDOWN_MS } from "./digest.js";
+import type { CoreError } from "./errors.js";
+import { FakeProfileStore } from "./fake-profile-store.js";
+import { FakeStore } from "./fake-store.js";
+import type { LinkSearch } from "./search.js";
+import type { SearchLog } from "./search-log.js";
+import type { Link, NewLink } from "./types.js";
+import {
+  archiveLink,
+  markOpened,
+  SNOOZE_MS,
+  snoozeLink,
+  tellWhy,
+  unarchiveLink,
+  unsnoozeLink,
+  WORTH_SIZE,
+  worthALook,
+} from "./worth-a-look.js";
+
+const A = "a";
+const B = "b";
+const DAY = 86_400_000;
+const NOW = new Date("2026-10-14T09:00:00Z");
+const at = (delta: number) => new Date(NOW.getTime() + delta);
+
+const noSearch: LinkSearch = { search: async () => [] };
+
+/** Records every call, so a test can show nothing was logged. */
+class SpySearchLog implements SearchLog {
+  calls: string[] = [];
+  async record() {
+    this.calls.push("record");
+  }
+  async pairOpen() {
+    this.calls.push("pairOpen");
+  }
+}
+
+let store: FakeStore;
+let clock: Date;
+let searchLog: SpySearchLog;
+const deps = () => ({
+  store,
+  profile: new FakeProfileStore(),
+  keywordSearch: noSearch,
+  searchLog,
+  now: () => clock,
+});
+
+beforeEach(() => {
+  store = new FakeStore();
+  clock = NOW;
+  searchLog = new SpySearchLog();
+});
+
+let n = 0;
+/** A link with no why, never surfaced: eligible, with reasons. */
+async function link(owner = A, over: Partial<NewLink> = {}): Promise<Link> {
+  n += 1;
+  const url = `https://ex.com/${n}`;
+  return (
+    await store.insertIfAbsent(owner, {
+      url,
+      urlKey: url,
+      title: `Link ${n}`,
+      summary: null,
+      why: null,
+      tags: [],
+      savedAt: at(-(n + 1) * DAY),
+      savedBy: "t",
+      lastOpenedAt: null,
+      lastSurfacedAt: null,
+      snoozedUntil: null,
+      state: "active",
+      ...over,
+    })
+  ).link;
+}
+
+const get = async (id: string, owner = A) => (await store.get(owner, id)) as Link;
+const ids = async () => (await worthALook(deps(), A)).map((d) => d.link.id);
+
+async function code(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+  } catch (e) {
+    return (e as CoreError).code;
+  }
+  return "no error";
+}
+
+describe("worthALook", () => {
+  it("shows the same three picks all day, writing nothing", async () => {
+    for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
+    const before = structuredClone(store.all(A));
+    const morning = await ids();
+    clock = new Date("2026-10-14T23:59:59.999Z");
+    expect(await ids()).toEqual(morning);
+    expect(morning).toHaveLength(WORTH_SIZE);
+    expect(store.all(A)).toEqual(before);
+  });
+
+  it("shows other picks on another day, from the whole queue, not only one digest's worth", async () => {
+    for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
+    const seen = new Set<string>();
+    const days: string[][] = [];
+    for (let d = 0; d < DIGEST_SIZE + 3; d++) {
+      clock = at(d * DAY);
+      days.push(await ids());
+      for (const id of days.at(-1) ?? []) seen.add(id);
+    }
+    expect(days[1]).not.toEqual(days[0]);
+    expect(seen.size).toBe(DIGEST_SIZE + 3);
+  });
+
+  it("shows every eligible link when there are fewer than three, and none when nothing is due", async () => {
+    expect(await ids()).toEqual([]);
+    const only = await link();
+    await link(A, { state: "archived" });
+    expect(await ids()).toEqual([only.id]);
+  });
+});
+
+describe("markOpened", () => {
+  it("records the opening and marks it surfaced, so home leaves it out for two weeks", async () => {
+    const l = await link();
+    await markOpened(deps(), A, l.id);
+    expect(await get(l.id)).toMatchObject({ lastOpenedAt: NOW, lastSurfacedAt: NOW });
+    clock = at(SURFACE_COOLDOWN_MS - 1);
+    expect(await ids()).not.toContain(l.id);
+    clock = at(SURFACE_COOLDOWN_MS);
+    expect(await ids()).toContain(l.id);
+  });
+
+  it("writes no search log row", async () => {
+    const l = await link();
+    await markOpened(deps(), A, l.id);
+    expect(searchLog.calls).toEqual([]);
+  });
+
+  it("records the opening of a link an agent's digest already marked, leaving that mark", async () => {
+    const l = await link(A, { lastSurfacedAt: at(-DAY) });
+    await markOpened(deps(), A, l.id);
+    expect(await get(l.id)).toMatchObject({ lastOpenedAt: NOW, lastSurfacedAt: at(-DAY) });
+  });
+
+  it("refuses another owner's link as not found, changing nothing", async () => {
+    const theirs = await link(B);
+    const before = structuredClone(store.all(B));
+    expect(await code(markOpened(deps(), A, theirs.id))).toBe("not_found");
+    expect(store.all(B)).toEqual(before);
+  });
+});
+
+describe("Not now", () => {
+  it("marks the link surfaced and snoozes it for two weeks, returning when the snooze ends", async () => {
+    const l = await link();
+    const until = await snoozeLink(deps(), A, l.id);
+    expect(until).toEqual(at(SNOOZE_MS));
+    expect(SNOOZE_MS).toBe(14 * DAY);
+    expect(await get(l.id)).toMatchObject({ lastSurfacedAt: NOW, snoozedUntil: at(SNOOZE_MS) });
+  });
+
+  it("undo clears the snooze it set", async () => {
+    const l = await link();
+    const until = await snoozeLink(deps(), A, l.id);
+    await unsnoozeLink(deps(), A, l.id, new Date(until));
+    expect((await get(l.id)).snoozedUntil).toBeNull();
+  });
+
+  it("undo after an AI changed the snooze is a conflict and leaves the AI's value", async () => {
+    const l = await link();
+    const until = await snoozeLink(deps(), A, l.id);
+    await store.update(A, l.id, { snoozedUntil: at(3 * DAY) });
+    expect(await code(unsnoozeLink(deps(), A, l.id, until))).toBe("conflict");
+    expect((await get(l.id)).snoozedUntil).toEqual(at(3 * DAY));
+  });
+
+  it("refuses another owner's link as not found, never as a conflict, changing nothing", async () => {
+    const theirs = await link(B, { snoozedUntil: at(DAY) });
+    const before = structuredClone(store.all(B));
+    expect(await code(snoozeLink(deps(), A, theirs.id))).toBe("not_found");
+    expect(await code(unsnoozeLink(deps(), A, theirs.id, at(DAY)))).toBe("not_found");
+    expect(await code(unsnoozeLink(deps(), A, theirs.id, at(2 * DAY)))).toBe("not_found");
+    expect(store.all(B)).toEqual(before);
+  });
+});
+
+describe("I'm done with it", () => {
+  it("archives the link, and undo makes it active again", async () => {
+    const l = await link();
+    await archiveLink(deps(), A, l.id);
+    expect((await get(l.id)).state).toBe("archived");
+    expect(await ids()).not.toContain(l.id);
+    await unarchiveLink(deps(), A, l.id);
+    expect((await get(l.id)).state).toBe("active");
+  });
+
+  it("undo of a link no longer archived is a conflict", async () => {
+    const l = await link();
+    await archiveLink(deps(), A, l.id);
+    await store.update(A, l.id, { state: "active", title: "changed elsewhere" });
+    const before = await get(l.id);
+    expect(await code(unarchiveLink(deps(), A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toEqual(before);
+  });
+
+  it("refuses another owner's link as not found, never as a conflict, changing nothing", async () => {
+    const theirs = await link(B);
+    const archived = await link(B, { state: "archived" });
+    const before = structuredClone(store.all(B));
+    expect(await code(archiveLink(deps(), A, theirs.id))).toBe("not_found");
+    expect(await code(unarchiveLink(deps(), A, theirs.id))).toBe("not_found");
+    expect(await code(unarchiveLink(deps(), A, archived.id))).toBe("not_found");
+    expect(store.all(B)).toEqual(before);
+  });
+});
+
+describe("tellWhy", () => {
+  it("records the owner's answer, trimmed, as asked", async () => {
+    const l = await link();
+    const updated = await tellWhy(deps(), A, l.id, "  to compare quotes  ");
+    expect(updated.why).toEqual({ text: "to compare quotes", source: "asked" });
+    expect((await get(l.id)).why).toEqual({ text: "to compare quotes", source: "asked" });
+  });
+
+  it("replaces an agent's guess", async () => {
+    const l = await link(A, { why: { text: "a guess", source: "inferred" } });
+    await tellWhy(deps(), A, l.id, "the real reason");
+    expect((await get(l.id)).why).toEqual({ text: "the real reason", source: "asked" });
+  });
+
+  it.each(["", "   ", "\n\t"])("refuses blank text %j and keeps the old why", async (text) => {
+    const l = await link(A, { why: { text: "a guess", source: "inferred" } });
+    expect(await code(tellWhy(deps(), A, l.id, text))).toBe("invalid_input");
+    expect((await get(l.id)).why).toEqual({ text: "a guess", source: "inferred" });
+  });
+
+  it.each(["stated", "asked"] as const)(
+    "will not replace a why that is %s: a conflict, and the why is unchanged",
+    async (source) => {
+      const l = await link(A, { why: { text: "theirs", source } });
+      expect(await code(tellWhy(deps(), A, l.id, "new"))).toBe("conflict");
+      expect((await get(l.id)).why).toEqual({ text: "theirs", source });
+    },
+  );
+
+  it("refuses another owner's link as not found, never as a conflict, changing nothing", async () => {
+    const open = await link(B);
+    const said = await link(B, { why: { text: "b's", source: "stated" } });
+    const before = structuredClone(store.all(B));
+    expect(await code(tellWhy(deps(), A, open.id, "x"))).toBe("not_found");
+    expect(await code(tellWhy(deps(), A, said.id, "x"))).toBe("not_found");
+    expect(store.all(B)).toEqual(before);
+  });
+});

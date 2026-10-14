@@ -498,7 +498,6 @@ describe("owner isolation coverage", () => {
     const aHome = await owner.send("/");
     expect(aHome.status).toBe(200);
     expect(String(aHome.body)).toContain(A_URL);
-    expect((await browser.send("/")).status).toBe(200);
     const routes = webRoutes(world);
     const paths = [...new Set(routes.map((r) => r.path))];
     expect(paths).toContain("/connections");
@@ -546,16 +545,17 @@ describe("owner isolation coverage", () => {
     }
 
     const before = rowsOf(world, A);
+    expect((await browser.send("/")).status).toBe(200);
     const everyMarker = [A_URL, note, ...executed.flatMap((e) => textOf(e.marker))];
     for (const { key, request } of executed) {
       const sent = await asB(request, `${key} (${request})`);
-      for (const m of everyMarker) {
-        expect(holds(sent, m), `B's ${key} (${request}) shows A's data`).toBe(false);
-      }
       expect(
         sent.bytes.equals(sentByA.get(key)?.bytes ?? Buffer.alloc(0)) && sent.status === 200,
         `B's ${key} (${request}) is byte-for-byte what A got`,
       ).toBe(false);
+      for (const m of everyMarker) {
+        expect(holds(sent, m), `B's ${key} (${request}) shows A's data`).toBe(false);
+      }
     }
     for (const path of paths) {
       const sent = await asB(fillPath(path, aLinkId), `GET ${path}`);

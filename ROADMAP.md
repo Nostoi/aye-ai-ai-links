@@ -22,6 +22,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** The server keeps its own copy of each link's preview image (#94; plan in comments 6171805935 and 6173115474, the second winning).
+  - **Owner ruling: images are cached, and wiped on sign-out.** `/images/:id?v=<sha256 prefix>` answers `Cache-Control: private, max-age=31536000, immutable` when `v` is the stored image's version; any other answer, and every 404, is `no-store`. Sign-out answers `Clear-Site-Data: "cache"`; that a real browser honours it on the sign-out `fetch` has not been checked. This is the one exception to the web door's `no-store` rule.
+  - **A separate image pass** (`core/image-indexer.ts`) sweeps every 15 s, one fetch at a time, beside the vector indexer, so a save never waits for an image. A snapshot recorded with an image URL is `pending` (migration 10 backfills every stored image URL). Writes compare and set on `pending` for the same URL, so a late result cannot replace a stored image.
+  - **Retries.** A network error, timeout, 408, 429 or 5xx retries after 1 min, doubling up to 1 h, and ends as `none` on the fifth failure. A refusal by the address rules ends as `refused`; a non-image, a body over 2 MB, a header over 40 megapixels or another 4xx ends as `none` at once. Backoffs are kept in memory, so a restart tries every pending image again. A shutdown abort leaves the image `pending`.
+  - **Types.** The magic bytes decide (PNG, JPEG, GIF, WebP); SVG and AVIF are refused. An upstream `image/*`, `application/octet-stream` or `binary/octet-stream` is read.
+  - **One rule set.** The page and image fetchers share `fetch/guarded-request.ts`. The JSON fetcher for OAuth metadata, which never follows redirects, keeps its own.
+  - **Not in this change:** a space-color fallback for a card with no image (#96, #97), images in MCP output, re-fetching when a page changes.
 - **2026-10-14:** Agent keys on the Apps and keys page (#99; plan in comment 6171805481, revised by comment 6173113093). Owner rulings, in session:
   - **Web creation.** The signed-in owner can make a key on the page, with no re-entered password and from any network.
   - **Names.** A name is at most 60 characters, and "web" in any case is refused, after trimming. Both rules live in `createAgentKey`, so they hold for the CLI too.

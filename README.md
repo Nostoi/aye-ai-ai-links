@@ -16,6 +16,7 @@ You talk to your AI; it uses the library for you.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by. Every tag records who decided its kind: you, or your AI's guess. A project your AI only guessed is presented as a guess until you confirm it. Tags from before this was recorded count as guesses too.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
 - **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
+- **Page images.** When a page names a preview image, the server fetches it in the background and keeps its own copy (PNG, JPEG, GIF or WebP, up to 2 MiB), so the web page shows it without asking any other site. The first start after upgrading to this version fetches the images of links already saved. Your browser keeps a copy of each image it shows, and signing out asks your browser to clear it.
 - **Digests.** Ask "anything I should look at?" and your AI gets up to five saved links worth another look, each with its reasons: it shares words with something you're working on, it has no why yet, it was saved over 30 days ago and no AI has recorded you opening it in that time, or it has never come up before. Your AI turns those into a short nudge, and can ask why you saved one, snooze it or archive it. A link that comes up in a digest stays out of digests for two weeks, so the next digest brings different links. Snoozed links stay out until the snooze ends, and archived links never come up.
 
 Each AI has its own key or its own app connection, and every link records which AI saved it.
@@ -36,14 +37,14 @@ The tools your AI uses:
 
 ### Still to come
 
-- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a search page (describe a link however you remember it and see the best matches, each with its why), and an Apps and keys page, where you can disconnect an app and make or turn off your AIs' keys.
+- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a search page (describe a link however you remember it and see the best matches, each with its page's image and its why), and an Apps and keys page, where you can disconnect an app and make or turn off your AIs' keys.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save and their images, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
 
 ## Run it on your Mac
 

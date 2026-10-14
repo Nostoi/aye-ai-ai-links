@@ -148,6 +148,26 @@ describe("auth routes", () => {
     expect(t.count("session")).toBe(0);
   });
 
+  it("signs out with Clear-Site-Data for the cache, keeping better-auth's cookie clearing", async () => {
+    const t = await setup();
+    const cookie = (await t.signIn(TEST_PASSWORD)).headers.getSetCookie()[0]?.split(";")[0] ?? "";
+    const res = await t.send("/sign-out", { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("clear-site-data")).toBe('"cache"');
+    const cleared = res.headers
+      .getSetCookie()
+      .filter((c) => /^__Secure-better-auth\.session_token=;/.test(c));
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]).toMatch(/max-age=0/i);
+    expect(await res.json()).toEqual({ success: true });
+    expect(t.count("session")).toBe(0);
+  });
+
+  it("sends no Clear-Site-Data on sign-in", async () => {
+    const t = await setup();
+    expect((await t.signIn(TEST_PASSWORD)).headers.get("clear-site-data")).toBeNull();
+  });
+
   it.each([
     ["POST", "/sign-up/email"],
     ["POST", "/change-password"],

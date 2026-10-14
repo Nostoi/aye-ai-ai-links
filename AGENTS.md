@@ -68,15 +68,15 @@ aye-ai-ai-links/
    ├─ core/       rules and use cases
    ├─ store/      SQLite persistence (swappable)
    ├─ search/     keyword + meaning search
-   ├─ fetch/      page snapshots (has its own `AGENTS.md`)
+   ├─ fetch/      page snapshots and preview images, through one guarded request (has its own `AGENTS.md`)
    ├─ auth/       agent keys, the caller identity, the web login and OAuth: better-auth, its lock, routes and client admission
    ├─ http/       request rate limiting and the request log
    ├─ cli/        the `keys` command for agent keys, the `owner` command for the web login, and the model prefetch
    ├─ mcp/        AI connector door
    ├─ api/        JSON API door (planned)
-   ├─ web/        web page door: login, the home question, search results, apps and agent keys, and the OAuth error page
+   ├─ web/        web page door: login, the home question, search results, stored images, apps and agent keys, and the OAuth error page
    ├─ app.ts          mounts every door on one HTTP app
-   ├─ deps.ts         builds store, search and profile on one database
+   ├─ deps.ts         builds store, search, images and profile on one database
    ├─ config.ts       reads the server's `AYE_` settings
    ├─ start-server.ts opens both databases, runs the auth migrations, starts the server and snapshot runner
    └─ server.ts       process entry point: signals and shutdown

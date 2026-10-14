@@ -21,6 +21,7 @@ import {
 } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
+import { setTagPinned } from "../core/tag-space.js";
 import { createDeps } from "../deps.js";
 import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -39,6 +40,7 @@ const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
+const A_DONE_URL = "https://a.example/remote-image";
 
 type Called = { status: number; isError: boolean; data: unknown; text: string };
 type Row = { id: string };
@@ -466,8 +468,16 @@ describe("owner isolation coverage", () => {
   type Marker = string | Buffer | string[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
-    "GET /": { noOwnerData: "the question and a search field, no links" },
+    "GET /": { request: "/", marker: () => A_TAG_NAME },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
+    "GET /spaces": {
+      request: `/spaces?tag=${encodeURIComponent(A_TAG_NAME)}`,
+      marker: () => [A_TAG_NAME, A_URL],
+    },
+    "GET /spaces/done": {
+      request: `/spaces/done?tag=${encodeURIComponent(A_TAG_NAME)}`,
+      marker: () => [A_TAG_NAME, A_DONE_URL],
+    },
     "GET /connections": {
       request: "/connections",
       marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
@@ -538,11 +548,18 @@ describe("owner isolation coverage", () => {
     // A second link whose page named a remote image and has none stored: its card must not
     // fall back to the remote URL, or A's search page makes an outside request.
     const { link: remote } = await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, {
-      url: "https://a.example/remote-image",
+      url: A_DONE_URL,
       savedBy: "seed",
       title: "Quokka burrow photos",
     });
     await recordImageUrl(world, remote.id, "https://images.example/quokka.png");
+    // A's tag is a space (on home), and the remote-image link is done in it (the done view).
+    const seedDeps = createDeps(world.links, new FakeEmbedder(DIMS));
+    await setTagPinned(seedDeps, A, { name: A_TAG_NAME, pinned: true });
+    await updateLink(seedDeps, A, remote.id, {
+      tags: [{ name: A_TAG_NAME, source: "stated" }],
+      state: "archived",
+    });
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,

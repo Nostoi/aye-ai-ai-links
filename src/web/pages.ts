@@ -1,8 +1,9 @@
-import type { Link } from "../core/types.js";
+import { linkSpace, type Space } from "../core/link-space.js";
+import type { Link, Tag } from "../core/types.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 
 /** Only web links are made clickable; anything else is shown as text. */
-const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
+export const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
@@ -112,7 +113,7 @@ export const oauthErrorPage = (message: string) =>
 </main>`,
   );
 
-const hostOf = (url: string) => {
+export const hostOf = (url: string) => {
   try {
     return new URL(url).hostname;
   } catch {
@@ -120,37 +121,59 @@ const hostOf = (url: string) => {
   }
 };
 
-function whyLine(why: Link["why"]): string {
+/** The why as every link card reads it; an inferred one is a guess. */
+export function whyLine(why: Link["why"]): string {
   if (!why) return "No why yet";
   const text = escapeHtml(why.text);
   return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: "${text}"`;
 }
 
-/** The link's stored image, served by this site, or the plain tile; never the page's own image URL. */
-const tile = (link: Link, version: string | undefined) =>
+/**
+ * The link's stored image, served by this site, or the plain tile; never the page's own image URL.
+ * `className` styles both.
+ */
+export const tile = (link: Link, version: string | undefined, className = "tile") =>
   version === undefined
-    ? '<div class="tile" aria-hidden="true"></div>'
-    : `<img class="tile" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(version)}" alt="" loading="lazy">`;
+    ? `<div class="${className}" aria-hidden="true"></div>`
+    : `<img class="${className}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(version)}" alt="" loading="lazy">`;
 
-function resultItem(link: Link, now: Date, version: string | undefined): string {
+/** The ` space-<color>` class of a space, or nothing for neutral. */
+export const spaceClass = (space: Pick<Space, "color"> | null) =>
+  space ? ` space-${space.color}` : "";
+
+/** A space's name after its color dot, as a card names the space it is in. */
+const spaceName = (space: Space | null) =>
+  space
+    ? `<span class="in-space"><span class="dot" aria-hidden="true"></span>${escapeHtml(space.name)}</span> `
+    : "";
+
+function resultItem(
+  link: Link,
+  now: Date,
+  version: string | undefined,
+  space: Space | null,
+): string {
   const label = escapeHtml(link.title ?? link.url);
   const title = isWebUrl(link.url)
     ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
     : label;
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
-  return `<li class="result">
+  return `<li class="result${spaceClass(space)}">
 ${tile(link, version)}
 <div class="result-body">
 <h2>${title}</h2>
 <p class="small">${saved}</p>
-${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
+${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${spaceName(space)}${whyLine(link.why)}</p>
 </div>
 </li>`;
 }
 
-/** The big question and one search field; the script lets `/` jump to it unless the owner is typing. */
-export const homePage = () =>
+/**
+ * The big question and one search field, then `spaces`, the "Your spaces" section, as HTML. The
+ * script lets `/` jump to the field unless the owner is typing.
+ */
+export const homePage = ({ spaces }: { spaces: string }) =>
   page(
     "Aye-AI-AI Links",
     `<main class="home">
@@ -163,6 +186,7 @@ export const homePage = () =>
 </div>
 <p class="small hint">Describe it however you remember it: when, why, what it looked like.</p>
 </form>
+${spaces}
 </main>
 <script>
 document.addEventListener("keydown", (event) => {
@@ -178,18 +202,21 @@ document.addEventListener("keydown", (event) => {
 
 /**
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
- * `images` holds the image version of each link that has a stored image.
+ * `images` holds the image version of each link that has a stored image; `catalog`, the owner's
+ * tags, gives each card its space (`linkSpace`).
  */
 export const searchPage = ({
   query,
   links,
   now,
   images = new Map(),
+  catalog = [],
 }: {
   query: string;
   links: Link[];
   now: Date;
   images?: Map<string, string>;
+  catalog?: Tag[];
 }) =>
   page(
     "Search · Aye-AI-AI Links",
@@ -202,7 +229,7 @@ export const searchPage = ({
 </div>
 </form>
 <h1>${query.trim() === "" ? "Your newest links" : "Best matches first"}</h1>
-${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results">\n${links.map((l) => resultItem(l, now, images.get(l.id))).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=">your newest links</a>.</p>

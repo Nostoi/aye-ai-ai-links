@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** Agent keys on the Apps and keys page (#99; plan in comment 6171805481, revised by comment 6173113093). Owner rulings, in session:
+  - **Web creation.** The signed-in owner can make a key on the page, with no re-entered password and from any network.
+  - **Names.** A name is at most 60 characters, and "web" in any case is refused, after trimming. Both rules live in `createAgentKey`, so they hold for the CLI too.
+  - **Undo acts now.** Turning off is done at once, by key id, and Undo turns the key back on within 60 seconds unless a key with the same name was made since. This applies to later Undo bars too; Disconnect keeps its own flow for now.
+  - **Wording.** Keys are "turned off", not "revoked"; the CLI's `revoke` subcommand keeps its name.
 - **2026-10-14:** Every app the owner allows gets a refresh token (#102, comments 6169832338 and 6170186544). ChatGPT asked for `links` only, so it had to reconnect every hour.
   - **The server adds `offline_access`.** The MCP spec says servers "SHOULD NOT include `offline_access` in `WWW-Authenticate` scope or Protected Resource Metadata `scopes_supported`" and that "the AS retains discretion". So `src/auth/offline-access.ts` adds it to an authorize request's one `scope` when it is missing; better-auth decides the rest.
   - **Refreshes too.** A refresh asking for less would get a successor token that never rotates (#105), so the same rule applies to refresh requests.

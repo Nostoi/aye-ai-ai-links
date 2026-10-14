@@ -1,11 +1,17 @@
-import type { OwnerId } from "./types.js";
+import type { LinkState, OwnerId } from "./types.js";
 
-/** Bounds are inclusive instants; tag and project keys are already normalized. */
+/**
+ * Bounds are inclusive instants; tag and project keys are already normalized. `before` is for a
+ * blank query only: it keeps the links listed after the one it names, by its `savedAt` and an id
+ * this store issued.
+ */
 export type SearchFilters = {
   tagKey?: string;
   projectKey?: string;
   savedFrom?: Date;
   savedTo?: Date;
+  state?: LinkState;
+  before?: { savedAt: Date; id: string };
 };
 
 /**
@@ -13,7 +19,9 @@ export type SearchFilters = {
  *
  * - Owner-scoped: only the owner's links are returned.
  * - Ids come back best first.
- * - A blank query lists the owner's links that pass the filters, newest first.
+ * - A blank query lists the owner's links that pass the filters, newest first: by `savedAt`, then
+ *   by id in the order the store issued them, newest first, so `before` pages through it.
+ * - A non-blank query with `before` is refused with an Error.
  * - A non-blank query with no searchable word returns [].
  * - Links whose own title, summary, why or tags match come first, in keyword order; links found
  *   only through their page text or by meaning follow.

@@ -1,6 +1,7 @@
 import { SPACE_COLORS } from "../core/tag-space.js";
 import type { Tag } from "../core/types.js";
 import { escapeHtml, page } from "./page.js";
+import { spaceHref } from "./space-page.js";
 
 /** Only a project an AI guessed is shown as a guess; a topic is the default kind. */
 const isGuess = (t: Tag) => t.kind === "project" && t.kindSource === "inferred";
@@ -27,7 +28,7 @@ function tagItem(t: Tag, i: number): string {
   ).join("");
   return `<li class="tag" data-key="${escapeHtml(t.key)}" data-color="${escapeHtml(t.color ?? "")}" data-pinned="${t.pinned}">
 <div class="tag-row">
-<h2><span class="dot${spaceClass(t.color)}" aria-hidden="true"></span><span class="tag-name">${escapeHtml(t.name)}</span><span class="kind">${kindLabel(t)}</span></h2>
+<h2><span class="dot${spaceClass(t.color)}" aria-hidden="true"></span><a class="tag-name" href="${escapeHtml(spaceHref(t.key))}">${escapeHtml(t.name)}</a><span class="kind">${kindLabel(t)}</span></h2>
 <button type="button" class="pill" data-action="pin" ${pressed(t.pinned)}>${t.pinned ? "Pinned to home" : "Pin to home"}</button>
 <button type="button" data-action="edit" aria-expanded="false" aria-controls="edit-${i}">Edit</button>
 </div>

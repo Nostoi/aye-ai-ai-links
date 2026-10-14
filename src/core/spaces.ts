@@ -1,6 +1,6 @@
 import { CoreError } from "./errors.js";
 import type { LinkImageReader } from "./image-store.js";
-import { type LinkPage, newestLinks } from "./link-pages.js";
+import { type LinkPage, linkPage } from "./link-pages.js";
 import { spaceColor } from "./link-space.js";
 import type { LinkSearch } from "./search.js";
 import type { LinkStore } from "./store.js";
@@ -40,7 +40,7 @@ export async function homeSpaces(
   const pinned = catalog.filter((t) => t.pinned);
   const spaces = await Promise.all(
     pinned.map(async (tag): Promise<HomeSpace> => {
-      const { links } = await newestLinks(deps, owner, {
+      const { links } = await linkPage(deps, owner, {
         tagKey: tag.key,
         state: "active",
         limit: MOSAIC_DEPTH,
@@ -78,7 +78,7 @@ export async function openSpace(
   const catalog = await deps.store.listTags(owner);
   const tag = catalog.find((t) => t.key === key);
   if (!tag) throw new CoreError("not_found", "No tag with that name was found.");
-  const page = await newestLinks(deps, owner, {
+  const page = await linkPage(deps, owner, {
     tagKey: key,
     state: input.state,
     limit: input.limit,

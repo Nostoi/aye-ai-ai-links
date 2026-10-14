@@ -28,6 +28,31 @@ function checkedDate(name: string, d: Date | undefined): Date | undefined {
   return d;
 }
 
+/** The tag, project and save-date filters as an agent sends them, checked and normalized. */
+export function checkedFilters(
+  input: Pick<SearchLinksInput, "tag" | "project" | "savedFrom" | "savedTo">,
+): Pick<SearchFilters, "tagKey" | "projectKey" | "savedFrom" | "savedTo"> {
+  const filters: SearchFilters = {};
+  if (input.tag !== undefined) filters.tagKey = tagKey(input.tag);
+  if (input.project !== undefined) filters.projectKey = tagKey(input.project);
+  const savedFrom = checkedDate("savedFrom", input.savedFrom);
+  const savedTo = checkedDate("savedTo", input.savedTo);
+  if (savedFrom && savedTo && savedFrom > savedTo) {
+    throw invalid("savedFrom is after savedTo. Swap them, or widen the range.");
+  }
+  if (savedFrom) filters.savedFrom = savedFrom;
+  if (savedTo) filters.savedTo = savedTo;
+  return filters;
+}
+
+/** A whole-number limit clamped to 1..50, 20 when left out; a fractional one is refused. */
+export function checkedLimit(limit: number | undefined): number {
+  if (limit !== undefined && !Number.isInteger(limit)) {
+    throw invalid("limit must be a whole number from 1 to 50. Pass an integer, or leave it out.");
+  }
+  return Math.min(MAX_LIMIT, Math.max(1, limit ?? DEFAULT_LIMIT));
+}
+
 export type SearchLinksDeps = {
   store: LinkStore;
   search: LinkSearch;
@@ -45,20 +70,8 @@ export async function searchLinks(
   input: SearchLinksInput,
   by: string,
 ): Promise<Link[]> {
-  const filters: SearchFilters = {};
-  if (input.tag !== undefined) filters.tagKey = tagKey(input.tag);
-  if (input.project !== undefined) filters.projectKey = tagKey(input.project);
-  const savedFrom = checkedDate("savedFrom", input.savedFrom);
-  const savedTo = checkedDate("savedTo", input.savedTo);
-  if (savedFrom && savedTo && savedFrom > savedTo) {
-    throw invalid("savedFrom is after savedTo. Swap them, or widen the range.");
-  }
-  if (savedFrom) filters.savedFrom = savedFrom;
-  if (savedTo) filters.savedTo = savedTo;
-  if (input.limit !== undefined && !Number.isInteger(input.limit)) {
-    throw invalid("limit must be a whole number from 1 to 50. Pass an integer, or leave it out.");
-  }
-  const limit = Math.min(MAX_LIMIT, Math.max(1, input.limit ?? DEFAULT_LIMIT));
+  const filters = checkedFilters(input);
+  const limit = checkedLimit(input.limit);
   const traces: SearchTrace[] = [];
   const ids = await search.search(owner, input.query, filters, limit, (t) => traces.push(t));
   const links = (await Promise.all(ids.map((id) => store.get(owner, id)))).filter(

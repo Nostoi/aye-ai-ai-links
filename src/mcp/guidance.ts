@@ -16,7 +16,7 @@ Tag kinds: ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" 
 
 Dates are full ISO-8601 timestamps with an offset or Z, such as 2026-10-01T09:30:00Z.
 
-Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link, because links are also matched by meaning. Results are ranked, not filtered, so check that each one fits; when none does, try other words or a filter before saying it isn't saved. A blank query lists the newest links.
+Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link, because links are also matched by meaning. Results are ranked, not filtered, so check that each one fits; when none does, try other words or a filter before saying it isn't saved. To list or count all, use list_links.
 
 Profile: get_profile (or save_link's profile) has notes about the owner and what they are working on. Read it before you infer a why or tags. Label what you add with the same stated, asked or inferred rule, and present inferred notes to the owner as guesses. When the owner says what they are working on, add a focus entry with add_profile. Change or remove a note with edit_profile only when the owner asks or confirms.`;
 
@@ -48,7 +48,15 @@ The result's kindSource becomes "stated". Asking for the kind a tag already has 
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
-Use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link: links are matched by their words and by meaning. Results are ranked, not filtered: check that each one fits, and when none does, try other words or a filter before saying it isn't saved. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back.`;
+Use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link: links are matched by their words and by meaning. Results are ranked, not filtered: check that each one fits, and when none does, try other words or a filter before saying it isn't saved. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back. To list every link, page past 50 or count links, use list_links.`;
+
+export const LIST_LINKS = `List the owner's saved links in a fixed order, a page at a time, with a total. Use it to go through the whole library, to page past search_links' 50, or to say how many links there are. To find a link from what the owner remembers, use search_links.
+
+order: "newest" (the default) or "oldest" by the time each link was saved, or "opened": only the links with a recorded opening, most recently opened first. An opening is recorded when an agent sends opened: true, or when the owner opens a link from the cards on the web home page; any other opening is not, so "opened" leaves those links out.
+
+Optional filters: tag, project, state ("active" or "archived"; without it, archived links are included), and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive), which filter by save time in every order. limit is a whole number; at most 50 links come back, 20 by default.
+
+total counts every link that passes the filters in that order, across all pages. nextCursor is null on the last page; otherwise send it back as cursor, with the same order and filters, for the next page. It is opaque: never build or change one. A cursor that does not fit is an error; list again without it. A link saved while you page can change total, and with "opened" a link opened while you page moves to the front and is missed until you list again.`;
 
 export const GET_LINK = `Get one saved link by its id, with its why, tags, state and page snapshot. Use search_links to find an id.
 

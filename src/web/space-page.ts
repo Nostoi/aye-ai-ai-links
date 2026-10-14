@@ -2,6 +2,7 @@ import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { hostOf, isWebUrl, spaceClass, tile, whyLine } from "./pages.js";
+import { olderScript } from "./show-older.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
@@ -84,47 +85,6 @@ ${tellWhyScript("space-links", "space-error")}
 `;
 
 /**
- * "Show older links" is a real link to the next page. The script fetches that page instead and
- * appends its cards, moving the link on to the page after or removing it. If the answer is not a
- * page of cards, or was redirected (a session that ended goes to the sign-in page), it goes to
- * the link as a normal navigation.
- */
-const OLDER_SCRIPT = `<script>
-// A block, so these names cannot clash with another script on the page.
-{
-const older = document.getElementById("older");
-const list = document.getElementById("space-links");
-if (older && list) {
-  older.addEventListener("click", async (event) => {
-    event.preventDefault();
-    if (older.getAttribute("aria-busy") === "true") return;
-    const href = older.getAttribute("href");
-    const go = () => {
-      location.href = href;
-    };
-    older.setAttribute("aria-busy", "true");
-    const res = await fetch(href, { headers: { accept: "text/html" } }).catch(() => null);
-    if (!res || !res.ok || res.redirected) return go();
-    const next = new DOMParser().parseFromString(await res.text(), "text/html");
-    const cards = next.getElementById("space-links");
-    if (!cards) return older.remove();
-    const added = [...cards.children];
-    list.append(...added);
-    const more = next.getElementById("older");
-    if (more) {
-      older.setAttribute("href", more.getAttribute("href"));
-      older.removeAttribute("aria-busy");
-    } else {
-      older.remove();
-    }
-    const first = added[0] && added[0].querySelector("a");
-    if (first && first.focus) first.focus();
-  });
-}
-}
-</script>`;
-
-/**
  * A tag's space: a header in its color (neutral when its color is not a space color), then its
  * active links newest first, or with `done` the links you're done with. Each page has at most
  * the links given; `older` is the cursor of the next page, or null.
@@ -158,10 +118,13 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : WHY_SCRIPT}${older ? OLDER_SCRIPT : ""}`,
+${done ? "" : WHY_SCRIPT}${older ? olderScript("space-links") : ""}`,
     { menu: true },
   );
 }
+
+/** Where a changed space page address starts again. */
+export const SPACE_RESTART = `Open the space again from the <a href="/">home page</a> and page from its newest links.`;
 
 /** For a tag the owner does not have, whoever else has it. It never names the tag asked for. */
 export const spaceMissingPage = () =>
@@ -170,17 +133,6 @@ export const spaceMissingPage = () =>
     `<main>
 <h1>This space is not here</h1>
 <p>There is no tag with that name. Your tags are on the <a href="/tags">Tags page</a>.</p>
-</main>`,
-    { menu: true },
-  );
-
-/** For a "Show older links" address that was changed or made by hand. */
-export const olderInvalidPage = () =>
-  page(
-    "Not valid · Aye-AI-AI Links",
-    `<main>
-<h1>That page of older links is not valid</h1>
-<p>Open the space again from the <a href="/">home page</a> and page from its newest links.</p>
 </main>`,
     { menu: true },
   );

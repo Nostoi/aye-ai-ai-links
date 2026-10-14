@@ -24,6 +24,8 @@ export function createDeps(db: Database, embedder: Embedder) {
     search: new HybridSearch(keywordSearch, new VectorSearch(db, MODEL_KEY), embedder, MODEL_KEY),
     /** The keyword half of `search` alone, for the digest's focus matching until #68. */
     keywordSearch,
+    /** Counts what a blank listing pages through; blank listings are keyword search's alone. */
+    count: keywordSearch,
     searchLog: new SqliteSearchLog(db),
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     /** Preview images: the image pass writes them, the web door reads them. */

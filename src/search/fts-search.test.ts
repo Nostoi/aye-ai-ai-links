@@ -199,8 +199,7 @@ describe("FtsSearch filters", () => {
     const newest = await s.save("a", { at: 3_000 });
     await s.save("b", { at: 1_500 });
     expect(await s.find("")).toEqual([newest, tiedHigh, tiedLow, first]);
-    const olderThan = (id: string, at: number) =>
-      s.find("", { before: { savedAt: new Date(at), id } });
+    const olderThan = (id: string, at: number) => s.find("", { before: { at: new Date(at), id } });
     expect(await olderThan(newest, 3_000)).toEqual([tiedHigh, tiedLow, first]);
     expect(await olderThan(tiedHigh, 2_000)).toEqual([tiedLow, first]);
     expect(await olderThan(tiedLow, 2_000)).toEqual([first]);
@@ -210,9 +209,18 @@ describe("FtsSearch filters", () => {
   it("refuses `before` with a word query", async () => {
     const s = setup();
     const id = await s.save("a", { title: "quokka" });
-    await expect(s.find("quokka", { before: { savedAt: new Date(9_999), id } })).rejects.toThrow(
+    await expect(s.find("quokka", { before: { at: new Date(9_999), id } })).rejects.toThrow(
       /blank query/,
     );
+  });
+
+  it("refuses an order with a word query", async () => {
+    const s = setup();
+    await s.save("a", { title: "quokka" });
+    for (const order of ["newest", "oldest", "opened"] as const) {
+      await expect(s.find("quokka", { order })).rejects.toThrow(/blank query/);
+    }
+    expect(await s.find("quokka")).toHaveLength(1);
   });
 });
 

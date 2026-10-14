@@ -119,8 +119,10 @@ describe("web door", () => {
     expect(html).toContain('href="/tags"');
     expect(html).toContain('href="/profile"');
     expect(html).toContain('<button id="sign-out"');
-    for (const missing of ["/all"]) {
-      expect(html).not.toContain(`href="${missing}"`);
+    // #37 added All links.
+    expect(html).toContain('href="/all"');
+    for (const path of ["/connections", "/tags", "/profile", "/all"]) {
+      expect((await t.get(path, await t.signIn())).status, path).toBe(200);
     }
   });
 

@@ -41,6 +41,7 @@ const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
 const A_DONE_URL = "https://a.example/remote-image";
+const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 
 type Called = { status: number; isError: boolean; data: unknown; text: string };
 type Row = { id: string };
@@ -103,6 +104,7 @@ const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
   "get_digest",
   "get_link",
   "get_profile",
+  "list_links",
   "save_link",
   "search_links",
   "update_link",
@@ -373,6 +375,27 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     expect(theirs.links[0]?.reasons.map((r) => r.kind)).toContain("focus_words");
   });
 
+  it("T14: B's list_links lists and counts only B's links, and A's cursor gets B nothing", async () => {
+    const { world, door, bId, snapA } = await open();
+    await tool(world, door.a, "save_link", { url: "https://a.example/second" });
+    type Listed = Found & { total: number; nextCursor: string | null };
+    const aPage = await tool<Listed>(world, door.a, "list_links", { limit: 1 });
+    expect(aPage.total).toBe(2);
+    expect(aPage.nextCursor).toEqual(expect.any(String));
+    const before = snapA();
+
+    const listing = await tool<Listed>(world, door.b, "list_links", { owner: A });
+    const res = await call(world, door.b, "list_links", { cursor: aPage.nextCursor, limit: 50 });
+
+    expect(listing).toMatchObject({ total: 1, nextCursor: null });
+    expect(listing.links.map((l) => l.id)).toEqual([bId]);
+    expect(res).toMatchObject({ status: 200, isError: true });
+    expect(res.text).toMatch(/not valid/);
+    expect(res.data).toBeUndefined();
+    expect(res.text).not.toContain(A_URL);
+    expect(snapA()).toEqual(before);
+  });
+
   it("T13: B's save_link response holds only B's tags, notes and focus, though A has others", async () => {
     const { world, door, snapA } = await open();
     await tool(world, door.a, "save_link", {
@@ -479,6 +502,8 @@ describe("owner isolation coverage", () => {
       request: `/spaces/done?tag=${encodeURIComponent(A_TAG_NAME)}`,
       marker: () => [A_TAG_NAME, A_DONE_URL],
     },
+    "GET /all": { request: "/all", marker: () => [A_URL, A_TAG_NAME] },
+    "GET /all/done": { request: "/all/done", marker: () => A_UNTAGGED_DONE_URL },
     "GET /connections": {
       request: "/connections",
       marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
@@ -561,6 +586,12 @@ describe("owner isolation coverage", () => {
       tags: [{ name: A_TAG_NAME, source: "stated" }],
       state: "archived",
     });
+    // A done link with no tag is on no space page: All links' done view is its way back.
+    const { link: untagged } = await saveLink(seedDeps, A, {
+      url: A_UNTAGGED_DONE_URL,
+      savedBy: "seed",
+    });
+    await updateLink(seedDeps, A, untagged.id, { state: "archived" });
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,

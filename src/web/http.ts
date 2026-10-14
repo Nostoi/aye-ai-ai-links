@@ -9,6 +9,7 @@ import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
+import { checkedOrder, linkPage } from "../core/link-pages.js";
 import {
   addOwnerNote,
   editOwnerNote,
@@ -34,17 +35,19 @@ import {
   worthALook,
 } from "../core/worth-a-look.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
+import { ALL_RESTART, allPage } from "./all-page.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { homePage } from "./home-page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
-import { olderInvalidPage, spaceMissingPage, spacePage } from "./space-page.js";
+import { olderInvalidPage } from "./show-older.js";
+import { SPACE_RESTART, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
 
-/** How many links a space page shows at a time. */
-const SPACE_PAGE = 24;
+/** How many links a space page or All links shows at a time. */
+const LINK_PAGE = 24;
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -268,7 +271,7 @@ export function webApp({
       const { tag, catalog, page } = await openSpace(deps, owner, {
         name,
         state,
-        limit: SPACE_PAGE,
+        limit: LINK_PAGE,
         ...(before === undefined ? {} : { before }),
       });
       const images = await deps.images.imageVersions(
@@ -282,11 +285,41 @@ export function webApp({
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
       if (error.code === "not_found") return c.html(spaceMissingPage(), 404, NO_STORE);
-      return c.html(olderInvalidPage(), 400, NO_STORE);
+      return c.html(olderInvalidPage(SPACE_RESTART), 400, NO_STORE);
     }
   };
   app.get("/spaces", session, space("active"));
   app.get("/spaces/done", session, space("archived"));
+
+  // All links names its order in the query (`allHref`); an unknown order or a changed cursor gets
+  // a 400. It reads a page and never a count.
+  const all = (state: LinkState) => async (c: Context<SessionEnv>) => {
+    const { owner } = c.get("caller");
+    const before = c.req.query("before");
+    try {
+      const order = checkedOrder(c.req.query("order"));
+      const page = await linkPage(deps, owner, {
+        order,
+        state,
+        limit: LINK_PAGE,
+        ...(before === undefined ? {} : { before }),
+      });
+      const images = await deps.images.imageVersions(
+        owner,
+        page.links.map((l) => l.id),
+      );
+      const catalog = await deps.store.listTags(owner);
+      const done = state === "archived";
+      const later = before !== undefined;
+      const html = allPage({ order, ...page, catalog, images, now: deps.now(), done, later });
+      return c.html(html, 200, NO_STORE);
+    } catch (error) {
+      if (!(error instanceof CoreError)) throw error;
+      return c.html(olderInvalidPage(ALL_RESTART), 400, NO_STORE);
+    }
+  };
+  app.get("/all", session, all("active"));
+  app.get("/all/done", session, all("archived"));
 
   // Another owner's link, a link without an image and an id never issued all get this same 404.
   app.get(IMAGE_ROUTE, session, async (c) => {

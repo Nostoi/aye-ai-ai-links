@@ -47,6 +47,8 @@ export type StartOptions = {
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
   jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
   refresherIntervalMs?: number;
+  /** Receives the request log, one line per request; stdout when left out. */
+  requestLog?: (line: string) => void;
 };
 
 /**
@@ -83,6 +85,7 @@ export async function startServer(
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher(),
     refresherIntervalMs,
+    requestLog = console.log,
   }: StartOptions = {},
 ) {
   // Loading first means a missing or tampered model fails the start with nothing to close.
@@ -133,6 +136,7 @@ export async function startServer(
       identify: auth.identify,
       auth,
       allowedHosts: config.allowedHosts,
+      log: requestLog,
     });
     closeApp = built.close;
     calls = built.calls;

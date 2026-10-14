@@ -249,10 +249,12 @@ describe("startServer", () => {
   };
 
   /** Starts with a fake pipeline unless the test passes one, so no test reaches the network. */
+  const logged: string[] = [];
   const start = async (options: StartOptions = {}, port = 0) => {
     const s = await startServer(cfg(dbPath, port), {
       ...fakePipeline(),
       settleMs: 200,
+      requestLog: (line) => logged.push(line),
       ...options,
     });
     started.push(s);
@@ -271,6 +273,7 @@ describe("startServer", () => {
     const res = await post(port, SAVE, "Bearer aak_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     expect(res.status).toBe(401);
     expect(rows()).toEqual([]);
+    expect(logged).toContainEqual(expect.stringMatching(/^\[http\] POST \/mcp 401 /));
   });
 
   it("lets an in-flight request finish and commit before closing the database", async () => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { claimSurfaced, type DigestDeps, type DigestLink, previewDigest } from "./digest.js";
 import { CoreError } from "./errors.js";
 import { updateLink } from "./links.js";
@@ -14,19 +15,21 @@ export const SNOOZE_MS = 14 * DAY_MS;
 
 export type WorthDeps = DigestDeps;
 
+/** A link's place in one day's shuffle: the same all that day (UTC), different the next. */
+const dayRank = (day: number, id: string) =>
+  createHash("sha256").update(`${day}:${id}`).digest("hex");
+
 /**
- * Up to WORTH_SIZE links from the whole digest queue, marking nothing. The picks change once a
- * day (UTC): each day starts WORTH_SIZE further along the queue, wrapping round.
+ * Up to WORTH_SIZE links from the whole digest queue, marking nothing. The queue is shuffled once
+ * a day (UTC), by link id, so a link leaving it or joining it moves no other pick; the queue's own
+ * order (focus first, least recently shown next) does not decide which links come up.
  */
 export async function worthALook(deps: WorthDeps, owner: OwnerId): Promise<DigestLink[]> {
   const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY);
-  if (links.length <= WORTH_SIZE) return links;
   const day = Math.floor(deps.now().getTime() / DAY_MS);
-  const start = (day * WORTH_SIZE) % links.length;
-  return Array.from(
-    { length: WORTH_SIZE },
-    (_, i) => links[(start + i) % links.length] as DigestLink,
-  );
+  const ranked = links.map((d) => ({ d, rank: dayRank(day, d.link.id) }));
+  ranked.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+  return ranked.slice(0, WORTH_SIZE).map((r) => r.d);
 }
 
 /**

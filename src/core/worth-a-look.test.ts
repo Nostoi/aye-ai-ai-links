@@ -101,16 +101,33 @@ describe("worthALook", () => {
     expect(store.all(A)).toEqual(before);
   });
 
+  it("keeps the other picks in place when one is put off, opened or archived, or a link is saved", async () => {
+    for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
+    for (const act of [
+      (id: string) => snoozeLink(deps(), A, id),
+      (id: string) => markOpened(deps(), A, id),
+      (id: string) => archiveLink(deps(), A, id),
+    ]) {
+      const [first, ...rest] = await ids();
+      await act(first as string);
+      expect(await ids()).toEqual(expect.arrayContaining(rest));
+    }
+    const before = await ids();
+    await link();
+    expect((await ids()).filter((id) => before.includes(id)).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("shows other picks on another day, from the whole queue, not only one digest's worth", async () => {
     for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
     const seen = new Set<string>();
     const days: string[][] = [];
-    for (let d = 0; d < DIGEST_SIZE + 3; d++) {
+    // A daily shuffle: over 60 days every link of eight comes up (a miss is about 1 in 10^12).
+    for (let d = 0; d < 60; d++) {
       clock = at(d * DAY);
       days.push(await ids());
       for (const id of days.at(-1) ?? []) seen.add(id);
     }
-    expect(days[1]).not.toEqual(days[0]);
+    expect(days.slice(1, 8).some((day) => day.join() !== days[0]?.join())).toBe(true);
     expect(seen.size).toBe(DIGEST_SIZE + 3);
   });
 

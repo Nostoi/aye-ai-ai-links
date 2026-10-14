@@ -6,6 +6,7 @@ export const tokens = {
     ink: "#26262B",
     soft: "#6E6B66",
     line: "#E7E3DA",
+    field: "#8F8A82",
     amber: "#E8A33D",
     "amber-bg": "#FFF3DC",
     "amber-ink": "#8A5A0B",
@@ -22,6 +23,7 @@ export const tokens = {
     ink: "#EDEBE6",
     soft: "#A8A49D",
     line: "#3A3A40",
+    field: "#77736D",
     amber: "#E8A33D",
     "amber-bg": "#3A2E17",
     "amber-ink": "#F2C374",
@@ -64,7 +66,7 @@ a{color:var(--ink);text-underline-offset:3px}
 ul{padding-left:22px;margin:0 0 24px}
 li{margin-bottom:10px}
 label{display:block;font-size:15.5px;font-weight:600}
-input{display:block;width:100%;margin-top:6px;padding:14px 20px;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:999px}
+input{display:block;width:100%;margin-top:6px;padding:14px 20px;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--field);border-radius:999px}
 button{font:inherit;font-size:15.5px;font-weight:600;padding:10px 20px;border-radius:999px;cursor:pointer;color:var(--ink);background:var(--surface);border:1.5px solid var(--line)}
 button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 :focus-visible{outline:3px solid var(--blue);outline-offset:2px}

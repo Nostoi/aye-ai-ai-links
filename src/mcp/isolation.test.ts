@@ -15,14 +15,16 @@ import {
   pkce,
   refresh,
   SECOND_USER,
+  type Sent,
   saveLinkWith,
   type World,
 } from "../auth/oauth-test-kit.js";
-import { saveLink } from "../core/links.js";
+import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { outsideRefs } from "../web/outside-refs-test-kit.js";
 
 /**
  * Owner isolation through every door, with real credentials: agent keys, OAuth access tokens and
@@ -431,6 +433,51 @@ describe("owner isolation coverage", () => {
       })
       .replaceAll("*", "x");
 
+  type Marker = string | Buffer | string[];
+  type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
+  const READ_ROUTES: Record<string, ReadEntry> = {
+    "GET /": { request: "/", marker: () => A_URL },
+    "GET /connections": { request: "/connections", marker: () => "Claude" },
+    "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
+    "GET /consent": {
+      noOwnerData: "names the client in the signed authorize query, no owner data",
+    },
+    "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
+  };
+  const readKey = (path: string) => `GET ${path}`;
+  const readablePaths = (world: World) => {
+    const routes = webRoutes(world);
+    return new Set(
+      routes
+        .filter(
+          (r) =>
+            r.method === "GET" ||
+            (r.method === "ALL" &&
+              routes.filter((o) => o.path === r.path).every((o) => o.method === "ALL")),
+        )
+        .map((r) => r.path),
+    );
+  };
+
+  it("every readable web path has a READ_ROUTES entry, and no entry names a missing route", async () => {
+    const readable = [...readablePaths(await oauthWorld())].map(readKey);
+    for (const key of readable) {
+      expect(
+        Object.keys(READ_ROUTES),
+        `${key} has no READ_ROUTES entry: add a sample request with A's marker, or a noOwnerData reason`,
+      ).toContain(key);
+    }
+    for (const key of Object.keys(READ_ROUTES)) {
+      expect(readable, `READ_ROUTES has an entry for ${key}, which is not a route`).toContain(key);
+    }
+  });
+
+  const textOf = (marker: Marker) => (Array.isArray(marker) ? marker : [marker]);
+  const holds = (sent: Sent, marker: string | Buffer) =>
+    typeof marker === "string"
+      ? sent.bytes.toString("utf8").includes(marker)
+      : sent.bytes.includes(marker);
+
   it("a signed-in B reaches none of A's data through any web path", async () => {
     const world = await oauthWorld();
     const a = await connectClaude(world);
@@ -442,6 +489,9 @@ describe("owner isolation coverage", () => {
     const aLinkId = (
       world.links.prepare("SELECT id FROM links WHERE owner_id = ?").get(A) as { id: string }
     ).id;
+    await updateLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, aLinkId, {
+      title: "Quokka habitat notes",
+    });
     const browser = await addSecondUser(world);
     const owner = world.agent();
     await owner.signIn();
@@ -449,30 +499,69 @@ describe("owner isolation coverage", () => {
     expect(aHome.status).toBe(200);
     expect(String(aHome.body)).toContain(A_URL);
     expect((await browser.send("/")).status).toBe(200);
-    const before = rowsOf(world, A);
     const routes = webRoutes(world);
     const paths = [...new Set(routes.map((r) => r.path))];
     expect(paths).toContain("/connections");
-    const readable = new Set(
-      routes
-        .filter(
-          (r) =>
-            r.method === "GET" ||
-            (r.method === "ALL" &&
-              routes.filter((o) => o.path === r.path).every((o) => o.method === "ALL")),
-        )
-        .map((r) => r.path),
-    );
+    const readable = readablePaths(world);
+
+    const asA = async (request: string, label: string) => {
+      const sent = await owner.send(request);
+      expect(sent.status, `A's ${label}`).not.toBe(404);
+      if (/text\/html/.test(sent.headers.get("content-type") ?? "")) {
+        expect(
+          outsideRefs(sent.bytes.toString("utf8")),
+          `A's ${label} makes an outside request`,
+        ).toEqual([]);
+      }
+      return sent;
+    };
+    const asB = async (request: string, label: string) => {
+      const sent = await browser.send(request);
+      expect(sent.status, `B's ${label}`).not.toBe(500);
+      return sent;
+    };
 
     for (const path of paths) {
-      const filled = fillPath(path, aLinkId);
-      if (readable.has(path)) {
-        expect((await owner.send(filled)).status, `A's GET ${path}`).not.toBe(404);
+      if (readable.has(path)) await asA(fillPath(path, aLinkId), `GET ${path}`);
+    }
+    const executed = Object.entries(READ_ROUTES).flatMap(([key, entry]) =>
+      "request" in entry
+        ? [
+            {
+              key,
+              request: entry.request.replaceAll(":id", aLinkId),
+              marker: entry.marker(world),
+            },
+          ]
+        : [],
+    );
+    const sentByA = new Map<string, Sent>();
+    for (const { key, request, marker } of executed) {
+      const sent = await asA(request, key);
+      expect(sent.status, `A's ${key} (${request})`).toBe(200);
+      for (const m of textOf(marker)) {
+        expect(holds(sent, m), `A's ${key} (${request}) should show its marker`).toBe(true);
       }
-      const res = await browser.send(filled);
-      const body = typeof res.body === "string" ? res.body : JSON.stringify(res.body);
-      expect(body, `GET ${path}`).not.toContain(A_URL);
-      expect(body, `GET ${path}`).not.toContain(note);
+      sentByA.set(key, sent);
+    }
+
+    const before = rowsOf(world, A);
+    const everyMarker = [A_URL, note, ...executed.flatMap((e) => textOf(e.marker))];
+    for (const { key, request } of executed) {
+      const sent = await asB(request, `${key} (${request})`);
+      for (const m of everyMarker) {
+        expect(holds(sent, m), `B's ${key} (${request}) shows A's data`).toBe(false);
+      }
+      expect(
+        sent.bytes.equals(sentByA.get(key)?.bytes ?? Buffer.alloc(0)) && sent.status === 200,
+        `B's ${key} (${request}) is byte-for-byte what A got`,
+      ).toBe(false);
+    }
+    for (const path of paths) {
+      const sent = await asB(fillPath(path, aLinkId), `GET ${path}`);
+      for (const m of everyMarker) {
+        expect(holds(sent, m), `B's GET ${path} shows A's data`).toBe(false);
+      }
     }
     expect(rowsOf(world, A)).toEqual(before);
   });

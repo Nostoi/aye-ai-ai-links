@@ -25,6 +25,16 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
+  it.each([
+    ["field", "bg"],
+    ["field", "surface"],
+  ] as const)("has 3:1 contrast for the %s outline on %s", (fg, bg) => {
+    expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(3);
+  });
+});
+
+it("outlines inputs with the field token", () => {
+  expect(themeCss).toMatch(/input\{[^}]*border:1\.5px solid var\(--field\)/);
 });
 
 describe("the theme css", () => {

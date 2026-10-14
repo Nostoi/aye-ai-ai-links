@@ -24,4 +24,4 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 
 ## New routes
 
-A new web route must pass the route guard in `src/mcp/isolation.test.ts` ("owner isolation coverage"). It requests every web path as a second owner and checks that the first owner's data never appears. A write route also needs a two-owner test named in the guard's `WRITE_ROUTES_TESTED` table, and a signed-in POST joins `CHECKED_PAGES` in `src/app.ts`.
+A new web route must pass the route guard in `src/mcp/isolation.test.ts` ("owner isolation coverage"). Every signed-in read path needs a `READ_ROUTES` entry: a sample request with A's marker (A gets 200 with it; a second owner gets no A marker and, for bytes, not A's body), or a `noOwnerData` reason. Every write path needs a `WRITE_ROUTES_TESTED` entry naming its two-owner test, and a signed-in POST joins `CHECKED_PAGES` in `src/app.ts`. The guard also fails any HTML page A receives that makes an outside request.

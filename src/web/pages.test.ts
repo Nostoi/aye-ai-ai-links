@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { outsideRefs } from "./outside-refs-test-kit.js";
 import {
   connectionsPage,
   consentExpiredPage,
@@ -136,28 +137,6 @@ const PAGES: [string, string][] = [
   ["home", homePage([])],
 ];
 
-function outsideRefs(html: string): string[] {
-  const markup = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3");
-  const tag =
-    /<([a-z][\w:-]*)((?:\s+[^\s"'<>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>]+))?)*)\s*\/?>/gi;
-  const attribute = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>]+)))?/g;
-  const outside = /(?:^|[\s,;=(])(?:https?:)?\/\//i;
-  const found: string[] = [];
-  for (const [, name = "", attributes = ""] of markup.matchAll(tag)) {
-    if (name.toLowerCase() === "a") continue;
-    for (const [, key = "", ...quoted] of attributes.matchAll(attribute)) {
-      const value = quoted.find((v) => v !== undefined) ?? "";
-      if (/^xmlns(:|$)/i.test(key) || /^\s*data:/i.test(value)) continue;
-      if (outside.test(value)) found.push(`<${name} ${key}=${value}>`);
-    }
-  }
-  for (const [, ref = ""] of html.matchAll(/url\(\s*['"]?([^)'"]*)/gi)) {
-    if (!/^data:/.test(ref)) found.push(`url(${ref})`);
-  }
-  if (/@import\b/i.test(html)) found.push("@import");
-  return found;
-}
-
 describe("the outside-request scan", () => {
   it.each([
     ["single-quoted src", "<img src='https://x.example/a.png'>"],
@@ -184,6 +163,7 @@ describe("the outside-request scan", () => {
       '<svg xmlns="http://www.w3.org/2000/svg"><use href="#m"/></svg>',
       '<link rel="icon" href="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">',
       '<img src="/logo.png" srcset="/a.png 1x, /b.png 2x">',
+      '<button data-client-id="https://x.example/id">x</button>',
     ].join("");
     expect(outsideRefs(html)).toEqual([]);
   });

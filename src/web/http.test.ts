@@ -56,7 +56,7 @@ async function setup() {
     expect(res.status).toBe(200);
     return res.headers.getSetCookie()[0]?.split(";")[0] ?? "";
   };
-  return { ...a, app, get, signIn };
+  return { ...a, linksDb: db, deps, app, get, signIn };
 }
 
 const expectLoginRedirect = (res: Response) => {
@@ -100,16 +100,87 @@ describe("web door", () => {
     expectLoginRedirect(await t.get("/", "__Secure-better-auth.session_token=forged.value"));
   });
 
-  it("after login, shows owner `owner`'s link and not another owner's, escaped, uncached, with sign-out", async () => {
+  it("after login, home asks the question as the search field's label, lists no links, and menus only existing pages", async () => {
     const t = await setup();
     const res = await t.get("/", await t.signIn());
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const html = await res.text();
-    expect(html).toContain(`<a href="${OWN}" rel="noreferrer">Own &lt;b&gt;link&lt;/b&gt;</a>`);
+    expect(html).toMatch(/<label[^>]*for="q"[^>]*>What are you trying to remember\?<\/label>/);
+    expect(html).toMatch(/<input[^>]*id="q"[^>]*name="q"[^>]*>/);
+    expect(html).toContain('action="/search"');
+    expect(html).not.toContain(OWN);
+    expect(html).toContain('href="/connections"');
+    expect(html).toContain('<button id="sign-out"');
+    for (const missing of ["/all", "/tags", "/profile"]) {
+      expect(html).not.toContain(`href="${missing}"`);
+    }
+  });
+
+  it("after login, /search shows owner `owner`'s link and not another owner's, escaped, uncached", async () => {
+    const t = await setup();
+    const res = await t.get("/search?q=link", await t.signIn());
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const html = await res.text();
+    expect(html).toContain(
+      `<a href="${OWN}" target="_blank" rel="noopener noreferrer">Own &lt;b&gt;link&lt;/b&gt;</a>`,
+    );
     expect(html).not.toContain(OTHER);
     expect(html).not.toContain("Other owner");
-    expect(html).toContain('<button id="sign-out"');
+    expect(html).not.toContain("<b>link");
+  });
+
+  it("sends a /search request without a session to /login", async () => {
+    const t = await setup();
+    expectLoginRedirect(await t.get("/search?q=link"));
+  });
+
+  it("lists the newest links under their own heading for a blank search", async () => {
+    const t = await setup();
+    const html = await (await t.get("/search?q=%20", await t.signIn())).text();
+    expect(html).toContain("Your newest links");
+    expect(html).not.toContain("Best matches first");
+    expect(html).toContain(OWN);
+    expect(html).not.toContain(OTHER);
+  });
+
+  it("titles a word search 'Best matches first' and shows an inferred why as a guess", async () => {
+    const t = await setup();
+    await saveLink(t.deps, "owner", {
+      url: "https://example.com/guessed",
+      savedBy: "codex",
+      title: "Quokka habitat",
+      why: { text: "for the zoo trip", source: "inferred" },
+    });
+    const html = await (await t.get("/search?q=quokka", await t.signIn())).text();
+    expect(html).toContain("Best matches first");
+    expect(html).toContain("Why (a guess): for the zoo trip");
+    expect(html).not.toContain('Why: "for the zoo trip"');
+  });
+
+  it("does not make a stored non-web URL clickable", async () => {
+    const t = await setup();
+    t.linksDb
+      .prepare("UPDATE links SET url = ? WHERE owner_id = 'owner'")
+      .run("javascript:alert(1)");
+    const html = await (await t.get("/search?q=link", await t.signIn())).text();
+    expect(html).toContain("Own &lt;b&gt;link&lt;/b&gt;");
+    expect(html).not.toContain('href="javascript:');
+  });
+
+  it("echoes the query escaped in the field", async () => {
+    const t = await setup();
+    const q = encodeURIComponent('"><script>x');
+    const html = await (await t.get(`/search?q=${q}`, await t.signIn())).text();
+    expect(html).toContain('value="&quot;&gt;&lt;script&gt;x"');
+    expect(html).not.toContain("<script>x");
+  });
+
+  it("writes no search log row for a web word search", async () => {
+    const t = await setup();
+    expect((await t.get("/search?q=link", await t.signIn())).status).toBe(200);
+    expect(t.linksDb.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
   it("refuses an expired session on the next request; the same session unexpired is accepted", async () => {
@@ -279,10 +350,12 @@ describe("the connections page", () => {
     expect(values).toEqual([id]);
   });
 
-  it("is linked from the home page", async () => {
+  it("is linked from the menu of the home page and of /search", async () => {
     const world = await oauthWorld();
-    const res = await (await signedIn(world)).send("/");
-    expect(String(res.body)).toContain('href="/connections"');
+    const browser = await signedIn(world);
+    for (const path of ["/", "/search?q=x"]) {
+      expect(String((await browser.send(path)).body), path).toContain('href="/connections"');
+    }
   });
 
   it("disconnects an app: 204, its token stops working and it leaves the list", async () => {
@@ -398,7 +471,7 @@ describe("the connections page", () => {
     expect((await saveLinkWith(world, claude.access, "https://example.com/a")).status).toBe(200);
   });
 
-  it.each(["/connections", "/oauth-error"])(
+  it.each(["/connections", "/oauth-error", "/search?q=x"])(
     "refuses GET %s with a foreign Origin, and serves it without one",
     async (path) => {
       const world = await oauthWorld();
@@ -413,6 +486,7 @@ describe("the connections page", () => {
     ["GET", "/connections"],
     ["POST", "/connections/disconnect"],
     ["GET", "/oauth-error"],
+    ["GET", "/search?q=x"],
   ])("refuses %s %s with a foreign Host", async (method, path) => {
     const world = await oauthWorld();
     await connectClaude(world);

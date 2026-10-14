@@ -14,13 +14,19 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | done |
 | Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | done |
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
-| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then Tailscale Funnel on. ChatGPT and Claude apps connect | in progress |
+| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | in progress |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | not started |
 | Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-14:** The public address moves from Tailscale Funnel to a Cloudflare Tunnel on the owner's domain (#102; comments 6159690488, 6168949364 and 6169170865).
+  - **Why.** ChatGPT's servers got a 502 through the Funnel address, and the app recorded no request from them; a request from ChatGPT through a Cloudflare tunnel reached the app.
+  - **Tailnet.** Tailscale Serve stays for agent keys.
+  - **One sign-in limit** (owner ruling, in session). This replaces the 2026-10-13 tailnet login bucket. Cloudflare passes a client-sent `Tailscale-User-Login` through unchanged, so anyone could have claimed that bucket. The lockout risk from a shared limit is accepted; restarting the server resets the count.
+  - **Rollback.** Before rolling the server back past this change, take the Cloudflare host out of `AYE_ALLOWED_HOSTS`.
 
 - **2026-10-13:** Phase 4 page designs and owner rulings (#12 comment 6158134489). The reason a card is shown uses its space's color, not amber, which changes the layout-A mockup. Removing or turning something off shows an Undo bar instead of asking first. Sign out is in the menu on every page. Page images are kept by the server (#94).
 

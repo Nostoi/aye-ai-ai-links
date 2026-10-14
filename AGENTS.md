@@ -47,7 +47,7 @@ Write a fact in its home and link to it from elsewhere; don't copy it.
 - **The calling agent does the AI work.** The server never calls an AI model API and needs no API keys.
 - **Label guesses.** Anything an agent inferred (a why, a tag, a profile note) is stored with its source and shown as a guess.
 - **Safe fetching.** The page fetcher refuses private, loopback and link-local addresses, including after redirects.
-- **No Funnel before auth.** The real app is not exposed publicly until login and owner-isolation tests pass (phase 3). See `ROADMAP.md` for the one dated exception.
+- **Nothing public before auth.** The real app is not exposed to the internet until login and owner-isolation tests pass (phase 3). See `ROADMAP.md` for the one dated exception.
 - **Tests discriminate.** A test must fail when the behaviour it protects breaks. Write it red first.
 - **Small, focused files** with one clear purpose each.
 

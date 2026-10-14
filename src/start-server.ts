@@ -54,9 +54,9 @@ export type StartOptions = {
 /**
  * Loads the model, opens the database and the auth database, builds the auth side (migrations,
  * internal client, and the client metadata of every connected OAuth client) and serves on
- * loopback; Tailscale Serve is what reaches it from the tailnet. The auth database stays locked
- * against every other process until it closes, so the owner CLI runs only while the server is
- * stopped.
+ * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
+ * The auth database stays locked against every other process until it closes, so the owner CLI
+ * runs only while the server is stopped.
  * The snapshot runner, the vector indexer and the metadata refresher start once the server is
  * listening. Any failure before that closes what was already opened.
  *

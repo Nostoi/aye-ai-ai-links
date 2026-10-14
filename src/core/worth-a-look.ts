@@ -19,17 +19,14 @@ export type WorthDeps = DigestDeps;
 const dayRank = (day: number, id: string) =>
   createHash("sha256").update(`${day}:${id}`).digest("hex");
 
-/**
- * Up to WORTH_SIZE links from the whole digest queue, marking nothing. The queue is shuffled once
- * a day (UTC), by link id, so a link leaving it or joining it moves no other pick; the queue's own
- * order (focus first, least recently shown next) does not decide which links come up.
- */
 export async function worthALook(deps: WorthDeps, owner: OwnerId): Promise<DigestLink[]> {
   const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY);
+  const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
   const day = Math.floor(deps.now().getTime() / DAY_MS);
-  const ranked = links.map((d) => ({ d, rank: dayRank(day, d.link.id) }));
+  const ranked = links.filter((d) => d !== lead).map((d) => ({ d, rank: dayRank(day, d.link.id) }));
   ranked.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
-  return ranked.slice(0, WORTH_SIZE).map((r) => r.d);
+  const shuffled = ranked.map((r) => r.d);
+  return (lead ? [lead, ...shuffled] : shuffled).slice(0, WORTH_SIZE);
 }
 
 /**

@@ -24,7 +24,8 @@ const DAY = 86_400_000;
 const NOW = new Date("2026-10-14T09:00:00Z");
 const at = (delta: number) => new Date(NOW.getTime() + delta);
 
-const noSearch: LinkSearch = { search: async () => [] };
+let hits: Map<string, string[]>;
+const keyword: LinkSearch = { search: async (_owner, query) => hits.get(query) ?? [] };
 
 /** Records every call, so a test can show nothing was logged. */
 class SpySearchLog implements SearchLog {
@@ -38,18 +39,21 @@ class SpySearchLog implements SearchLog {
 }
 
 let store: FakeStore;
+let profile: FakeProfileStore;
 let clock: Date;
 let searchLog: SpySearchLog;
 const deps = () => ({
   store,
-  profile: new FakeProfileStore(),
-  keywordSearch: noSearch,
+  profile,
+  keywordSearch: keyword,
   searchLog,
   now: () => clock,
 });
 
 beforeEach(() => {
   store = new FakeStore();
+  profile = new FakeProfileStore();
+  hits = new Map();
   clock = NOW;
   searchLog = new SpySearchLog();
 });
@@ -76,6 +80,16 @@ async function link(owner = A, over: Partial<NewLink> = {}): Promise<Link> {
       ...over,
     })
   ).link;
+}
+
+/** A focus entry the owner gave, whose keyword search finds `found`. */
+async function focus(text: string, created: Date, found: string[]): Promise<void> {
+  await profile.apply(
+    A,
+    { addNotes: [], editNotes: [], removeNotes: [], addFocus: [{ text, source: "stated" }] },
+    { writtenBy: "agent", at: created, focusLimit: 100 },
+  );
+  hits.set(text, found);
 }
 
 const get = async (id: string, owner = A) => (await store.get(owner, id)) as Link;
@@ -129,6 +143,35 @@ describe("worthALook", () => {
     }
     expect(days.slice(1, 8).some((day) => day.join() !== days[0]?.join())).toBe(true);
     expect(seen.size).toBe(DIGEST_SIZE + 3);
+  });
+
+  it("leads with the queue's first focus match every day, the other two from the day's shuffle", async () => {
+    const all: Link[] = [];
+    for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
+    const [older, newer, also] = all.slice(-3) as [Link, Link, Link];
+    await focus("older", at(-2 * DAY), [older.id]);
+    await focus("newer", at(-DAY), [newer.id, also.id]);
+    for (let d = 0; d < 10; d++) {
+      clock = at(d * DAY);
+      const picks = await ids();
+      expect(picks[0]).toBe(newer.id);
+      expect(new Set(picks).size).toBe(WORTH_SIZE);
+    }
+  });
+
+  it("when the lead goes, the next focus match leads, else the shuffle's first, and the other picks stay", async () => {
+    const all: Link[] = [];
+    for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
+    const [first, second] = all.slice(-2) as [Link, Link];
+    await focus("topic", at(-DAY), [first.id, second.id]);
+    const [lead, ...rest] = await ids();
+    expect(lead).toBe(first.id);
+    await snoozeLink(deps(), A, first.id);
+    const [nextLead, ...nextRest] = await ids();
+    expect(nextLead).toBe(second.id);
+    expect(nextRest).toEqual(expect.arrayContaining(rest.filter((id) => id !== second.id)));
+    await archiveLink(deps(), A, second.id);
+    expect(await ids()).toEqual(expect.arrayContaining(nextRest));
   });
 
   it("shows every eligible link when there are fewer than three, and none when nothing is due", async () => {

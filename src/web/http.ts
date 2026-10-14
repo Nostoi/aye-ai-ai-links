@@ -23,16 +23,20 @@ import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
 import type { LinkState, OwnerId, Tag, TagKind } from "../core/types.js";
+import {
+  archiveLink,
+  markOpened,
+  snoozeLink,
+  tellWhy,
+  unarchiveLink,
+  unsnoozeLink,
+  type WorthDeps,
+  worthALook,
+} from "../core/worth-a-look.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
-import {
-  consentExpiredPage,
-  consentPage,
-  homePage,
-  loginPage,
-  oauthErrorPage,
-  searchPage,
-} from "./pages.js";
+import { homePage } from "./home-page.js";
+import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 import { olderInvalidPage, spaceMissingPage, spacePage } from "./space-page.js";
@@ -68,6 +72,13 @@ const isString: Check<string> = (value) => typeof value === "string";
 const isBoolean: Check<boolean> = (value) => typeof value === "boolean";
 const isSafeInteger = (value: unknown): value is number => Number.isSafeInteger(value);
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
+
+/** A link id as the page sends it: digits, as the store issues them. */
+const isLinkId = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9]{1,20}$/.test(value);
+const isDate = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+const isDateOrNull = (value: unknown): value is string | null => value === null || isDate(value);
 
 /** The object a shape of member checks accepts. */
 type Shaped<S extends Record<string, Check<unknown>>> = {
@@ -105,6 +116,22 @@ const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
     c.set("body", value as Shaped<S>);
     await next();
   });
+
+/** The page's words for a link that is gone; core's are written for an agent. */
+const LINK_GONE = "That link is gone. Reload the page.";
+const HOME_REFUSALS = { not_found: 404, conflict: 409, invalid_input: 400 } as const;
+
+/** A refused home action answers with its status and message; anything else is thrown on. */
+async function homeAction(c: Context, act: () => Promise<Response>): Promise<Response> {
+  try {
+    return await act();
+  } catch (error) {
+    if (!(error instanceof CoreError) || !(error.code in HOME_REFUSALS)) throw error;
+    const code = error.code as keyof typeof HOME_REFUSALS;
+    const message = code === "not_found" ? LINK_GONE : error.message;
+    return c.json({ code, message }, HOME_REFUSALS[code], NO_STORE);
+  }
+}
 
 /** What the owner is told when a note action is refused, by core's error code. */
 const NOTE_REFUSALS = {
@@ -174,7 +201,7 @@ export function webApp({
   connections,
   keys,
 }: {
-  deps: SearchLinksDeps & { images: LinkImageReader; profile: ProfileStore; now: () => Date };
+  deps: SearchLinksDeps & WorthDeps & { images: LinkImageReader; profile: ProfileStore };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -203,9 +230,18 @@ export function webApp({
     c.html(oauthErrorPage(oauthErrorMessage(c.req.query("error"))), 200, NO_STORE),
   );
 
+  // Reads only: a cross-site GET carries the Lax session cookie, so it must not use links up.
   app.get("/", session, async (c) => {
-    const spaces = spacesSection(await homeSpaces(deps, c.get("caller").owner));
-    return c.html(homePage({ spaces }), 200, NO_STORE);
+    const { owner } = c.get("caller");
+    const links = await worthALook(deps, owner);
+    const images = await deps.images.imageVersions(
+      owner,
+      links.map((d) => d.link.id),
+    );
+    const { spaces, catalog } = await homeSpaces(deps, owner);
+    const worth = { links, images, now: deps.now(), catalog };
+    const page = homePage({ worth, spaces: spacesSection(spaces) });
+    return c.html(page, 200, NO_STORE);
   });
 
   app.get("/search", session, async (c) => {
@@ -272,6 +308,68 @@ export function webApp({
   });
 
   // Each POST's body is read, capped, before the session read takes the lock.
+
+  // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
+  // writes could be set off from another site.
+  const linkId = { id: isLinkId };
+  const done = (c: Context) => c.body(null, 204, NO_STORE);
+
+  app.post("/home/opened", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      await markOpened(deps, c.get("caller").owner, c.get("body").id);
+      return done(c);
+    }),
+  );
+
+  app.post("/home/snooze", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      const snooze = await snoozeLink(deps, c.get("caller").owner, c.get("body").id);
+      return c.json(
+        {
+          until: snooze.until.toISOString(),
+          claimedAt: snooze.claimedAt?.toISOString() ?? null,
+          previousSurfacedAt: snooze.previousSurfacedAt?.toISOString() ?? null,
+        },
+        200,
+        NO_STORE,
+      );
+    }),
+  );
+
+  const undoSnooze = { until: isDate, claimedAt: isDateOrNull, previousSurfacedAt: isDateOrNull };
+  app.post("/home/unsnooze", jsonBody({ ...linkId, ...undoSnooze }), session, (c) =>
+    homeAction(c, async () => {
+      const { id, until, claimedAt, previousSurfacedAt } = c.get("body");
+      await unsnoozeLink(deps, c.get("caller").owner, id, {
+        until: new Date(until),
+        claimedAt: claimedAt === null ? null : new Date(claimedAt),
+        previousSurfacedAt: previousSurfacedAt === null ? null : new Date(previousSurfacedAt),
+      });
+      return done(c);
+    }),
+  );
+
+  app.post("/home/archive", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      await archiveLink(deps, c.get("caller").owner, c.get("body").id);
+      return done(c);
+    }),
+  );
+
+  app.post("/home/unarchive", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      await unarchiveLink(deps, c.get("caller").owner, c.get("body").id);
+      return done(c);
+    }),
+  );
+
+  app.post("/home/why", jsonBody({ ...linkId, text: isString }), session, (c) =>
+    homeAction(c, async () => {
+      const { id, text } = c.get("body");
+      await tellWhy(deps, c.get("caller").owner, id, text);
+      return done(c);
+    }),
+  );
 
   // 204 whether or not the app was connected; the page reloads either way.
   app.post("/connections/disconnect", jsonBody({ clientId: isString }), session, async (c) => {

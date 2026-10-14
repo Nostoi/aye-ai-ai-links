@@ -126,7 +126,7 @@ button.link{background:none;border:0;padding:0 6px;font-weight:400;text-decorati
 .search-box input{flex:1;min-width:0;width:auto;margin:0;padding:10px 0;background:transparent;border:0;border-radius:0}
 kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);border-radius:6px;padding:2px 8px}
 .home{padding-top:48px}
-.home form{max-width:620px;margin:0 auto}
+.home-search{max-width:620px;margin:0 auto}
 .question{text-align:center;font-size:30px;font-weight:700;letter-spacing:-.3px;margin:0 0 18px}
 .hint{text-align:center;margin:12px 0 0}
 .search-page{max-width:720px;margin:0 0 36px}
@@ -140,6 +140,35 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .result p{margin:0 0 8px}
 .not-it{max-width:720px;background:var(--surface);border-radius:18px;padding:18px 22px}
 .not-it p{margin:0 0 4px}
+.worth{margin:64px 0 0}
+.worth-grid{display:flex;flex-wrap:wrap;align-items:flex-start;gap:22px}
+.worth-card{min-width:0;background:var(--surface);overflow:hidden}
+.worth-card h3 a{text-decoration:none}
+.worth-lead{flex:2 1 460px;border-radius:20px;box-shadow:0 4px 18px #0000000f;border-top:6px solid var(--space,var(--line))}
+.worth-image{display:block;width:100%;height:220px;object-fit:cover;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
+.worth-body{min-width:0;padding:22px 26px 24px}
+.worth-body p,.worth-body h3{overflow-wrap:anywhere}
+.reason{display:inline-block;margin:0 0 12px;padding:5px 12px;border-radius:999px;font-size:13.5px;font-weight:600;background:color-mix(in srgb,var(--space,var(--soft)) 14%,var(--surface))}
+.worth-lead h3{font-size:22px;line-height:1.25;margin:0 0 8px}
+.meta{font-size:15.5px;margin:0 0 18px}
+.meta:empty{display:none}
+a.button{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:999px;font-size:15.5px;font-weight:600;text-decoration:none;border:1.5px solid var(--line)}
+a.button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.worth-side{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:22px}
+.worth-small{display:flex;border-radius:18px;box-shadow:0 2px 10px #0000000b}
+.worth-tile{flex:0 0 104px;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
+img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cover}
+.worth-small .worth-body{flex:1;padding:16px 18px}
+.worth-small h3{font-size:16px;line-height:1.3;margin:0 0 6px}
+.worth-small .meta{font-size:14px;margin:0 0 4px}
+.small-actions{gap:0 18px}
+.small-actions button{min-height:44px;padding:0;background:none;border:0;color:var(--soft);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.needs-you{outline:2px solid var(--amber);outline-offset:-2px}
+.ask{margin:0 0 14px}
+.ask p{margin:0 0 8px}
+.tell-why{min-height:44px;padding:0 16px;font-size:14px;background:var(--amber-bg);color:var(--amber-ink);border:0}
+.why-form{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.why-form input{flex:1 1 180px;min-width:0;width:auto;margin:0;padding:10px 16px}
 .tags{max-width:760px}
 .tags h1{margin-bottom:8px}
 .tags .lead{margin-bottom:28px}
@@ -194,7 +223,6 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .card-body p{margin:0 0 8px}
 .card-body p:last-child{margin:0}
 .card-why{font-size:15px;overflow-wrap:anywhere}
-.needs-why{display:inline-block;padding:4px 14px;border-radius:999px;background:var(--amber-bg);color:var(--amber-ink);font-size:14px;font-weight:600}
 .show-older{display:inline-flex;align-items:center;min-height:44px;padding:0 26px;border-radius:999px;background:var(--ink);color:var(--surface);font-size:15.5px;font-weight:600;text-decoration:none}
 ${spaceClasses}
 @media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}}

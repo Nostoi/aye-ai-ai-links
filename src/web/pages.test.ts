@@ -1,22 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
 import { connectionsPage } from "./connections-page.js";
+import { homePage } from "./home-page.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
-import {
-  consentExpiredPage,
-  consentPage,
-  homePage,
-  loginPage,
-  oauthErrorPage,
-  searchPage,
-} from "./pages.js";
+import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
-const EMPTY_HOME = { spaces: "" };
+const EMPTY_HOME = {
+  worth: { links: [], images: new Map(), now: new Date(0), catalog: [] },
+  spaces: "",
+};
 const KITCHEN = {
   key: "kitchen",
   name: "Kitchen",
@@ -171,6 +168,7 @@ const PAGES: [string, string][] = [
   [
     "home with spaces",
     homePage({
+      ...EMPTY_HOME,
       spaces: spacesSection([
         { key: "kitchen", name: "Kitchen", color: "clay", mosaic: [{ linkId: "1", version: "v" }] },
       ]),

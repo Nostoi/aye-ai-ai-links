@@ -8,6 +8,7 @@ import {
   FOCUS_WINDOW_MS,
   getDigest,
   NOT_OPENED_MS,
+  previewDigest,
   SURFACE_COOLDOWN_MS,
 } from "./digest.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
@@ -407,5 +408,38 @@ describe("getDigest claim", () => {
     await focus("topic", at(-DAY));
     expect(await getDigest(deps(), OWNER)).toEqual({ links: [] });
     expect(keyword.calls).toEqual([]);
+  });
+});
+
+describe("previewDigest", () => {
+  /** A mix of focus, no-why, old and never-shown links, more than one digest holds. */
+  async function library() {
+    await focus("solar", at(-DAY));
+    const focused = await link();
+    keyword.hits.set("solar", [focused.id]);
+    for (let i = 0; i < DIGEST_SIZE + 2; i++)
+      await link({ why: null, savedAt: at(-(i + 2) * DAY) });
+    await link({ lastSurfacedAt: null });
+    await link({ savedAt: at(-60 * DAY) });
+  }
+
+  it("writes nothing, and picks what getDigest then returns, in its order and with its reasons", async () => {
+    await library();
+    const before = structuredClone(store.all(OWNER));
+    const preview = await previewDigest(deps(), OWNER);
+    expect(store.all(OWNER)).toEqual(before);
+    expect(preview.links).toHaveLength(DIGEST_SIZE);
+    const digest = await getDigest(deps(), OWNER);
+    expect(preview.links.map((l) => [l.link.id, l.reasons])).toEqual(
+      digest.links.map((l) => [l.link.id, l.reasons]),
+    );
+  });
+
+  it("with a larger limit returns the same order, then the rest of the queue", async () => {
+    await library();
+    const first = (await previewDigest(deps(), OWNER)).links.map((l) => l.link.id);
+    const all = (await previewDigest(deps(), OWNER, Number.POSITIVE_INFINITY)).links;
+    expect(all.length).toBe(DIGEST_SIZE + 5);
+    expect(all.slice(0, DIGEST_SIZE).map((l) => l.link.id)).toEqual(first);
   });
 });

@@ -29,11 +29,16 @@ type Deps = {
 
 /**
  * The owner's spaces (pinned tags), by key. Each mosaic holds the stored images of the newest
- * active links that have one, among the space's newest `MOSAIC_DEPTH` active links.
+ * active links that have one, among the space's newest `MOSAIC_DEPTH` active links. The owner's
+ * catalog comes too, for `linkSpace`.
  */
-export async function homeSpaces(deps: Deps, owner: OwnerId): Promise<HomeSpace[]> {
-  const pinned = (await deps.store.listTags(owner)).filter((t) => t.pinned);
-  return Promise.all(
+export async function homeSpaces(
+  deps: Deps,
+  owner: OwnerId,
+): Promise<{ spaces: HomeSpace[]; catalog: Tag[] }> {
+  const catalog = await deps.store.listTags(owner);
+  const pinned = catalog.filter((t) => t.pinned);
+  const spaces = await Promise.all(
     pinned.map(async (tag): Promise<HomeSpace> => {
       const { links } = await newestLinks(deps, owner, {
         tagKey: tag.key,
@@ -56,6 +61,7 @@ export async function homeSpaces(deps: Deps, owner: OwnerId): Promise<HomeSpace[
       };
     }),
   );
+  return { spaces, catalog };
 }
 
 /**

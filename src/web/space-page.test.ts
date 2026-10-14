@@ -229,9 +229,14 @@ describe("a space page", () => {
     expect(outsideRefs(html)).toEqual([]);
   });
 
-  it("asks in amber for a missing why on an active link", () => {
-    const html = space({ links: [link("1", { why: null })] });
-    expect(dom(html).querySelector(".needs-why")?.textContent).toBe("No why yet");
+  it("asks Tell me why, as home does, on an active link with no why, and not on one with a why", () => {
+    const d = dom(space({ links: [link("1", { why: null }), link("2")] }));
+    const [needy, known] = [...d.querySelectorAll("#space-links > li")];
+    expect(needy?.querySelector(".ask")?.textContent).toContain("Why did you save this?");
+    expect(needy?.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
+    expect(needy?.querySelector("form.why-form")?.hasAttribute("hidden")).toBe(true);
+    expect(known?.querySelector(".ask")).toBeNull();
+    expect(d.querySelectorAll("button[data-act=why]")).toHaveLength(1);
   });
 
   it("says when the space has no links yet", () => {
@@ -284,8 +289,10 @@ describe("a space's links you're done with", () => {
     const card = dom(html).querySelector("#space-links > li");
     expect(card?.className).toContain("faded");
     expect(card?.querySelector("h3")?.textContent?.trim()).toBe("Link 1");
-    expect(dom(html).querySelector(".needs-why")).toBeNull();
+    expect(card?.querySelector(".ask, button[data-act=why], form.why-form")).toBeNull();
+    expect(card?.querySelector(".card-why")?.textContent).toBe("No why yet");
     expect(card?.outerHTML).not.toMatch(/amber|needs/);
+    expect(html).not.toContain("/home/why");
   });
 
   it("says when nothing in the space is done", () => {
@@ -333,6 +340,54 @@ async function clickOlder(
   for (let i = 0; i < 2; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   return { document, location, asked, prevented };
 }
+
+describe("Tell me why on a space card", () => {
+  type Sent = { url: string; body: unknown; redirect: unknown };
+  async function answerWhy(html: string, reply: { status: number; body?: unknown }, text: string) {
+    const { document } = parseHTML(html);
+    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1] ?? "")
+      .filter((s) => !s.includes("sign-out"))
+      .join("\n");
+    const sent: Sent[] = [];
+    const fetch = async (url: string, init: { body: string; redirect?: string }) => {
+      sent.push({ url, body: JSON.parse(init.body), redirect: init.redirect });
+      return { status: reply.status, json: async () => reply.body };
+    };
+    new Function("document", "fetch", code)(document, fetch);
+    const win = document.defaultView as unknown as typeof globalThis;
+    const fire = (el: Element | null, type: string) =>
+      el?.dispatchEvent(new win.Event(type, { bubbles: true, cancelable: true }));
+    fire(document.querySelector("button[data-act=why]"), "click");
+    const form = document.querySelector("form.why-form") as HTMLFormElement;
+    const opened = !form.hidden;
+    (form.querySelector("input") as HTMLInputElement).value = text;
+    fire(form, "submit");
+    for (let i = 0; i < 2; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    return { document, sent, opened };
+  }
+  const page = () => space({ links: [link("7", { why: null }), link("8")] });
+
+  it("opens the field, posts /home/why, and replaces the question with the answer", async () => {
+    const r = await answerWhy(page(), { status: 204 }, "  for the <attic>  ");
+    expect(r.opened).toBe(true);
+    expect(r.sent).toEqual([
+      { url: "/home/why", body: { id: "7", text: "  for the <attic>  " }, redirect: "manual" },
+    ]);
+    const card = r.document.querySelector('[data-id="7"]') as HTMLElement;
+    expect(card.querySelector(".ask")).toBeNull();
+    const why = card.querySelector(".card-why") as HTMLElement;
+    expect(why.hidden).toBe(false);
+    expect(why.textContent).toBe('Why: "for the <attic>"');
+  });
+
+  it("shows the refusal's words on a 409 and keeps the question", async () => {
+    const message = "This link already has a reason. Reload.";
+    const r = await answerWhy(page(), { status: 409, body: { code: "conflict", message } }, "x");
+    expect(r.document.querySelector("[role=alert]")?.textContent).toBe(message);
+    expect(r.document.querySelector('[data-id="7"] .ask')).not.toBeNull();
+  });
+});
 
 describe("Show older links", () => {
   const first = space({ links: [link("3"), link("2")], older: "2.2" });

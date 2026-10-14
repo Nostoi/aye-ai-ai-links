@@ -5,7 +5,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "../core/snapshot-store.js";
-import type { LinkStore, SurfacedClaim } from "../core/store.js";
+import type { LinkExpectation, LinkStore, SurfacedClaim } from "../core/store.js";
 import type {
   Labelled,
   Link,
@@ -139,6 +139,19 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     return row ? { ...row, pinned: row.pinned === 1 } : null;
   }
 
+  async updateIf(owner: OwnerId, id: string, expected: LinkExpectation, patch: LinkPatch) {
+    const n = parseId(id);
+    if (n === null) return null;
+    return this.db
+      .transaction(() => {
+        const link = this.updateSync(owner, n, patch, expected);
+        if (link) return { link, applied: true };
+        const current = this.read(owner, n);
+        return current ? { link: current, applied: false } : null;
+      })
+      .immediate();
+  }
+
   async pinTag(
     owner: OwnerId,
     key: string,
@@ -179,6 +192,18 @@ export class SqliteStore implements LinkStore, SnapshotStore {
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
     return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
+  }
+
+  async unclaimSurfaced(owner: OwnerId, id: string, claim: { at: Date; previous: Date | null }) {
+    const n = parseId(id);
+    if (n === null) return false;
+    const { changes } = this.db
+      .prepare(
+        `UPDATE links SET last_surfaced_at = ?
+         WHERE id = ? AND owner_id = ? AND last_surfaced_at = ?`,
+      )
+      .run(toMs(claim.previous), n, owner, toMs(claim.at));
+    return changes === 1;
   }
 
   async dueSnapshots(now: Date, limit: number) {
@@ -318,7 +343,13 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     return { link: this.mustRead(owner, existing.id), created: false };
   }
 
-  private updateSync(owner: OwnerId, id: number, patch: LinkPatch): Link | null {
+  /** With `expected`, the row is written only while it matches (see `LinkStore.updateIf`). */
+  private updateSync(
+    owner: OwnerId,
+    id: number,
+    patch: LinkPatch,
+    expected: LinkExpectation = {},
+  ): Link | null {
     const sets: string[] = [];
     const values: unknown[] = [];
     const set = (column: string, value: unknown) => {
@@ -335,9 +366,26 @@ export class SqliteStore implements LinkStore, SnapshotStore {
       set("why_source", patch.why?.source ?? null);
     }
     if (sets.length === 0) sets.push("id = id");
+    const where = ["id = ?", "owner_id = ?"];
+    const whereValues: unknown[] = [id, owner];
+    if (expected.state !== undefined) {
+      where.push("state = ?");
+      whereValues.push(expected.state);
+    }
+    if (expected.snoozedUntil !== undefined) {
+      where.push("snoozed_until IS ?");
+      whereValues.push(toMs(expected.snoozedUntil));
+    }
+    if (expected.whySource !== undefined) {
+      const sources = expected.whySource.filter((s) => s !== null);
+      const either = sources.map(() => "why_source = ?");
+      if (expected.whySource.includes(null)) either.push("why_source IS NULL");
+      where.push(either.length > 0 ? `(${either.join(" OR ")})` : "0");
+      whereValues.push(...sources);
+    }
     const matched = this.db
-      .prepare(`UPDATE links SET ${sets.join(", ")} WHERE id = ? AND owner_id = ? RETURNING id`)
-      .get(...values, id, owner);
+      .prepare(`UPDATE links SET ${sets.join(", ")} WHERE ${where.join(" AND ")} RETURNING id`)
+      .get(...values, ...whereValues);
     if (!matched) return null;
     if (patch.tags !== undefined) {
       this.db.prepare("DELETE FROM link_tags WHERE link_id = ? AND owner_id = ?").run(id, owner);

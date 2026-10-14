@@ -170,37 +170,6 @@ ${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${
 }
 
 /**
- * The big question and one search field, then `spaces`, the "Your spaces" section, as HTML. The
- * script lets `/` jump to the field unless the owner is typing.
- */
-export const homePage = ({ spaces }: { spaces: string }) =>
-  page(
-    "Aye-AI-AI Links",
-    `<main class="home">
-<form action="/search" method="get" role="search">
-<label class="question" for="q">What are you trying to remember?</label>
-<div class="search-box">
-<input id="q" name="q" type="search" placeholder="That article about batteries and the tax credit">
-<kbd aria-hidden="true">/</kbd>
-<button class="primary" type="submit">Find it</button>
-</div>
-<p class="small hint">Describe it however you remember it: when, why, what it looked like.</p>
-</form>
-${spaces}
-</main>
-<script>
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "/") return;
-  const active = document.activeElement;
-  if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
-  event.preventDefault();
-  document.getElementById("q").focus();
-});
-</script>`,
-    { menu: true },
-  );
-
-/**
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
  * `images` holds the image version of each link that has a stored image; `catalog`, the owner's
  * tags, gives each card its space (`linkSpace`).

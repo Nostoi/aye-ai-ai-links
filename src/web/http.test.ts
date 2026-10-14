@@ -102,7 +102,8 @@ describe("web door", () => {
     expectLoginRedirect(await t.get("/", "__Secure-better-auth.session_token=forged.value"));
   });
 
-  it("after login, home asks the question as the search field's label, lists no links, and menus only existing pages", async () => {
+  // #95 changed home from no links to the owner's "Worth a look today" picks.
+  it("after login, home asks the question as the search field's label, shows only the owner's picks, and menus only existing pages", async () => {
     const t = await setup();
     const res = await t.get("/", await t.signIn());
     expect(res.status).toBe(200);
@@ -111,7 +112,9 @@ describe("web door", () => {
     expect(html).toMatch(/<label[^>]*for="q"[^>]*>What are you trying to remember\?<\/label>/);
     expect(html).toMatch(/<input[^>]*id="q"[^>]*name="q"[^>]*>/);
     expect(html).toContain('action="/search"');
-    expect(html).not.toContain(OWN);
+    expect(html).toContain(OWN);
+    expect(html).toContain("Own &lt;b&gt;link&lt;/b&gt;");
+    expect(html).not.toContain(OTHER);
     expect(html).toContain('href="/connections"');
     expect(html).toContain('href="/tags"');
     expect(html).toContain('href="/profile"');

@@ -31,6 +31,21 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Reason copy.** A focus entry the owner gave reads `You said you're working on "…"`; an inferred one reads `Maybe you're working on "…" (a guess)`. A link not opened lately reads "You saved this over a month ago"; otherwise "You saved this {date}". Amber is used only for the needs-you card and its Tell me why.
   - **Not in this change:** space colors on cards (#96 brings `linkSpace`; until then every card is neutral), the spaces section (#96 fills `homePage`'s `spaces`), and a time limit on Undo of I'm done, which would need a stored archive time.
 
+- **2026-10-14:** Your spaces (#96; plan in comment 6174151207, revised by comment 6174529645).
+  - **Owner ruling: a space shows only active links.** Done (archived) links are left out of its mosaic and list. They are shown faded but legible under "Links you're done with", at its own path, `/spaces/done?tag=`.
+  - **A link's color** is `linkSpace` (`core/link-space.ts`):
+    - `within` wins when it names one of the link's pinned tags;
+    - otherwise the link's first pinned tag in attach order;
+    - a pinned tag whose stored color is not in `SPACE_COLORS` is skipped;
+    - null is neutral, so amber never appears.
+
+    Search results and space cards read it. #95's cards read it once #95 and #96 are both merged.
+  - **Space pages.** Every tag the owner has gets a space page, pinned or not. Only pinned tags show on home, by key. The band uses the tag's color when it is a space color, otherwise neutral. A blank or missing `tag` redirects with 303 to `/`. An unknown key and another owner's key get the same 404, which never names the key.
+  - **Paging.** `newestLinks` (`core/link-pages.ts`) pages newest first by `(savedAt, id)`, 24 links a page on the web. `SearchFilters.before` applies to a blank query only, and a word query with it is refused. The cursor is opaque to the door. Core accepts one only when it names one of the owner's links with that saved time, so a hand-made id never reaches the engine; anything else is `invalid_input`, which is a 400. "Show older links" is a real link, and a script appends the next page, navigating instead when the answer was redirected or failed.
+  - **Mosaic.** It shows the stored images of the 3 newest active links that have one, among the space's newest 50 active links. Cells without an image are tints of the space's color.
+  - **Origin check.** `/`, `/spaces` and `/spaces/done` join `CHECKED_PAGES`, since home now shows owner data. This is the same change as #95's.
+  - **Open question, not yet decided:** an unpinned tag that kept its color gets a colored band, while its cards fall back to their first pinned tag, since `within` counts only pinned tags.
+
 - **2026-10-14:** The Tags page (#97; plan in comment 6173556769, revised by comments 6173827375, 6173935487 and 6174590317).
   - **Owner rulings (comment 6173827375).**
     - **Only an inferred project is a guess.** It reads "Project? (a guess)" until the owner confirms it; a topic always shows plainly, since every tag starts as one. This narrows spec §5's "Inferred values are always shown as guesses" for tag kinds.

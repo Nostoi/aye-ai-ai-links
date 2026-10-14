@@ -1,7 +1,7 @@
 import type { LinkSearch, ListRanks, SearchFilters, SearchTrace } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 import type { Embedder } from "./embedder.js";
-import { type FtsSearch, queryKind } from "./fts-search.js";
+import { checkedKind, type FtsSearch } from "./fts-search.js";
 import { listRanks } from "./list-ranks.js";
 import type { VectorSearch } from "./vector-search.js";
 
@@ -64,7 +64,7 @@ export class HybridSearch implements LinkSearch {
     limit: number,
     trace?: (t: SearchTrace) => void,
   ): Promise<string[]> {
-    const kind = queryKind(query);
+    const kind = checkedKind(query, filters);
     if (kind === "blank") return this.fts.search(owner, query, filters, limit);
     if (kind === "no_words") return [];
 

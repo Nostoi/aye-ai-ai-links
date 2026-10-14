@@ -19,9 +19,10 @@ import {
 import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
+import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
-import type { OwnerId, Tag, TagKind } from "../core/types.js";
+import type { LinkState, OwnerId, Tag, TagKind } from "../core/types.js";
 import {
   archiveLink,
   markOpened,
@@ -38,7 +39,12 @@ import { homePage } from "./home-page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
+import { olderInvalidPage, spaceMissingPage, spacePage } from "./space-page.js";
+import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
+
+/** How many links a space page shows at a time. */
+const SPACE_PAGE = 24;
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -232,7 +238,8 @@ export function webApp({
       owner,
       links.map((d) => d.link.id),
     );
-    const page = homePage({ worth: { links, images, now: deps.now() }, spaces: "" });
+    const spaces = spacesSection(await homeSpaces(deps, owner));
+    const page = homePage({ worth: { links, images, now: deps.now() }, spaces });
     return c.html(page, 200, NO_STORE);
   });
 
@@ -244,9 +251,41 @@ export function webApp({
       caller.owner,
       links.map((l) => l.id),
     );
+    const catalog = await deps.store.listTags(caller.owner);
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now, images }), 200, NO_STORE);
+    return c.html(searchPage({ query, links, now, images, catalog }), 200, NO_STORE);
   });
+
+  // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does
+  // not have, whoever else has it, gets one 404; a changed cursor gets a 400.
+  const space = (state: LinkState) => async (c: Context<SessionEnv>) => {
+    const name = c.req.query("tag") ?? "";
+    if (name.trim() === "") return c.redirect("/", 303);
+    const { owner } = c.get("caller");
+    const before = c.req.query("before");
+    try {
+      const { tag, catalog, page } = await openSpace(deps, owner, {
+        name,
+        state,
+        limit: SPACE_PAGE,
+        ...(before === undefined ? {} : { before }),
+      });
+      const images = await deps.images.imageVersions(
+        owner,
+        page.links.map((l) => l.id),
+      );
+      const done = state === "archived";
+      const later = before !== undefined;
+      const html = spacePage({ tag, catalog, ...page, images, now: deps.now(), done, later });
+      return c.html(html, 200, NO_STORE);
+    } catch (error) {
+      if (!(error instanceof CoreError)) throw error;
+      if (error.code === "not_found") return c.html(spaceMissingPage(), 404, NO_STORE);
+      return c.html(olderInvalidPage(), 400, NO_STORE);
+    }
+  };
+  app.get("/spaces", session, space("active"));
+  app.get("/spaces/done", session, space("archived"));
 
   // Another owner's link, a link without an image and an id never issued all get this same 404.
   app.get(IMAGE_ROUTE, session, async (c) => {

@@ -5,10 +5,31 @@ import { homePage } from "./home-page.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
+import { spacePage } from "./space-page.js";
+import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
 const EMPTY_HOME = { worth: { links: [], images: new Map(), now: new Date(0) }, spaces: "" };
+const KITCHEN = {
+  key: "kitchen",
+  name: "Kitchen",
+  kind: "project",
+  kindSource: "inferred",
+  color: "clay",
+  pinned: true,
+  description: null,
+  projectStatus: "active",
+} as const;
+const SPACE = {
+  tag: KITCHEN,
+  catalog: [KITCHEN],
+  links: [],
+  older: "1.1",
+  images: new Map(),
+  now: new Date(0),
+  done: false,
+};
 
 /** The page's own inline script, run against stand-ins for the DOM, `location` and `fetch`. */
 function scriptOf(html: string): string {
@@ -141,6 +162,17 @@ const PAGES: [string, string][] = [
   ],
   ["error", oauthErrorPage("It failed.")],
   ["home", homePage(EMPTY_HOME)],
+  [
+    "home with spaces",
+    homePage({
+      ...EMPTY_HOME,
+      spaces: spacesSection([
+        { key: "kitchen", name: "Kitchen", color: "clay", mosaic: [{ linkId: "1", version: "v" }] },
+      ]),
+    }),
+  ],
+  ["space", spacePage(SPACE)],
+  ["space done", spacePage({ ...SPACE, done: true })],
   ["search", searchPage({ query: "q", links: [], now: new Date(0) })],
   [
     "tags",
@@ -221,13 +253,14 @@ describe("the header", () => {
 });
 
 describe("the menu", () => {
-  it("is on home, search, tags, connections and profile, holds only Tags, Profile, Apps and keys and Sign out, and is not on the others", () => {
+  it("is on home, search, tags, connections, profile and space pages, holds only Tags, Profile, Apps and keys and Sign out, and is not on the others", () => {
     const withMenu = [
       homePage(EMPTY_HOME),
       searchPage({ query: "", links: [], now: new Date(0) }),
       tagsPage({ tags: [] }),
       connectionsPage({ connections: [], keys: [], now: new Date(0) }),
       profilePage({ notes: [], focus: [], now: new Date(0) }),
+      spacePage(SPACE),
     ];
     for (const html of withMenu) {
       expect(html).toContain(

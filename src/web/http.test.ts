@@ -666,6 +666,35 @@ describe("agent keys on the connections page", () => {
     expect(await works(world, field(fresh, "key"))).toBe(401);
   });
 
+  it("undoes the turn-off of the newest key with a name, though an older one with it is off", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: old.id }));
+    const fresh = ownerKey(world);
+    expect((await browser.send(TURN_OFF, posting({ id: fresh.id }))).status).toBe(204);
+    expect((await browser.send(TURN_ON, posting({ id: fresh.id }))).status).toBe(204);
+    expect(await works(world, fresh.key)).toBe(200);
+    expect(await works(world, old.key)).toBe(401);
+  });
+
+  it("refuses a second user's undo of the owner's key as it refuses an id that is no key, naming nothing of the owner's", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world, "codex");
+    world.keyStore.revokeById("owner", old.id, new Date());
+    const fresh = ownerKey(world, "codex");
+    const bBrowser = await addSecondUser(world);
+    const before = keyRows(world);
+    const theirs = await bBrowser.send(TURN_ON, posting({ id: old.id }));
+    const none = await bBrowser.send(TURN_ON, posting({ id: 9999 }));
+    expect(theirs.status).toBe(400);
+    expect(theirs.body).toEqual(none.body);
+    expect(String(theirs.bytes)).not.toContain("codex");
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, old.key)).toBe(401);
+    expect(await works(world, fresh.key)).toBe(200);
+  });
+
   it("a stale turn-off of the old key's id leaves the new key with the same name on", async () => {
     const world = await oauthWorld();
     const old = ownerKey(world);

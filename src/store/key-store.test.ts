@@ -144,6 +144,15 @@ describe("SqliteKeyStore", () => {
       expect(keys.restore("mark", id, OFF)).toBe(true);
       expect(keys.findLiveByHash("h1")).toEqual({ owner: "mark", name: "codex" });
     });
+
+    it("restores the newest key with a name though an older one with it is off", () => {
+      const { keys } = offKey();
+      const newer = keys.create("mark", "Mark", "codex", "h2", LATER);
+      keys.revokeById("mark", newer, LATER);
+      expect(keys.restore("mark", newer, LATER)).toBe(true);
+      expect(keys.findLiveByHash("h2")).toEqual({ owner: "mark", name: "codex" });
+      expect(keys.findLiveByHash("h1")).toBeNull();
+    });
   });
 
   it("refuses a second live key for the same owner and agent", () => {

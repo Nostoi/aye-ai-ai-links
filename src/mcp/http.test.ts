@@ -170,7 +170,7 @@ describe("MCP door over HTTP", () => {
     expect(res.body.result.instructions).toContain("inferred");
   });
 
-  it("lists the nine tools with their annotations and string dates", async () => {
+  it("lists the ten tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
@@ -179,6 +179,7 @@ describe("MCP door over HTTP", () => {
       "get_digest",
       "get_link",
       "get_profile",
+      "list_links",
       "save_link",
       "search_links",
       "update_link",
@@ -191,6 +192,13 @@ describe("MCP door over HTTP", () => {
       openWorldHint = false,
     ) => ({ readOnlyHint, destructiveHint, idempotentHint, openWorldHint });
     expect(tools.search_links.annotations).toEqual(hints(true, false, true));
+    expect(tools.list_links.annotations).toEqual(hints(true, false, true));
+    expect(tools.search_links.description).toContain("list_links");
+    expect(tools.list_links.inputSchema.properties.order.enum).toEqual([
+      "newest",
+      "oldest",
+      "opened",
+    ]);
     expect(tools.get_link.annotations).toEqual(hints(true, false, true));
     // Saving fetches the new link's page in the background, so it reaches the open web.
     expect(tools.save_link.annotations).toEqual(hints(false, false, true, true));
@@ -694,6 +702,43 @@ describe("MCP door over HTTP", () => {
     const frac = await call(app, "key-a", "search_links", { query: "", limit: 1.5 });
     expect(frac.body.result.isError).toBe(true);
     expect(frac.body.result.content[0].text).toContain("limit must be a whole number");
+  });
+
+  it("list_links reaches all 51 links by following nextCursor, with a total of 51 on every page", async () => {
+    for (let i = 0; i < 51; i++) {
+      await saveLink(deps, A.owner, { url: `https://example.com/${i}`, savedBy: "t" });
+    }
+    await saveLink(deps, B.owner, { url: "https://example.com/b", savedBy: "t" });
+    const seen: string[] = [];
+    const totals: number[] = [];
+    let cursor: string | null = null;
+    do {
+      const res = await call(app, "key-a", "list_links", {
+        limit: 50,
+        ...(cursor === null ? {} : { cursor }),
+      });
+      expect(res.body.result.isError).toBeUndefined();
+      const page = res.body.result.structuredContent;
+      seen.push(...page.links.map((l: Json) => l.id));
+      totals.push(page.total);
+      cursor = page.nextCursor;
+    } while (cursor !== null && totals.length < 5);
+    expect(totals).toEqual([51, 51]);
+    expect(new Set(seen).size).toBe(51);
+    expect((await call(app, "key-b", "list_links", {})).body.result.structuredContent.total).toBe(
+      1,
+    );
+  });
+
+  it("list_links refuses a cursor from another order as a tool error", async () => {
+    await call(app, "key-a", "save_link", { url: "https://example.com/1" });
+    await call(app, "key-a", "save_link", { url: "https://example.com/2" });
+    const first = await call(app, "key-a", "list_links", { limit: 1 });
+    const cursor = first.body.result.structuredContent.nextCursor;
+    expect(cursor).toEqual(expect.any(String));
+    const res = await call(app, "key-a", "list_links", { order: "oldest", cursor });
+    expect(res.body.result.isError).toBe(true);
+    expect(res.body.result.content[0].text).toContain("not valid");
   });
 
   it("update_link replaces the tag set and clears with null", async () => {

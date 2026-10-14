@@ -14,6 +14,7 @@ import type { Caller } from "../auth/caller.js";
 import type { getDigest } from "../core/digest.js";
 import type { filingContext } from "../core/filing-context.js";
 import type { getLinkWithText, saveLink, updateLink } from "../core/links.js";
+import type { listLinks } from "../core/list-links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { searchLinks } from "../core/search-links.js";
 import type { changeTagKind } from "../core/tag-kind.js";
@@ -29,6 +30,7 @@ import {
   type getProfileOutput,
   type linkOutput,
   type linkResultOutput,
+  type listLinksOutput,
   type profileOutput,
   saveLinkOutput,
   type searchLinksOutput,
@@ -97,6 +99,7 @@ const save = (args: Record<string, unknown>): Step => ({ tool: "save_link", args
 const update = (args: Record<string, unknown>): Step => ({ tool: "update_link", args });
 const get = (id: string): Step => ({ tool: "get_link", args: { id } });
 const search = (query: string): Step => ({ tool: "search_links", args: { query } });
+const list = (args: Record<string, unknown> = {}): Step => ({ tool: "list_links", args });
 const retag = (name: string, kind: string): Step => ({ tool: "update_tag", args: { name, kind } });
 const addToProfile = (args: Record<string, unknown>): Step => ({ tool: "add_profile", args });
 const editProfileStep = (args: Record<string, unknown>): Step => ({ tool: "edit_profile", args });
@@ -136,6 +139,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       "get_digest",
       "get_link",
       "get_profile",
+      "list_links",
       "save_link",
       "search_links",
       "update_link",
@@ -206,6 +210,11 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(update({ id: "1", why: null, summary: null }));
     await run(search(""));
     await run(search("zzzznomatch"));
+    const firstPage = await run(list({ limit: 1 }));
+    const lastPage = await run(list({ order: "oldest" }));
+    await run(list({ order: "opened", state: "active" }));
+    expect(firstPage).toMatchObject({ total: 3, nextCursor: expect.any(String) });
+    expect(lastPage).toMatchObject({ total: 3, nextCursor: null });
     // Timestamps whose JSON form is outside the four-digit ISO range stay readable.
     await run(update({ id: "2", snoozedUntil: UPPER }));
     await run(update({ id: "3", snoozedUntil: LOWER }));
@@ -386,6 +395,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(update({ id: "1", summary: "s" }));
     await run(get("1"));
     await run(search(""));
+    await run(list());
     await run(retag("Aye Launch", "topic"));
     await run(
       addToProfile({
@@ -419,6 +429,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       "search_links with a fractional limit",
       { tool: "search_links", args: { query: "", limit: 1.5 } },
     ],
+    ["list_links with a cursor it never made", list({ cursor: "1000.999" })],
     ["update_tag with an unknown tag", retag("nope", "topic")],
   ])("%s is a text-only error", async (_name, { tool, args }) => {
     const res = (await callTool(app, era, tool, args)).result;
@@ -611,6 +622,13 @@ describe("output schemas against core's types (checked by tsc)", () => {
     >();
     expectTypeOf<z.output<typeof searchLinksOutput>>().toEqualTypeOf<
       Wire<{ links: Returned<typeof searchLinks> }>
+    >();
+    expectTypeOf<z.output<typeof listLinksOutput>>().toEqualTypeOf<
+      Wire<
+        Omit<Returned<typeof listLinks>, "older"> & {
+          nextCursor: Returned<typeof listLinks>["older"];
+        }
+      >
     >();
     expectTypeOf<z.output<typeof updateTagOutput>>().toEqualTypeOf<
       Wire<{ tag: Returned<typeof changeTagKind> }>

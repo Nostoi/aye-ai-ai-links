@@ -12,6 +12,7 @@ You talk to your AI; it uses the library for you.
 
 - **Save by talking.** Give your AI a link and a few words. It saves the link with a summary, tags, and a note on *why* you saved it. If you didn't say why, it asks once or makes a guess, and guesses are labelled as guesses.
 - **Find by describing.** Ask for "that article about batteries from spring". Your AI turns that into a search that matches links by meaning as well as by their words, with optional filters for tag, project and date saved. Common words like "the" or "that" are ignored in the keyword match unless the query has nothing else. The first start after upgrading to this version embeds every saved link in the background; until a link is embedded, it is found by its words only.
+- **Go through everything.** Ask your AI how many links you have, or to go through all of them: newest first, oldest first, or the ones most recently opened (an opening counts when your AI records it or you open a link from the home page's cards). It pages through the whole library, past the 50 links a search returns, and can count only a tag, a project, archived links or a date range.
 - **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by. Every tag records who decided its kind: you, or your AI's guess. A project your AI only guessed is presented as a guess until you confirm it, and so is a project from before this was recorded. A topic is never shown as a guess, since every tag starts as one.
 - **Tags page.** Signed in, open **Tags** from the menu to see every tag. **Pin to home** makes a tag one of your spaces, and it gets a color no other tag has while one is free (past six colored tags, two spaces may share one). **Edit** lets you confirm or switch its kind, pick one of six colors, and mark a project **Done** or reopen it; a done project stops being suggested to your AI for filing. Unpinning and marking done show an **Undo** bar. Each tag's name opens its space.
@@ -32,6 +33,7 @@ The tools your AI uses:
 | `update_link` | Changes a link's title, summary, why, tags, state or snooze date. |
 | `update_tag` | Switches a tag between topic and project, or confirms its kind as yours. |
 | `search_links` | Finds links, best match first. A blank search lists the newest. |
+| `list_links` | Lists every link, newest first, oldest first or most recently opened, a page at a time, with a total. |
 | `get_link` | Opens one link by its id, with its page's text (up to 20,000 characters). |
 | `get_profile` | Reads the notes about you and your active projects. |
 | `add_profile` | Adds a note about you, or what you're working on now. |

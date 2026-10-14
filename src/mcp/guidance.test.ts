@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
+import * as guidance from "./guidance.js";
 import { GET_DIGEST, GET_PROFILE, INSTRUCTIONS, SAVE_LINK, UPDATE_TAG } from "./guidance.js";
+
+describe("list_links guidance", () => {
+  const LIST_LINKS = (guidance as Record<string, string>).LIST_LINKS ?? "";
+
+  it("points to list_links from the shared instructions and search_links, for listing and counting", () => {
+    expect(INSTRUCTIONS).toMatch(/list or count.*list_links/);
+    expect(guidance.SEARCH_LINKS).toMatch(/list_links/);
+  });
+
+  it("says what each order lists, what the total counts, and how cursors behave", () => {
+    for (const order of ['"newest"', '"oldest"', '"opened"']) expect(LIST_LINKS).toContain(order);
+    expect(LIST_LINKS).toMatch(/opened: true.*home page/s);
+    expect(LIST_LINKS).toMatch(/total counts/);
+    expect(LIST_LINKS).toMatch(/nextCursor is null on the last page/);
+    expect(LIST_LINKS).toMatch(/opened while you page.*missed/s);
+    expect(LIST_LINKS).toMatch(/archived links are included/);
+  });
+});
 
 describe("guidance on a tag's kindSource", () => {
   it("tells agents in the shared instructions, save_link and get_profile to present an inferred project as a guess", () => {

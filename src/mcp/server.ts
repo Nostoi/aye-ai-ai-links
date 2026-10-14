@@ -10,9 +10,10 @@ import { getDigest } from "../core/digest.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
 import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
+import { listLinks } from "../core/list-links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
-import type { LinkSearch } from "../core/search.js";
+import { LINK_ORDERS, type LinkCount, type LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { PageTextReader } from "../core/snapshot-text.js";
@@ -27,6 +28,7 @@ import {
   getLinkOutput,
   getProfileOutput,
   linkResultOutput,
+  listLinksOutput,
   profileOutput,
   saveLinkOutput,
   searchLinksOutput,
@@ -37,6 +39,7 @@ export type McpDeps = {
   store: LinkStore;
   search: LinkSearch;
   keywordSearch: LinkSearch;
+  count: LinkCount;
   profile: ProfileStore;
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
@@ -102,6 +105,16 @@ const searchLinksInput = z.object({
   project: z.string().optional(),
   savedFrom: timestamp.optional(),
   savedTo: timestamp.optional(),
+  limit: z.number().optional(),
+});
+const listLinksInput = z.object({
+  order: z.enum(LINK_ORDERS).optional(),
+  tag: z.string().optional(),
+  project: z.string().optional(),
+  state: z.enum(STATES).optional(),
+  savedFrom: timestamp.optional(),
+  savedTo: timestamp.optional(),
+  cursor: z.string().optional(),
   limit: z.number().optional(),
 });
 const updateTagInput = z.object({ name: z.string(), kind: z.enum(TAG_KINDS) });
@@ -285,6 +298,29 @@ export function buildMcpServer(
         savedBy,
       ),
     }),
+  );
+
+  register(
+    "list_links",
+    {
+      description: guidance.LIST_LINKS,
+      inputSchema: listLinksInput,
+      outputSchema: listLinksOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ savedFrom, savedTo, ...rest }) => {
+      const { links, older, total } = await listLinks(deps, owner, {
+        ...rest,
+        savedFrom: toDate(savedFrom),
+        savedTo: toDate(savedTo),
+      });
+      return { links, total, nextCursor: older };
+    },
   );
 
   register(

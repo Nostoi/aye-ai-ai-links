@@ -138,6 +138,11 @@ export const saveLinkOutput = z.strictObject({
 export const linkResultOutput = z.strictObject({ link: linkOutput });
 export const getLinkOutput = z.strictObject({ link: linkOutput, snapshotText: snapshotTextOutput });
 export const searchLinksOutput = z.strictObject({ links: z.array(linkOutput) });
+export const listLinksOutput = z.strictObject({
+  links: z.array(linkOutput),
+  total: z.number().int(),
+  nextCursor: z.string().nullable(),
+});
 export const updateTagOutput = z.strictObject({ tag: tagOutput });
 
 const digestReasonOutput = z.discriminatedUnion("kind", [

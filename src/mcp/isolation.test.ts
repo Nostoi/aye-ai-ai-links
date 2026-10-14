@@ -103,6 +103,7 @@ const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
   "get_digest",
   "get_link",
   "get_profile",
+  "list_links",
   "save_link",
   "search_links",
   "update_link",
@@ -371,6 +372,27 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     const theirs = await tool<Digest>(world, door.a, "get_digest", {});
     expect(theirs.links.map((d) => d.link.id)).toEqual([aId]);
     expect(theirs.links[0]?.reasons.map((r) => r.kind)).toContain("focus_words");
+  });
+
+  it("T14: B's list_links lists and counts only B's links, and A's cursor gets B nothing", async () => {
+    const { world, door, bId, snapA } = await open();
+    await tool(world, door.a, "save_link", { url: "https://a.example/second" });
+    type Listed = Found & { total: number; nextCursor: string | null };
+    const aPage = await tool<Listed>(world, door.a, "list_links", { limit: 1 });
+    expect(aPage.total).toBe(2);
+    expect(aPage.nextCursor).toEqual(expect.any(String));
+    const before = snapA();
+
+    const listing = await tool<Listed>(world, door.b, "list_links", { owner: A });
+    const res = await call(world, door.b, "list_links", { cursor: aPage.nextCursor, limit: 50 });
+
+    expect(listing).toMatchObject({ total: 1, nextCursor: null });
+    expect(listing.links.map((l) => l.id)).toEqual([bId]);
+    expect(res).toMatchObject({ status: 200, isError: true });
+    expect(res.text).toMatch(/not valid/);
+    expect(res.data).toBeUndefined();
+    expect(res.text).not.toContain(A_URL);
+    expect(snapA()).toEqual(before);
   });
 
   it("T13: B's save_link response holds only B's tags, notes and focus, though A has others", async () => {

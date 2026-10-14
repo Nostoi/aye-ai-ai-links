@@ -13,7 +13,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 
 ## Color
 
-- Each space (pinned tag) keeps one color everywhere, through the `.space-*` classes. The colors are `SPACE_COLORS` in `src/core/tag-space.ts`. A new pin takes a color no tag holds while one is free; two spaces may share a color past that, or when the owner picks one.
+- Each space (pinned tag) keeps one color everywhere, through the `.space-*` classes. The colors are `SPACE_COLORS` in `src/core/tag-space.ts`. A new pin takes a color no tag holds while one is free; two spaces may share a color past that, or when the owner picks one. A card's space comes from `linkSpace` and a tag's color from `spaceColor` (`src/core/link-space.ts`); both pass only `SPACE_COLORS`. Other class names never start with `space-`.
 - Amber only ever means "needs you". Never use it for a space, or for the reason a card is shown: that uses its space's color.
 - Everything else is neutral. The teal logo is the one brand exception.
 

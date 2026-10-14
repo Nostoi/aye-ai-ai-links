@@ -41,6 +41,8 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
     listTags: (owner) => inner.listTags(owner),
     updateTag: (owner, key, patch, expected) => inner.updateTag(owner, key, patch, expected),
+    pinTag: (owner, key, pin) => inner.pinTag(owner, key, pin),
+    colorTag: (owner, key, color) => inner.colorTag(owner, key, color),
     listLinks: (owner) => inner.listLinks(owner),
     claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
     ...over,
@@ -774,6 +776,64 @@ export function describeStoreContract(
           tagOf("solar", { kind: "project", kindSource: "stated", projectStatus: "done" }),
         );
         expect(await h.catalog(A)).toEqual([tag]);
+      });
+    });
+
+    describe("pinTag and colorTag", () => {
+      const solar = tagOf("solar", {
+        name: "Solar",
+        kind: "project",
+        kindSource: "asked",
+        description: "d",
+        projectStatus: "done",
+      });
+
+      it("pinning gives a tag with no color the one passed, and changes nothing else", async () => {
+        await h.seedTag(A, solar);
+        await h.seedTag(B, tagOf("solar"));
+        const pinned = await h.store.pinTag(A, "solar", { pinned: true, color: "teal" });
+        expect(pinned).toEqual({ ...solar, pinned: true, color: "teal" });
+        expect(await h.catalog(A)).toEqual([pinned]);
+        expect(await h.catalog(B)).toEqual([tagOf("solar")]);
+      });
+
+      it("pinning keeps a color the tag already has, so a pinned tag always has one", async () => {
+        await h.seedTag(A, { ...solar, color: "violet" });
+        const pinned = await h.store.pinTag(A, "solar", { pinned: true, color: "teal" });
+        expect(pinned).toEqual({ ...solar, pinned: true, color: "violet" });
+        expect(await h.catalog(A)).toEqual([pinned]);
+      });
+
+      it("unpinning keeps the color, and pinning again brings it back", async () => {
+        await h.seedTag(A, { ...solar, pinned: true, color: "clay" });
+        const unpinned = await h.store.pinTag(A, "solar", { pinned: false });
+        expect(unpinned).toEqual({ ...solar, pinned: false, color: "clay" });
+        expect(await h.catalog(A)).toEqual([unpinned]);
+        const again = await h.store.pinTag(A, "solar", { pinned: true, color: "teal" });
+        expect(again).toEqual({ ...solar, pinned: true, color: "clay" });
+      });
+
+      it("colorTag sets only the color, whatever the kind and pin", async () => {
+        await h.seedTag(A, { ...solar, pinned: true, color: "clay" });
+        await h.seedTag(B, tagOf("solar", { color: "rose" }));
+        const colored = await h.store.colorTag(A, "solar", "green");
+        expect(colored).toEqual({ ...solar, pinned: true, color: "green" });
+        expect(await h.catalog(A)).toEqual([colored]);
+        expect(await h.catalog(B)).toEqual([tagOf("solar", { color: "rose" })]);
+      });
+
+      it("both write nothing and return null for an absent key or another owner's key", async () => {
+        await h.seedTag(A, solar);
+        await h.seedTag(B, tagOf("only-b"));
+        const beforeA = await h.catalog(A);
+        const beforeB = await h.catalog(B);
+        expect(await h.store.pinTag(A, "absent", { pinned: true, color: "teal" })).toBeNull();
+        expect(await h.store.pinTag(A, "only-b", { pinned: true, color: "teal" })).toBeNull();
+        expect(await h.store.pinTag(A, "only-b", { pinned: false })).toBeNull();
+        expect(await h.store.colorTag(A, "only-b", "teal")).toBeNull();
+        expect(await h.store.colorTag(A, "absent", "teal")).toBeNull();
+        expect(await h.catalog(A)).toEqual(beforeA);
+        expect(await h.catalog(B)).toEqual(beforeB);
       });
     });
 

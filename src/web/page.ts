@@ -29,14 +29,63 @@ document.getElementById("sign-out").addEventListener("click", async () => {
 });
 </script>`;
 
+/** How long the Undo bar stays up. The server allows an undo for longer (`UNDO_WINDOW_MS`). */
+export const UNDO_BAR_MS = 10_000;
+
+const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>`;
+
+/**
+ * Defines `showUndo(message, undo)` for the page's own script, which calls it after an action has
+ * already been done. The bar shows `message` with an Undo button for `UNDO_BAR_MS`; Undo runs
+ * `undo` once, with the button disabled until it settles, then closes the bar. A new message
+ * replaces the bar, and a pending undo only closes the bar if it is still its own.
+ */
+const UNDO_SCRIPT = `<script>
+const showUndo = (() => {
+  const bar = document.getElementById("undo-bar");
+  const text = bar.querySelector("span");
+  const button = bar.querySelector("button");
+  let current = null;
+  const close = (action) => {
+    if (current !== action) return;
+    clearTimeout(action.timer);
+    current = null;
+    bar.hidden = true;
+  };
+  button.addEventListener("click", async () => {
+    const action = current;
+    if (!action || action.running) return;
+    action.running = true;
+    clearTimeout(action.timer);
+    button.disabled = true;
+    try {
+      await action.undo();
+    } finally {
+      if (current === action) button.disabled = false;
+      close(action);
+    }
+  });
+  return (message, undo) => {
+    if (current) clearTimeout(current.timer);
+    const action = { undo, running: false };
+    action.timer = setTimeout(() => close(action), ${UNDO_BAR_MS});
+    current = action;
+    text.textContent = message;
+    button.disabled = false;
+    bar.hidden = false;
+  };
+})();
+</script>`;
+
 /**
  * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
- * adds the menu (and implies `home`), for the pages the owner browses.
+ * adds the menu (and implies `home`), for the pages the owner browses. `undo` adds the Undo bar
+ * and `showUndo`.
  */
 export const page = (
   title: string,
   body: string,
-  { home = false, menu = false } = {},
+  { home = false, menu = false, undo = false } = {},
 ) => `<!doctype html>
 <html lang="en">
 <head>
@@ -53,7 +102,7 @@ ${themeCss}
 <div class="column">
 ${body}
 </div>
-${menu ? MENU_SCRIPT : ""}
+${undo ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}
 </body>
 </html>
 `;

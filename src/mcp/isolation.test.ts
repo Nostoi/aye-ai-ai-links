@@ -35,6 +35,7 @@ const A = "owner";
 const B = SECOND_USER.id;
 const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
+const A_KEY_NAME = "agent-a route guard";
 
 type Called = { status: number; isError: boolean; data: unknown; text: string };
 type Row = { id: string };
@@ -442,7 +443,10 @@ describe("owner isolation coverage", () => {
   const READ_ROUTES: Record<string, ReadEntry> = {
     "GET /": { noOwnerData: "the question and a search field, no links" },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
-    "GET /connections": { request: "/connections", marker: () => "Claude" },
+    "GET /connections": {
+      request: "/connections",
+      marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
+    },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
@@ -487,6 +491,7 @@ describe("owner isolation coverage", () => {
     const world = await oauthWorld();
     const a = await connectClaude(world);
     await saveLinkWith(world, a.access, A_URL);
+    createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: A_KEY_NAME });
     const note = "A private note for the route guard";
     await addProfile(createDeps(world.links, new FakeEmbedder(DIMS)), A, "seed", {
       addNotes: [{ text: note, source: "stated" }],
@@ -580,6 +585,9 @@ describe("owner isolation coverage", () => {
   /** Each web route that can change data, and the two-owner test that covers it. */
   const WRITE_ROUTES_TESTED: Record<string, string> = {
     "POST /connections/disconnect": "T9, T11 and the two-owner disconnect test in web/http.test.ts",
+    "POST /connections/keys": "the two-owner agent keys test in web/http.test.ts",
+    "POST /connections/keys/turn-off": "the two-owner agent keys test in web/http.test.ts",
+    "POST /connections/keys/turn-on": "the two-owner agent keys test in web/http.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

@@ -66,7 +66,7 @@ export const consentPage = ({
     "Approve a connection · Aye-AI-AI Links",
     `<main>
 <h1>Connect ${escapeHtml(clientName)}?</h1>
-<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>. It stays connected while you use it, until you disconnect it on the Connected apps page.</p>
+<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>. It stays connected while you use it, until you disconnect it on the Apps and keys page.</p>
 <p class="actions"><button class="primary" id="accept" type="button">Allow</button> <button id="deny" type="button">Deny</button></p>
 <p id="error" role="alert"></p>
 </main>
@@ -100,44 +100,6 @@ export const consentExpiredPage = () =>
 <h1>This approval link is not valid</h1>
 <p>It may have expired. Start the connection again from the app.</p>
 </main>`,
-  );
-
-export type ConnectionRow = { clientId: string; name: string | null; connectedAt: Date };
-
-function connectionItem(c: ConnectionRow): string {
-  return `<li><span><strong>${escapeHtml(c.name ?? c.clientId)}</strong>, connected ${c.connectedAt.toISOString().slice(0, 10)}</span> <button type="button" data-client-id="${escapeHtml(c.clientId)}">Disconnect</button></li>`;
-}
-
-/**
- * The owner's connected apps. Each Disconnect button posts `{clientId}` (read from its data
- * attribute, never written into the script) to `/connections/disconnect`, then reloads.
- */
-export const connectionsPage = (connections: ConnectionRow[]) =>
-  page(
-    "Connected apps · Aye-AI-AI Links",
-    `<main>
-<h1>Connected apps</h1>
-${connections.length === 0 ? "<p>No apps are connected.</p>" : `<ul class="connections">\n${connections.map(connectionItem).join("\n")}\n</ul>`}
-<p>A disconnected app is refused from its next request. To use it again, connect it again from the app.</p>
-<p id="error" role="alert"></p>
-<p><a href="/">Back to your links</a></p>
-</main>
-<script>
-const error = document.getElementById("error");
-for (const button of document.querySelectorAll("button[data-client-id]")) {
-  button.addEventListener("click", async () => {
-    error.textContent = "";
-    const res = await fetch("/connections/disconnect", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ clientId: button.dataset.clientId }),
-    });
-    if (res.ok) location.reload();
-    else error.textContent = "That did not work. Reload the page and try again.";
-  });
-}
-</script>`,
-    { menu: true },
   );
 
 /** Where an OAuth authorization that failed ends. `message` is always one of our own sentences. */

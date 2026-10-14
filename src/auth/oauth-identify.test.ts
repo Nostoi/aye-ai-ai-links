@@ -67,6 +67,33 @@ describe("oauthIdentify", () => {
     expect(world.savedBy()).toEqual([clientId]);
   });
 
+  it.each(["web", " Web ", "WEB"])(
+    "names a client registered as %j by its client_id, since web marks the owner's own writes",
+    async (name) => {
+      const world = await oauthWorld();
+      const registered = await world.agent().send("/api/auth/oauth2/register", {
+        method: "POST",
+        origin: false,
+        json: {
+          client_name: name,
+          redirect_uris: [DCR_REDIRECT],
+          token_endpoint_auth_method: "none",
+        },
+      });
+      const clientId = field(registered, "client_id");
+      const p = pkce();
+      const { code } = await approve(world, clientId, DCR_REDIRECT, { challenge: p.challenge });
+      const tokens = await exchange(world, code, p.verifier, {
+        client_id: clientId,
+        redirect_uri: DCR_REDIRECT,
+      });
+      expect(
+        (await saveLinkWith(world, field(tokens, "access_token"), "https://e.example/w")).status,
+      ).toBe(200);
+      expect(world.savedBy()).toEqual([clientId]);
+    },
+  );
+
   it("still takes agent keys, rate limited in their own bucket, apart from an OAuth client of the same name", async () => {
     const world = await oauthWorld({ rateLimit: { limit: 1, now: () => 0 } });
     const registered = await world.agent().send("/api/auth/oauth2/register", {

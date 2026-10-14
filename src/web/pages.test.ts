@@ -305,13 +305,20 @@ describe("the search page's cards", () => {
     expect(html).not.toContain('href="javascript:');
   });
 
-  it("escapes the title, the why and the query", () => {
+  it("escapes the title, the why, the host and the query", () => {
     const html = results(
-      [link({ title: "<i>t</i>", why: { text: "<u>w</u>", source: "stated" } })],
+      [
+        link({
+          url: "http://a&amp;b.example/x",
+          title: "<i>t</i>",
+          why: { text: "<u>w</u>", source: "stated" },
+        }),
+      ],
       '"><script>x',
     );
     expect(html).not.toMatch(/<i>|<u>|<script>x/);
     expect(html).toContain('value="&quot;&gt;&lt;script&gt;x"');
+    expect(html).toContain("a&amp;amp;b.example, saved");
   });
 
   it("says when nothing matched, above the 'Not it?' box that links to the newest links", () => {

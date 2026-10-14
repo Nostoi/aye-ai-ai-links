@@ -244,41 +244,25 @@ describe("auth routes", () => {
     expect(t.count("session")).toBe(0);
   });
 
-  // Tailscale serve sets the user header on tailnet requests; Funnel strips it and sets the marker.
-  const tailnet = { "tailscale-user-login": "owner@example.com" };
+  // A proxy can pass this header through from the caller, so it never earns a separate limit.
+  const identity = { "tailscale-user-login": "owner@example.com" };
 
-  it("keeps tailnet sign-ins working after public ones use up the login limit", async () => {
-    const t = await setup({ loginLimit: { limit: 2, windowMs: 60_000, now: () => 0 } });
+  it("counts a sign-in carrying a Tailscale user header against the shared login limit", async () => {
+    const t = await setup({ loginLimit: { limit: 1, windowMs: 60_000, now: () => 0 } });
     expect((await t.signIn("Wrong-password-1")).status).toBe(401);
-    expect((await t.signIn("Wrong-password-2")).status).toBe(401);
-    expect((await t.signIn(TEST_PASSWORD)).status).toBe(429);
-    expect((await t.signIn(TEST_PASSWORD, {}, tailnet)).status).toBe(200);
-    expect(t.count("session")).toBe(1);
+    const verified = t.hashing.verify;
+    const res = await t.signIn(TEST_PASSWORD, {}, identity);
+    expect(res.status).toBe(429);
+    expect(res.headers.getSetCookie()).toEqual([]);
+    expect(t.hashing.verify).toBe(verified);
+    expect(t.count("session")).toBe(0);
   });
 
-  it.each([["?1"], ["?0"], [""]])(
-    "counts a sign-in carrying the Funnel marker %j against the public limit, even with a user header",
-    async (marker) => {
-      const t = await setup({ loginLimit: { limit: 1, windowMs: 60_000, now: () => 0 } });
-      expect((await t.signIn("Wrong-password-1")).status).toBe(401);
-      const verified = t.hashing.verify;
-      const res = await t.signIn(
-        TEST_PASSWORD,
-        {},
-        { ...tailnet, "tailscale-funnel-request": marker },
-      );
-      expect(res.status).toBe(429);
-      expect(t.hashing.verify).toBe(verified);
-      expect(t.count("session")).toBe(0);
-    },
-  );
-
-  it("keeps public sign-ins working after tailnet ones use up their limit", async () => {
+  it("lets sign-ins carrying a Tailscale user header use up the shared login limit", async () => {
     const t = await setup({ loginLimit: { limit: 1, windowMs: 60_000, now: () => 0 } });
-    expect((await t.signIn("Wrong-password-1", {}, tailnet)).status).toBe(401);
-    expect((await t.signIn(TEST_PASSWORD, {}, tailnet)).status).toBe(429);
-    expect((await t.signIn(TEST_PASSWORD)).status).toBe(200);
-    expect(t.count("session")).toBe(1);
+    expect((await t.signIn("Wrong-password-1", {}, identity)).status).toBe(401);
+    expect((await t.signIn(TEST_PASSWORD)).status).toBe(429);
+    expect(t.count("session")).toBe(0);
   });
 
   it("does not count other auth routes against the login limit", async () => {

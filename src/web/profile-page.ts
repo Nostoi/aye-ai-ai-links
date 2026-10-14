@@ -114,14 +114,11 @@ const startEdit = (card) => {
   const meta = card.querySelector(".note-meta");
   const edit = document.createElement("form");
   edit.className = "note-edit";
-  const label = document.createElement("label");
-  label.className = "visually-hidden";
-  label.textContent = "Note";
   const box = document.createElement("textarea");
+  box.setAttribute("aria-label", "Note");
   box.rows = 3;
   box.required = true;
   box.value = text.textContent;
-  label.append(box);
   const save = document.createElement("button");
   save.type = "submit";
   save.className = "primary";
@@ -132,7 +129,7 @@ const startEdit = (card) => {
   const actions = document.createElement("div");
   actions.className = "actions";
   actions.append(save, cancel);
-  edit.append(label, actions);
+  edit.append(box, actions);
   text.hidden = true;
   meta.hidden = true;
   card.append(edit);

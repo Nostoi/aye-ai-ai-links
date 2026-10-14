@@ -198,6 +198,10 @@ describe("the All links page", () => {
       "Nothing opened yet. Links you open from the home page's cards show here.",
     ],
     [{ done: true }, "Nothing here is done yet."],
+    [
+      { done: true, order: "opened" as const },
+      "You haven't opened any of the links you're done with.",
+    ],
     [{ later: true }, "No older links."],
     [{ later: true, order: "oldest" as const }, "No more links."],
   ])("says so when there is nothing to show (%j)", (over, words) => {

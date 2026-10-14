@@ -75,7 +75,10 @@ describe("the All links routes", () => {
       const deps = depsOf(world);
       for (let i = 0; i < 51; i++) {
         const id = await save(world, A, `https://a.example/${i}`);
-        await deps.store.update(A, id, { lastOpenedAt: new Date(Date.UTC(2026, 9, 1, 0, 0, i)) });
+        const opened = (i * 7) % 51;
+        await deps.store.update(A, id, {
+          lastOpenedAt: new Date(Date.UTC(2026, 9, 1, 0, 0, opened)),
+        });
       }
       const browser = await signedIn(world);
       const pages: string[] = [];
@@ -90,8 +93,8 @@ describe("the All links routes", () => {
       expect(counts).toEqual([24, 24, 3]);
       const seen = pages.flatMap((p) => hrefsOf(p, ".link-card h3 a"));
       expect(new Set(seen).size).toBe(51);
-      const first = order === "oldest" ? "https://a.example/0" : "https://a.example/50";
-      expect(seen[0]).toBe(first);
+      const first = { newest: 50, oldest: 0, opened: 29 }[order];
+      expect(seen[0]).toBe(`https://a.example/${first}`);
     },
   );
 

@@ -100,6 +100,7 @@ ${links.map((l) => card(l, input)).join("\n")}
 
 function empty({ order, done, later }: Input): string {
   if (later) return order === "newest" ? "No older links." : "No more links.";
+  if (done && order === "opened") return "You haven't opened any of the links you're done with.";
   if (done) return "Nothing here is done yet.";
   if (order === "opened") {
     return "Nothing opened yet. Links you open from the home page's cards show here.";

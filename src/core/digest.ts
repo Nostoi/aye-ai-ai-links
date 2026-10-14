@@ -1,7 +1,7 @@
 import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { LinkSearch } from "./search.js";
-import type { LinkStore } from "./store.js";
+import type { LinkStore, SurfacedClaim } from "./store.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
 
 // Uncalibrated defaults (ROADMAP #34); the owner may change them.
@@ -106,39 +106,89 @@ async function focusReasons(
 }
 
 /**
+ * Up to `limit` eligible links that have a reason, in digest order, with each one's focus reasons.
+ * Reads only. Eligible: active, not snoozed at now, and surfaced at or before now -
+ * SURFACE_COOLDOWN_MS.
+ */
+async function select(
+  deps: DigestDeps,
+  owner: OwnerId,
+  now: Date,
+  limit: number,
+): Promise<{ picked: Link[]; focus: Map<string, DigestReason[]> }> {
+  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
+  const all = await deps.store.listLinks(owner);
+  const candidates = new Map(
+    all.filter((l) => eligible(l, now, notSurfacedAfter)).map((l) => [l.id, l]),
+  );
+  if (candidates.size === 0) return { picked: [], focus: new Map() };
+
+  const focus = await focusReasons(deps, owner, now, all.length, (id) => candidates.has(id));
+  const focusPicked = [...focus.keys()].slice(0, FOCUS_SLOTS);
+  const rest = [...candidates.values()]
+    .filter(
+      (l) =>
+        !focusPicked.includes(l.id) &&
+        (focus.has(l.id) || ownReasons(l, l.lastSurfacedAt, now).length > 0),
+    )
+    .sort(rotation);
+  const picked = [...focusPicked.map((id) => candidates.get(id) as Link), ...rest];
+  return { picked: picked.slice(0, limit), focus };
+}
+
+/**
+ * Marks the owner's links `ids` surfaced at now, the one write behind the digest's cooldown. The
+ * store re-checks eligibility; a link no longer eligible is skipped and left as it is.
+ */
+export async function claimSurfaced(
+  deps: Pick<DigestDeps, "store" | "now">,
+  owner: OwnerId,
+  ids: string[],
+): Promise<SurfacedClaim[]> {
+  const now = deps.now();
+  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
+  return ids.length === 0
+    ? []
+    : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now });
+}
+
+/**
+ * What `getDigest` would return now, without marking anything: up to `limit` links (DIGEST_SIZE
+ * by default) in the same order, with every reason that applies.
+ */
+export async function previewDigest(
+  deps: DigestDeps,
+  owner: OwnerId,
+  limit = DIGEST_SIZE,
+): Promise<{ links: DigestLink[] }> {
+  const now = deps.now();
+  const { picked, focus } = await select(deps, owner, now, limit);
+  const links = picked.map((link) => ({
+    link,
+    reasons: [...(focus.get(link.id) ?? []), ...ownReasons(link, link.lastSurfacedAt, now)],
+  }));
+  return { links };
+}
+
+/**
  * Picks up to DIGEST_SIZE eligible links that have a reason, marks them surfaced, and returns them
  * with every reason that applies.
  *
- * Eligible: active, not snoozed at now, and surfaced at or before now - SURFACE_COOLDOWN_MS.
- * The claim re-checks that in the store; a link it skips is left out, and the other reasons are
- * judged again from the link as claimed. A claimed link left with no reason is left out but stays
- * marked. A response lost after the claim still uses up its links.
+ * The claim re-checks eligibility in the store; a link it skips is left out, and the other reasons
+ * are judged again from the link as claimed. A claimed link left with no reason is left out but
+ * stays marked. A response lost after the claim still uses up its links.
  */
 export async function getDigest(
   deps: DigestDeps,
   owner: OwnerId,
 ): Promise<{ links: DigestLink[] }> {
   const now = deps.now();
-  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
-  const all = await deps.store.listLinks(owner);
-  const candidates = new Map(
-    all.filter((l) => eligible(l, now, notSurfacedAfter)).map((l) => [l.id, l]),
+  const { picked, focus } = await select(deps, owner, now, DIGEST_SIZE);
+  const claimed = await claimSurfaced(
+    { store: deps.store, now: () => now },
+    owner,
+    picked.map((l) => l.id),
   );
-  if (candidates.size === 0) return { links: [] };
-
-  const focus = await focusReasons(deps, owner, now, all.length, (id) => candidates.has(id));
-  const focusPicked = new Set([...focus.keys()].slice(0, FOCUS_SLOTS));
-  const rest = [...candidates.values()]
-    .filter(
-      (l) =>
-        !focusPicked.has(l.id) &&
-        (focus.has(l.id) || ownReasons(l, l.lastSurfacedAt, now).length > 0),
-    )
-    .sort(rotation);
-  const picked = [...focusPicked, ...rest.map((l) => l.id)].slice(0, DIGEST_SIZE);
-  if (picked.length === 0) return { links: [] };
-
-  const claimed = await deps.store.claimSurfaced(owner, picked, { at: now, notSurfacedAfter, now });
   const links = claimed
     .map(({ link, previousSurfacedAt }) => ({
       link,

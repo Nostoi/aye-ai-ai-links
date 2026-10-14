@@ -1,5 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 
+const MAX_AGENT = 200;
+
 /**
  * One line per request: method, path, status, time, the refusal's `error` or `code` from a JSON
  * error body, and the user agent. The query string, other headers and bodies are never written:
@@ -12,6 +14,7 @@ export function requestLog(log: (line: string) => void): MiddlewareHandler {
     const { status } = c.res;
     const parts = [
       "[http]",
+      new Date(start).toISOString(),
       c.req.method,
       new URL(c.req.url).pathname,
       String(status),
@@ -20,8 +23,10 @@ export function requestLog(log: (line: string) => void): MiddlewareHandler {
     const error = status >= 400 ? await errorCode(c.res) : undefined;
     if (error) parts.push(`error=${error}`);
     const agent = c.req.header("user-agent");
-    parts.push(`ua=${agent ? JSON.stringify(agent) : "-"}`);
-    log(parts.join(" "));
+    parts.push(`ua=${agent ? JSON.stringify(agent.slice(0, MAX_AGENT)) : "-"}`);
+    try {
+      log(parts.join(" "));
+    } catch {}
   };
 }
 

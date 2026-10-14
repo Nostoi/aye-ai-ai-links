@@ -273,7 +273,9 @@ describe("startServer", () => {
     const res = await post(port, SAVE, "Bearer aak_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     expect(res.status).toBe(401);
     expect(rows()).toEqual([]);
-    expect(logged).toContainEqual(expect.stringMatching(/^\[http\] POST \/mcp 401 /));
+    expect(logged).toContainEqual(
+      expect.stringMatching(/^\[http\] \d{4}-\d\d-\d\dT\S+Z POST \/mcp 401 /),
+    );
   });
 
   it("lets an in-flight request finish and commit before closing the database", async () => {

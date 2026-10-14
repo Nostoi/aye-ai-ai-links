@@ -197,4 +197,15 @@ describe("the Undo bar", () => {
     await p.settle();
     expect(p.focused()).toBe(p.$("#pin"));
   });
+
+  it("a second message shown after focus left the bar gives focus back to where focus was then", async () => {
+    const p = load();
+    p.focus(p.$("#pin"));
+    p.showUndo("Kitchen unpinned.", async () => {});
+    p.focus(p.$("#pin2"));
+    p.showUndo("Baking unpinned.", async () => {});
+    p.fire(p.undoButton, "click");
+    await p.settle();
+    expect(p.focused()).toBe(p.$("#pin2"));
+  });
 });

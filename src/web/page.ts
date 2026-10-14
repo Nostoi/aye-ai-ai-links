@@ -41,8 +41,8 @@ const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden>
  * `UNDO_BAR_MS` after it last had neither focus nor the pointer.
  * Undo runs `undo` once, with the button disabled until it settles, then closes the
  * bar. A new message replaces the bar, and a pending undo only closes the bar if it is still its
- * own. When the bar closes with focus on it, focus goes back to what had it before the first
- * message, if that is still on the page.
+ * own. When the bar closes with focus on it, focus goes back to what had it before,
+ * if that is still on the page.
  */
 const UNDO_SCRIPT = `<script>
 const showUndo = (() => {
@@ -114,7 +114,8 @@ const showUndo = (() => {
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
-    } else returnTo = document.activeElement;
+    }
+    if (!current || !bar.contains(document.activeElement)) returnTo = document.activeElement;
     const action = { undo, running: false };
     action.ceiling = setTimeout(() => close(action), ${UNDO_BAR_MAX_MS});
     current = action;

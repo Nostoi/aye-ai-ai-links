@@ -80,6 +80,8 @@ ${why}
  * the link as a normal navigation.
  */
 const OLDER_SCRIPT = `<script>
+// A block, so these names cannot clash with another script on the page.
+{
 const older = document.getElementById("older");
 const list = document.getElementById("space-links");
 if (older && list) {
@@ -108,6 +110,7 @@ if (older && list) {
     const first = added[0] && added[0].querySelector("a");
     if (first && first.focus) first.focus();
   });
+}
 }
 </script>`;
 

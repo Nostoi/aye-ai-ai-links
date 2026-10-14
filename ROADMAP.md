@@ -30,12 +30,12 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - a pinned tag whose stored color is not in `SPACE_COLORS` is skipped;
     - null is neutral, so amber never appears.
 
-    Search results, space cards and #95's cards read it.
+    Search results and space cards read it. #95's cards read it once #95 and #96 are both merged.
   - **Space pages.** Every tag the owner has gets a space page, pinned or not. Only pinned tags show on home, by key. The band uses the tag's color when it is a space color, otherwise neutral. A blank or missing `tag` redirects with 303 to `/`. An unknown key and another owner's key get the same 404, which never names the key.
   - **Paging.** `newestLinks` (`core/link-pages.ts`) pages newest first by `(savedAt, id)`, 24 links a page on the web. `SearchFilters.before` applies to a blank query only, and a word query with it is refused. The cursor is opaque to the door. Core accepts one only when it names one of the owner's links with that saved time, so a hand-made id never reaches the engine; anything else is `invalid_input`, which is a 400. "Show older links" is a real link, and a script appends the next page, navigating instead when the answer was redirected or failed.
   - **Mosaic.** It shows the stored images of the 3 newest active links that have one, among the space's newest 50 active links. Cells without an image are tints of the space's color.
   - **Origin check.** `/`, `/spaces` and `/spaces/done` join `CHECKED_PAGES`, since home now shows owner data. This is the same change as #95's.
-  - **Accepted:** an unpinned tag that kept its color gets a colored band, while its cards fall back to their first pinned tag, since `within` counts only pinned tags.
+  - **Open question, not yet decided:** an unpinned tag that kept its color gets a colored band, while its cards fall back to their first pinned tag, since `within` counts only pinned tags.
 
 - **2026-10-14:** The Tags page (#97; plan in comment 6173556769, revised by comments 6173827375, 6173935487 and 6174590317).
   - **Owner rulings (comment 6173827375).**

@@ -10,6 +10,7 @@ import {
   oauthErrorPage,
   searchPage,
 } from "./pages.js";
+import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
 
@@ -145,6 +146,23 @@ const PAGES: [string, string][] = [
   ["error", oauthErrorPage("It failed.")],
   ["home", homePage()],
   ["search", searchPage({ query: "q", links: [], now: new Date(0) })],
+  [
+    "tags",
+    tagsPage({
+      tags: [
+        {
+          key: "kitchen",
+          name: "Kitchen",
+          kind: "project",
+          kindSource: "inferred",
+          color: "clay",
+          pinned: true,
+          description: null,
+          projectStatus: "active",
+        },
+      ],
+    }),
+  ],
 ];
 
 describe("the outside-request scan", () => {
@@ -207,16 +225,17 @@ describe("the header", () => {
 });
 
 describe("the menu", () => {
-  it("is on home, search and connections, holds only Apps and keys and Sign out, and is not on the others", () => {
+  it("is on home, search, tags and connections, holds only Tags, Apps and keys and Sign out, and is not on the others", () => {
     const withMenu = [
       homePage(),
       searchPage({ query: "", links: [], now: new Date(0) }),
+      tagsPage({ tags: [] }),
       connectionsPage({ connections: [], keys: [], now: new Date(0) }),
     ];
     for (const html of withMenu) {
-      expect(html).toContain('<a href="/connections">Apps and keys</a>');
+      expect(html).toContain('<a href="/tags">Tags</a><a href="/connections">Apps and keys</a>');
       expect(html).toContain('<button id="sign-out"');
-      expect(html).not.toMatch(/href="\/(all|tags|profile)"/);
+      expect(html).not.toMatch(/href="\/(all|profile)"/);
     }
     const without = [loginPage({ next: "/" }), oauthErrorPage("x"), consentExpiredPage()];
     for (const html of without) expect(html).not.toContain('id="sign-out"');

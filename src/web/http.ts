@@ -7,8 +7,12 @@ import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
+import { CoreError } from "../core/errors.js";
+import { setProjectStatus } from "../core/project-status.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
-import type { OwnerId } from "../core/types.js";
+import { changeTagKind } from "../core/tag-kind.js";
+import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
+import type { OwnerId, Tag, TagKind } from "../core/types.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import {
@@ -20,12 +24,14 @@ import {
   searchPage,
 } from "./pages.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
+import { tagsPage } from "./tags-page.js";
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
 
 type Check<T> = (value: unknown) => value is T;
 const isString: Check<string> = (value) => typeof value === "string";
+const isBoolean: Check<boolean> = (value) => typeof value === "boolean";
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 
 /** The object a shape of member checks accepts. */
@@ -72,6 +78,28 @@ function keyAction(c: Context, act: () => Response): Response {
   } catch (error) {
     if (!(error instanceof AgentKeyError || error instanceof KeyStoreError)) throw error;
     return c.json({ code: error.code, message: error.message }, 400, NO_STORE);
+  }
+}
+
+/**
+ * A tag action answers 200 with the tag. A refusal answers in the owner's words, never core's,
+ * which are written for an agent: `invalid` for a refused value, and fixed words for a tag that
+ * is gone or changed meanwhile. Anything else is thrown on.
+ */
+async function tagAction(c: Context, invalid: string, act: () => Promise<Tag>) {
+  try {
+    return c.json({ tag: await act() }, 200, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError)) throw error;
+    if (error.code === "not_found") {
+      const message = "That tag is not there any more. Reload the page.";
+      return c.json({ code: error.code, message }, 404, NO_STORE);
+    }
+    if (error.code === "conflict") {
+      const message = "That tag changed while you were editing it. Reload the page and try again.";
+      return c.json({ code: error.code, message }, 409, NO_STORE);
+    }
+    return c.json({ code: error.code, message: invalid }, 400, NO_STORE);
   }
 }
 
@@ -165,6 +193,50 @@ export function webApp({
       keys.turnOn(c.get("caller").owner, c.get("body").id);
       return c.body(null, 204, NO_STORE);
     }),
+  );
+
+  app.get("/tags", session, async (c) =>
+    c.html(tagsPage({ tags: await deps.store.listTags(c.get("caller").owner) }), 200, NO_STORE),
+  );
+
+  // Each tag action names the tag by its key; core matches it as a name.
+  const tagBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
+    jsonBody({ key: isString, ...shape });
+
+  app.post("/tags/pin", tagBody({ pinned: isBoolean }), session, (c) =>
+    tagAction(c, "That did not work. Reload the page and try again.", () =>
+      setTagPinned(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        pinned: c.get("body").pinned,
+      }),
+    ),
+  );
+
+  app.post("/tags/color", tagBody({ color: isString }), session, (c) =>
+    tagAction(c, "Pick one of the six colors.", () =>
+      setTagColor(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        color: c.get("body").color as SpaceColor,
+      }),
+    ),
+  );
+
+  app.post("/tags/kind", tagBody({ kind: isString }), session, (c) =>
+    tagAction(c, "Pick Topic or Project.", () =>
+      changeTagKind(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        kind: c.get("body").kind as TagKind,
+      }),
+    ),
+  );
+
+  app.post("/tags/status", tagBody({ status: isString }), session, (c) =>
+    tagAction(c, "Only a project can be done or reopened. Make it a project first.", () =>
+      setProjectStatus(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        status: c.get("body").status as "active" | "done",
+      }),
+    ),
   );
 
   if (consent) {

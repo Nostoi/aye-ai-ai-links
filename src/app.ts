@@ -48,6 +48,11 @@ const CHECKED_PAGES = [
   "/connections/keys",
   "/connections/keys/turn-off",
   "/connections/keys/turn-on",
+  "/tags",
+  "/tags/pin",
+  "/tags/color",
+  "/tags/kind",
+  "/tags/status",
   OAUTH_ERROR_PATH,
 ];
 

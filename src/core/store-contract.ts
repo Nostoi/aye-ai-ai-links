@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
 import { filingContext } from "./filing-context.js";
 import { getLink, saveLink, updateLink } from "./links.js";
+import { setProjectStatus } from "./project-status.js";
 import type { LinkStore } from "./store.js";
 import { changeTagKind } from "./tag-kind.js";
+import { SPACE_COLORS, setTagColor, setTagPinned } from "./tag-space.js";
 import type { Labelled, Link, Tag, TagKind } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
@@ -103,6 +105,18 @@ function countingTagWrites(inner: LinkStore): { store: LinkStore; calls: () => n
     updateTag(owner, key, patch, expected) {
       n++;
       return inner.updateTag(owner, key, patch, expected);
+    },
+  });
+  return { store, calls: () => n };
+}
+
+/** Counts the color writes that reach the store. */
+function countingColorWrites(inner: LinkStore): { store: LinkStore; calls: () => number } {
+  let n = 0;
+  const store = wrap(inner, {
+    colorTag(owner, key, color) {
+      n++;
+      return inner.colorTag(owner, key, color);
     },
   });
   return { store, calls: () => n };
@@ -834,6 +848,176 @@ export function describeStoreContract(
         expect(await h.store.colorTag(A, "absent", "teal")).toBeNull();
         expect(await h.catalog(A)).toEqual(beforeA);
         expect(await h.catalog(B)).toEqual(beforeB);
+      });
+    });
+
+    describe("setTagColor", () => {
+      it.each(SPACE_COLORS.map((c) => [c]))("sets %s, matching the name loosely", async (color) => {
+        await h.seedTag(A, tagOf("home batteries", { name: "Home Batteries" }));
+        await h.seedTag(B, tagOf("home batteries"));
+        const tag = await setTagColor(deps(), A, { name: " HOME  batteries", color });
+        expect(tag).toEqual(tagOf("home batteries", { name: "Home Batteries", color }));
+        expect(await h.catalog(A)).toEqual([tag]);
+        expect(await h.catalog(B)).toEqual([tagOf("home batteries")]);
+      });
+
+      it.each([["amber"], ["Teal"], ["red"], ["#2F8F83"], [""], [7], [null]])(
+        "refuses %j without writing",
+        async (color) => {
+          await h.seedTag(A, tagOf("solar", { color: "clay" }));
+          const counted = countingColorWrites(h.store);
+          const refused = setTagColor({ store: counted.store }, A, {
+            name: "solar",
+            color: color as never,
+          });
+          expect(await code(refused)).toBe("invalid_input");
+          expect(counted.calls()).toBe(0);
+          expect(await h.catalog(A)).toEqual([tagOf("solar", { color: "clay" })]);
+        },
+      );
+
+      it("refuses an unknown tag and a blank name", async () => {
+        await h.seedTag(B, tagOf("only-b"));
+        expect(await code(setTagColor(deps(), A, { name: "only-b", color: "teal" }))).toBe(
+          "not_found",
+        );
+        expect(await code(setTagColor(deps(), A, { name: " ", color: "teal" }))).toBe(
+          "invalid_input",
+        );
+        expect(await h.catalog(B)).toEqual([tagOf("only-b")]);
+      });
+    });
+
+    describe("setTagPinned", () => {
+      const pin = (name: string, store = h.store) =>
+        setTagPinned({ store }, A, { name, pinned: true });
+      const unpin = (name: string) => setTagPinned(deps(), A, { name, pinned: false });
+
+      it("gives a new pin the first color no tag holds, counting unpinned tags", async () => {
+        await h.seedTag(A, tagOf("a", { color: "teal" }));
+        await h.seedTag(A, tagOf("b", { color: "clay", pinned: true }));
+        await h.seedTag(A, tagOf("c"));
+        expect(await pin("c")).toEqual(tagOf("c", { color: "violet", pinned: true }));
+      });
+
+      it("gives two pins different colors while a color is free, though the first was unpinned", async () => {
+        await h.seedTag(A, tagOf("kitchen"));
+        await h.seedTag(A, tagOf("baking"));
+        expect((await pin("kitchen"))?.color).toBe("teal");
+        expect(await unpin("kitchen")).toEqual(tagOf("kitchen", { color: "teal" }));
+        expect((await pin("baking"))?.color).toBe("clay");
+      });
+
+      it("once every color is held, gives the first color no pinned tag holds", async () => {
+        for (const color of SPACE_COLORS) {
+          await h.seedTag(A, tagOf(color, { color, pinned: color !== "blue" }));
+        }
+        await h.seedTag(A, tagOf("new"));
+        expect((await pin("new"))?.color).toBe("blue");
+      });
+
+      it("gives teal once every color is held by a pinned tag", async () => {
+        for (const [i, color] of ["rose", ...SPACE_COLORS].entries()) {
+          await h.seedTag(A, tagOf(`x${i}`, { color, pinned: true }));
+        }
+        await h.seedTag(A, tagOf("new"));
+        expect((await pin("new"))?.color).toBe("teal");
+      });
+
+      it("keeps a tag's own color on pin and unpin, so pinning again brings the same color", async () => {
+        await h.seedTag(A, tagOf("solar", { color: "green", kind: "project" }));
+        expect(await pin("solar")).toEqual(
+          tagOf("solar", { color: "green", kind: "project", pinned: true }),
+        );
+        expect(await unpin("solar")).toEqual(tagOf("solar", { color: "green", kind: "project" }));
+        expect(await pin("solar")).toEqual(
+          tagOf("solar", { color: "green", kind: "project", pinned: true }),
+        );
+      });
+
+      it("keeps a color the owner chose between the read and the pin", async () => {
+        await h.seedTag(A, tagOf("solar"));
+        const racing = wrap(h.store, {
+          async pinTag(owner, key, p) {
+            await h.store.colorTag(owner, key, "violet");
+            return h.store.pinTag(owner, key, p);
+          },
+        });
+        expect(await pin("solar", racing)).toEqual(
+          tagOf("solar", { color: "violet", pinned: true }),
+        );
+        expect(await h.catalog(A)).toEqual([tagOf("solar", { color: "violet", pinned: true })]);
+      });
+
+      it("refuses an unknown tag, another owner's, and a blank name, writing nothing", async () => {
+        await h.seedTag(B, tagOf("only-b"));
+        expect(await code(pin("absent"))).toBe("not_found");
+        expect(await code(pin("only-b"))).toBe("not_found");
+        expect(await code(unpin("  "))).toBe("invalid_input");
+        expect(await h.catalog(B)).toEqual([tagOf("only-b")]);
+      });
+    });
+
+    describe("setProjectStatus", () => {
+      const project = tagOf("solar", { kind: "project", kindSource: "stated" });
+      const status = (s: "active" | "done", store = h.store) =>
+        setProjectStatus({ store }, A, { name: "Solar", status: s });
+
+      it("marks a project done, which takes it out of active projects, and reopens it", async () => {
+        await h.seedTag(A, { ...project, projectStatus: "active" });
+        await h.seedTag(B, { ...project, projectStatus: "active" });
+        expect(await status("done")).toEqual({ ...project, projectStatus: "done" });
+        expect((await filingContext(deps(), A)).activeProjects).toEqual([]);
+        expect(await status("active")).toEqual({ ...project, projectStatus: "active" });
+        expect((await filingContext(deps(), A)).activeProjects.map((t) => t.key)).toEqual([
+          "solar",
+        ]);
+        expect(await h.catalog(B)).toEqual([{ ...project, projectStatus: "active" }]);
+      });
+
+      it("refuses a topic, and its row is unchanged", async () => {
+        await h.seedTag(A, tagOf("solar", { color: "teal" }));
+        const counted = countingTagWrites(h.store);
+        expect(await code(status("done", counted.store))).toBe("invalid_input");
+        expect(counted.calls()).toBe(0);
+        expect(await h.catalog(A)).toEqual([tagOf("solar", { color: "teal" })]);
+      });
+
+      it("refuses a status that is not active or done, writing nothing", async () => {
+        await h.seedTag(A, project);
+        for (const bad of ["archived", null, ""]) {
+          const refused = setProjectStatus(deps(), A, { name: "solar", status: bad as never });
+          expect(await code(refused)).toBe("invalid_input");
+        }
+        expect(await h.catalog(A)).toEqual([project]);
+      });
+
+      it("refuses a project that became a topic while it ran, writing no status", async () => {
+        await h.seedTag(A, { ...project, projectStatus: "active" });
+        expect(await code(status("done", racingTagWrite(h.store, 1)))).toBe("invalid_input");
+        expect(await h.catalog(A)).toEqual([
+          tagOf("solar", { kindSource: "stated", projectStatus: null }),
+        ]);
+      });
+
+      it("is a conflict when the kind keeps moving, after one retry", async () => {
+        await h.seedTag(A, project);
+        let writes = 0;
+        const moving = wrap(h.store, {
+          async updateTag() {
+            writes++;
+            return null;
+          },
+        });
+        expect(await code(status("done", moving))).toBe("conflict");
+        expect(writes).toBe(2);
+        expect(await h.catalog(A)).toEqual([project]);
+      });
+
+      it("refuses an unknown tag and another owner's", async () => {
+        await h.seedTag(B, project);
+        expect(await code(status("done"))).toBe("not_found");
+        expect(await h.catalog(B)).toEqual([project]);
       });
     });
 

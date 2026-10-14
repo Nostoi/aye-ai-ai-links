@@ -13,6 +13,7 @@ import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
+import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import { webApp } from "./web/http.js";
@@ -52,14 +53,19 @@ export function createApp({
   auth,
   allowedHosts,
   rateLimit,
+  log,
 }: {
   deps: McpDeps;
   identify: Identify;
   auth?: AuthDeps | undefined;
   allowedHosts?: string[] | undefined;
   rateLimit?: RateLimitOptions | undefined;
+  /** Receives one line per request; no request log when left out. */
+  log?: ((line: string) => void) | undefined;
 }) {
   const app = new Hono();
+  // First, so refusals by every check below are recorded too.
+  if (log) app.use("*", requestLog(log));
   const baseUrl = auth?.auth.options.baseURL;
   const mcp = mcpApp({
     deps,

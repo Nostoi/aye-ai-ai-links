@@ -212,6 +212,7 @@ export async function oauthWorld({
   limits,
   authDb,
   net = fakeNetwork(),
+  log,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -219,6 +220,7 @@ export async function oauthWorld({
   /** The auth database; in memory when left out. */
   authDb?: Database.Database;
   net?: ReturnType<typeof fakeNetwork>;
+  log?: (line: string) => void;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -236,6 +238,7 @@ export async function oauthWorld({
     auth: { ...auth, limits },
     allowedHosts: ["links.example"],
     rateLimit,
+    log,
   });
   const savedBy = () =>
     (links.prepare("SELECT saved_by AS s FROM links ORDER BY rowid").all() as { s: string }[]).map(

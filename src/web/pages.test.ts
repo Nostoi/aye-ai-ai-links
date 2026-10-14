@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
 import { connectionsPage } from "./connections-page.js";
+import { homePage } from "./home-page.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
-import {
-  consentExpiredPage,
-  consentPage,
-  homePage,
-  loginPage,
-  oauthErrorPage,
-  searchPage,
-} from "./pages.js";
+import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 
 const ORIGIN = "https://links.example";
+const EMPTY_HOME = { worth: { links: [], images: new Map(), now: new Date(0) }, spaces: "" };
 
 /** The page's own inline script, run against stand-ins for the DOM, `location` and `fetch`. */
 function scriptOf(html: string): string {
@@ -143,7 +138,7 @@ const PAGES: [string, string][] = [
     }),
   ],
   ["error", oauthErrorPage("It failed.")],
-  ["home", homePage()],
+  ["home", homePage(EMPTY_HOME)],
   ["search", searchPage({ query: "q", links: [], now: new Date(0) })],
 ];
 
@@ -193,7 +188,7 @@ describe.each(PAGES)("the %s page", (_, html) => {
 describe("the header", () => {
   it("links the mark home on signed-in pages only", () => {
     const home = /<a class="brand" href="\/">/;
-    expect(homePage()).toMatch(home);
+    expect(homePage(EMPTY_HOME)).toMatch(home);
     expect(searchPage({ query: "", links: [], now: new Date(0) })).toMatch(home);
     expect(connectionsPage({ connections: [], keys: [], now: new Date(0) })).toMatch(home);
     expect(consentPage({ clientName: "C", redirectHost: "h" })).toMatch(home);
@@ -209,7 +204,7 @@ describe("the header", () => {
 describe("the menu", () => {
   it("is on home, search and connections, holds only Apps and keys and Sign out, and is not on the others", () => {
     const withMenu = [
-      homePage(),
+      homePage(EMPTY_HOME),
       searchPage({ query: "", links: [], now: new Date(0) }),
       connectionsPage({ connections: [], keys: [], now: new Date(0) }),
     ];
@@ -235,7 +230,7 @@ function pressSlash(active: { tagName: string; isContentEditable?: boolean } | n
       if (type === "keydown") onKey = fn;
     },
   };
-  new Function("document", scriptOf(homePage()))(document);
+  new Function("document", scriptOf(homePage(EMPTY_HOME)))(document);
   onKey?.({ key: "/", preventDefault: () => prevented++ });
   return { focused, prevented };
 }

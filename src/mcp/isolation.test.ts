@@ -465,7 +465,8 @@ describe("owner isolation coverage", () => {
   type Marker = string | Buffer | string[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
-    "GET /": { noOwnerData: "the question and a search field, no links" },
+    // A's titled link has no why, so it is one of A's picks on home.
+    "GET /": { request: "/", marker: () => "Quokka habitat notes" },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
     "GET /connections": {
       request: "/connections",
@@ -622,6 +623,12 @@ describe("owner isolation coverage", () => {
     "POST /connections/keys": "the two-owner agent keys test in web/http.test.ts",
     "POST /connections/keys/turn-off": "the two-owner agent keys test in web/http.test.ts",
     "POST /connections/keys/turn-on": "the two-owner agent keys test in web/http.test.ts",
+    "POST /home/opened": "the two-owner test of POST /home/opened in web/home-routes.test.ts",
+    "POST /home/snooze": "the two-owner test of POST /home/snooze in web/home-routes.test.ts",
+    "POST /home/unsnooze": "the two-owner test of POST /home/unsnooze in web/home-routes.test.ts",
+    "POST /home/archive": "the two-owner test of POST /home/archive in web/home-routes.test.ts",
+    "POST /home/unarchive": "the two-owner test of POST /home/unarchive in web/home-routes.test.ts",
+    "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

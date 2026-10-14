@@ -2,7 +2,7 @@ import type { Link } from "../core/types.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 
 /** Only web links are made clickable; anything else is shown as text. */
-const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
+export const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
@@ -126,11 +126,14 @@ function whyLine(why: Link["why"]): string {
   return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: "${text}"`;
 }
 
-/** The link's stored image, served by this site, or the plain tile; never the page's own image URL. */
-const tile = (link: Link, version: string | undefined) =>
+/**
+ * The link's stored image, served by this site, or the plain tile; never the page's own image URL.
+ * `className` styles both.
+ */
+export const tile = (link: Link, version: string | undefined, className = "tile") =>
   version === undefined
-    ? '<div class="tile" aria-hidden="true"></div>'
-    : `<img class="tile" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(version)}" alt="" loading="lazy">`;
+    ? `<div class="${className}" aria-hidden="true"></div>`
+    : `<img class="${className}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(version)}" alt="" loading="lazy">`;
 
 function resultItem(link: Link, now: Date, version: string | undefined): string {
   const label = escapeHtml(link.title ?? link.url);
@@ -148,33 +151,6 @@ ${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${
 </div>
 </li>`;
 }
-
-/** The big question and one search field; the script lets `/` jump to it unless the owner is typing. */
-export const homePage = () =>
-  page(
-    "Aye-AI-AI Links",
-    `<main class="home">
-<form action="/search" method="get" role="search">
-<label class="question" for="q">What are you trying to remember?</label>
-<div class="search-box">
-<input id="q" name="q" type="search" placeholder="That article about batteries and the tax credit">
-<kbd aria-hidden="true">/</kbd>
-<button class="primary" type="submit">Find it</button>
-</div>
-<p class="small hint">Describe it however you remember it: when, why, what it looked like.</p>
-</form>
-</main>
-<script>
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "/") return;
-  const active = document.activeElement;
-  if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
-  event.preventDefault();
-  document.getElementById("q").focus();
-});
-</script>`,
-    { menu: true },
-  );
 
 /**
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.

@@ -7,19 +7,24 @@ import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
+import { CoreError } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import type { OwnerId } from "../core/types.js";
+import {
+  archiveLink,
+  markOpened,
+  snoozeLink,
+  tellWhy,
+  unarchiveLink,
+  unsnoozeLink,
+  type WorthDeps,
+  worthALook,
+} from "../core/worth-a-look.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
-import {
-  consentExpiredPage,
-  consentPage,
-  homePage,
-  loginPage,
-  oauthErrorPage,
-  searchPage,
-} from "./pages.js";
+import { homePage } from "./home-page.js";
+import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
@@ -46,29 +51,81 @@ const imageHeaders = (contentType: string, cached: boolean) => ({
 const isString = (value: unknown): value is string => typeof value === "string";
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 
+/** A link id as the page sends it: digits, as the store issues them. */
+const isLinkId = (value: unknown): value is string =>
+  typeof value === "string" && /^[0-9]{1,20}$/.test(value);
+const isDate = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+
 /**
- * Takes a JSON body under the auth body cap, so any client id that can connect fits, and sets
- * `field` to its member `name` when `accepts` does.
+ * Reads a JSON body under the auth body cap, so any client id that can connect fits. Returns the
+ * parsed body (undefined when it is not JSON), or the 413 to answer with.
  */
+async function readJson(c: Context): Promise<{ body: unknown } | Response> {
+  let raw: Uint8Array | null;
+  try {
+    raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
+  } catch (error) {
+    if (!(error instanceof BodyTooLarge)) throw error;
+    return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
+  }
+  try {
+    return { body: JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array())) };
+  } catch {
+    return { body: undefined };
+  }
+}
+
+const member = (body: unknown, name: string): unknown =>
+  typeof body === "object" && body !== null ? (body as Record<string, unknown>)[name] : undefined;
+
+/** Takes a JSON body (see `readJson`) and sets `field` to its member `name` when `accepts` does. */
 const jsonField = <T>(name: string, accepts: (value: unknown) => value is T) =>
   createMiddleware<{ Variables: { field: T } }>(async (c, next) => {
-    let raw: Uint8Array | null;
-    try {
-      raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
-    } catch (error) {
-      if (!(error instanceof BodyTooLarge)) throw error;
-      return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()))[name];
-    } catch {}
+    const read = await readJson(c);
+    if (read instanceof Response) return read;
+    const value = member(read.body, name);
     if (!accepts(value)) {
       return c.json({ code: "BAD_REQUEST", message: `Send a JSON body with a ${name}.` }, 400);
     }
     c.set("field", value);
     await next();
   });
+
+/** `jsonField` for two members: sets `fields` to both when each is accepted. */
+const jsonFields = <A, B>(
+  [nameA, acceptsA]: [string, (value: unknown) => value is A],
+  [nameB, acceptsB]: [string, (value: unknown) => value is B],
+) =>
+  createMiddleware<{ Variables: { fields: [A, B] } }>(async (c, next) => {
+    const read = await readJson(c);
+    if (read instanceof Response) return read;
+    const [a, b] = [member(read.body, nameA), member(read.body, nameB)];
+    if (!acceptsA(a) || !acceptsB(b)) {
+      return c.json(
+        { code: "BAD_REQUEST", message: `Send a JSON body with a ${nameA} and a ${nameB}.` },
+        400,
+      );
+    }
+    c.set("fields", [a, b]);
+    await next();
+  });
+
+/** The page's words for a link that is gone; core's are written for an agent. */
+const LINK_GONE = "That link is gone. Reload the page.";
+const HOME_REFUSALS = { not_found: 404, conflict: 409, invalid_input: 400 } as const;
+
+/** A refused home action answers with its status and message; anything else is thrown on. */
+async function homeAction(c: Context, act: () => Promise<Response>): Promise<Response> {
+  try {
+    return await act();
+  } catch (error) {
+    if (!(error instanceof CoreError) || !(error.code in HOME_REFUSALS)) throw error;
+    const code = error.code as keyof typeof HOME_REFUSALS;
+    const message = code === "not_found" ? LINK_GONE : error.message;
+    return c.json({ code, message }, HOME_REFUSALS[code], NO_STORE);
+  }
+}
 
 /** A refused key action answers 400 with the rule's own message; anything else is thrown on. */
 function keyAction(c: Context, act: () => Response): Response {
@@ -92,7 +149,7 @@ export function webApp({
   connections,
   keys,
 }: {
-  deps: SearchLinksDeps & { images: LinkImageReader };
+  deps: SearchLinksDeps & WorthDeps & { images: LinkImageReader };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -121,7 +178,17 @@ export function webApp({
     c.html(oauthErrorPage(oauthErrorMessage(c.req.query("error"))), 200, NO_STORE),
   );
 
-  app.get("/", session, (c) => c.html(homePage(), 200, NO_STORE));
+  // Reads only: a cross-site GET carries the Lax session cookie, so it must not use links up.
+  app.get("/", session, async (c) => {
+    const { owner } = c.get("caller");
+    const links = await worthALook(deps, owner);
+    const images = await deps.images.imageVersions(
+      owner,
+      links.map((d) => d.link.id),
+    );
+    const page = homePage({ worth: { links, images, now: deps.now() }, spaces: "" });
+    return c.html(page, 200, NO_STORE);
+  });
 
   app.get("/search", session, async (c) => {
     const caller = c.get("caller");
@@ -155,6 +222,56 @@ export function webApp({
   });
 
   // Each POST's body is read, capped, before the session read takes the lock.
+
+  // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
+  // writes could be set off from another site.
+  const linkId = jsonField("id", isLinkId);
+  const done = (c: Context) => c.body(null, 204, NO_STORE);
+
+  app.post("/home/opened", linkId, session, (c) =>
+    homeAction(c, async () => {
+      await markOpened(deps, c.get("caller").owner, c.get("field"));
+      return done(c);
+    }),
+  );
+
+  // Answers when the snooze ends, which its Undo sends back.
+  app.post("/home/snooze", linkId, session, (c) =>
+    homeAction(c, async () => {
+      const until = await snoozeLink(deps, c.get("caller").owner, c.get("field"));
+      return c.json({ until: until.toISOString() }, 200, NO_STORE);
+    }),
+  );
+
+  app.post("/home/unsnooze", jsonFields(["id", isLinkId], ["until", isDate]), session, (c) =>
+    homeAction(c, async () => {
+      const [id, until] = c.get("fields");
+      await unsnoozeLink(deps, c.get("caller").owner, id, new Date(until));
+      return done(c);
+    }),
+  );
+
+  app.post("/home/archive", linkId, session, (c) =>
+    homeAction(c, async () => {
+      await archiveLink(deps, c.get("caller").owner, c.get("field"));
+      return done(c);
+    }),
+  );
+
+  app.post("/home/unarchive", linkId, session, (c) =>
+    homeAction(c, async () => {
+      await unarchiveLink(deps, c.get("caller").owner, c.get("field"));
+      return done(c);
+    }),
+  );
+
+  app.post("/home/why", jsonFields(["id", isLinkId], ["text", isString]), session, (c) =>
+    homeAction(c, async () => {
+      const [id, text] = c.get("fields");
+      await tellWhy(deps, c.get("caller").owner, id, text);
+      return done(c);
+    }),
+  );
 
   // 204 whether or not the app was connected; the page reloads either way.
   app.post("/connections/disconnect", jsonField("clientId", isString), session, async (c) => {

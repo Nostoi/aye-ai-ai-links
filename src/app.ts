@@ -49,6 +49,12 @@ const CHECKED_PAGES = [
   "/connections/keys",
   "/connections/keys/turn-off",
   "/connections/keys/turn-on",
+  "/home/opened",
+  "/home/snooze",
+  "/home/unsnooze",
+  "/home/archive",
+  "/home/unarchive",
+  "/home/why",
   OAUTH_ERROR_PATH,
   IMAGE_ROUTE,
 ];

@@ -129,7 +129,13 @@ export function fakeNetwork() {
   };
 }
 
-export type Sent = { status: number; headers: Headers; body: Record<string, unknown> | string };
+export type Sent = {
+  status: number;
+  headers: Headers;
+  body: Record<string, unknown> | string;
+  /** The response body exactly as sent. */
+  bytes: Buffer;
+};
 
 /** A browser or a client backend: keeps cookies, and sends the base Origin on POSTs unless told not to. */
 export class Agent {
@@ -176,12 +182,13 @@ export class Agent {
       if (value === "" || /max-age=0/i.test(cookie)) this.cookies.delete(pair.slice(0, at));
       else this.cookies.set(pair.slice(0, at), value);
     }
-    const text = await res.text();
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const text = bytes.toString("utf8");
     let parsed: Record<string, unknown> | string = text;
     try {
       parsed = JSON.parse(text);
     } catch {}
-    return { status: res.status, headers: res.headers, body: parsed };
+    return { status: res.status, headers: res.headers, body: parsed, bytes };
   }
 
   async signIn(extra: Record<string, unknown> = {}) {

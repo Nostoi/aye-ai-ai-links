@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { consentPage, loginPage } from "./pages.js";
+import { outsideRefs } from "./outside-refs-test-kit.js";
+import {
+  connectionsPage,
+  consentExpiredPage,
+  consentPage,
+  homePage,
+  loginPage,
+  oauthErrorPage,
+} from "./pages.js";
 
 const ORIGIN = "https://links.example";
 
@@ -117,5 +125,72 @@ describe("the consent page", () => {
     expect(html).toContain("&lt;img src=x onerror=&quot;1&quot;&gt;");
     expect(html).toContain("a&amp;b");
     expect(html).not.toContain("<img");
+  });
+});
+
+const PAGES: [string, string][] = [
+  ["login", loginPage({ next: "/" })],
+  ["consent", consentPage({ clientName: "Claude", redirectHost: "claude.ai" })],
+  ["consent expired", consentExpiredPage()],
+  ["connections", connectionsPage([{ clientId: "c", name: "Claude", connectedAt: new Date(0) }])],
+  ["error", oauthErrorPage("It failed.")],
+  ["home", homePage([])],
+];
+
+describe("the outside-request scan", () => {
+  it.each([
+    ["single-quoted src", "<img src='https://x.example/a.png'>"],
+    ["single-quoted link href", "<link rel='preload' href='https://x.example/f.woff2'>"],
+    ["unquoted src", "<img src=https://x.example/a.png>"],
+    ["unquoted link href", "<link rel=preload href=https://x.example/f.woff2>"],
+    ["poster", '<video poster="https://x.example/p.png"></video>'],
+    ["second srcset candidate", '<img srcset="/a.png 1x, https://x.example/b.png 2x">'],
+    ["object data", '<object data="https://x.example/o.svg"></object>'],
+    ["svg image href", '<svg><image href="https://x.example/i.png"/></svg>'],
+    ["svg image xlink:href", '<svg><image xlink:href="//x.example/i.png"/></svg>'],
+    ["protocol-relative script", '<script src="//x.example/s.js"></script>'],
+    ["form action", '<form action="https://x.example/post"></form>'],
+    ["meta refresh", '<meta http-equiv="refresh" content="0; url=https://x.example/">'],
+    ["css url()", "<style>a{background:url(https://x.example/a.png)}</style>"],
+    ["css @import", "<style>@import 'https://x.example/a.css';</style>"],
+  ])("flags %s", (_, html) => {
+    expect(outsideRefs(html)).not.toEqual([]);
+  });
+
+  it("lets navigation links, namespaces and data: values through", () => {
+    const html = [
+      '<a href="https://claude.ai/cb" target=_blank>go</a>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><use href="#m"/></svg>',
+      '<link rel="icon" href="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">',
+      '<img src="/logo.png" srcset="/a.png 1x, /b.png 2x">',
+      '<button data-client-id="https://x.example/id">x</button>',
+    ].join("");
+    expect(outsideRefs(html)).toEqual([]);
+  });
+});
+
+describe.each(PAGES)("the %s page", (_, html) => {
+  it("makes no outside request", () => {
+    expect(outsideRefs(html)).toEqual([]);
+  });
+
+  it("carries the theme and a data: favicon", () => {
+    expect(html).toContain("prefers-color-scheme: dark");
+    expect(html).toMatch(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
+  });
+});
+
+describe("the header", () => {
+  it("links the mark home on signed-in pages only", () => {
+    const home = /<a class="brand" href="\/">/;
+    expect(homePage([])).toMatch(home);
+    expect(connectionsPage([])).toMatch(home);
+    expect(consentPage({ clientName: "C", redirectHost: "h" })).toMatch(home);
+    expect(loginPage({ next: "/" })).not.toMatch(home);
+    expect(oauthErrorPage("x")).not.toMatch(home);
+  });
+
+  it("labels the logo", () => {
+    expect(loginPage({ next: "/" })).toContain('role="img" aria-label="Aye-AI-AI Links"');
   });
 });

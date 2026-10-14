@@ -6,6 +6,7 @@ import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
+import type { LinkImageReader } from "../core/image-store.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import type { OwnerId } from "../core/types.js";
 import {
@@ -22,6 +23,24 @@ import { requireSession, type SessionEnv } from "./require-session.js";
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
+
+/** A link's stored preview image. The id must be digits; anything else is not this route. */
+export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
+
+/**
+ * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
+ * The one exception to `NO_STORE` (owner ruling on #94): a URL carrying the image's current
+ * version is cached privately for a year, since a new image gets a new version, and signing out
+ * clears the browser's cache (`src/auth/http.ts`).
+ */
+const imageHeaders = (contentType: string, cached: boolean) => ({
+  "Content-Type": contentType,
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "default-src 'none'; sandbox",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Content-Disposition": "inline",
+  "Cache-Control": cached ? "private, max-age=31536000, immutable" : "no-store",
+});
 
 /** Takes a JSON `{clientId}` body under the auth body cap, so any id that can connect fits. */
 const clientIdBody = createMiddleware<{ Variables: { clientId: string } }>(async (c, next) => {
@@ -54,7 +73,7 @@ export function webApp({
   consent,
   connections,
 }: {
-  deps: SearchLinksDeps;
+  deps: SearchLinksDeps & { images: LinkImageReader };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -82,8 +101,20 @@ export function webApp({
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
     const links = await searchLinks(deps, caller.owner, { query }, caller.savedBy);
+    const images = await deps.images.imageVersions(
+      caller.owner,
+      links.map((l) => l.id),
+    );
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now }), 200, NO_STORE);
+    return c.html(searchPage({ query, links, now, images }), 200, NO_STORE);
+  });
+
+  // Another owner's link, a link without an image and an id never issued all get this same 404.
+  app.get(IMAGE_ROUTE, session, async (c) => {
+    const image = await deps.images.image(c.get("caller").owner, c.req.param("id"));
+    if (!image) return c.text("Not found.", 404, NO_STORE);
+    const cached = c.req.query("v") === image.version;
+    return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
   });
 
   app.get("/connections", session, async (c) =>

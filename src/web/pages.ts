@@ -218,7 +218,13 @@ function whyLine(why: Link["why"]): string {
   return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: "${text}"`;
 }
 
-function resultItem(link: Link, now: Date): string {
+/** The link's stored image, served by this site, or the plain tile; never the page's own image URL. */
+const tile = (link: Link, version: string | undefined) =>
+  version === undefined
+    ? '<div class="tile" aria-hidden="true"></div>'
+    : `<img class="tile" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(version)}" alt="" loading="lazy">`;
+
+function resultItem(link: Link, now: Date, version: string | undefined): string {
   const label = escapeHtml(link.title ?? link.url);
   const title = isWebUrl(link.url)
     ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
@@ -226,7 +232,7 @@ function resultItem(link: Link, now: Date): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
   return `<li class="result">
-<div class="tile" aria-hidden="true"></div>
+${tile(link, version)}
 <div class="result-body">
 <h2>${title}</h2>
 <p class="small">${saved}</p>
@@ -262,8 +268,21 @@ document.addEventListener("keydown", (event) => {
     { menu: true },
   );
 
-/** Search results, as the door got them. A blank query lists the newest links, so it is headed so. */
-export const searchPage = ({ query, links, now }: { query: string; links: Link[]; now: Date }) =>
+/**
+ * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
+ * `images` holds the image version of each link that has a stored image.
+ */
+export const searchPage = ({
+  query,
+  links,
+  now,
+  images = new Map(),
+}: {
+  query: string;
+  links: Link[];
+  now: Date;
+  images?: Map<string, string>;
+}) =>
   page(
     "Search · Aye-AI-AI Links",
     `<main>
@@ -275,7 +294,7 @@ export const searchPage = ({ query, links, now }: { query: string; links: Link[]
 </div>
 </form>
 <h1>${query.trim() === "" ? "Your newest links" : "Best matches first"}</h1>
-${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results">\n${links.map((l) => resultItem(l, now)).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results">\n${links.map((l) => resultItem(l, now, images.get(l.id))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=">your newest links</a>.</p>

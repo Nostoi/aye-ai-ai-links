@@ -321,6 +321,23 @@ describe("the search page's cards", () => {
     expect(html).toContain("a&amp;amp;b.example, saved");
   });
 
+  it("shows a stored image from this site, by its versioned URL, and the plain tile otherwise", () => {
+    const remote = { status: "ok" as const, fetchedAt: NOW, title: null, description: null };
+    const html = searchPage({
+      query: "q",
+      links: [
+        link({ id: "7", snapshot: { ...remote, imageUrl: "https://cdn.example/7.png" } }),
+        link({ id: "8", snapshot: { ...remote, imageUrl: "https://cdn.example/8.png" } }),
+      ],
+      now: NOW,
+      images: new Map([["7", "abc123"]]),
+    });
+    expect(html).toContain('<img class="tile" src="/images/7?v=abc123" alt="" loading="lazy">');
+    expect(html.match(/<div class="tile" aria-hidden="true"><\/div>/g)).toHaveLength(1);
+    expect(html).not.toContain("cdn.example");
+    expect(outsideRefs(html)).toEqual([]);
+  });
+
   it("says when nothing matched, above the 'Not it?' box that links to the newest links", () => {
     const html = results([]);
     expect(html).toContain("Nothing matched");

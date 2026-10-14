@@ -9,8 +9,19 @@ import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
+import {
+  addOwnerNote,
+  editOwnerNote,
+  profileContext,
+  removeNote,
+  restoreNote,
+} from "../core/profile.js";
+import type { ProfileStore } from "../core/profile-store.js";
+import { setProjectStatus } from "../core/project-status.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
-import type { OwnerId } from "../core/types.js";
+import { changeTagKind } from "../core/tag-kind.js";
+import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
+import type { OwnerId, Tag, TagKind } from "../core/types.js";
 import {
   archiveLink,
   markOpened,
@@ -25,7 +36,9 @@ import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { homePage } from "./home-page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
+import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
+import { tagsPage } from "./tags-page.js";
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -48,7 +61,10 @@ const imageHeaders = (contentType: string, cached: boolean) => ({
   "Cache-Control": cached ? "private, max-age=31536000, immutable" : "no-store",
 });
 
-const isString = (value: unknown): value is string => typeof value === "string";
+type Check<T> = (value: unknown) => value is T;
+const isString: Check<string> = (value) => typeof value === "string";
+const isBoolean: Check<boolean> = (value) => typeof value === "boolean";
+const isSafeInteger = (value: unknown): value is number => Number.isSafeInteger(value);
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 
 /** A link id as the page sends it: digits, as the store issues them. */
@@ -57,57 +73,40 @@ const isLinkId = (value: unknown): value is string =>
 const isDate = (value: unknown): value is string =>
   typeof value === "string" && !Number.isNaN(Date.parse(value));
 
+/** The object a shape of member checks accepts. */
+type Shaped<S extends Record<string, Check<unknown>>> = {
+  [K in keyof S]: S[K] extends Check<infer T> ? T : never;
+};
+
 /**
- * Reads a JSON body under the auth body cap, so any client id that can connect fits. Returns the
- * parsed body (undefined when it is not JSON), or the 413 to answer with.
+ * Takes a JSON body under the auth body cap, so any client id that can connect fits, and sets
+ * `body` to it when it is an object whose members pass each check in `shape`. Other members are
+ * ignored. This checks types only; the rules are core's.
  */
-async function readJson(c: Context): Promise<{ body: unknown } | Response> {
-  let raw: Uint8Array | null;
-  try {
-    raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
-  } catch (error) {
-    if (!(error instanceof BodyTooLarge)) throw error;
-    return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
-  }
-  try {
-    return { body: JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array())) };
-  } catch {
-    return { body: undefined };
-  }
-}
-
-const member = (body: unknown, name: string): unknown =>
-  typeof body === "object" && body !== null ? (body as Record<string, unknown>)[name] : undefined;
-
-/** Takes a JSON body (see `readJson`) and sets `field` to its member `name` when `accepts` does. */
-const jsonField = <T>(name: string, accepts: (value: unknown) => value is T) =>
-  createMiddleware<{ Variables: { field: T } }>(async (c, next) => {
-    const read = await readJson(c);
-    if (read instanceof Response) return read;
-    const value = member(read.body, name);
-    if (!accepts(value)) {
-      return c.json({ code: "BAD_REQUEST", message: `Send a JSON body with a ${name}.` }, 400);
+const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
+  createMiddleware<{ Variables: { body: Shaped<S> } }>(async (c, next) => {
+    let raw: Uint8Array | null;
+    try {
+      raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
+    } catch (error) {
+      if (!(error instanceof BodyTooLarge)) throw error;
+      return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
     }
-    c.set("field", value);
-    await next();
-  });
-
-/** `jsonField` for two members: sets `fields` to both when each is accepted. */
-const jsonFields = <A, B>(
-  [nameA, acceptsA]: [string, (value: unknown) => value is A],
-  [nameB, acceptsB]: [string, (value: unknown) => value is B],
-) =>
-  createMiddleware<{ Variables: { fields: [A, B] } }>(async (c, next) => {
-    const read = await readJson(c);
-    if (read instanceof Response) return read;
-    const [a, b] = [member(read.body, nameA), member(read.body, nameB)];
-    if (!acceptsA(a) || !acceptsB(b)) {
-      return c.json(
-        { code: "BAD_REQUEST", message: `Send a JSON body with a ${nameA} and a ${nameB}.` },
-        400,
+    let value: unknown;
+    try {
+      value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()));
+    } catch {}
+    const fits =
+      typeof value === "object" &&
+      value !== null &&
+      Object.entries(shape).every(([name, check]) =>
+        check((value as Record<string, unknown>)[name]),
       );
+    if (!fits) {
+      const names = Object.keys(shape).join(" and ");
+      return c.json({ code: "BAD_REQUEST", message: `Send a JSON body with ${names}.` }, 400);
     }
-    c.set("fields", [a, b]);
+    c.set("body", value as Shaped<S>);
     await next();
   });
 
@@ -127,6 +126,30 @@ async function homeAction(c: Context, act: () => Promise<Response>): Promise<Res
   }
 }
 
+/** What the owner is told when a note action is refused, by core's error code. */
+const NOTE_REFUSALS = {
+  not_found: { status: 404, message: "That note is gone. Reload." },
+  conflict: { status: 409, message: "An AI changed this note. Reload." },
+} as const;
+
+/**
+ * Runs a note action and answers 204. A refusal answers with the owner's wording: 404 for a note
+ * that is gone, 409 for one an AI changed, and 400 with core's own message for invalid text.
+ */
+async function noteAction(c: Context, act: () => Promise<void>): Promise<Response> {
+  try {
+    await act();
+    return c.body(null, 204, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError)) throw error;
+    if (error.code === "not_found" || error.code === "conflict") {
+      const { status, message } = NOTE_REFUSALS[error.code];
+      return c.json({ code: error.code, message }, status, NO_STORE);
+    }
+    return c.json({ code: error.code, message: error.message }, 400, NO_STORE);
+  }
+}
+
 /** A refused key action answers 400 with the rule's own message; anything else is thrown on. */
 function keyAction(c: Context, act: () => Response): Response {
   try {
@@ -134,6 +157,28 @@ function keyAction(c: Context, act: () => Response): Response {
   } catch (error) {
     if (!(error instanceof AgentKeyError || error instanceof KeyStoreError)) throw error;
     return c.json({ code: error.code, message: error.message }, 400, NO_STORE);
+  }
+}
+
+/**
+ * A tag action answers 200 with the tag. A refusal answers in the owner's words, never core's,
+ * which are written for an agent: `invalid` for a refused value, and fixed words for a tag that
+ * is gone or changed meanwhile. Anything else is thrown on.
+ */
+async function tagAction(c: Context, invalid: string, act: () => Promise<Tag>) {
+  try {
+    return c.json({ tag: await act() }, 200, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError)) throw error;
+    if (error.code === "not_found") {
+      const message = "That tag is not there any more. Reload the page.";
+      return c.json({ code: error.code, message }, 404, NO_STORE);
+    }
+    if (error.code === "conflict") {
+      const message = "That tag changed while you were editing it. Reload the page and try again.";
+      return c.json({ code: error.code, message }, 409, NO_STORE);
+    }
+    return c.json({ code: error.code, message: invalid }, 400, NO_STORE);
   }
 }
 
@@ -149,7 +194,7 @@ export function webApp({
   connections,
   keys,
 }: {
-  deps: SearchLinksDeps & WorthDeps & { images: LinkImageReader };
+  deps: SearchLinksDeps & WorthDeps & { images: LinkImageReader; profile: ProfileStore };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -225,78 +270,163 @@ export function webApp({
 
   // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
   // writes could be set off from another site.
-  const linkId = jsonField("id", isLinkId);
+  const linkId = { id: isLinkId };
   const done = (c: Context) => c.body(null, 204, NO_STORE);
 
-  app.post("/home/opened", linkId, session, (c) =>
+  app.post("/home/opened", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
-      await markOpened(deps, c.get("caller").owner, c.get("field"));
+      await markOpened(deps, c.get("caller").owner, c.get("body").id);
       return done(c);
     }),
   );
 
   // Answers when the snooze ends, which its Undo sends back.
-  app.post("/home/snooze", linkId, session, (c) =>
+  app.post("/home/snooze", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
-      const until = await snoozeLink(deps, c.get("caller").owner, c.get("field"));
+      const until = await snoozeLink(deps, c.get("caller").owner, c.get("body").id);
       return c.json({ until: until.toISOString() }, 200, NO_STORE);
     }),
   );
 
-  app.post("/home/unsnooze", jsonFields(["id", isLinkId], ["until", isDate]), session, (c) =>
+  app.post("/home/unsnooze", jsonBody({ ...linkId, until: isDate }), session, (c) =>
     homeAction(c, async () => {
-      const [id, until] = c.get("fields");
+      const { id, until } = c.get("body");
       await unsnoozeLink(deps, c.get("caller").owner, id, new Date(until));
       return done(c);
     }),
   );
 
-  app.post("/home/archive", linkId, session, (c) =>
+  app.post("/home/archive", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
-      await archiveLink(deps, c.get("caller").owner, c.get("field"));
+      await archiveLink(deps, c.get("caller").owner, c.get("body").id);
       return done(c);
     }),
   );
 
-  app.post("/home/unarchive", linkId, session, (c) =>
+  app.post("/home/unarchive", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
-      await unarchiveLink(deps, c.get("caller").owner, c.get("field"));
+      await unarchiveLink(deps, c.get("caller").owner, c.get("body").id);
       return done(c);
     }),
   );
 
-  app.post("/home/why", jsonFields(["id", isLinkId], ["text", isString]), session, (c) =>
+  app.post("/home/why", jsonBody({ ...linkId, text: isString }), session, (c) =>
     homeAction(c, async () => {
-      const [id, text] = c.get("fields");
+      const { id, text } = c.get("body");
       await tellWhy(deps, c.get("caller").owner, id, text);
       return done(c);
     }),
   );
 
   // 204 whether or not the app was connected; the page reloads either way.
-  app.post("/connections/disconnect", jsonField("clientId", isString), session, async (c) => {
-    await connections.disconnect(c.get("caller").owner, c.get("field"));
+  app.post("/connections/disconnect", jsonBody({ clientId: isString }), session, async (c) => {
+    await connections.disconnect(c.get("caller").owner, c.get("body").clientId);
     return c.body(null, 204, NO_STORE);
   });
 
   // The key is in this response only; the page shows it once and never puts it in a URL.
-  app.post("/connections/keys", jsonField("name", isString), session, (c) =>
-    keyAction(c, () => c.json(keys.create(c.get("caller").owner, c.get("field")), 200, NO_STORE)),
+  app.post("/connections/keys", jsonBody({ name: isString }), session, (c) =>
+    keyAction(c, () =>
+      c.json(keys.create(c.get("caller").owner, c.get("body").name), 200, NO_STORE),
+    ),
   );
 
-  app.post("/connections/keys/turn-off", jsonField("id", isId), session, (c) =>
+  app.post("/connections/keys/turn-off", jsonBody({ id: isId }), session, (c) =>
     keyAction(c, () => {
-      keys.turnOff(c.get("caller").owner, c.get("field"));
+      keys.turnOff(c.get("caller").owner, c.get("body").id);
       return c.body(null, 204, NO_STORE);
     }),
   );
 
   // The Undo of a turn-off.
-  app.post("/connections/keys/turn-on", jsonField("id", isId), session, (c) =>
+  app.post("/connections/keys/turn-on", jsonBody({ id: isId }), session, (c) =>
     keyAction(c, () => {
-      keys.turnOn(c.get("caller").owner, c.get("field"));
+      keys.turnOn(c.get("caller").owner, c.get("body").id);
       return c.body(null, 204, NO_STORE);
     }),
+  );
+
+  app.get("/tags", session, async (c) =>
+    c.html(tagsPage({ tags: await deps.store.listTags(c.get("caller").owner) }), 200, NO_STORE),
+  );
+
+  // Each tag action names the tag by its key; core matches it as a name.
+  const tagBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
+    jsonBody({ key: isString, ...shape });
+
+  app.post("/tags/pin", tagBody({ pinned: isBoolean }), session, (c) =>
+    tagAction(c, "That did not work. Reload the page and try again.", () =>
+      setTagPinned(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        pinned: c.get("body").pinned,
+      }),
+    ),
+  );
+
+  app.post("/tags/color", tagBody({ color: isString }), session, (c) =>
+    tagAction(c, "Pick one of the six colors.", () =>
+      setTagColor(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        color: c.get("body").color as SpaceColor,
+      }),
+    ),
+  );
+
+  app.post("/tags/kind", tagBody({ kind: isString }), session, (c) =>
+    tagAction(c, "Pick Topic or Project.", () =>
+      changeTagKind(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        kind: c.get("body").kind as TagKind,
+      }),
+    ),
+  );
+
+  app.post("/tags/status", tagBody({ status: isString }), session, (c) =>
+    tagAction(c, "Only a project can be done or reopened. Make it a project first.", () =>
+      setProjectStatus(deps, c.get("caller").owner, {
+        name: c.get("body").key,
+        status: c.get("body").status as "active" | "done",
+      }),
+    ),
+  );
+
+  app.get("/profile", session, async (c) => {
+    const { owner } = c.get("caller");
+    const { notes, recentFocus } = await profileContext(deps, owner);
+    return c.html(profilePage({ notes, focus: recentFocus, now: deps.now() }), 200, NO_STORE);
+  });
+
+  app.post("/profile/notes/add", jsonBody({ text: isString }), session, (c) =>
+    noteAction(c, () => {
+      const { owner, savedBy } = c.get("caller");
+      return addOwnerNote(deps, owner, savedBy, c.get("body").text);
+    }),
+  );
+
+  const noteVersion = { id: isString, updatedAt: isSafeInteger };
+
+  // Edit and That's right: confirming a guess is an edit with the text shown.
+  for (const path of ["/profile/notes/edit", "/profile/notes/confirm"]) {
+    app.post(path, jsonBody({ ...noteVersion, text: isString }), session, (c) =>
+      noteAction(c, () => {
+        const { owner, savedBy } = c.get("caller");
+        const { id, updatedAt, text } = c.get("body");
+        return editOwnerNote(deps, owner, savedBy, { id, text, updatedAt: new Date(updatedAt) });
+      }),
+    );
+  }
+
+  app.post("/profile/notes/remove", jsonBody(noteVersion), session, (c) =>
+    noteAction(c, () => {
+      const { owner, savedBy } = c.get("caller");
+      const { id, updatedAt } = c.get("body");
+      return removeNote(deps, owner, savedBy, { id, updatedAt: new Date(updatedAt) });
+    }),
+  );
+
+  // The Undo of a remove.
+  app.post("/profile/notes/restore", jsonBody({ id: isString }), session, (c) =>
+    noteAction(c, () => restoreNote(deps, c.get("caller").owner, c.get("body").id)),
   );
 
   if (consent) {

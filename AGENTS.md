@@ -45,7 +45,7 @@ Write a fact in its home and link to it from elsewhere; don't copy it.
 - **Core depends on interfaces.** `core/` uses `store/`, `search/` and `fetch/` through interfaces, never their implementations.
 - **Owner scoping lives in `store/`.** Every data call takes the owner; no door can skip it.
 - **The calling agent does the AI work.** The server never calls an AI model API and needs no API keys.
-- **Label guesses.** Anything an agent inferred (a why, a tag, a profile note) is stored with its source and shown as a guess.
+- **Label guesses.** Anything an agent inferred (a why, a tag, a profile note) is stored with its source and shown as a guess. A tag's kind is the exception: only an inferred project is shown as a guess, since every tag starts as a topic (`ROADMAP.md`, 2026-10-14).
 - **Safe fetching.** The page fetcher refuses private, loopback and link-local addresses, including after redirects.
 - **Nothing public before auth.** The real app is not exposed to the internet until login and owner-isolation tests pass (phase 3). See `ROADMAP.md` for the one dated exception.
 - **Tests discriminate.** A test must fail when the behaviour it protects breaks. Write it red first.
@@ -74,7 +74,7 @@ aye-ai-ai-links/
    ├─ cli/        the `keys` command for agent keys, the `owner` command for the web login, and the model prefetch
    ├─ mcp/        AI connector door
    ├─ api/        JSON API door (planned)
-   ├─ web/        web page door: login, home (the search question and its picks), search results, stored images, apps and agent keys, and the OAuth error page
+   ├─ web/        web page door: login, home (the search question and its picks), search results, stored images, tags, the profile, apps and agent keys, and the OAuth error page
    ├─ app.ts          mounts every door on one HTTP app
    ├─ deps.ts         builds store, search, images and profile on one database
    ├─ config.ts       reads the server's `AYE_` settings

@@ -38,6 +38,7 @@ const B = SECOND_USER.id;
 const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
+const A_TAG_NAME = "Quokka den plans";
 
 type Called = { status: number; isError: boolean; data: unknown; text: string };
 type Row = { id: string };
@@ -472,11 +473,16 @@ describe("owner isolation coverage", () => {
       request: "/connections",
       marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
     },
+    "GET /profile": {
+      request: "/profile",
+      marker: () => "A private note for the route guard",
+    },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
     },
     "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
+    "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
   };
   const readKey = (path: string) => `GET ${path}`;
@@ -527,6 +533,7 @@ describe("owner isolation coverage", () => {
     ).id;
     await updateLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, aLinkId, {
       title: "Quokka habitat notes",
+      tags: [{ name: A_TAG_NAME, source: "stated" }],
     });
     await storeImage(world, aLinkId, A_IMAGE);
     // A second link whose page named a remote image and has none stored: its card must not
@@ -629,6 +636,15 @@ describe("owner isolation coverage", () => {
     "POST /home/archive": "the two-owner test of POST /home/archive in web/home-routes.test.ts",
     "POST /home/unarchive": "the two-owner test of POST /home/unarchive in web/home-routes.test.ts",
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
+    "POST /tags/pin": "the two-owner tag actions test in web/tags-routes.test.ts",
+    "POST /tags/color": "the two-owner tag actions test in web/tags-routes.test.ts",
+    "POST /tags/kind": "the two-owner tag actions test in web/tags-routes.test.ts",
+    "POST /tags/status": "the two-owner tag actions test in web/tags-routes.test.ts",
+    "POST /profile/notes/add": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/edit": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/confirm": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/remove": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/restore": "the two-owner profile tests in web/profile-page.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

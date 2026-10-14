@@ -1,0 +1,302 @@
+import { describe, expect, it } from "vitest";
+import { AUTH_BODY_LIMIT } from "../auth/http.js";
+import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
+import type { Tag } from "../core/types.js";
+
+const B = SECOND_USER.id;
+
+type Seed = Partial<Omit<Tag, "key">> & { key: string };
+
+/** Puts a tag in an owner's catalog, as the store keeps it. */
+function seed(world: World, owner: string, t: Seed) {
+  world.links
+    .prepare(
+      `INSERT INTO tags (owner_id, key, name, kind, kind_source, color, pinned, project_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      owner,
+      t.key,
+      t.name ?? t.key,
+      t.kind ?? "topic",
+      t.kindSource ?? "stated",
+      t.color ?? null,
+      t.pinned ? 1 : 0,
+      t.projectStatus ?? null,
+    );
+}
+
+/** Every tag row of every owner, so a refusal can be shown to have changed none. */
+const tagRows = (world: World) =>
+  world.links.prepare("SELECT * FROM tags ORDER BY owner_id, key").all();
+const rowOf = (world: World, owner: string, key: string) =>
+  world.links
+    .prepare(
+      "SELECT kind, kind_source AS kindSource, color, pinned, project_status AS projectStatus FROM tags WHERE owner_id = ? AND key = ?",
+    )
+    .get(owner, key);
+
+async function signedIn(world: World) {
+  const browser = world.agent();
+  await browser.signIn();
+  return browser;
+}
+
+const posting = (json: unknown) => ({ method: "POST", json });
+const AGENT_WORDS = /update_tag|search_links|save_link/;
+
+describe("the Tags page", () => {
+  it("sends a browser without a session to /login", async () => {
+    const res = await (await oauthWorld()).agent().send("/tags");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/login");
+  });
+
+  it("lists the owner's tags only, escaped and uncached", async () => {
+    const world = await oauthWorld();
+    await addSecondUser(world);
+    seed(world, "owner", {
+      key: "<img src=x onerror=alert(1)>",
+      name: "<img src=x onerror=alert(1)>",
+    });
+    seed(world, "owner", { key: "kitchen", name: "Kitchen", color: "clay", pinned: true });
+    seed(world, B, { key: "b-only", name: "B's secret tag" });
+    const res = await (await signedIn(world)).send("/tags");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const html = String(res.body);
+    expect(html).toContain("Kitchen");
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(html).not.toContain("<img src=x");
+    expect(html).not.toContain("B's secret tag");
+  });
+
+  it("is linked from the menu", async () => {
+    const world = await oauthWorld();
+    const html = String((await (await signedIn(world)).send("/")).body);
+    expect(html).toContain('<a href="/tags">Tags</a>');
+  });
+
+  it("refuses GET /tags with a foreign Origin, and serves it without one", async () => {
+    const browser = await signedIn(await oauthWorld());
+    expect(
+      (await browser.send("/tags", { headers: { origin: "https://evil.example" } })).status,
+    ).toBe(403);
+    expect((await browser.send("/tags")).status).toBe(200);
+  });
+});
+
+describe("tag actions from the Tags page", () => {
+  it("pins a tag: 200 uncached with the tag, which has the free color; unpinning keeps it", async () => {
+    const world = await oauthWorld();
+    seed(world, "owner", { key: "baking", color: "teal" });
+    seed(world, "owner", { key: "kitchen", name: "Kitchen" });
+    const browser = await signedIn(world);
+    const res = await browser.send("/tags/pin", posting({ key: "kitchen", pinned: true }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.body).toEqual({
+      tag: expect.objectContaining({
+        key: "kitchen",
+        name: "Kitchen",
+        pinned: true,
+        color: "clay",
+      }),
+    });
+    const off = await browser.send("/tags/pin", posting({ key: "kitchen", pinned: false }));
+    expect(off.body).toEqual({ tag: expect.objectContaining({ pinned: false, color: "clay" }) });
+    expect(rowOf(world, "owner", "kitchen")).toMatchObject({ pinned: 0, color: "clay" });
+  });
+
+  it("sets a color, and refuses one that is not a space color in the owner's words", async () => {
+    const world = await oauthWorld();
+    seed(world, "owner", { key: "kitchen", color: "clay", pinned: true });
+    const browser = await signedIn(world);
+    const res = await browser.send("/tags/color", posting({ key: "kitchen", color: "violet" }));
+    expect(res.status).toBe(200);
+    expect(rowOf(world, "owner", "kitchen")).toMatchObject({ color: "violet" });
+    const before = tagRows(world);
+    const amber = await browser.send("/tags/color", posting({ key: "kitchen", color: "amber" }));
+    expect(amber.status).toBe(400);
+    expect(amber.body).toEqual({ code: "invalid_input", message: "Pick one of the six colors." });
+    expect(tagRows(world)).toEqual(before);
+  });
+
+  it("confirms a guessed kind, or changes it, and answers in the owner's words", async () => {
+    const world = await oauthWorld();
+    seed(world, "owner", {
+      key: "kitchen",
+      kind: "project",
+      kindSource: "inferred",
+      projectStatus: "done",
+    });
+    const browser = await signedIn(world);
+    const confirmed = await browser.send(
+      "/tags/kind",
+      posting({ key: "kitchen", kind: "project" }),
+    );
+    expect(confirmed.status).toBe(200);
+    expect(rowOf(world, "owner", "kitchen")).toMatchObject({
+      kind: "project",
+      kindSource: "stated",
+      projectStatus: "done",
+    });
+    const topic = await browser.send("/tags/kind", posting({ key: "kitchen", kind: "topic" }));
+    expect(topic.body).toEqual({
+      tag: expect.objectContaining({ kind: "topic", projectStatus: null }),
+    });
+    const bad = await browser.send("/tags/kind", posting({ key: "kitchen", kind: "folder" }));
+    expect(bad.status).toBe(400);
+    expect(String(bad.bytes)).not.toMatch(AGENT_WORDS);
+  });
+
+  it("marks a project done and reopens it, and refuses a topic, writing nothing", async () => {
+    const world = await oauthWorld();
+    seed(world, "owner", { key: "kitchen", kind: "project", projectStatus: "active" });
+    seed(world, "owner", { key: "baking" });
+    const browser = await signedIn(world);
+    const done = await browser.send("/tags/status", posting({ key: "kitchen", status: "done" }));
+    expect(done.status).toBe(200);
+    expect(rowOf(world, "owner", "kitchen")).toMatchObject({ projectStatus: "done" });
+    await browser.send("/tags/status", posting({ key: "kitchen", status: "active" }));
+    expect(rowOf(world, "owner", "kitchen")).toMatchObject({ projectStatus: "active" });
+    const before = tagRows(world);
+    const topic = await browser.send("/tags/status", posting({ key: "baking", status: "done" }));
+    expect(topic.status).toBe(400);
+    expect(topic.body).toEqual({
+      code: "invalid_input",
+      message: "Only a project can be done or reopened. Make it a project first.",
+    });
+    expect(tagRows(world)).toEqual(before);
+  });
+
+  it.each([
+    ["/tags/pin", { pinned: true }],
+    ["/tags/color", { color: "teal" }],
+    ["/tags/kind", { kind: "project" }],
+    ["/tags/status", { status: "done" }],
+  ])("answers 404 in the owner's words for a tag that is not there: %s", async (path, rest) => {
+    const world = await oauthWorld();
+    const res = await (await signedIn(world)).send(path, posting({ key: "nope", ...rest }));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({
+      code: "not_found",
+      message: "That tag is not there any more. Reload the page.",
+    });
+  });
+
+  it("acts for the signed-in user: a second user's actions change only their own tag with the same name", async () => {
+    const world = await oauthWorld();
+    const bBrowser = await addSecondUser(world);
+    seed(world, "owner", {
+      key: "kitchen",
+      name: "Kitchen",
+      kind: "project",
+      kindSource: "inferred",
+      color: "clay",
+      pinned: true,
+      projectStatus: "active",
+    });
+    seed(world, "owner", { key: "a-only", name: "A's private tag", kind: "project" });
+    seed(world, B, {
+      key: "kitchen",
+      name: "kitchen",
+      kind: "project",
+      kindSource: "inferred",
+      projectStatus: "active",
+    });
+    const ownerRows = () =>
+      world.links.prepare("SELECT * FROM tags WHERE owner_id = 'owner' ORDER BY key").all();
+    const before = ownerRows();
+
+    const listed = String((await bBrowser.send("/tags")).body);
+    const answers = [
+      await bBrowser.send("/tags/pin", posting({ key: "kitchen", pinned: true })),
+      await bBrowser.send("/tags/color", posting({ key: "kitchen", color: "rose" })),
+      await bBrowser.send("/tags/status", posting({ key: "kitchen", status: "done" })),
+      await bBrowser.send("/tags/kind", posting({ key: "kitchen", kind: "project" })),
+    ];
+    const theirs = [
+      await bBrowser.send("/tags/pin", posting({ key: "a-only", pinned: true })),
+      await bBrowser.send("/tags/color", posting({ key: "a-only", color: "rose" })),
+      await bBrowser.send("/tags/status", posting({ key: "a-only", status: "done" })),
+      await bBrowser.send("/tags/kind", posting({ key: "a-only", kind: "topic" })),
+    ];
+    const none = await bBrowser.send("/tags/pin", posting({ key: "never", pinned: true }));
+
+    expect(listed).not.toContain("Kitchen");
+    expect(listed).not.toContain("A's private tag");
+    expect(answers.map((a) => a.status)).toEqual([200, 200, 200, 200]);
+    for (const res of theirs) {
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(none.body);
+    }
+    expect(ownerRows()).toEqual(before);
+    expect(rowOf(world, B, "kitchen")).toEqual({
+      kind: "project",
+      kindSource: "stated",
+      color: "rose",
+      pinned: 1,
+      projectStatus: "done",
+    });
+  });
+
+  const OVER = "x".repeat(AUTH_BODY_LIMIT);
+  describe.each([
+    ["/tags/pin", { key: "kitchen", pinned: true }, "pinned", "yes"],
+    ["/tags/color", { key: "kitchen", color: "teal" }, "color", 3],
+    ["/tags/kind", { key: "kitchen", kind: "project" }, "kind", true],
+    ["/tags/status", { key: "kitchen", status: "done" }, "status", 1],
+  ] as const)("POST %s", (path, body, field, wrong) => {
+    async function tagsWorld() {
+      const world = await oauthWorld();
+      seed(world, "owner", {
+        key: "kitchen",
+        kind: "project",
+        kindSource: "inferred",
+        projectStatus: "active",
+      });
+      return world;
+    }
+
+    const refusals: [string, () => object, number][] = [
+      ["without an Origin", () => ({ json: body, origin: false }), 403],
+      [
+        "with a foreign Origin",
+        () => ({ json: body, headers: { origin: "https://evil.example" } }),
+        403,
+      ],
+      ["with a foreign Host", () => ({ json: body, headers: { host: "evil.example" } }), 403],
+      ["without a session", () => ({ json: body, anonymous: true }), 302],
+      ["with a body over the cap", () => ({ json: { ...body, pad: OVER } }), 413],
+      [
+        "with a body over the cap, before reading any session",
+        () => ({ json: { ...body, pad: OVER }, anonymous: true }),
+        413,
+      ],
+      ["with a body that is not JSON", () => ({ rawForm: "key=kitchen" }), 400],
+      ["without the key", () => ({ json: { ...body, key: undefined } }), 400],
+      ["with the key as a number", () => ({ json: { ...body, key: 7 } }), 400],
+      [`without its ${field}`, () => ({ json: { key: "kitchen" } }), 400],
+      [`with the ${field} of the wrong type`, () => ({ json: { ...body, [field]: wrong } }), 400],
+    ];
+
+    it.each(refusals)("refuses a request %s, and every tag row stays", async (_, how, status) => {
+      const world = await tagsWorld();
+      const before = tagRows(world);
+      const { anonymous, ...options } = how() as { anonymous?: true };
+      const browser = anonymous ? world.agent() : await signedIn(world);
+      const res = await browser.send(path, { method: "POST", ...options });
+      expect(res.status).toBe(status);
+      expect(tagRows(world)).toEqual(before);
+    });
+
+    it("succeeds with the same body from a signed-in page, so each refusal is down to what it changed", async () => {
+      const world = await tagsWorld();
+      const before = tagRows(world);
+      const res = await (await signedIn(world)).send(path, posting(body));
+      expect(res.status).toBe(200);
+      expect(tagRows(world)).not.toEqual(before);
+    });
+  });
+});

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SPACE_COLORS } from "../core/tag-space.js";
 import { themeCss, tokens } from "./theme.js";
 
 const channel = (n: number) => {
@@ -65,6 +66,17 @@ describe("the theme css", () => {
     for (const name of names) {
       expect(dark, name).toContain(`--${name}:${tokens.dark[name]}`);
     }
+  });
+
+  it("gives every space color a class and a light and dark token, and amber is no space color", () => {
+    expect(SPACE_COLORS).not.toContain("amber");
+    expect(SPACE_COLORS).toHaveLength(6);
+    for (const color of SPACE_COLORS) {
+      expect(themeCss, color).toContain(`.space-${color}{--space:var(--${color})}`);
+      expect(Object.keys(tokens.light), color).toContain(color);
+      expect(Object.keys(tokens.dark), color).toContain(color);
+    }
+    expect(themeCss.match(/\.space-[a-z]+\{/g)).toHaveLength(SPACE_COLORS.length);
   });
 
   it("respects reduced motion and uses the system rounded font", () => {

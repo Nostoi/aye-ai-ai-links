@@ -32,7 +32,7 @@ function fresh(): { db: Db; harness: ProfileHarness; store: SqliteProfileStore }
 describeProfileStoreContract("SqliteProfileStore", () => fresh().harness);
 
 const AT = new Date("2026-01-01T00:00:00Z");
-const ctx = { writtenBy: "x", at: AT, focusLimit: 10 };
+const ctx = { writtenBy: "x", at: AT, focusLimit: 10, purgeBefore: new Date(0) };
 const count = (db: Db, table: string) =>
   (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 
@@ -211,6 +211,49 @@ describe("SqliteProfileStore only", () => {
       for (const db of open.splice(0)) if (db.open) db.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("keeps a removed note's row until it is purged, then deletes only that owner's expired rows", async () => {
+    const { db, store, harness } = fresh();
+    await harness.addOwner(A);
+    await harness.addOwner("owner-b");
+    const T2 = new Date(AT.getTime() + 1000);
+    const added = await store.apply(
+      A,
+      changes({ addNotes: [{ text: "gone soon", source: "inferred" }] }),
+      ctx,
+    );
+    const theirs = await store.apply(
+      "owner-b",
+      changes({ addNotes: [{ text: "b's", source: "stated" }] }),
+      ctx,
+    );
+    if (!added.ok || !theirs.ok) throw new Error("expected ok");
+    for (const [owner, r] of [
+      [A, added],
+      ["owner-b", theirs],
+    ] as const) {
+      await store.apply(
+        owner,
+        changes({
+          removeNotes: [
+            { id: r.addedNoteIds[0] as string, expectedSource: r.notes[0]?.source ?? "stated" },
+          ],
+        }),
+        ctx,
+      );
+    }
+    const removedAt = db
+      .prepare("SELECT owner_id, removed_at FROM profile_notes ORDER BY id")
+      .all();
+    expect(removedAt).toEqual([
+      { owner_id: A, removed_at: AT.getTime() },
+      { owner_id: "owner-b", removed_at: AT.getTime() },
+    ]);
+    await store.apply(A, changes(), { ...ctx, at: T2, purgeBefore: T2 });
+    expect(db.prepare("SELECT owner_id FROM profile_notes").all()).toEqual([
+      { owner_id: "owner-b" },
+    ]);
   });
 
   it("adds both tables with a migration that leaves older data and the version consistent", () => {

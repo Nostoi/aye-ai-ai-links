@@ -63,7 +63,7 @@ export type Tag = {
   key: string;
   name: string;
   kind: TagKind;
-  /** Who decided `kind`: "inferred" means an agent guessed it and it is shown as a guess. */
+  /** Who decided `kind`: "inferred" means an agent guessed it; an inferred project is shown as a guess. */
   kindSource: Source;
   color: string | null;
   pinned: boolean;

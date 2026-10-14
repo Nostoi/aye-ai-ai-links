@@ -252,6 +252,25 @@ export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImag
     return { link: (await this.update(owner, id, patch)) as Link, applied: true };
   }
 
+  async pinTag(
+    owner: OwnerId,
+    key: string,
+    pin: { pinned: true; color: string } | { pinned: false },
+  ) {
+    const entry = this.catalogOf(owner).get(key);
+    if (!entry) return null;
+    entry.pinned = pin.pinned;
+    if (pin.pinned) entry.color ??= pin.color;
+    return structuredClone(entry);
+  }
+
+  async colorTag(owner: OwnerId, key: string, color: string) {
+    const entry = this.catalogOf(owner).get(key);
+    if (!entry) return null;
+    entry.color = color;
+    return structuredClone(entry);
+  }
+
   async listLinks(owner: OwnerId) {
     return [...this.owned(owner).values()].map((l) => this.view(owner, l));
   }

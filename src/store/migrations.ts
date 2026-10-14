@@ -179,6 +179,9 @@ export const MIGRATIONS: string[] = [
     CHECK (typeof(bytes) = 'blob' AND length(bytes) <= 2097152)
   );
   `,
+  // When a profile note was removed (#98): removal is soft, so Undo can bring the note back
+  // until it is purged. NULL is a live note. Additive; rebuilds nothing.
+  "ALTER TABLE profile_notes ADD COLUMN removed_at INTEGER",
 ];
 
 /**

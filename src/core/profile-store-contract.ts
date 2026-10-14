@@ -23,7 +23,10 @@ export const changes = (c: Partial<ProfileChanges> = {}): ProfileChanges => ({
 
 const T1 = new Date("2026-01-01T00:00:00Z");
 const T2 = new Date("2026-02-02T00:00:00Z");
+const T3 = new Date("2026-03-03T00:00:00Z");
 const LIMIT = 10;
+/** A purge cutoff before every test time, so a write purges nothing. */
+const NO_PURGE = new Date(0);
 
 export function describeProfileStoreContract(
   name: string,
@@ -38,7 +41,8 @@ export function describeProfileStoreContract(
       writtenBy = "claude-code",
       at = T1,
       focusLimit = LIMIT,
-    ) => store.apply(owner, changes(c), { writtenBy, at, focusLimit });
+      purgeBefore = NO_PURGE,
+    ) => store.apply(owner, changes(c), { writtenBy, at, focusLimit, purgeBefore });
 
     /** Apply a change that must succeed. */
     async function applyOk(
@@ -46,8 +50,9 @@ export function describeProfileStoreContract(
       c: Partial<ProfileChanges>,
       writtenBy?: string,
       at?: Date,
+      purgeBefore?: Date,
     ) {
-      const r = await apply(owner, c, writtenBy, at);
+      const r = await apply(owner, c, writtenBy, at, LIMIT, purgeBefore);
       if (!r.ok) throw new Error(`expected ok, got ${JSON.stringify(r)}`);
       return r;
     }
@@ -139,7 +144,7 @@ export function describeProfileStoreContract(
             { text: "f3", source: "stated" },
           ],
         }),
-        { writtenBy: "x", at: T1, focusLimit: 2 },
+        { writtenBy: "x", at: T1, focusLimit: 2, purgeBefore: NO_PURGE },
       );
       if (!r.ok) throw new Error("expected ok");
       expect(r.recentFocus.map((f) => f.text)).toEqual(["f3", "f2"]);
@@ -373,6 +378,182 @@ export function describeProfileStoreContract(
           removeNotes: [{ id: "999", expectedSource: "inferred" }],
         });
         expect(result).toEqual({ ok: false, unknownId: "999" });
+        expect(await store.listNotes(A)).toEqual(before);
+      });
+    });
+
+    describe("a removed note", () => {
+      /** Three notes of A's, the middle one removed at T2; `before` is the list as it was. */
+      async function removedMiddle() {
+        const added = await applyOk(
+          A,
+          {
+            addNotes: [
+              { text: "first", source: "stated" },
+              { text: "middle guess", source: "inferred" },
+              { text: "last", source: "asked" },
+            ],
+          },
+          "codex",
+        );
+        const [, middle] = added.addedNoteIds as [string, string, string];
+        const before = await store.listNotes(A);
+        await applyOk(A, { removeNotes: [{ id: middle, expectedSource: "inferred" }] }, "web", T2);
+        return { middle, before };
+      }
+
+      it("is hidden from listNotes and from the write's result", async () => {
+        const { middle } = await removedMiddle();
+        expect((await store.listNotes(A)).map((n) => n.text)).toEqual(["first", "last"]);
+        const r = await applyOk(A, {});
+        expect(r.notes.map((n) => n.id)).not.toContain(middle);
+      });
+
+      it("answers unknownId to an edit or a second remove, and changes nothing", async () => {
+        const { middle } = await removedMiddle();
+        const shown = await store.listNotes(A);
+        expect(
+          await apply(A, {
+            editNotes: [{ id: middle, text: "back", source: "stated", expectedSource: "inferred" }],
+          }),
+        ).toEqual({ ok: false, unknownId: middle });
+        expect(
+          await apply(A, { removeNotes: [{ id: middle, expectedSource: "inferred" }] }),
+        ).toEqual({ ok: false, unknownId: middle });
+        expect(await store.listNotes(A)).toEqual(shown);
+        expect(await store.restoreNote(A, middle, T2)).toBe(true);
+      });
+
+      it("is restored unchanged, with its id, text, label, writer, time and place", async () => {
+        const { middle, before } = await removedMiddle();
+        expect(await store.restoreNote(A, middle, T2)).toBe(true);
+        expect(await store.listNotes(A)).toEqual(before);
+      });
+
+      it("is not restored when it was removed before removedSince, and nothing changes", async () => {
+        const { middle } = await removedMiddle();
+        const shown = await store.listNotes(A);
+        expect(await store.restoreNote(A, middle, new Date(T2.getTime() + 1))).toBe(false);
+        expect(await store.listNotes(A)).toEqual(shown);
+      });
+
+      it("is restored only once", async () => {
+        const { middle, before } = await removedMiddle();
+        expect(await store.restoreNote(A, middle, T2)).toBe(true);
+        expect(await store.restoreNote(A, middle, T2)).toBe(false);
+        expect(await store.listNotes(A)).toEqual(before);
+      });
+
+      it.each(["", "abc", "0", "999"])("restores nothing for the id %j", async (id) => {
+        await removedMiddle();
+        const shown = await store.listNotes(A);
+        expect(await store.restoreNote(A, id, NO_PURGE)).toBe(false);
+        expect(await store.listNotes(A)).toEqual(shown);
+      });
+
+      it("is not restored for another owner, and stays restorable by its own", async () => {
+        const { middle } = await removedMiddle();
+        expect(await store.restoreNote(B, middle, NO_PURGE)).toBe(false);
+        expect(await store.listNotes(B)).toEqual([]);
+        expect(await store.restoreNote(A, middle, T2)).toBe(true);
+      });
+
+      it("is purged by the owner's next write once it was removed before purgeBefore", async () => {
+        const { middle } = await removedMiddle();
+        const kept = await applyOk(A, { addNotes: [{ text: "x", source: "stated" }] });
+        const newer = kept.addedNoteIds[0] as string;
+        await applyOk(A, { removeNotes: [{ id: newer, expectedSource: "stated" }] }, "web", T3);
+        await applyOk(A, {}, "web", T3, new Date(T2.getTime() + 1));
+        expect(await store.restoreNote(A, middle, NO_PURGE)).toBe(false);
+        expect(await store.restoreNote(A, newer, NO_PURGE)).toBe(true);
+      });
+
+      it("is purged by a restore of another note, with the same cutoff as removedSince", async () => {
+        const { middle } = await removedMiddle();
+        const kept = await applyOk(A, { addNotes: [{ text: "x", source: "stated" }] });
+        const newer = kept.addedNoteIds[0] as string;
+        await applyOk(A, { removeNotes: [{ id: newer, expectedSource: "stated" }] }, "web", T3);
+        expect(await store.restoreNote(A, newer, new Date(T2.getTime() + 1))).toBe(true);
+        expect(await store.restoreNote(A, middle, NO_PURGE)).toBe(false);
+      });
+
+      it("is not purged by another owner's write", async () => {
+        const { middle } = await removedMiddle();
+        await applyOk(B, { addNotes: [{ text: "b", source: "stated" }] }, "x", T3, T3);
+        await store.restoreNote(B, "999", T3);
+        expect(await store.restoreNote(A, middle, NO_PURGE)).toBe(true);
+      });
+    });
+
+    describe("a write that expects the note's updatedAt", () => {
+      async function seed() {
+        const added = await applyOk(A, { addNotes: [{ text: "a guess", source: "inferred" }] });
+        const id = added.addedNoteIds[0] as string;
+        return { id, before: await store.listNotes(A) };
+      }
+
+      it("applies an edit and a remove when the note's updatedAt is the one given", async () => {
+        const { id } = await seed();
+        await applyOk(
+          A,
+          {
+            editNotes: [
+              {
+                id,
+                text: "confirmed",
+                source: "stated",
+                expectedSource: "inferred",
+                expectedUpdatedAt: T1,
+              },
+            ],
+          },
+          "web",
+          T2,
+        );
+        expect((await store.listNotes(A))[0]).toMatchObject({ text: "confirmed", updatedAt: T2 });
+        await applyOk(A, {
+          removeNotes: [{ id, expectedSource: "stated", expectedUpdatedAt: T2 }],
+        });
+        expect(await store.listNotes(A)).toEqual([]);
+      });
+
+      it("answers conflict for an edit or a remove when it differs, and changes nothing", async () => {
+        const { id, before } = await seed();
+        const stale = new Date(T1.getTime() - 1);
+        expect(
+          await apply(
+            A,
+            {
+              addNotes: [{ text: "new", source: "stated" }],
+              editNotes: [
+                {
+                  id,
+                  text: "x",
+                  source: "stated",
+                  expectedSource: "inferred",
+                  expectedUpdatedAt: stale,
+                },
+              ],
+            },
+            "web",
+            T2,
+          ),
+        ).toEqual({ ok: false, conflictId: id });
+        expect(
+          await apply(A, {
+            removeNotes: [{ id, expectedSource: "inferred", expectedUpdatedAt: stale }],
+          }),
+        ).toEqual({ ok: false, conflictId: id });
+        expect(await store.listNotes(A)).toEqual(before);
+      });
+
+      it("answers unknownId, not conflict, for another owner's note", async () => {
+        const { id, before } = await seed();
+        expect(
+          await apply(B, {
+            removeNotes: [{ id, expectedSource: "inferred", expectedUpdatedAt: T1 }],
+          }),
+        ).toEqual({ ok: false, unknownId: id });
         expect(await store.listNotes(A)).toEqual(before);
       });
     });

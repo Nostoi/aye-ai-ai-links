@@ -88,7 +88,7 @@ async function focus(text: string, created: Date, found: string[]): Promise<void
   await profile.apply(
     A,
     { addNotes: [], editNotes: [], removeNotes: [], addFocus: [{ text, source: "stated" }] },
-    { writtenBy: "agent", at: created, focusLimit: 100 },
+    { writtenBy: "agent", at: created, focusLimit: 100, purgeBefore: new Date(0) },
   );
   hits.set(text, found);
 }

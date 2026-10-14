@@ -74,7 +74,7 @@ aye-ai-ai-links/
    ├─ cli/        the `keys` command for agent keys, the `owner` command for the web login, and the model prefetch
    ├─ mcp/        AI connector door
    ├─ api/        JSON API door (planned)
-   ├─ web/        web page door: login, the home question, search results, stored images, apps and agent keys, and the OAuth error page
+   ├─ web/        web page door: login, home (the search question and its picks), search results, stored images, apps and agent keys, and the OAuth error page
    ├─ app.ts          mounts every door on one HTTP app
    ├─ deps.ts         builds store, search, images and profile on one database
    ├─ config.ts       reads the server's `AYE_` settings

@@ -69,7 +69,8 @@ export async function unsnoozeLink(
 
 /** I'm done with it. */
 export async function archiveLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
-  await updateLink(deps, owner, id, { state: "archived" });
+  const alreadyDone = "This link is already moved out of your list. Reload.";
+  await changeIf(deps, owner, id, { state: "active" }, { state: "archived" }, alreadyDone);
 }
 
 /** The Undo of I'm done with it: makes the link active only while it is still archived. */

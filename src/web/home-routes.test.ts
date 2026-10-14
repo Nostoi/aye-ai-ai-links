@@ -123,6 +123,16 @@ describe("the home card actions", () => {
     expect((await browser.send("/home/unarchive", post({ id }))).status).toBe(409);
   });
 
+  it("/home/archive after an AI archived the link is a 409, changing nothing", async () => {
+    const { world, browser, id } = await home();
+    await browser.send("/");
+    await updateLink(linkDeps(world), A, id, { state: "archived" });
+    const before = row(world, id);
+    const res = await browser.send("/home/archive", post({ id }));
+    expect(res.status).toBe(409);
+    expect(row(world, id)).toEqual(before);
+  });
+
   it("/home/why records the owner's answer as asked, over an agent's guess", async () => {
     const { world, browser, id } = await home({ text: "a guess", source: "inferred" });
     const res = await browser.send("/home/why", post({ id, text: " to compare " }));

@@ -300,6 +300,14 @@ describe("I'm done with it", () => {
     expect((await get(l.id)).state).toBe("active");
   });
 
+  it("will not take over an archive an AI made: a conflict, nothing written", async () => {
+    const l = await link();
+    await store.update(A, l.id, { state: "archived" });
+    const before = await get(l.id);
+    expect(await code(archiveLink(deps(), A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toEqual(before);
+  });
+
   it("undo of a link no longer archived is a conflict", async () => {
     const l = await link();
     await archiveLink(deps(), A, l.id);

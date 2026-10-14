@@ -2,6 +2,7 @@ import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { hostOf, isWebUrl, spaceClass, tile, whyLine } from "./pages.js";
+import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
  * The URL of a tag's space page, or with `done` its links you're done with; `before` is a page's
@@ -50,8 +51,8 @@ type Input = {
 };
 
 /**
- * One card. An active link with no why asks in amber, "needs you"; a done one never does, and its
- * picture is faded while its text stays at full contrast.
+ * One card. An active link with no why asks Tell me why, in amber, "needs you"; a done one never
+ * does, and its picture is faded while its text stays at full contrast.
  */
 function card(link: Link, { tag, catalog, images, now, done }: Input): string {
   const label = escapeHtml(link.title ?? link.url);
@@ -63,9 +64,9 @@ function card(link: Link, { tag, catalog, images, now, done }: Input): string {
   const why =
     link.why || done
       ? `<p class="card-why">${whyLine(link.why)}</p>`
-      : '<p><span class="needs-why">No why yet</span></p>';
+      : `${whyAnswer("p", "Why: ", "card-why")}\n${askWhy(link)}`;
   const space = linkSpace(link, catalog, { within: tag.key });
-  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}">
+  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}">
 ${tile(link, images.get(link.id), "card-image")}
 <div class="card-body">
 <h3>${title}</h3>
@@ -74,6 +75,13 @@ ${why}
 </div>
 </li>`;
 }
+
+/** Tell me why on the active cards, including those Show older links appends. */
+const WHY_SCRIPT = `<script>
+${CARD_FETCH}
+${tellWhyScript("space-links", "space-error")}
+</script>
+`;
 
 /**
  * "Show older links" is a real link to the next page. The script fetches that page instead and
@@ -141,6 +149,7 @@ export function spacePage(input: Input): string {
 ${list}
 ${more}`
     : `<h2>Newest first</h2>
+<p id="space-error" role="alert"></p>
 ${list}
 ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">Links you're done with</a></p>`;
   return page(
@@ -149,7 +158,7 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${older ? OLDER_SCRIPT : ""}`,
+${done ? "" : WHY_SCRIPT}${older ? OLDER_SCRIPT : ""}`,
     { menu: true },
   );
 }

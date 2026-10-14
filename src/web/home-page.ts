@@ -3,6 +3,7 @@ import { linkSpace } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { isWebUrl, spaceClass, tile } from "./pages.js";
+import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
  * What "Worth a look today" shows: the picks, the image version of each that has one, now, and
@@ -36,13 +37,13 @@ function reason({ link, reasons }: DigestLink, now: Date): { text: string; plain
   return { text: `You saved this ${savedOn(link.savedAt, now)}`, plain: true };
 }
 
-/** The saved date (left out when the reason already says it) and the why. */
+/** The saved date (left out when the reason already says it) and the why, or where it will go. */
 function meta(link: Link, now: Date, withDate: boolean): string {
-  const why = link.why
-    ? `${quoted(link.why.text)}${link.why.source === "inferred" ? " (a guess)" : ""}`
-    : null;
-  const parts = [withDate ? `Saved ${savedOn(link.savedAt, now)}` : null, why];
-  return `<p class="small meta">${parts.filter((p) => p !== null).join(", ")}</p>`;
+  const date = withDate ? `Saved ${savedOn(link.savedAt, now)}` : null;
+  if (!link.why)
+    return `<p class="small meta">${date ?? ""}${whyAnswer("span", date ? ", " : "")}</p>`;
+  const why = `${quoted(link.why.text)}${link.why.source === "inferred" ? " (a guess)" : ""}`;
+  return `<p class="small meta">${[date, why].filter((p) => p !== null).join(", ")}</p>`;
 }
 
 /** The title, linked to open in a new tab when it is a web link. */
@@ -52,20 +53,6 @@ function title(link: Link): string {
     ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" data-open>${label}</a>`
     : label;
 }
-
-/** The amber "needs you" ask, with the field that opens on Tell me why. */
-const ask = (link: Link) =>
-  link.why
-    ? ""
-    : `<div class="ask">
-<p class="small">Why did you save this?</p>
-<button class="tell-why" type="button" data-act="why">Tell me why</button>
-<form class="why-form" hidden>
-<label class="visually-hidden" for="why-${escapeHtml(link.id)}">Why did you save this?</label>
-<input id="why-${escapeHtml(link.id)}" name="why" autocomplete="off" required>
-<button class="primary" type="submit">Save</button>
-</form>
-</div>`;
 
 const BUTTONS = `<button type="button" data-act="snooze">Not now</button>
 <button type="button" data-act="archive">I'm done with it</button>`;
@@ -86,7 +73,7 @@ ${tile(link, cards.images.get(link.id), "worth-image")}
 <p class="reason">${why.text}</p>
 <h3>${title(link)}</h3>
 ${meta(link, cards.now, !why.plain)}
-${ask(link)}
+${askWhy(link)}
 <div class="actions">
 ${open}${BUTTONS}
 </div>
@@ -100,7 +87,7 @@ ${tile(link, cards.images.get(link.id), "worth-tile")}
 <div class="worth-body">
 <h3>${title(link)}</h3>
 ${meta(link, cards.now, true)}
-${ask(link)}
+${askWhy(link)}
 <div class="actions small-actions">
 ${BUTTONS}
 </div>
@@ -136,26 +123,14 @@ document.addEventListener("keydown", (event) => {
 /**
  * The cards' buttons. Opening a link (a click, or a middle click) records it with a keepalive post
  * and lets the link open. Not now and I'm done hide the card at once and put it back if the server
- * refuses; Undo asks the server to reverse, and the card stays gone if it cannot. Tell me why posts
- * the owner's answer and replaces the question with it.
+ * refuses; Undo asks the server to reverse, and the card stays gone if it cannot. Tell me why is
+ * `tellWhyScript`.
  */
 const CARDS_SCRIPT = `<script>
+${CARD_FETCH}
+${tellWhyScript("worth-cards", "home-error")}
 const homeError = document.getElementById("home-error");
 const cards = document.getElementById("worth-cards");
-const post = (url, body, extra) =>
-  fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    redirect: "manual",
-    ...extra,
-  }).catch(() => null);
-const failure = async (res) => {
-  const data = res && [400, 404, 409].includes(res.status) ? await res.json().catch(() => null) : null;
-  return data && typeof data.message === "string"
-    ? data.message
-    : "That did not work. Reload the page and try again.";
-};
 const opened = (event) => {
   const link = event.target.closest("a[data-open]");
   if (!link || (event.type === "auxclick" && event.button !== 1)) return;
@@ -194,34 +169,7 @@ if (cards) {
     const button = event.target.closest("button[data-act]");
     if (!button) return;
     const card = button.closest("[data-id]");
-    if (button.dataset.act === "why") {
-      const form = card.querySelector("form.why-form");
-      form.hidden = false;
-      form.querySelector("input").focus();
-    } else if (!card.hidden) {
-      hideFor(card, button.dataset.act);
-    }
-  });
-  cards.addEventListener("submit", async (event) => {
-    const form = event.target.closest("form.why-form");
-    if (!form) return;
-    event.preventDefault();
-    const card = form.closest("[data-id]");
-    const input = form.querySelector("input");
-    const submit = form.querySelector("button");
-    homeError.textContent = "";
-    if (input.value.trim() === "" || submit.disabled) return;
-    submit.disabled = true;
-    const res = await post("/home/why", { id: card.dataset.id, text: input.value });
-    submit.disabled = false;
-    if (!res || res.status !== 204) {
-      homeError.textContent = await failure(res);
-      return;
-    }
-    const meta = card.querySelector(".meta");
-    meta.textContent = (meta.textContent ? meta.textContent + ", " : "") + '"' + input.value.trim() + '"';
-    card.querySelector(".ask").remove();
-    card.classList.remove("needs-you");
+    if (button.dataset.act !== "why" && !card.hidden) hideFor(card, button.dataset.act);
   });
 }
 addEventListener("pageshow", (event) => {

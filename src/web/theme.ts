@@ -223,7 +223,6 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .card-body p{margin:0 0 8px}
 .card-body p:last-child{margin:0}
 .card-why{font-size:15px;overflow-wrap:anywhere}
-.needs-why{display:inline-block;padding:4px 14px;border-radius:999px;background:var(--amber-bg);color:var(--amber-ink);font-size:14px;font-weight:600}
 .show-older{display:inline-flex;align-items:center;min-height:44px;padding:0 26px;border-radius:999px;background:var(--ink);color:var(--surface);font-size:15.5px;font-weight:600;text-decoration:none}
 ${spaceClasses}
 @media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}}

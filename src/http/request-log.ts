@@ -1,10 +1,10 @@
 import type { MiddlewareHandler } from "hono";
 
 const MAX_AGENT = 200;
+const MAX_DESCRIPTION = 200;
 
 /**
- * One line per request: method, path, status, time, the refusal's `error` or `code` from a JSON
- * error body, and the user agent. The query string, other headers and bodies are never written:
+ * One line per request. The query string, other headers and bodies are never written:
  * they carry codes, tokens, cookies and client assertions.
  */
 export function requestLog(log: (line: string) => void): MiddlewareHandler {
@@ -20,8 +20,9 @@ export function requestLog(log: (line: string) => void): MiddlewareHandler {
       String(status),
       `${Date.now() - start}ms`,
     ];
-    const error = status >= 400 ? await errorCode(c.res) : undefined;
-    if (error) parts.push(`error=${error}`);
+    const refusal = status >= 400 ? await refusalOf(c.res) : {};
+    if (refusal.error) parts.push(`error=${refusal.error}`);
+    if (refusal.description) parts.push(`description=${JSON.stringify(refusal.description)}`);
     const agent = c.req.header("user-agent");
     parts.push(`ua=${agent ? JSON.stringify(agent.slice(0, MAX_AGENT)) : "-"}`);
     try {
@@ -30,16 +31,22 @@ export function requestLog(log: (line: string) => void): MiddlewareHandler {
   };
 }
 
-/** A JSON error body's `error` or `code`, if it is a plain token. Only JSON bodies are read, never a stream. */
-async function errorCode(res: Response): Promise<string | undefined> {
-  if (!res.headers.get("content-type")?.includes("application/json")) return undefined;
+/** A JSON error body's `error` or `code` (if a plain token) and `error_description`, capped. Only JSON bodies are read, never a stream. */
+async function refusalOf(res: Response): Promise<{ error?: string; description?: string }> {
+  if (!res.headers.get("content-type")?.includes("application/json")) return {};
   try {
     const body: unknown = await res.clone().json();
-    if (typeof body !== "object" || body === null) return undefined;
-    const { error, code } = body as Record<string, unknown>;
+    if (typeof body !== "object" || body === null) return {};
+    const { error, code, error_description } = body as Record<string, unknown>;
     const value = typeof error === "string" ? error : code;
-    return typeof value === "string" && /^[\w.-]{1,64}$/.test(value) ? value : undefined;
+    return {
+      error: typeof value === "string" && /^[\w.-]{1,64}$/.test(value) ? value : undefined,
+      description:
+        typeof error_description === "string"
+          ? error_description.slice(0, MAX_DESCRIPTION)
+          : undefined,
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }

@@ -13,6 +13,8 @@ import {
   signingKey,
 } from "../auth/oauth-test-kit.js";
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
 async function loggedWorld() {
@@ -22,7 +24,7 @@ async function loggedWorld() {
 }
 
 describe("the request log", () => {
-  it("records each request of a ChatGPT connection, with the token refusal's error code, and no secret", async () => {
+  it("records each request of a ChatGPT connection, with the token refusal's error code and description, and no secret", async () => {
     const { world, lines } = await loggedWorld();
     const key = signingKey("k1");
     const jwksUri = "https://chatgpt.com/oauth/test-client/jwks.json";
@@ -52,7 +54,7 @@ describe("the request log", () => {
     expect(lines).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^\\[http\\] \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z POST /api/auth/oauth2/token 401 \\d+ms error=${field(forged, "error")} ua=-$`,
+          `^\\[http\\] \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z POST /api/auth/oauth2/token 401 \\d+ms error=${field(forged, "error")} description=${escapeRegExp(JSON.stringify(field(forged, "error_description")))} ua=-$`,
         ),
       ),
     );

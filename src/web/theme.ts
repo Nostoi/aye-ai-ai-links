@@ -224,6 +224,19 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .card-body p:last-child{margin:0}
 .card-why{font-size:15px;overflow-wrap:anywhere}
 .show-older{display:inline-flex;align-items:center;min-height:44px;padding:0 26px;border-radius:999px;background:var(--ink);color:var(--surface);font-size:15.5px;font-weight:600;text-decoration:none}
+.all-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px}
+.all-head h1{margin:0}
+.search-instead{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:999px;background:var(--surface);font-size:15.5px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px #0000000d}
+.orders{display:flex;flex-wrap:wrap;align-items:center;gap:0 10px;margin:0 0 24px;font-size:15.5px;color:var(--soft)}
+.orders a{display:inline-flex;align-items:center;min-height:44px;color:var(--soft);text-decoration:none}
+.orders a[aria-current=true]{color:var(--ink);font-weight:600;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
+.month{margin:0 0 40px}
+.month h2{font-size:20px;margin:0 0 14px;color:var(--soft)}
+.month .link-cards{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin:0}
+.all-card .card-image{height:140px}
+.card-site{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
+.card-site .dot{flex:none;width:10px;height:10px;margin:0}
+.all-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px}
 ${spaceClasses}
 @media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;

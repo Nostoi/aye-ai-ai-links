@@ -405,6 +405,46 @@ describe("Show older links", () => {
     expect(r.location.href).toBe(`${ORIGIN}/spaces?tag=x`);
   });
 
+  it("lets an appended card answer Tell me why", async () => {
+    const page = space({ links: [link("3")], older: "3.3" });
+    const later = space({ links: [link("1", { why: null })], older: null, later: true });
+    const { document, DOMParser } = parseHTML(page);
+    const code = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1] ?? "")
+      .filter((s) => !s.includes("sign-out"))
+      .join("\n");
+    const posted: string[] = [];
+    const fetch = async (url: string) => {
+      if (url === "/home/why") {
+        posted.push(url);
+        return { status: 204 };
+      }
+      return { ok: true, redirected: false, text: async () => later };
+    };
+    new Function("document", "fetch", "location", "DOMParser", code)(
+      document,
+      fetch,
+      { href: `${ORIGIN}/spaces?tag=x` },
+      DOMParser,
+    );
+    const win = document.defaultView as unknown as typeof globalThis;
+    const fire = (el: Element | null, type: string) =>
+      el?.dispatchEvent(new win.Event(type, { bubbles: true, cancelable: true }));
+    const settle = async () => {
+      for (let i = 0; i < 2; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    fire(document.getElementById("older"), "click");
+    await settle();
+    const card = document.querySelector('#space-links [data-id="1"]') as HTMLElement;
+    fire(card.querySelector("button[data-act=why]"), "click");
+    (card.querySelector("form.why-form input") as HTMLInputElement).value = "for the shed";
+    fire(card.querySelector("form.why-form"), "submit");
+    await settle();
+    expect(posted).toEqual(["/home/why"]);
+    expect(card.querySelector(".ask")).toBeNull();
+    expect(card.querySelector("[data-why-answer]")?.textContent).toBe('Why: "for the shed"');
+  });
+
   it("moves the button on to the page after when there are more", async () => {
     const more = space({ links: [link("1")], older: "1.1" });
     const r = await clickOlder(first, { ok: true, redirected: false, text: more });

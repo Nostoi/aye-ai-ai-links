@@ -48,6 +48,8 @@ const CHECKED_PAGES = [
   "/search",
   "/spaces",
   "/spaces/done",
+  "/all",
+  "/all/done",
   "/connections/disconnect",
   "/connections/keys",
   "/connections/keys/turn-off",

@@ -41,6 +41,7 @@ const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
 const A_DONE_URL = "https://a.example/remote-image";
+const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 
 type Called = { status: number; isError: boolean; data: unknown; text: string };
 type Row = { id: string };
@@ -501,6 +502,8 @@ describe("owner isolation coverage", () => {
       request: `/spaces/done?tag=${encodeURIComponent(A_TAG_NAME)}`,
       marker: () => [A_TAG_NAME, A_DONE_URL],
     },
+    "GET /all": { request: "/all", marker: () => [A_URL, A_TAG_NAME] },
+    "GET /all/done": { request: "/all/done", marker: () => A_UNTAGGED_DONE_URL },
     "GET /connections": {
       request: "/connections",
       marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
@@ -583,6 +586,12 @@ describe("owner isolation coverage", () => {
       tags: [{ name: A_TAG_NAME, source: "stated" }],
       state: "archived",
     });
+    // A done link with no tag is on no space page: All links' done view is its way back.
+    const { link: untagged } = await saveLink(seedDeps, A, {
+      url: A_UNTAGGED_DONE_URL,
+      savedBy: "seed",
+    });
+    await updateLink(seedDeps, A, untagged.id, { state: "archived" });
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,

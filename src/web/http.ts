@@ -238,8 +238,9 @@ export function webApp({
       owner,
       links.map((d) => d.link.id),
     );
-    const spaces = spacesSection(await homeSpaces(deps, owner));
-    const page = homePage({ worth: { links, images, now: deps.now() }, spaces });
+    const { spaces, catalog } = await homeSpaces(deps, owner);
+    const worth = { links, images, now: deps.now(), catalog };
+    const page = homePage({ worth, spaces: spacesSection(spaces) });
     return c.html(page, 200, NO_STORE);
   });
 

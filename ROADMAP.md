@@ -22,6 +22,9 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** "Worth a look today" joined to Your spaces (#95, after #96 merged).
+  - **Space colors.** Each card takes its link's `linkSpace` color, so one with no colored pinned tag stays neutral. `homeSpaces` now returns the owner's catalog with the spaces, so `GET /` loads the tags once for both.
+
 - **2026-10-14:** "Worth a look today" on the home page (#95; plan in comments 6174150207 and 6174529271, the second winning). Owner rulings, in session:
   - **Picks.** Up to three cards from the digest's whole queue (`previewDigest`, which marks nothing), so `GET /` writes nothing: the session cookie is SameSite=Lax, so a cross-site GET could otherwise use links up. **A focus match leads** (comment 6176064419): the queue's first link matching a focus entry, in digest order, is the large card. The other cards, or all three when nothing matches, come from a shuffle of the rest of the queue by link id, new each UTC day, so a card going away or a link being saved moves no other pick. When the lead goes, the next focus match leads, or else the shuffle's first.
   - **Open it** (or a title) is a real link in a new tab; a click or middle click also posts `/home/opened`, which records the opening and marks the link surfaced through the digest's one claim path, so home leaves it out for two weeks. It never writes the search log. An opening from the browser's context menu is not recorded (accepted).

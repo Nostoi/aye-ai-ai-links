@@ -1,13 +1,19 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
-import type { Link } from "../core/types.js";
+import { linkSpace } from "../core/link-space.js";
+import type { Link, Tag } from "../core/types.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { isWebUrl, tile } from "./pages.js";
+import { isWebUrl, spaceClass, tile } from "./pages.js";
 
-/** What "Worth a look today" shows: the picks, the image version of each that has one, and now. */
-export type WorthCards = { links: DigestLink[]; images: Map<string, string>; now: Date };
-
-/** The space class of a link's color. None yet: every card is neutral until #96 brings spaces. */
-const linkSpace = (_link: Link): string | null => null;
+/**
+ * What "Worth a look today" shows: the picks, the image version of each that has one, now, and
+ * the owner's tags, which give each card its space (`linkSpace`).
+ */
+export type WorthCards = {
+  links: DigestLink[];
+  images: Map<string, string>;
+  now: Date;
+  catalog: Tag[];
+};
 
 const quoted = (text: string) => `"${escapeHtml(text)}"`;
 
@@ -64,11 +70,8 @@ const ask = (link: Link) =>
 const BUTTONS = `<button type="button" data-act="snooze">Not now</button>
 <button type="button" data-act="archive">I'm done with it</button>`;
 
-function classes(base: string, link: Link): string {
-  const space = linkSpace(link);
-  return [base, link.why ? null : "needs-you", space ? `space-${space}` : null]
-    .filter((c) => c !== null)
-    .join(" ");
+function classes(base: string, link: Link, catalog: Tag[]): string {
+  return `${base}${link.why ? "" : " needs-you"}${spaceClass(linkSpace(link, catalog))}`;
 }
 
 function leadCard(d: DigestLink, cards: WorthCards): string {
@@ -77,7 +80,7 @@ function leadCard(d: DigestLink, cards: WorthCards): string {
   const open = isWebUrl(link.url)
     ? `<a class="button primary" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" data-open>Open it</a>\n`
     : "";
-  return `<article class="${classes("worth-card worth-lead", link)}" data-id="${escapeHtml(link.id)}">
+  return `<article class="${classes("worth-card worth-lead", link, cards.catalog)}" data-id="${escapeHtml(link.id)}">
 ${tile(link, cards.images.get(link.id), "worth-image")}
 <div class="worth-body">
 <p class="reason">${why.text}</p>
@@ -92,7 +95,7 @@ ${open}${BUTTONS}
 }
 
 function smallCard({ link }: DigestLink, cards: WorthCards): string {
-  return `<article class="${classes("worth-card worth-small", link)}" data-id="${escapeHtml(link.id)}">
+  return `<article class="${classes("worth-card worth-small", link, cards.catalog)}" data-id="${escapeHtml(link.id)}">
 ${tile(link, cards.images.get(link.id), "worth-tile")}
 <div class="worth-body">
 <h3>${title(link)}</h3>

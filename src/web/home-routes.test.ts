@@ -56,6 +56,23 @@ describe("GET /", () => {
     expect(html).toContain("Tell me why");
   });
 
+  it("colors a pick by the owner's pinned space", async () => {
+    const world = await oauthWorld();
+    const deps = linkDeps(world);
+    const { link } = await saveLink(deps, A, {
+      url: "https://a.example/kitchen-card",
+      savedBy: "seed",
+      tags: [{ name: "Kitchen", source: "stated" }],
+    });
+    await deps.store.pinTag(A, "kitchen", { pinned: true, color: "clay" });
+    const browser = world.agent();
+    await browser.signIn();
+    const html = String((await browser.send("/")).body);
+    expect(html).toMatch(
+      new RegExp(`class="worth-card worth-lead[^"]* space-clay" data-id="${link.id}"`),
+    );
+  });
+
   it("refuses another site's Origin or Host with 403, showing no card; a plain GET still shows it", async () => {
     const { browser } = await home();
     const foreign: Record<string, string>[] = [

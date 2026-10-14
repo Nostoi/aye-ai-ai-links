@@ -10,7 +10,10 @@ import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
-const EMPTY_HOME = { worth: { links: [], images: new Map(), now: new Date(0) }, spaces: "" };
+const EMPTY_HOME = {
+  worth: { links: [], images: new Map(), now: new Date(0), catalog: [] },
+  spaces: "",
+};
 const KITCHEN = {
   key: "kitchen",
   name: "Kitchen",

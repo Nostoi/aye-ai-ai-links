@@ -43,7 +43,7 @@ describe("homeSpaces", () => {
     await save("a", ["Kitchen", "Baking", "Home batteries"]);
     await pin("a", "kitchen", "clay");
     await pin("a", "home batteries", "teal");
-    expect(await homeSpaces(deps(), "a")).toEqual([
+    expect((await homeSpaces(deps(), "a")).spaces).toEqual([
       { key: "home batteries", name: "Home batteries", color: "teal", mosaic: [] },
       { key: "kitchen", name: "Kitchen", color: "clay", mosaic: [] },
     ]);
@@ -53,7 +53,9 @@ describe("homeSpaces", () => {
     await save("a", ["Kitchen"]);
     await save("b", ["Kitchen"]);
     await pin("b", "kitchen", "violet");
-    expect(await homeSpaces(deps(), "a")).toEqual([]);
+    const { spaces, catalog } = await homeSpaces(deps(), "a");
+    expect(spaces).toEqual([]);
+    expect(catalog).toEqual([expect.objectContaining({ key: "kitchen", pinned: false })]);
   });
 
   it("shows the three newest stored images of the space's active links", async () => {
@@ -66,7 +68,7 @@ describe("homeSpaces", () => {
     await save("a", ["garden"], { image: true });
     const newest = await save("a", ["kitchen"], { image: true });
     await pin("a", "kitchen", "clay");
-    const [kitchen] = await homeSpaces(deps(), "a");
+    const [kitchen] = (await homeSpaces(deps(), "a")).spaces;
     expect(kitchen?.mosaic).toEqual([
       { linkId: newest, version: `v-${newest}` },
       { linkId: third, version: `v-${third}` },
@@ -79,13 +81,16 @@ describe("homeSpaces", () => {
     await save("a", ["kitchen"], { image: true });
     for (let i = 0; i < MOSAIC_DEPTH; i++) await save("a", ["kitchen"]);
     await pin("a", "kitchen", "clay");
-    expect((await homeSpaces(deps(), "a"))[0]?.mosaic).toEqual([]);
+    expect((await homeSpaces(deps(), "a")).spaces[0]?.mosaic).toEqual([]);
   });
 
   it("gives a pinned tag whose stored color is not a space color no color", async () => {
     await save("a", ["kitchen"]);
     await pin("a", "kitchen", "amber");
-    expect((await homeSpaces(deps(), "a"))[0]).toMatchObject({ key: "kitchen", color: null });
+    expect((await homeSpaces(deps(), "a")).spaces[0]).toMatchObject({
+      key: "kitchen",
+      color: null,
+    });
   });
 });
 

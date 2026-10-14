@@ -1,7 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { DigestLink, DigestReason } from "../core/digest.js";
-import type { FocusEntry, Link, Source } from "../core/types.js";
+import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
 import { homePage } from "./home-page.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { themeCss } from "./theme.js";
@@ -38,8 +38,28 @@ const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => 
   link: link(over),
   reasons,
 });
-const render = (links: DigestLink[], images = new Map<string, string>()) =>
-  homePage({ worth: { links, images, now: NOW }, spaces: "" });
+const render = (links: DigestLink[], images = new Map<string, string>(), catalog: Tag[] = []) =>
+  homePage({ worth: { links, images, now: NOW, catalog }, spaces: "" });
+const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
+  key,
+  name: key,
+  kind: "topic",
+  kindSource: "stated",
+  color: null,
+  pinned: false,
+  description: null,
+  projectStatus: null,
+  ...over,
+});
+const on = (...keys: string[]): Pick<Link, "tags"> => ({
+  tags: keys.map((key) => ({
+    key,
+    name: key,
+    source: "stated",
+    kind: "topic",
+    kindSource: "stated",
+  })),
+});
 const dom = (html: string) => parseHTML(html).document;
 const pill = (html: string) => dom(html).querySelector(".worth-lead .reason")?.textContent;
 
@@ -175,6 +195,32 @@ describe("Worth a look today", () => {
     for (const el of dom(html).querySelectorAll(".reason, .worth-image, .worth-tile")) {
       expect(el.className).not.toMatch(/amber|needs-you|tell-why/);
     }
+  });
+
+  it("colors each card by its link's first colored pinned tag, and leaves the rest neutral", () => {
+    const catalog = [
+      tag("loose", { color: "teal", pinned: false }),
+      tag("plain", { pinned: true }),
+      tag("needy", { color: "amber", pinned: true }),
+      tag("kitchen", { color: "clay", pinned: true }),
+      tag("garden", { color: "green", pinned: true }),
+    ];
+    const cards = [
+      card([], { ...on("loose", "plain", "needy", "kitchen", "garden"), why: null }),
+      card([], on("loose")),
+      card([], on("plain", "needy")),
+    ];
+    const d = dom(render(cards, new Map(), catalog));
+    const classOf = (i: number) =>
+      (d.querySelector(`[data-id="${cards[i]?.link.id}"]`) as HTMLElement).className;
+    expect(
+      classOf(0)
+        .split(" ")
+        .filter((c) => c.startsWith("space-")),
+    ).toEqual(["space-clay"]);
+    expect(classOf(1)).not.toMatch(/space-/);
+    expect(classOf(2)).not.toMatch(/space-/);
+    for (const el of d.querySelectorAll("[class]")) expect(el.className).not.toMatch(/amber/);
   });
 
   it("shows the stored image from this site, never the page's own image URL", () => {

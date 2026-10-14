@@ -53,13 +53,19 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
   const now = deps.now();
   const link = await deps.store.get(owner, id);
   if (!link) throw new CoreError("not_found", "That link is gone. Reload the page.");
+  if (link.state !== "active") throw new CoreError("conflict", ALREADY_DONE);
   if (link.snoozedUntil !== null && link.snoozedUntil > now) {
     throw new CoreError("conflict", ALREADY_PUT_OFF);
   }
   const [claim] = await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
   const until = new Date(now.getTime() + SNOOZE_MS);
-  const expected = { snoozedUntil: link.snoozedUntil };
-  await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF);
+  const expected = { state: "active" as const, snoozedUntil: link.snoozedUntil };
+  try {
+    await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF);
+  } catch (error) {
+    if (claim) await unclaimSurfaced(deps, owner, id, now, claim.previousSurfacedAt);
+    throw error;
+  }
   return {
     until,
     claimedAt: claim ? now : null,
@@ -68,6 +74,7 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
+const ALREADY_DONE = "This link is already moved out of your list. Reload.";
 
 export async function unsnoozeLink(
   deps: WorthDeps,
@@ -83,8 +90,7 @@ export async function unsnoozeLink(
 
 /** I'm done with it. */
 export async function archiveLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
-  const alreadyDone = "This link is already moved out of your list. Reload.";
-  await changeIf(deps, owner, id, { state: "active" }, { state: "archived" }, alreadyDone);
+  await changeIf(deps, owner, id, { state: "active" }, { state: "archived" }, ALREADY_DONE);
 }
 
 /** The Undo of I'm done with it: makes the link active only while it is still archived. */

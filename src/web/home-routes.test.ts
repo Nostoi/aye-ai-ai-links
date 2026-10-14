@@ -135,6 +135,19 @@ describe("the home card actions", () => {
     expect(before).toMatchObject({ snoozed_until: ai.getTime(), last_surfaced_at: null });
   });
 
+  it("/home/snooze after an AI archived the link is a 409, changing nothing", async () => {
+    const { world, browser, id } = await home();
+    await browser.send("/");
+    await updateLink(linkDeps(world), A, id, { state: "archived" });
+    const before = row(world, id);
+    const res = await browser.send("/home/snooze", post({ id }));
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      message: "This link is already moved out of your list. Reload.",
+    });
+    expect(row(world, id)).toEqual(before);
+  });
+
   it("/home/archive archives it and /home/unarchive makes it active again; a second undo is a 409", async () => {
     const { world, browser, id } = await home();
     expect((await browser.send("/home/archive", post({ id }))).status).toBe(204);

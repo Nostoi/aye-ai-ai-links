@@ -273,6 +273,41 @@ describe("Not now", () => {
     expect(await get(l.id)).toMatchObject({ snoozedUntil: at(3 * DAY), lastSurfacedAt: null });
   });
 
+  it("will not put off a link an AI archived after the page was shown: a conflict, nothing written", async () => {
+    const l = await link();
+    await store.update(A, l.id, { state: "archived" });
+    const before = await get(l.id);
+    expect(await code(snoozeLink(deps(), A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toEqual(before);
+  });
+
+  it("will not put off a link an AI archived after its read: a conflict, nothing written", async () => {
+    const l = await link();
+    const racing = Object.create(store) as FakeStore;
+    racing.get = async (owner, id) => {
+      const read = await store.get(owner, id);
+      await store.update(A, l.id, { state: "archived" });
+      return read;
+    };
+    expect(await code(snoozeLink({ ...deps(), store: racing }, A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toMatchObject({ snoozedUntil: null, lastSurfacedAt: null });
+  });
+
+  it("will not put off a link an AI archived after its claim: a conflict, the claim taken back", async () => {
+    const l = await link(A, { lastSurfacedAt: at(-SURFACE_COOLDOWN_MS) });
+    const racing = Object.create(store) as FakeStore;
+    racing.claimSurfaced = async (owner, ids, when) => {
+      const claimed = await store.claimSurfaced(owner, ids, when);
+      await store.update(A, l.id, { state: "archived" });
+      return claimed;
+    };
+    expect(await code(snoozeLink({ ...deps(), store: racing }, A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toMatchObject({
+      snoozedUntil: null,
+      lastSurfacedAt: at(-SURFACE_COOLDOWN_MS),
+    });
+  });
+
   it("puts off a link whose earlier snooze has ended", async () => {
     const l = await link(A, { snoozedUntil: NOW });
     await snoozeLink(deps(), A, l.id);

@@ -471,6 +471,10 @@ describe("owner isolation coverage", () => {
       request: "/connections",
       marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
     },
+    "GET /profile": {
+      request: "/profile",
+      marker: () => "A private note for the route guard",
+    },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
@@ -622,6 +626,11 @@ describe("owner isolation coverage", () => {
     "POST /connections/keys": "the two-owner agent keys test in web/http.test.ts",
     "POST /connections/keys/turn-off": "the two-owner agent keys test in web/http.test.ts",
     "POST /connections/keys/turn-on": "the two-owner agent keys test in web/http.test.ts",
+    "POST /profile/notes/add": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/edit": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/confirm": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/remove": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/restore": "the two-owner profile tests in web/profile-page.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

@@ -113,8 +113,9 @@ describe("web door", () => {
     expect(html).toContain('action="/search"');
     expect(html).not.toContain(OWN);
     expect(html).toContain('href="/connections"');
+    expect(html).toContain('href="/profile"');
     expect(html).toContain('<button id="sign-out"');
-    for (const missing of ["/all", "/tags", "/profile"]) {
+    for (const missing of ["/all", "/tags"]) {
       expect(html).not.toContain(`href="${missing}"`);
     }
   });

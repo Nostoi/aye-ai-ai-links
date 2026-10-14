@@ -10,6 +10,7 @@ import {
   oauthErrorPage,
   searchPage,
 } from "./pages.js";
+import { profilePage } from "./profile-page.js";
 
 const ORIGIN = "https://links.example";
 
@@ -207,16 +208,18 @@ describe("the header", () => {
 });
 
 describe("the menu", () => {
-  it("is on home, search and connections, holds only Apps and keys and Sign out, and is not on the others", () => {
+  it("is on home, search, connections and profile, holds only Profile, Apps and keys and Sign out, and is not on the others", () => {
     const withMenu = [
       homePage(),
       searchPage({ query: "", links: [], now: new Date(0) }),
       connectionsPage({ connections: [], keys: [], now: new Date(0) }),
+      profilePage({ notes: [], focus: [], now: new Date(0) }),
     ];
     for (const html of withMenu) {
+      expect(html).toContain('<a href="/profile">Profile</a>');
       expect(html).toContain('<a href="/connections">Apps and keys</a>');
       expect(html).toContain('<button id="sign-out"');
-      expect(html).not.toMatch(/href="\/(all|tags|profile)"/);
+      expect(html).not.toMatch(/href="\/(all|tags)"/);
     }
     const without = [loginPage({ next: "/" }), oauthErrorPage("x"), consentExpiredPage()];
     for (const html of without) expect(html).not.toContain('id="sign-out"');

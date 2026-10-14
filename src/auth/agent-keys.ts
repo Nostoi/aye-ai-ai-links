@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { OwnerId } from "../core/types.js";
 import type { KeyInfo, SqliteKeyStore } from "../store/key-store.js";
 import type { Identify } from "./caller.js";
-import { WEB_SAVED_BY } from "./session.js";
+import { namesWeb, WEB_SAVED_BY } from "./session.js";
 
 export class AgentKeyError extends Error {
   constructor(
@@ -79,7 +79,7 @@ function agentName(raw: string): string {
       "Use only printable characters: no tabs, line breaks or other control characters.",
     );
   }
-  if (agent.toLowerCase() === WEB_SAVED_BY) {
+  if (namesWeb(agent)) {
     throw new AgentKeyError(
       "invalid_agent",
       `"${WEB_SAVED_BY}" names links saved on the web page. Choose another name.`,

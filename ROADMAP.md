@@ -22,6 +22,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** The Profile page (#98; plan in comment 6173556256, revised by comment 6173758666).
+  - **Labels.** A note written on the web shows "You confirmed this". An inferred note or focus entry shows as a guess by the AI that wrote it.
+  - **Undo acts now** (the #99 ruling, comment 6173113093). Remove is done at once and Undo restores the note, unchanged, within 60 seconds (`NOTE_UNDO_WINDOW_MS` in `core/profile.ts`).
+  - **Removal is soft.** This holds for `edit_profile` too. A removed note is hidden from every reader at once: `get_profile`, `save_link`'s profile and the page. Its row is deleted at that owner's next profile write after the 60 seconds; there is no timer.
+  - **Stale pages are refused.** The page's Edit, That's right and Remove send the version the page showed. If an AI changed the note since, the change is refused ("An AI changed this note. Reload.") and the note is unchanged.
+  - **"web" is reserved for every writer.** An OAuth app whose name is "web" in any case, after trimming, is recorded by its client id, so it can't pass for the owner. Agent keys already refused the name. No production key was named "web" (comment 6173760638).
 - **2026-10-14:** The server keeps its own copy of each link's preview image (#94; plan in comments 6171805935 and 6173115474, the second winning).
   - **Owner ruling: images are cached, and wiped on sign-out.** `/images/:id?v=<sha256 prefix>` answers `Cache-Control: private, max-age=31536000, immutable` when `v` is the stored image's version; any other answer, and every 404, is `no-store`. Sign-out answers `Clear-Site-Data: "cache"`; that a real browser honours it on the sign-out `fetch` has not been checked. This is the one exception to the web door's `no-store` rule.
   - **A separate image pass** (`core/image-indexer.ts`) sweeps every 15 s, one fetch at a time, beside the vector indexer, so a save never waits for an image. A snapshot recorded with an image URL is `pending` (migration 10 backfills every stored image URL). Writes compare and set on `pending` for the same URL, so a late result cannot replace a stored image.

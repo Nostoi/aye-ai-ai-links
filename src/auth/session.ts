@@ -2,8 +2,11 @@ import type { WithAuthLock } from "./auth-lock.js";
 import type { Auth } from "./better-auth.js";
 import type { Caller, Identify } from "./caller.js";
 
-/** What a browser session records as `savedBy`. */
+/** What a browser session records as `savedBy` and `writtenBy`: the owner's own writes. */
 export const WEB_SAVED_BY = "web";
+
+/** Whether a writer's name would pass for the web session's; no agent or app may use it. */
+export const namesWeb = (name: string) => name.trim().toLowerCase() === WEB_SAVED_BY;
 
 /**
  * Reads the request's session from the database, under the auth lock: `getSession` can refresh

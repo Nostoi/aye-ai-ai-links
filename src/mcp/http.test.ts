@@ -957,6 +957,7 @@ describe("MCP door over HTTP", () => {
     it("reports a committed add as success even when every later read fails, so a retry cannot duplicate it", async () => {
       const failing = {
         apply: deps.profile.apply.bind(deps.profile),
+        restoreNote: deps.profile.restoreNote.bind(deps.profile),
         listNotes: async () => {
           throw new Error("read after write");
         },

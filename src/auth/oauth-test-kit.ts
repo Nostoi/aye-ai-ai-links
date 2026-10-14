@@ -149,12 +149,15 @@ export class Agent {
       headers = {},
       json,
       form,
+      rawForm,
       origin = method === "POST",
     }: {
       method?: string;
       headers?: Record<string, string>;
       json?: unknown;
       form?: Record<string, string>;
+      /** A form body sent as written, for names a record cannot repeat. */
+      rawForm?: string;
       origin?: boolean;
     } = {},
   ): Promise<Sent> {
@@ -167,6 +170,10 @@ export class Agent {
     if (form) {
       h.set("content-type", "application/x-www-form-urlencoded");
       body = new URLSearchParams(form).toString();
+    }
+    if (rawForm !== undefined) {
+      h.set("content-type", "application/x-www-form-urlencoded");
+      body = rawForm;
     }
     if (origin && !h.has("origin")) h.set("origin", TEST_BASE_URL);
     if (this.cookies.size > 0 && !h.has("cookie")) {

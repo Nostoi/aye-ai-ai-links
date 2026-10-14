@@ -1,0 +1,57 @@
+import type { ImageType } from "./fetch.js";
+import type { OwnerId } from "./types.js";
+
+/** A link whose page named an image that has not been fetched yet. */
+export type PendingImage = { owner: OwnerId; linkId: string; imageUrl: string };
+
+export type ImageBytes = { contentType: ImageType; bytes: Uint8Array };
+
+/** A stored image. `version` changes whenever the bytes do, so it can key a long-cached URL. */
+export type StoredImage = ImageBytes & { version: string };
+
+/** Why an image will never be stored: refused by the address rules, or nothing usable came back. */
+export type ImageEnd = "refused" | "none";
+
+/** The version of an image whose bytes have this sha256 (hex): its first 16 characters. */
+export const imageVersion = (sha256: string): string => sha256.slice(0, 16);
+
+/**
+ * Persistence contract for the image pass. Any implementation must meet all of it.
+ *
+ * - A snapshot recorded with an image URL is pending until `writeImage` or `endImage`.
+ * - Owner scoping: `writeImage` and `endImage` take the owner and never touch another owner's
+ *   link. `pendingImages` is the exception: cross-owner maintenance for the image pass, never
+ *   for a request.
+ * - Both writes compare and set: they change something only while the link's image is still
+ *   pending for the same `imageUrl`, so a late or repeated result cannot replace a stored image.
+ * - Ids: those of `LinkStore`. An id never issued, or one owned by someone else, yields false,
+ *   never an error.
+ */
+export interface ImageStore {
+  /**
+   * Cross-owner read. Up to `limit` pending images of every owner, with link ids greater than
+   * `afterId` (all when null), in id order.
+   */
+  pendingImages(afterId: string | null, limit: number): Promise<PendingImage[]>;
+
+  /** Store the image and end its pending state. Returns false, writing nothing, unless pending. */
+  writeImage(
+    owner: OwnerId,
+    linkId: string,
+    imageUrl: string,
+    image: ImageBytes,
+    at: Date,
+  ): Promise<boolean>;
+
+  /** End the pending state with no image. Returns false, writing nothing, unless pending. */
+  endImage(owner: OwnerId, linkId: string, imageUrl: string, end: ImageEnd): Promise<boolean>;
+}
+
+/** The web door's reads of stored images. Owner-scoped: another owner's link reads as no image. */
+export interface LinkImageReader {
+  /** The version of each of these links that has a stored image; links without one are absent. */
+  imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, string>>;
+
+  /** The link's stored image, or null when it has none. */
+  image(owner: OwnerId, linkId: string): Promise<StoredImage | null>;
+}

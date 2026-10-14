@@ -18,12 +18,13 @@ import { authApp, originRefused, type RouteLimit, rootMetadataApp } from "./auth
 import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
+import type { LinkImageReader } from "./core/image-store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import type { SqliteKeyStore } from "./store/key-store.js";
-import { webApp } from "./web/http.js";
+import { IMAGE_ROUTE, webApp } from "./web/http.js";
 
 /**
  * better-auth, the lock every call into it goes through, the OAuth state around it, and the
@@ -55,6 +56,7 @@ const CHECKED_PAGES = [
   "/profile/notes/remove",
   "/profile/notes/restore",
   OAUTH_ERROR_PATH,
+  IMAGE_ROUTE,
 ];
 
 /** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
@@ -68,27 +70,27 @@ export function resourceChallenge(baseUrl: string): string {
   return value;
 }
 
+export type AppOptions = {
+  identify: Identify;
+  allowedHosts?: string[] | undefined;
+  rateLimit?: RateLimitOptions | undefined;
+  /** Receives one line per request; no request log when left out. */
+  log?: ((line: string) => void) | undefined;
+} & (
+  | { deps: McpDeps; auth?: undefined }
+  /** The web door also reads stored images. */
+  | { deps: McpDeps & { images: LinkImageReader }; auth: AuthDeps }
+);
+
 /**
  * The whole HTTP surface. Every door is mounted here, so tests drive the real composition. The
  * server always passes `auth`; without it, as in tests of the MCP door alone, the auth routes,
  * the root metadata and the web door are not mounted. `allowedHosts` covers every door.
  */
-export function createApp({
-  deps,
-  identify,
-  auth,
-  allowedHosts,
-  rateLimit,
-  log,
-}: {
-  deps: McpDeps;
-  identify: Identify;
-  auth?: AuthDeps | undefined;
-  allowedHosts?: string[] | undefined;
-  rateLimit?: RateLimitOptions | undefined;
-  /** Receives one line per request; no request log when left out. */
-  log?: ((line: string) => void) | undefined;
-}) {
+export function createApp(options: AppOptions) {
+  const { deps, identify, allowedHosts, rateLimit, log } = options;
+  const web = options.auth ? options : undefined;
+  const auth = web?.auth;
   const app = new Hono();
   // First, so refusals by every check below are recorded too.
   if (log) app.use("*", requestLog(log));
@@ -101,7 +103,7 @@ export function createApp({
     challenge: baseUrl ? resourceChallenge(baseUrl) : undefined,
   });
   app.route("/mcp", mcp.app);
-  if (auth && baseUrl) {
+  if (web && auth && baseUrl) {
     if (allowedHosts) {
       const hosts = hostHeaderValidation(allowedHosts);
       for (const path of [
@@ -141,7 +143,7 @@ export function createApp({
       "/",
       webApp({
         // Owner ruling on #93: web searches aren't logged until opens are recorded.
-        deps: { ...deps, searchLog: undefined },
+        deps: { ...web.deps, searchLog: undefined },
         auth: betterAuth,
         withAuthLock,
         consent: consentDetails({ auth: betterAuth, withAuthLock, clients }),

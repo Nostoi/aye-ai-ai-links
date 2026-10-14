@@ -16,6 +16,8 @@ export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register"
  *   the guarded fetcher, so registrations naming one are refused.
  * - `gate`: authorize goes through the authorize gate instead of straight to better-auth.
  * - `offlineAccess`: `offline_access` is added to the query's scope (`offline-access.ts`).
+ * - `clearCache`: the response tells the browser to drop its cache, which holds the owner's
+ *   long-cached preview images (`IMAGE_ROUTE` in `src/web/http.ts`).
  */
 export type RoutePolicy = {
   origin: "same" | "optional";
@@ -23,6 +25,7 @@ export type RoutePolicy = {
   refuseJwksUri?: true;
   gate?: true;
   offlineAccess?: true;
+  clearCache?: true;
 };
 
 /**
@@ -32,7 +35,7 @@ export type RoutePolicy = {
  */
 export const AUTH_ROUTES: ReadonlyMap<string, RoutePolicy> = new Map<string, RoutePolicy>([
   ["POST /sign-in/email", { origin: "same", limit: "login" }],
-  ["POST /sign-out", { origin: "same" }],
+  ["POST /sign-out", { origin: "same", clearCache: true }],
   ["GET /get-session", { origin: "optional" }],
   [
     "GET /oauth2/authorize",
@@ -190,9 +193,21 @@ export function authApp({
     const url = policy.offlineAccess ? authorizeWithOfflineAccess(raw.url) : raw.url;
     const request = new Request(url, { method: raw.method, headers: raw.headers, body });
     if (policy.gate && authorize) return authorize(request);
-    return withAuthLock(() => handle(request));
+    const response = await withAuthLock(() => handle(request));
+    return policy.clearCache ? clearingCache(response) : response;
   });
   return app;
+}
+
+/** The response with `Clear-Site-Data: "cache"` added, its status, body and cookies kept. */
+function clearingCache(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Clear-Site-Data", '"cache"');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 /** The root metadata documents, served by better-auth under the lock. */

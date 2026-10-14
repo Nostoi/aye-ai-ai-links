@@ -516,7 +516,7 @@ describe("startServer", () => {
       expect(authTables()).toEqual(expect.arrayContaining(["oauthClient", "session", "user"]));
     });
 
-    it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves / with the session", async () => {
+    it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves the owner's links on /search with the session", async () => {
       await seed("https://example.com/served-home");
       const auth = openAuthDatabase(authPath());
       const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
@@ -538,7 +538,7 @@ describe("startServer", () => {
       expect(signIn.status).toBe(200);
       const [cookie] = signIn.headers.getSetCookie();
       expect(cookie).toMatch(/; Secure/);
-      const home = await fetch(`http://127.0.0.1:${port}/`, {
+      const home = await fetch(`http://127.0.0.1:${port}/search`, {
         headers: { cookie: (cookie ?? "").split(";")[0] ?? "" },
         redirect: "manual",
       });

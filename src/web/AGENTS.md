@@ -23,6 +23,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 - Every page renders through `page()` and the theme tokens in `theme.ts`; no page brings its own colors.
 - Controls are at least 44px tall. Fields are outlined with `--field`.
 - Removing or turning something off shows an Undo bar instead of asking first.
+- A saved link opens in a new tab: `target="_blank" rel="noopener noreferrer"`.
 - Page designs: #12 comment 6158134489.
 
 ## New routes

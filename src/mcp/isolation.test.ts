@@ -436,7 +436,8 @@ describe("owner isolation coverage", () => {
   type Marker = string | Buffer | string[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
-    "GET /": { request: "/", marker: () => A_URL },
+    "GET /": { noOwnerData: "the question and a search field, no links" },
+    "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
     "GET /connections": { request: "/connections", marker: () => "Claude" },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
@@ -493,11 +494,16 @@ describe("owner isolation coverage", () => {
       title: "Quokka habitat notes",
     });
     const browser = await addSecondUser(world);
+    await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
+      url: B_URL,
+      savedBy: "seed-b",
+      title: "Quokka field guide",
+    });
     const owner = world.agent();
     await owner.signIn();
-    const aHome = await owner.send("/");
-    expect(aHome.status).toBe(200);
-    expect(String(aHome.body)).toContain(A_URL);
+    const aSearch = await owner.send("/search?q=quokka");
+    expect(aSearch.status).toBe(200);
+    expect(String(aSearch.body)).toContain(A_URL);
     const routes = webRoutes(world);
     const paths = [...new Set(routes.map((r) => r.path))];
     expect(paths).toContain("/connections");
@@ -546,6 +552,7 @@ describe("owner isolation coverage", () => {
 
     const before = rowsOf(world, A);
     expect((await browser.send("/")).status).toBe(200);
+    expect(String((await browser.send("/search?q=quokka")).body)).toContain(B_URL);
     const everyMarker = [A_URL, note, ...executed.flatMap((e) => textOf(e.marker))];
     for (const { key, request } of executed) {
       const sent = await asB(request, `${key} (${request})`);
@@ -683,10 +690,17 @@ describe("owner isolation through the web session door", () => {
     await saveLinkWith(world, a.access, A_URL);
     const browser = await addSecondUser(world);
     await saveLinkWith(world, await connectClaudeAs(world, browser), B_URL);
+    const deps = createDeps(world.links, new FakeEmbedder(DIMS));
+    for (const owner of [A, B]) {
+      const { id } = world.links.prepare("SELECT id FROM links WHERE owner_id = ?").get(owner) as {
+        id: string;
+      };
+      await updateLink(deps, owner, id, { title: `Quokka notes of ${owner}` });
+    }
     const before = { rows: rowsOf(world, A), grants: grantsOf(world, A) };
     const total = world.links.prepare("SELECT count(*) AS n FROM links").get();
 
-    const home = await browser.send(`/?owner=${A}`);
+    const home = await browser.send(`/search?q=quokka&owner=${A}`);
     const gone = await browser.send("/connections/disconnect", {
       method: "POST",
       json: { clientId: CLAUDE_ID, owner: A },

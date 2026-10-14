@@ -35,4 +35,9 @@ describe("get_digest guidance", () => {
     expect(GET_DIGEST).toContain("snoozedUntil");
     expect(GET_DIGEST).toMatch(/marks the links it returns as shown.*Don't call it again/s);
   });
+
+  it("says the web home page records openings too, and does not claim agents are the only source", () => {
+    expect(GET_DIGEST).not.toContain("recorded only when an agent sends opened: true");
+    expect(GET_DIGEST).toMatch(/opened: true.*home page/s);
+  });
 });

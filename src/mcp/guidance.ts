@@ -67,7 +67,7 @@ export const GET_DIGEST = `Get a few saved links worth bringing back to the owne
 Reasons:
 - focus_words: the link shares words with that focus entry (something the owner is working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave the link out of your nudge if it doesn't fit. Present a focus entry whose source is "inferred" as a guess.
 - no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
-- not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded only when an agent sends opened: true, so never tell the owner they haven't opened it.
+- not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or when the owner opens it from the cards on the web home page; any other opening is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.
 
 Offer to snooze a link (update_link with snoozedUntil) or archive it (state "archived"). Send opened: true if the owner opens one.

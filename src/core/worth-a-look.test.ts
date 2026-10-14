@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DIGEST_SIZE, SURFACE_COOLDOWN_MS } from "./digest.js";
 import type { CoreError } from "./errors.js";
@@ -156,6 +157,19 @@ describe("worthALook", () => {
       const picks = await ids();
       expect(picks[0]).toBe(newer.id);
       expect(new Set(picks).size).toBe(WORTH_SIZE);
+    }
+  });
+
+  it("with no focus match, leads with the day's shuffle first, not the queue's first", async () => {
+    const all: Link[] = [];
+    for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
+    const rank = (day: number, id: string) =>
+      createHash("sha256").update(`${day}:${id}`).digest("hex");
+    for (let d = 0; d < 10; d++) {
+      clock = at(d * DAY);
+      const day = Math.floor(clock.getTime() / DAY);
+      const shuffled = all.map((l) => l.id).sort((x, y) => (rank(day, x) < rank(day, y) ? -1 : 1));
+      expect((await ids())[0]).toBe(shuffled[0]);
     }
   });
 

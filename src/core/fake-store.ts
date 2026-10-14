@@ -297,6 +297,13 @@ export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImag
     return claimed;
   }
 
+  async unclaimSurfaced(owner: OwnerId, id: string, claim: { at: Date; previous: Date | null }) {
+    const found = this.owned(owner).get(id);
+    if (found?.lastSurfacedAt?.getTime() !== claim.at.getTime()) return false;
+    found.lastSurfacedAt = claim.previous && new Date(claim.previous);
+    return true;
+  }
+
   async pendingImages(afterId: string | null, limit: number): Promise<PendingImage[]> {
     const order = (id: string) => Number(id.replace(/^link-/, ""));
     const pending: PendingImage[] = [];

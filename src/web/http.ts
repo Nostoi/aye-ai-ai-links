@@ -72,6 +72,7 @@ const isLinkId = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9]{1,20}$/.test(value);
 const isDate = (value: unknown): value is string =>
   typeof value === "string" && !Number.isNaN(Date.parse(value));
+const isDateOrNull = (value: unknown): value is string | null => value === null || isDate(value);
 
 /** The object a shape of member checks accepts. */
 type Shaped<S extends Record<string, Check<unknown>>> = {
@@ -280,18 +281,30 @@ export function webApp({
     }),
   );
 
-  // Answers when the snooze ends, which its Undo sends back.
   app.post("/home/snooze", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
-      const until = await snoozeLink(deps, c.get("caller").owner, c.get("body").id);
-      return c.json({ until: until.toISOString() }, 200, NO_STORE);
+      const snooze = await snoozeLink(deps, c.get("caller").owner, c.get("body").id);
+      return c.json(
+        {
+          until: snooze.until.toISOString(),
+          claimedAt: snooze.claimedAt?.toISOString() ?? null,
+          previousSurfacedAt: snooze.previousSurfacedAt?.toISOString() ?? null,
+        },
+        200,
+        NO_STORE,
+      );
     }),
   );
 
-  app.post("/home/unsnooze", jsonBody({ ...linkId, until: isDate }), session, (c) =>
+  const undoSnooze = { until: isDate, claimedAt: isDateOrNull, previousSurfacedAt: isDateOrNull };
+  app.post("/home/unsnooze", jsonBody({ ...linkId, ...undoSnooze }), session, (c) =>
     homeAction(c, async () => {
-      const { id, until } = c.get("body");
-      await unsnoozeLink(deps, c.get("caller").owner, id, new Date(until));
+      const { id, until, claimedAt, previousSurfacedAt } = c.get("body");
+      await unsnoozeLink(deps, c.get("caller").owner, id, {
+        until: new Date(until),
+        claimedAt: claimedAt === null ? null : new Date(claimedAt),
+        previousSurfacedAt: previousSurfacedAt === null ? null : new Date(previousSurfacedAt),
+      });
       return done(c);
     }),
   );

@@ -1,3 +1,4 @@
+import { CoreError } from "./errors.js";
 import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { LinkSearch } from "./search.js";
@@ -150,6 +151,19 @@ export async function claimSurfaced(
   return ids.length === 0
     ? []
     : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now });
+}
+
+export async function unclaimSurfaced(
+  deps: Pick<DigestDeps, "store">,
+  owner: OwnerId,
+  id: string,
+  claimedAt: Date,
+  previous: Date | null,
+): Promise<boolean> {
+  if (previous !== null && previous >= claimedAt) {
+    throw new CoreError("invalid_input", "The surfacing to put back must be before the claim.");
+  }
+  return deps.store.unclaimSurfaced(owner, id, { at: claimedAt, previous });
 }
 
 /**

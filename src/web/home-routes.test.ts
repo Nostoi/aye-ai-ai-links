@@ -92,27 +92,32 @@ describe("the home card actions", () => {
     expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
-  it("/home/snooze marks it surfaced and snoozes two weeks, answering when; /home/unsnooze reverses the snooze", async () => {
+  it("/home/snooze marks it surfaced and snoozes two weeks, answering both; /home/unsnooze reverses both, so the card is back", async () => {
     const { world, browser, id } = await home();
     const res = await browser.send("/home/snooze", post({ id }));
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    const until = (res.body as { until: string }).until;
+    const snooze = res.body as Record<string, string | null>;
     const r = row(world, id);
-    expect(r.snoozed_until).toBe(Date.parse(until));
+    expect(snooze).toEqual({
+      until: new Date(r.snoozed_until as number).toISOString(),
+      claimedAt: new Date(r.last_surfaced_at as number).toISOString(),
+      previousSurfacedAt: null,
+    });
     expect(r.snoozed_until).toBe((r.last_surfaced_at as number) + SNOOZE_MS);
     expect(String((await browser.send("/")).body)).not.toContain("Worth a look today");
-    const back = await browser.send("/home/unsnooze", post({ id, until }));
+    const back = await browser.send("/home/unsnooze", post({ id, ...snooze }));
     expect(back.status).toBe(204);
-    expect(row(world, id).snoozed_until).toBeNull();
+    expect(row(world, id)).toMatchObject({ snoozed_until: null, last_surfaced_at: null });
+    expect(String((await browser.send("/")).body)).toContain(`data-id="${id}"`);
   });
 
   it("/home/unsnooze after an AI changed the snooze is a 409 and leaves the AI's value", async () => {
     const { world, browser, id } = await home();
-    const { until } = (await browser.send("/home/snooze", post({ id }))).body as { until: string };
-    const ai = new Date(Date.parse(until) + 86_400_000);
+    const snooze = (await browser.send("/home/snooze", post({ id }))).body as { until: string };
+    const ai = new Date(Date.parse(snooze.until) + 86_400_000);
     await updateLink(linkDeps(world), A, id, { snoozedUntil: ai });
-    const res = await browser.send("/home/unsnooze", post({ id, until }));
+    const res = await browser.send("/home/unsnooze", post({ id, ...snooze }));
     expect(res.status).toBe(409);
     expect(row(world, id).snoozed_until).toBe(ai.getTime());
   });
@@ -181,17 +186,25 @@ describe("the home card actions", () => {
   });
 });
 
-/** A snooze the two-owner test seeds, which the unsnooze body names. */
+/** A snooze and its claim the two-owner test seeds, which the unsnooze body names. */
 const SEED_UNTIL = new Date("2030-01-01T00:00:00.000Z");
+const SEED_CLAIM = new Date("2029-12-18T00:00:00.000Z");
+
+type Seed = LinkPatch & { lastSurfacedAt?: Date };
 
 /** Each POST, with a body naming the card's link, and the state of A's link it acts on. */
-const ROUTES: [string, (id: string) => Record<string, unknown>, LinkPatch][] = [
+const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
   ["/home/opened", (id) => ({ id }), {}],
   ["/home/snooze", (id) => ({ id }), {}],
   [
     "/home/unsnooze",
-    (id) => ({ id, until: SEED_UNTIL.toISOString() }),
-    { snoozedUntil: SEED_UNTIL },
+    (id) => ({
+      id,
+      until: SEED_UNTIL.toISOString(),
+      claimedAt: SEED_CLAIM.toISOString(),
+      previousSurfacedAt: null,
+    }),
+    { snoozedUntil: SEED_UNTIL, lastSurfacedAt: SEED_CLAIM },
   ],
   ["/home/archive", (id) => ({ id }), {}],
   ["/home/unarchive", (id) => ({ id }), { state: "archived" }],
@@ -201,7 +214,13 @@ const ROUTES: [string, (id: string) => Record<string, unknown>, LinkPatch][] = [
 describe.each(ROUTES)("POST %s", (path, body, seed) => {
   it("acts for the signed-in owner only: B naming A's link gets 404 and A's rows are unchanged", async () => {
     const { world, browser, id } = await home();
-    await updateLink(linkDeps(world), A, id, seed);
+    const { lastSurfacedAt, ...patch } = seed;
+    await updateLink(linkDeps(world), A, id, patch);
+    if (lastSurfacedAt) {
+      world.links
+        .prepare("UPDATE links SET last_surfaced_at = ? WHERE id = ?")
+        .run(lastSurfacedAt.getTime(), Number(id));
+    }
     const bBrowser = await addSecondUser(world);
     const before = ownedRows(world, A);
     const res = await bBrowser.send(path, post(body(id)));
@@ -209,6 +228,7 @@ describe.each(ROUTES)("POST %s", (path, body, seed) => {
     expect(ownedRows(world, A)).toEqual(before);
     // The same request from A is accepted, so B's 404 is down to whose link it is.
     expect((await browser.send(path, post(body(id)))).status).toBeLessThan(300);
+    if (lastSurfacedAt) expect(row(world, id).last_surfaced_at).toBeNull();
   });
 
   const OVER = "x".repeat(AUTH_BODY_LIMIT);
@@ -238,10 +258,27 @@ describe.each(ROUTES)("POST %s", (path, body, seed) => {
   });
 });
 
-it("POST /home/unsnooze refuses an until that is not a date, and /home/why a text that is not a string", async () => {
+it("POST /home/unsnooze refuses a time that is missing or not a date, and /home/why a text that is not a string", async () => {
   const { world, browser, id } = await home();
   const before = allRows(world);
-  expect((await browser.send("/home/unsnooze", post({ id, until: "soon" }))).status).toBe(400);
+  const undo = {
+    id,
+    until: SEED_UNTIL.toISOString(),
+    claimedAt: SEED_CLAIM.toISOString(),
+    previousSurfacedAt: null,
+  };
+  for (const bad of [
+    { until: "soon" },
+    { until: null },
+    { claimedAt: "soon" },
+    { claimedAt: undefined },
+    { previousSurfacedAt: "soon" },
+    { previousSurfacedAt: undefined },
+    { previousSurfacedAt: SEED_UNTIL.toISOString() },
+  ]) {
+    const res = await browser.send("/home/unsnooze", post({ ...undo, ...bad }));
+    expect(res.status, JSON.stringify(bad)).toBe(400);
+  }
   expect((await browser.send("/home/why", post({ id, text: 7 }))).status).toBe(400);
   expect(allRows(world)).toEqual(before);
 });

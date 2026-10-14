@@ -313,9 +313,13 @@ describe("the home page's script", () => {
   it("Not now hides the card and offers Undo, which sends back the snooze it got and shows the card", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;
-    const until = "2026-10-28T10:00:00.000Z";
+    const snooze = {
+      until: "2026-10-28T10:00:00.000Z",
+      claimedAt: "2026-10-14T10:00:00.000Z",
+      previousSurfacedAt: "2026-09-01T10:00:00.000Z",
+    };
     const page = load(
-      (s) => (s.url === "/home/snooze" ? { status: 200, body: { until } } : { status: 204 }),
+      (s) => (s.url === "/home/snooze" ? { status: 200, body: snooze } : { status: 204 }),
       cards,
     );
     page.dispatch(".worth-lead button[data-act=snooze]", "click");
@@ -325,7 +329,8 @@ describe("the home page's script", () => {
     expect(page.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
     page.dispatch("#undo-bar button", "click");
     await page.settle();
-    expect(page.sent[1]).toMatchObject({ url: "/home/unsnooze", body: { id, until } });
+    expect(page.sent[1]).toMatchObject({ url: "/home/unsnooze" });
+    expect(page.sent[1]?.body).toEqual({ id, ...snooze });
     expect(page.hidden(id)).toBe(false);
   });
 

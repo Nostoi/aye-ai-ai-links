@@ -194,6 +194,18 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
   }
 
+  async unclaimSurfaced(owner: OwnerId, id: string, claim: { at: Date; previous: Date | null }) {
+    const n = parseId(id);
+    if (n === null) return false;
+    const { changes } = this.db
+      .prepare(
+        `UPDATE links SET last_surfaced_at = ?
+         WHERE id = ? AND owner_id = ? AND last_surfaced_at = ?`,
+      )
+      .run(toMs(claim.previous), n, owner, toMs(claim.at));
+    return changes === 1;
+  }
+
   async dueSnapshots(now: Date, limit: number) {
     const rows = this.db
       .prepare(

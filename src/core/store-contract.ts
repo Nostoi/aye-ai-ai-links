@@ -47,6 +47,7 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     colorTag: (owner, key, color) => inner.colorTag(owner, key, color),
     listLinks: (owner) => inner.listLinks(owner),
     claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
+    unclaimSurfaced: (owner, id, claim) => inner.unclaimSurfaced(owner, id, claim),
     updateIf: (owner, id, expected, patch) => inner.updateIf(owner, id, expected, patch),
     ...over,
   };
@@ -1357,6 +1358,60 @@ export function describeStoreContract(
         expect(await h.store.claimSurfaced(A, [], when)).toEqual([]);
         expect(await h.store.claimSurfaced(B, [mine.id], when)).toEqual([]);
         expect((await h.store.get(A, mine.id))?.lastSurfacedAt).toBeNull();
+      });
+    });
+
+    describe("unclaimSurfaced", () => {
+      const at = new Date("2026-03-01T10:20:30.456Z");
+      const earlier = new Date("2026-02-01T00:00:00.000Z");
+      const insert = async (owner: string, n: number, lastSurfacedAt: Date | null) =>
+        (
+          await h.store.insertIfAbsent(owner, {
+            url: `https://ex.com/${n}`,
+            urlKey: `https://ex.com/${n}`,
+            title: null,
+            summary: null,
+            why: null,
+            tags: [],
+            savedAt: new Date("2026-01-01T00:00:00Z"),
+            savedBy: "t",
+            lastOpenedAt: null,
+            lastSurfacedAt,
+            snoozedUntil: null,
+            state: "active",
+          })
+        ).link;
+
+      it("puts back the previous value, null or a date, while lastSurfacedAt is still the claim's", async () => {
+        const never = await insert(A, 1, at);
+        const before = await insert(A, 2, at);
+        expect(
+          await h.store.unclaimSurfaced(A, never.id, { at: new Date(at), previous: null }),
+        ).toBe(true);
+        expect(await h.store.unclaimSurfaced(A, before.id, { at, previous: earlier })).toBe(true);
+        expect(await h.store.get(A, never.id)).toEqual({ ...never, lastSurfacedAt: null });
+        expect(await h.store.get(A, before.id)).toEqual({ ...before, lastSurfacedAt: earlier });
+      });
+
+      it("writes nothing once lastSurfacedAt moved on, even by a millisecond, or was never set", async () => {
+        const later = await insert(A, 1, new Date(at.getTime() + 1));
+        const unset = await insert(A, 2, null);
+        const before = structuredClone(await h.all(A));
+        expect(await h.store.unclaimSurfaced(A, later.id, { at, previous: earlier })).toBe(false);
+        expect(await h.store.unclaimSurfaced(A, unset.id, { at, previous: earlier })).toBe(false);
+        expect(await h.all(A)).toEqual(before);
+      });
+
+      it("never touches another owner's link, and an unknown or malformed id is false", async () => {
+        const theirs = await insert(B, 1, at);
+        const mine = await insert(A, 2, at);
+        const absent = theirs.id.replace(/\d+$/, (n) => String(Number(n) + 1000));
+        const before = [structuredClone(await h.all(A)), structuredClone(await h.all(B))];
+        for (const id of [theirs.id, absent, "zzz", "", "9223372036854775808"]) {
+          expect(await h.store.unclaimSurfaced(A, id, { at, previous: null }), id).toBe(false);
+        }
+        expect(await h.store.unclaimSurfaced(B, mine.id, { at, previous: null })).toBe(false);
+        expect([await h.all(A), await h.all(B)]).toEqual(before);
       });
     });
 

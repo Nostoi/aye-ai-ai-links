@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DIGEST_SIZE, SURFACE_COOLDOWN_MS } from "./digest.js";
+import { DIGEST_SIZE, getDigest, SURFACE_COOLDOWN_MS } from "./digest.js";
 import type { CoreError } from "./errors.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
@@ -238,7 +238,7 @@ describe("markOpened", () => {
 describe("Not now", () => {
   it("marks the link surfaced and snoozes it for two weeks, returning when the snooze ends", async () => {
     const l = await link();
-    const until = await snoozeLink(deps(), A, l.id);
+    const { until } = await snoozeLink(deps(), A, l.id);
     expect(until).toEqual(at(SNOOZE_MS));
     expect(SNOOZE_MS).toBe(14 * DAY);
     expect(await get(l.id)).toMatchObject({ lastSurfacedAt: NOW, snoozedUntil: at(SNOOZE_MS) });
@@ -247,7 +247,7 @@ describe("Not now", () => {
   it("marks and snoozes from one instant, though the clock moves while it runs", async () => {
     const l = await link();
     let tick = 0;
-    const until = await snoozeLink({ ...deps(), now: () => at(tick++) }, A, l.id);
+    const { until } = await snoozeLink({ ...deps(), now: () => at(tick++) }, A, l.id);
     const after = await get(l.id);
     expect(after.snoozedUntil).toEqual(until);
     expect(until.getTime() - (after.lastSurfacedAt as Date).getTime()).toBe(SNOOZE_MS);
@@ -279,27 +279,66 @@ describe("Not now", () => {
     expect((await get(l.id)).snoozedUntil).toEqual(at(SNOOZE_MS));
   });
 
-  it("undo clears the snooze it set", async () => {
-    const l = await link();
-    const until = await snoozeLink(deps(), A, l.id);
-    await unsnoozeLink(deps(), A, l.id, new Date(until));
-    expect((await get(l.id)).snoozedUntil).toBeNull();
+  it("answers the claim it made and the value it replaced, which undo sends back", async () => {
+    const l = await link(A, { lastSurfacedAt: at(-SURFACE_COOLDOWN_MS) });
+    expect(await snoozeLink(deps(), A, l.id)).toEqual({
+      until: at(SNOOZE_MS),
+      claimedAt: NOW,
+      previousSurfacedAt: at(-SURFACE_COOLDOWN_MS),
+    });
   });
 
-  it("undo after an AI changed the snooze is a conflict and leaves the AI's value", async () => {
+  it("undo clears the snooze and the claim it set: the link is back on home and in a digest at once", async () => {
     const l = await link();
-    const until = await snoozeLink(deps(), A, l.id);
+    const snooze = await snoozeLink(deps(), A, l.id);
+    await unsnoozeLink(deps(), A, l.id, structuredClone(snooze));
+    expect(await get(l.id)).toMatchObject({ snoozedUntil: null, lastSurfacedAt: null });
+    expect(await ids()).toContain(l.id);
+    expect((await getDigest(deps(), A)).links.map((d) => d.link.id)).toContain(l.id);
+  });
+
+  it("undo puts back the surfacing the claim replaced", async () => {
+    const l = await link(A, { lastSurfacedAt: at(-SURFACE_COOLDOWN_MS) });
+    await unsnoozeLink(deps(), A, l.id, await snoozeLink(deps(), A, l.id));
+    expect((await get(l.id)).lastSurfacedAt).toEqual(at(-SURFACE_COOLDOWN_MS));
+  });
+
+  it("undo after an AI changed the snooze is a conflict, leaves the AI's value, and still takes back its claim", async () => {
+    const l = await link();
+    const snooze = await snoozeLink(deps(), A, l.id);
     await store.update(A, l.id, { snoozedUntil: at(3 * DAY) });
-    expect(await code(unsnoozeLink(deps(), A, l.id, until))).toBe("conflict");
-    expect((await get(l.id)).snoozedUntil).toEqual(at(3 * DAY));
+    expect(await code(unsnoozeLink(deps(), A, l.id, snooze))).toBe("conflict");
+    expect(await get(l.id)).toMatchObject({ snoozedUntil: at(3 * DAY), lastSurfacedAt: null });
+  });
+
+  it("undo after an agent's digest claimed the link clears the snooze and leaves the agent's claim", async () => {
+    const l = await link();
+    const snooze = await snoozeLink(deps(), A, l.id);
+    clock = snooze.until;
+    expect((await getDigest(deps(), A)).links.map((d) => d.link.id)).toEqual([l.id]);
+    await unsnoozeLink(deps(), A, l.id, snooze);
+    expect(await get(l.id)).toMatchObject({ snoozedUntil: null, lastSurfacedAt: snooze.until });
+  });
+
+  it("undo refuses a replaced value that is not before the claim, writing nothing", async () => {
+    const l = await link();
+    const snooze = await snoozeLink(deps(), A, l.id);
+    const before = await get(l.id);
+    for (const previousSurfacedAt of [snooze.claimedAt, at(DAY)]) {
+      const bad = { ...snooze, previousSurfacedAt };
+      expect(await code(unsnoozeLink(deps(), A, l.id, bad))).toBe("invalid_input");
+    }
+    expect(await get(l.id)).toEqual(before);
   });
 
   it("refuses another owner's link as not found, never as a conflict, changing nothing", async () => {
-    const theirs = await link(B, { snoozedUntil: at(DAY) });
+    const theirs = await link(B, { snoozedUntil: at(DAY), lastSurfacedAt: NOW });
     const before = structuredClone(store.all(B));
     expect(await code(snoozeLink(deps(), A, theirs.id))).toBe("not_found");
-    expect(await code(unsnoozeLink(deps(), A, theirs.id, at(DAY)))).toBe("not_found");
-    expect(await code(unsnoozeLink(deps(), A, theirs.id, at(2 * DAY)))).toBe("not_found");
+    for (const until of [at(DAY), at(2 * DAY)]) {
+      const snooze = { until, claimedAt: NOW, previousSurfacedAt: null };
+      expect(await code(unsnoozeLink(deps(), A, theirs.id, snooze))).toBe("not_found");
+    }
     expect(store.all(B)).toEqual(before);
   });
 });

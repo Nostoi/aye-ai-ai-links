@@ -167,7 +167,8 @@ const hideFor = async (card, act) => {
   if (act === "snooze") {
     const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (data && typeof data.until === "string") {
-      undo = ["Hidden for two weeks.", "/home/unsnooze", { id, until: data.until }];
+      const { until, claimedAt, previousSurfacedAt } = data;
+      undo = ["Hidden for two weeks.", "/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }];
     }
   } else if (res && res.status === 204) {
     undo = ["Moved out of your list.", "/home/unarchive", { id }];

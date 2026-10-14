@@ -118,6 +118,12 @@ export interface LinkStore {
     when: { at: Date; notSurfacedAfter: Date; now: Date },
   ): Promise<SurfacedClaim[]>;
 
+  unclaimSurfaced(
+    owner: OwnerId,
+    id: string,
+    claim: { at: Date; previous: Date | null },
+  ): Promise<boolean>;
+
   /**
    * Conditional write, in one atomic step: apply `patch` as `update` does, but only while the
    * link still matches every field `expected` names. Returns the link as it is afterwards, with

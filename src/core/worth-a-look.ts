@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { claimSurfaced, type DigestDeps, type DigestLink, previewDigest } from "./digest.js";
+import {
+  claimSurfaced,
+  type DigestDeps,
+  type DigestLink,
+  previewDigest,
+  unclaimSurfaced,
+} from "./digest.js";
 import { CoreError } from "./errors.js";
 import { updateLink } from "./links.js";
 import type { LinkExpectation } from "./store.js";
@@ -40,31 +46,39 @@ export async function markOpened(deps: WorthDeps, owner: OwnerId, id: string): P
   await claimSurfaced(at, owner, [id]);
 }
 
-/** Not now: marks the link surfaced, then snoozes it for SNOOZE_MS. Returns when the snooze ends. */
-export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<Date> {
+export type Snooze = { until: Date; claimedAt: Date | null; previousSurfacedAt: Date | null };
+
+/** Not now: marks the link surfaced, then snoozes it for SNOOZE_MS. */
+export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<Snooze> {
   const now = deps.now();
   const link = await deps.store.get(owner, id);
   if (!link) throw new CoreError("not_found", "That link is gone. Reload the page.");
   if (link.snoozedUntil !== null && link.snoozedUntil > now) {
     throw new CoreError("conflict", ALREADY_PUT_OFF);
   }
-  await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
+  const [claim] = await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
   const until = new Date(now.getTime() + SNOOZE_MS);
   const expected = { snoozedUntil: link.snoozedUntil };
   await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF);
-  return until;
+  return {
+    until,
+    claimedAt: claim ? now : null,
+    previousSurfacedAt: claim?.previousSurfacedAt ?? null,
+  };
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
 
-/** The Undo of Not now: clears the snooze only while it is still the one Not now set (`until`). */
 export async function unsnoozeLink(
   deps: WorthDeps,
   owner: OwnerId,
   id: string,
-  until: Date,
+  snooze: Snooze,
 ): Promise<void> {
-  await changeIf(deps, owner, id, { snoozedUntil: until }, { snoozedUntil: null });
+  if (snooze.claimedAt) {
+    await unclaimSurfaced(deps, owner, id, snooze.claimedAt, snooze.previousSurfacedAt);
+  }
+  await changeIf(deps, owner, id, { snoozedUntil: snooze.until }, { snoozedUntil: null });
 }
 
 /** I'm done with it. */

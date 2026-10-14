@@ -1,53 +1,8 @@
 import type { Link } from "../core/types.js";
-import { faviconHref, inlineLogo } from "./logo.js";
-import { themeCss } from "./theme.js";
-
-const escapeHtml = (s: string) =>
-  s.replace(
-    /[&<>"']/g,
-    (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] as string,
-  );
+import { escapeHtml, page, savedOn } from "./page.js";
 
 /** Only web links are made clickable; anything else is shown as text. */
 const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
-
-const NAME = "Aye-AI-AI Links";
-const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</span>`;
-
-const MENU = `<nav class="menu" aria-label="Main"><a href="/connections">Apps and keys</a><button id="sign-out" type="button">Sign out</button></nav>`;
-
-/** Ends the session, then goes to the sign-in page. */
-const MENU_SCRIPT = `<script>
-document.getElementById("sign-out").addEventListener("click", async () => {
-  await fetch("/api/auth/sign-out", { method: "POST" });
-  location.href = "/login";
-});
-</script>`;
-
-/**
- * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
- * adds the menu (and implies `home`), for the pages the owner browses.
- */
-const page = (title: string, body: string, { home = false, menu = false } = {}) => `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
-<link rel="icon" type="image/svg+xml" href="${faviconHref}">
-<style>
-${themeCss}
-</style>
-</head>
-<body>
-<header class="column site">${home || menu ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}${menu ? MENU : ""}</header>
-<div class="column">
-${body}
-</div>
-${menu ? MENU_SCRIPT : ""}
-</body>
-</html>
-`;
 
 /**
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
@@ -111,7 +66,7 @@ export const consentPage = ({
     "Approve a connection · Aye-AI-AI Links",
     `<main>
 <h1>Connect ${escapeHtml(clientName)}?</h1>
-<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>. It stays connected while you use it, until you disconnect it on the Connected apps page.</p>
+<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>. It stays connected while you use it, until you disconnect it on the Apps and keys page.</p>
 <p class="actions"><button class="primary" id="accept" type="button">Allow</button> <button id="deny" type="button">Deny</button></p>
 <p id="error" role="alert"></p>
 </main>
@@ -147,44 +102,6 @@ export const consentExpiredPage = () =>
 </main>`,
   );
 
-export type ConnectionRow = { clientId: string; name: string | null; connectedAt: Date };
-
-function connectionItem(c: ConnectionRow): string {
-  return `<li><span><strong>${escapeHtml(c.name ?? c.clientId)}</strong>, connected ${c.connectedAt.toISOString().slice(0, 10)}</span> <button type="button" data-client-id="${escapeHtml(c.clientId)}">Disconnect</button></li>`;
-}
-
-/**
- * The owner's connected apps. Each Disconnect button posts `{clientId}` (read from its data
- * attribute, never written into the script) to `/connections/disconnect`, then reloads.
- */
-export const connectionsPage = (connections: ConnectionRow[]) =>
-  page(
-    "Connected apps · Aye-AI-AI Links",
-    `<main>
-<h1>Connected apps</h1>
-${connections.length === 0 ? "<p>No apps are connected.</p>" : `<ul class="connections">\n${connections.map(connectionItem).join("\n")}\n</ul>`}
-<p>A disconnected app is refused from its next request. To use it again, connect it again from the app.</p>
-<p id="error" role="alert"></p>
-<p><a href="/">Back to your links</a></p>
-</main>
-<script>
-const error = document.getElementById("error");
-for (const button of document.querySelectorAll("button[data-client-id]")) {
-  button.addEventListener("click", async () => {
-    error.textContent = "";
-    const res = await fetch("/connections/disconnect", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ clientId: button.dataset.clientId }),
-    });
-    if (res.ok) location.reload();
-    else error.textContent = "That did not work. Reload the page and try again.";
-  });
-}
-</script>`,
-    { menu: true },
-  );
-
 /** Where an OAuth authorization that failed ends. `message` is always one of our own sentences. */
 export const oauthErrorPage = (message: string) =>
   page(
@@ -202,15 +119,6 @@ const hostOf = (url: string) => {
     return "";
   }
 };
-
-/** "March 12"; the year is added when it is not the current one. Always read in UTC. */
-const savedOn = (savedAt: Date, now: Date) =>
-  savedAt.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    ...(savedAt.getUTCFullYear() === now.getUTCFullYear() ? {} : { year: "numeric" }),
-    timeZone: "UTC",
-  });
 
 function whyLine(why: Link["why"]): string {
   if (!why) return "No why yet";

@@ -5,6 +5,7 @@ import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
+import { SqliteKeyStore } from "../store/key-store.js";
 import { buildAuth } from "./build-auth.js";
 import { INTERNAL_CLIENT_ID } from "./internal-client.js";
 import { TEST_BASE_URL, TEST_SECRET } from "./memory-auth.js";
@@ -59,7 +60,7 @@ async function restart(world: World) {
   const { app } = createApp({
     deps,
     identify: again.identify,
-    auth: again,
+    auth: { ...again, keys: new SqliteKeyStore(links) },
     allowedHosts: ["links.example"],
   });
   return { ...world, ...again, app, links };

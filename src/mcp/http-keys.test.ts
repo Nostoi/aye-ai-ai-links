@@ -50,12 +50,12 @@ describe("MCP door with real agent keys", () => {
   beforeEach(() => {
     db = openDatabase(":memory:");
     keys = new SqliteKeyStore(db);
-    markKey = createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: "codex" });
+    markKey = createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: "codex" }).key;
     aliceKey = createAgentKey(keys, {
       owner: "alice",
       ownerName: "Alice",
       agent: "claude-code",
-    });
+    }).key;
     app = appFor({ deps: createDeps(db, new FakeEmbedder(DIMS)), identify: keyIdentify(keys) });
   });
 

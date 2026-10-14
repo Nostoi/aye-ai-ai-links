@@ -2,6 +2,12 @@ import { createResourceServerChallenge } from "@better-auth/oauth-provider";
 import { hostHeaderValidation } from "@modelcontextprotocol/hono";
 import { APIError } from "better-auth/api";
 import { Hono } from "hono";
+import {
+  createAgentKey,
+  listAgentKeys,
+  turnOffAgentKey,
+  turnOnAgentKey,
+} from "./auth/agent-keys.js";
 import type { WithAuthLock } from "./auth/auth-lock.js";
 import { authorizeGate } from "./auth/authorize-gate.js";
 import { AUTH_BASE_PATH, type Auth, mcpResource } from "./auth/better-auth.js";
@@ -17,14 +23,19 @@ import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
+import type { SqliteKeyStore } from "./store/key-store.js";
 import { IMAGE_ROUTE, webApp } from "./web/http.js";
 
-/** better-auth, the lock every call into it goes through, and the OAuth state around it. */
+/**
+ * better-auth, the lock every call into it goes through, the OAuth state around it, and the
+ * agent keys the web page manages.
+ */
 export type AuthDeps = {
   auth: Auth;
   withAuthLock: WithAuthLock;
   stash: MetadataStash;
   clients: OAuthClients;
+  keys: SqliteKeyStore;
   /** Overrides of the global route limits (`ROUTE_LIMITS`), for tests. */
   limits?: Partial<Record<RouteLimit, RateLimitOptions>> | undefined;
 };
@@ -35,6 +46,9 @@ const CHECKED_PAGES = [
   "/connections",
   "/search",
   "/connections/disconnect",
+  "/connections/keys",
+  "/connections/keys/turn-off",
+  "/connections/keys/turn-on",
   OAUTH_ERROR_PATH,
   IMAGE_ROUTE,
 ];
@@ -97,7 +111,7 @@ export function createApp(options: AppOptions) {
       }
     }
     const origin = new URL(baseUrl).origin;
-    // A foreign Origin is refused on each of these; a missing one only on the disconnect POST.
+    // A foreign Origin is refused on each of these; a missing one only on their POSTs.
     for (const path of CHECKED_PAGES) {
       app.use(path, async (c, next) => {
         if (originRefused(c.req.raw, origin, { origin: "same" })) {
@@ -106,7 +120,7 @@ export function createApp(options: AppOptions) {
         await next();
       });
     }
-    const { auth: betterAuth, withAuthLock, stash, clients } = auth;
+    const { auth: betterAuth, withAuthLock, stash, clients, keys } = auth;
     const handle = (request: Request) => betterAuth.handler(request);
     app.route(
       AUTH_BASE_PATH,
@@ -130,6 +144,13 @@ export function createApp(options: AppOptions) {
         connections: {
           list: listConnections({ withAuthLock, clients }),
           disconnect: disconnect({ withAuthLock, clients, stash }),
+        },
+        // A key made on the web names its owner by id; an existing owner's name is kept.
+        keys: {
+          list: (owner) => listAgentKeys(keys, owner),
+          create: (owner, name) => createAgentKey(keys, { owner, ownerName: owner, agent: name }),
+          turnOff: (owner, id) => turnOffAgentKey(keys, owner, id),
+          turnOn: (owner, id) => turnOnAgentKey(keys, owner, id),
         },
       }),
     );

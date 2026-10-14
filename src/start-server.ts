@@ -140,12 +140,13 @@ export async function startServer(
       ...(imagePollMs !== undefined && { pollMs: imagePollMs }),
     });
     authDb = openAuthDatabase(config.auth.dbPath);
+    const keys = new SqliteKeyStore(db);
     const auth = await buildAuth({
       db: authDb,
       secret: config.auth.secret,
       baseUrl: config.auth.baseUrl,
       fetch: jsonFetcher.fetch,
-      keys: keyIdentify(new SqliteKeyStore(db)),
+      keys: keyIdentify(keys),
       wrapMigrations: wrapAuthMigrations,
       refresherOptions: { intervalMs: refresherIntervalMs },
     });
@@ -153,7 +154,7 @@ export async function startServer(
     const built = createApp({
       deps: { ...deps, snapshots: runner, saveWaitMs },
       identify: auth.identify,
-      auth,
+      auth: { ...auth, keys },
       allowedHosts: config.allowedHosts,
       log: requestLog,
     });

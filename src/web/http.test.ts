@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
+import { createAgentKey, hashKey } from "../auth/agent-keys.js";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { memoryAuth, TEST_BASE_URL, TEST_EMAIL, TEST_PASSWORD } from "../auth/memory-auth.js";
 import {
@@ -22,6 +23,7 @@ import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
+import { SqliteKeyStore } from "../store/key-store.js";
 
 const OWN = "https://example.com/own-link";
 const OTHER = "https://example.com/other-owners-link";
@@ -36,7 +38,7 @@ async function setup() {
   const { app } = createApp({
     deps,
     identify: async () => null,
-    auth: a,
+    auth: { ...a, keys: new SqliteKeyStore(db) },
   });
   const get = (path: string, cookie?: string) =>
     app.fetch(
@@ -499,5 +501,303 @@ describe("the connections page", () => {
     });
     expect(res.status).toBe(403);
     expect(grantRows(world)).toEqual(before);
+  });
+});
+
+/** Every agent-key row and every user, so a refusal can be shown to have changed none. */
+const keyRows = (world: World) => ({
+  keys: world.links.prepare("SELECT * FROM agent_keys ORDER BY id").all(),
+  users: world.links.prepare("SELECT * FROM users ORDER BY id").all(),
+});
+
+/** A key of the owner's, made as the CLI makes one. */
+const ownerKey = (world: World, agent = "Codex on laptop") =>
+  createAgentKey(world.keyStore, { owner: "owner", ownerName: "Owner", agent });
+
+const MAKE = "/connections/keys";
+const TURN_OFF = "/connections/keys/turn-off";
+const TURN_ON = "/connections/keys/turn-on";
+const posting = (json: unknown) => ({ method: "POST", json });
+const works = async (world: World, key: string) =>
+  (await saveLinkWith(world, key, `https://example.com/${Math.random()}`)).status;
+
+describe("agent keys on the connections page", () => {
+  it("lists the owner's keys that are on, by name and date, never a key or hash", async () => {
+    const world = await oauthWorld();
+    const on = ownerKey(world, "Codex <on> laptop");
+    const off = ownerKey(world, "Old agent");
+    world.keyStore.revokeById("owner", off.id, new Date());
+    const res = await (await signedIn(world)).send("/connections");
+    expect(res.status).toBe(200);
+    const html = String(res.body);
+    expect(html).toContain("Agent keys");
+    expect(html).toContain("<strong>Codex &lt;on&gt; laptop</strong>");
+    expect(html).toContain(`data-key-id="${on.id}"`);
+    expect(html).toMatch(/Made [A-Z][a-z]+ \d{1,2}</);
+    expect(html).not.toContain("Old agent");
+    expect(html).not.toContain(`data-key-id="${off.id}"`);
+    for (const secret of [on.key, hashKey(on.key), off.key]) expect(html).not.toContain(secret);
+  });
+
+  it("makes a key: uncached JSON with its id, name and key, which works on /mcp and is not on the page after", async () => {
+    const world = await oauthWorld();
+    const browser = await signedIn(world);
+    const res = await browser.send(MAKE, posting({ name: "  Codex on desktop " }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const key = field(res, "key");
+    expect(res.body).toEqual({ id: expect.any(Number), name: "Codex on desktop", key });
+    expect(await works(world, key)).toBe(200);
+    expect(world.savedBy()).toEqual(["Codex on desktop"]);
+    const page = await browser.send("/connections");
+    expect(String(page.body)).toContain("<strong>Codex on desktop</strong>");
+    expect(page.bytes.includes(key)).toBe(false);
+  });
+
+  it.each([
+    ["a blank name", "  ", /Give the agent a name/],
+    ["a name over 60 characters", "a".repeat(61), /60 characters/],
+    ["web", "web", /"web"/],
+    ["Web with spaces", " Web ", /"web"/],
+    ["a name that already has a key", "Codex on laptop", /already has a live key/],
+  ])("refuses to make a key with %s, writing no row", async (_, name, message) => {
+    const world = await oauthWorld();
+    ownerKey(world);
+    const before = keyRows(world);
+    const res = await (await signedIn(world)).send(MAKE, posting({ name }));
+    expect(res.status).toBe(400);
+    expect(field(res, "message")).toMatch(message);
+    expect(keyRows(world)).toEqual(before);
+  });
+
+  it("turns a key off by id: 204 uncached, its next request gets 401, and it leaves the list", async () => {
+    const world = await oauthWorld();
+    const made = ownerKey(world);
+    expect(await works(world, made.key)).toBe(200);
+    const browser = await signedIn(world);
+    const res = await browser.send(TURN_OFF, posting({ id: made.id }));
+    expect(res.status).toBe(204);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await works(world, made.key)).toBe(401);
+    const after = String((await browser.send("/connections")).body);
+    expect(after).not.toContain("<strong>Codex on laptop</strong>");
+    expect(after).not.toContain(`data-key-id="${made.id}"`);
+  });
+
+  it.each([
+    ["an id that is no key", () => 9999],
+    [
+      "a key that is already off",
+      (world: World) => {
+        const made = ownerKey(world, "Old agent");
+        world.keyStore.revokeById("owner", made.id, new Date());
+        return made.id;
+      },
+    ],
+  ])("refuses to turn off %s with 400, and every key row stays", async (_, id) => {
+    const world = await oauthWorld();
+    const live = ownerKey(world);
+    const target = id(world);
+    const before = keyRows(world);
+    const res = await (await signedIn(world)).send(TURN_OFF, posting({ id: target }));
+    expect(res.status).toBe(400);
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, live.key)).toBe(200);
+  });
+
+  it("undoes a turn-off within 60 seconds: 204 and the key works again", async () => {
+    const world = await oauthWorld();
+    const made = ownerKey(world);
+    const browser = await signedIn(world);
+    expect((await browser.send(TURN_OFF, posting({ id: made.id }))).status).toBe(204);
+    expect(await works(world, made.key)).toBe(401);
+    const res = await browser.send(TURN_ON, posting({ id: made.id }));
+    expect(res.status).toBe(204);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await works(world, made.key)).toBe(200);
+  });
+
+  it("refuses an undo more than 60 seconds after the turn-off, and the key stays off", async () => {
+    const world = await oauthWorld();
+    const made = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: made.id }));
+    world.links
+      .prepare("UPDATE agent_keys SET revoked_at = revoked_at - 61000 WHERE id = ?")
+      .run(made.id);
+    const before = keyRows(world);
+    const res = await browser.send(TURN_ON, posting({ id: made.id }));
+    expect(res.status).toBe(400);
+    expect(field(res, "message")).toMatch(/too late/);
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, made.key)).toBe(401);
+  });
+
+  it("refuses an undo once a new key with the same name was made; the old stays off and the new works", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: old.id }));
+    const fresh = await browser.send(MAKE, posting({ name: "Codex on laptop" }));
+    expect(fresh.status).toBe(200);
+    const before = keyRows(world);
+    const res = await browser.send(TURN_ON, posting({ id: old.id }));
+    expect(res.status).toBe(400);
+    expect(field(res, "message")).toMatch(/was made since/);
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, old.key)).toBe(401);
+    expect(await works(world, field(fresh, "key"))).toBe(200);
+  });
+
+  it("refuses an undo once a new key with the same name was made, even after that one is turned off too", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: old.id }));
+    const fresh = await browser.send(MAKE, posting({ name: "Codex on laptop" }));
+    const freshId = (fresh.body as { id: number }).id;
+    expect((await browser.send(TURN_OFF, posting({ id: freshId }))).status).toBe(204);
+    const before = keyRows(world);
+    const res = await browser.send(TURN_ON, posting({ id: old.id }));
+    expect(res.status).toBe(400);
+    expect(field(res, "message")).toMatch(/was made since/);
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, old.key)).toBe(401);
+    expect(await works(world, field(fresh, "key"))).toBe(401);
+  });
+
+  it("undoes the turn-off of the newest key with a name, though an older one with it is off", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: old.id }));
+    const fresh = ownerKey(world);
+    expect((await browser.send(TURN_OFF, posting({ id: fresh.id }))).status).toBe(204);
+    expect((await browser.send(TURN_ON, posting({ id: fresh.id }))).status).toBe(204);
+    expect(await works(world, fresh.key)).toBe(200);
+    expect(await works(world, old.key)).toBe(401);
+  });
+
+  it("refuses a second user's undo of the owner's key as it refuses an id that is no key, naming nothing of the owner's", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world, "codex");
+    world.keyStore.revokeById("owner", old.id, new Date());
+    const fresh = ownerKey(world, "codex");
+    const bBrowser = await addSecondUser(world);
+    const before = keyRows(world);
+    const theirs = await bBrowser.send(TURN_ON, posting({ id: old.id }));
+    const none = await bBrowser.send(TURN_ON, posting({ id: 9999 }));
+    expect(theirs.status).toBe(400);
+    expect(theirs.body).toEqual(none.body);
+    expect(String(theirs.bytes)).not.toContain("codex");
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, old.key)).toBe(401);
+    expect(await works(world, fresh.key)).toBe(200);
+  });
+
+  it("a stale turn-off of the old key's id leaves the new key with the same name on", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: old.id }));
+    const fresh = ownerKey(world);
+    const before = keyRows(world);
+    expect((await browser.send(TURN_OFF, posting({ id: old.id }))).status).toBe(400);
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, fresh.key)).toBe(200);
+  });
+
+  it("acts for the signed-in user: a second user's list, make, turn-off and undo leave the owner's keys alone", async () => {
+    const world = await oauthWorld();
+    const live = ownerKey(world, "agent-a");
+    const off = ownerKey(world, "agent-a-old");
+    world.keyStore.revokeById("owner", off.id, new Date());
+    const bBrowser = await addSecondUser(world);
+    const ownerRows = () =>
+      world.links.prepare("SELECT * FROM agent_keys WHERE owner_id = 'owner' ORDER BY id").all();
+    const before = ownerRows();
+
+    const listed = String((await bBrowser.send("/connections")).body);
+    const turnOff = await bBrowser.send(TURN_OFF, posting({ id: live.id }));
+    const turnOn = await bBrowser.send(TURN_ON, posting({ id: off.id }));
+    const made = await bBrowser.send(MAKE, posting({ name: "agent-a" }));
+
+    expect(listed).not.toContain("agent-a");
+    expect(listed).not.toContain(`data-key-id="${live.id}"`);
+    expect(turnOff.status).toBe(400);
+    expect(turnOn.status).toBe(400);
+    expect(made.status).toBe(200);
+    expect(ownerRows()).toEqual(before);
+    expect(await works(world, live.key)).toBe(200);
+    expect(await works(world, off.key)).toBe(401);
+    expect(world.keyStore.findLiveByHash(hashKey(field(made, "key")))).toEqual({
+      owner: SECOND_USER.id,
+      name: "agent-a",
+    });
+  });
+
+  const OVER = "x".repeat(AUTH_BODY_LIMIT);
+  describe.each([
+    [MAKE, { name: "New agent" }, "name"],
+    [TURN_OFF, "live", "id"],
+    [TURN_ON, "off", "id"],
+  ] as const)("POST %s", (path, sample, name) => {
+    /** The owner's live key, and one turned off just now, which an undo could bring back. */
+    async function keysWorld() {
+      const world = await oauthWorld();
+      const live = ownerKey(world);
+      const off = ownerKey(world, "Off agent");
+      world.keyStore.revokeById("owner", off.id, new Date());
+      const body = sample === "live" ? { id: live.id } : sample === "off" ? { id: off.id } : sample;
+      return { world, live, off, body };
+    }
+
+    const refusals: [string, (body: Record<string, unknown>) => object, number][] = [
+      ["without an Origin", (json) => ({ json, origin: false }), 403],
+      [
+        "with a foreign Origin",
+        (json) => ({ json, headers: { origin: "https://evil.example" } }),
+        403,
+      ],
+      ["with a foreign Host", (json) => ({ json, headers: { host: "evil.example" } }), 403],
+      ["without a session", (json) => ({ json, anonymous: true }), 302],
+      ["with a body over the cap", (json) => ({ json: { ...json, pad: OVER } }), 413],
+      [
+        "with a body over the cap, before reading any session",
+        (json) => ({ json: { ...json, pad: OVER }, anonymous: true }),
+        413,
+      ],
+      [
+        "with a body that is not JSON",
+        (json) => ({ rawForm: new URLSearchParams(json as Record<string, string>).toString() }),
+        400,
+      ],
+      [`without its field`, () => ({ json: { other: 1 } }), 400],
+      ...(name === "id"
+        ? ([
+            ["with the id as a string", (json) => ({ json: { id: String(json.id) } }), 400],
+            ["with a fractional id", (json) => ({ json: { id: Number(json.id) + 0.5 } }), 400],
+            ["with id 0", () => ({ json: { id: 0 } }), 400],
+          ] as typeof refusals)
+        : ([["with the name as a number", () => ({ json: { name: 7 } }), 400]] as typeof refusals)),
+    ];
+
+    it.each(refusals)("refuses a request %s, and every key row stays", async (_, how, status) => {
+      const { world, live, off, body } = await keysWorld();
+      const before = keyRows(world);
+      const { anonymous, ...options } = how(body) as { anonymous?: true };
+      const browser = anonymous ? world.agent() : await signedIn(world);
+      const res = await browser.send(path, { method: "POST", ...options });
+      expect(res.status).toBe(status);
+      expect(keyRows(world)).toEqual(before);
+      expect(await works(world, live.key)).toBe(200);
+      expect(await works(world, off.key)).toBe(401);
+    });
+
+    it("succeeds with the same body from a signed-in page, so each refusal is down to what it changed", async () => {
+      const { world, body } = await keysWorld();
+      const res = await (await signedIn(world)).send(path, posting(body));
+      expect(res.status).toBeLessThan(300);
+    });
   });
 });

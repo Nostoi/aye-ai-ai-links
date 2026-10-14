@@ -242,7 +242,7 @@ export async function oauthWorld({
   const { app } = createApp({
     deps,
     identify: auth.identify,
-    auth: { ...auth, limits },
+    auth: { ...auth, keys: keyStore, limits },
     allowedHosts: ["links.example"],
     rateLimit,
     log,

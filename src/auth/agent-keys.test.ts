@@ -14,6 +14,8 @@ import {
   listAgentKeys,
   parseBearer,
   revokeAgentKey,
+  turnOffAgentKey,
+  turnOnAgentKey,
 } from "./agent-keys.js";
 
 type Db = Database.Database;
@@ -35,7 +37,7 @@ function setup() {
   const db = openAt(":memory:");
   const keys = new SqliteKeyStore(db);
   const identify = keyIdentify(keys);
-  const key = createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: "codex" });
+  const { key } = createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: "codex" });
   return { db, keys, identify, key };
 }
 
@@ -137,7 +139,7 @@ describe("keyIdentify", () => {
     const server = new SqliteKeyStore(openAt(path));
     const cli = new SqliteKeyStore(openAt(path));
     const identify = keyIdentify(server);
-    const key = createAgentKey(cli, { owner: "mark", ownerName: "Mark", agent: "codex" });
+    const { key } = createAgentKey(cli, { owner: "mark", ownerName: "Mark", agent: "codex" });
     expect(await identify(asRequest(`Bearer ${key}`))).toEqual({
       owner: "mark",
       savedBy: "codex",
@@ -176,5 +178,107 @@ describe("key use cases", () => {
       createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: "codex" }),
     ).toThrow(/already has a live key/);
     expect(() => revokeAgentKey(keys, "mark", "nobody")).toThrow(AgentKeyError);
+  });
+
+  it("returns the new key's id and trimmed name with the key", () => {
+    const { keys } = setup();
+    const made = createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: " claude " });
+    expect(made).toEqual({ id: expect.any(Number), name: "claude", key: expect.any(String) });
+    expect(listAgentKeys(keys, "mark").find((k) => k.name === "claude")?.id).toBe(made.id);
+    expect(keys.findLiveByHash(hashKey(made.key))).toEqual({ owner: "mark", name: "claude" });
+  });
+});
+
+describe("key names", () => {
+  const STAR = "\u{1F31F}";
+  const make = (keys: SqliteKeyStore, agent: string) =>
+    createAgentKey(keys, { owner: "bob", ownerName: "Bob", agent });
+
+  it.each([
+    ["60 characters outside the BMP", STAR.repeat(60)],
+    ["60 characters with spaces around them", `  ${"a".repeat(60)}  `],
+    ["a name that only starts with web", "website"],
+  ])("allows %s", (_, agent) => {
+    const { keys } = setup();
+    expect(make(keys, agent).name).toBe(agent.trim());
+  });
+
+  it.each([
+    ["61 characters outside the BMP", STAR.repeat(61), /60 characters/],
+    ["61 characters", "a".repeat(61), /60 characters/],
+    ["web", "web", /"web"/],
+    ["Web with spaces", " Web ", /"web"/],
+    ["WEB", "WEB", /"web"/],
+    ["a lone high surrogate", "\ud800abc", /printable/],
+    ["a lone low surrogate", "abc\udc00", /printable/],
+    ["a tab inside", "a\tb", /printable/],
+    ["a NUL", "a\u0000b", /printable/],
+    ["a line break inside", "a\nb", /printable/],
+    ["DEL", "a\u007fb", /printable/],
+    ["a C1 control", "a\u0085b", /printable/],
+  ])("refuses %s, writing no owner and no key", (_, agent, message) => {
+    const { db, keys } = setup();
+    const count = () => db.prepare("SELECT count(*) AS n FROM users").get();
+    const keyRows = () => db.prepare("SELECT * FROM agent_keys ORDER BY id").all();
+    const [users, rows] = [count(), keyRows()];
+    expect(() => make(keys, agent)).toThrow(AgentKeyError);
+    expect(() => make(keys, agent)).toThrow(message);
+    expect(count()).toEqual(users);
+    expect(keyRows()).toEqual(rows);
+  });
+});
+
+describe("turning a key off and on by id", () => {
+  const OFF = new Date("2026-10-14T12:00:00.000Z");
+  const at = (ms: number) => new Date(OFF.getTime() + ms);
+
+  function offKey() {
+    const t = setup();
+    const { id } = listAgentKeys(t.keys, "mark")[0] as { id: number };
+    turnOffAgentKey(t.keys, "mark", id, OFF);
+    return { ...t, id };
+  }
+
+  it("turns the key off at once: the next request with it is refused", async () => {
+    const { keys, identify, key } = setup();
+    const { id } = listAgentKeys(keys, "mark")[0] as { id: number };
+    turnOffAgentKey(keys, "mark", id, OFF);
+    expect(await identify(asRequest(`Bearer ${key}`))).toBeNull();
+  });
+
+  it("refuses to turn off another owner's key or one that is off, and that key stays as it was", async () => {
+    const { keys, identify, key } = setup();
+    const { id } = listAgentKeys(keys, "mark")[0] as { id: number };
+    expect(() => turnOffAgentKey(keys, "alice", id, OFF)).toThrow(AgentKeyError);
+    expect(await identify(asRequest(`Bearer ${key}`))).not.toBeNull();
+    turnOffAgentKey(keys, "mark", id, OFF);
+    expect(() => turnOffAgentKey(keys, "mark", id, at(1))).toThrow(AgentKeyError);
+    expect(listAgentKeys(keys, "mark")[0]?.revokedAt).toEqual(OFF);
+  });
+
+  it("turns it back on within 60 seconds, and the key works again", async () => {
+    const { keys, identify, key, id } = offKey();
+    turnOnAgentKey(keys, "mark", id, at(60_000));
+    expect(await identify(asRequest(`Bearer ${key}`))).not.toBeNull();
+  });
+
+  it("refuses after 60 seconds, and the key stays off", async () => {
+    const { keys, identify, key, id } = offKey();
+    expect(() => turnOnAgentKey(keys, "mark", id, at(60_001))).toThrow(AgentKeyError);
+    expect(await identify(asRequest(`Bearer ${key}`))).toBeNull();
+  });
+
+  it("refuses another owner's undo, and the key stays off", async () => {
+    const { keys, identify, key, id } = offKey();
+    expect(() => turnOnAgentKey(keys, "alice", id, at(1))).toThrow(AgentKeyError);
+    expect(await identify(asRequest(`Bearer ${key}`))).toBeNull();
+  });
+
+  it("refuses when a new key with the same name was made since; the old stays off and the new on", async () => {
+    const { keys, identify, key, id } = offKey();
+    const made = createAgentKey(keys, { owner: "mark", ownerName: "Mark", agent: "codex" }, at(1));
+    expect(() => turnOnAgentKey(keys, "mark", id, at(2))).toThrow(/was made since/);
+    expect(await identify(asRequest(`Bearer ${key}`))).toBeNull();
+    expect(await identify(asRequest(`Bearer ${made.key}`))).not.toBeNull();
   });
 });

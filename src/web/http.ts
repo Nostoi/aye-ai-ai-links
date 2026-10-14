@@ -1,5 +1,6 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
+import { AgentKeyError } from "../auth/agent-keys.js";
 import type { WithAuthLock } from "../auth/auth-lock.js";
 import type { Auth } from "../auth/better-auth.js";
 import type { ConsentDetails } from "../auth/consent.js";
@@ -9,9 +10,9 @@ import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import type { OwnerId } from "../core/types.js";
+import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
+import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import {
-  type ConnectionRow,
-  connectionsPage,
   consentExpiredPage,
   consentPage,
   homePage,
@@ -42,25 +43,42 @@ const imageHeaders = (contentType: string, cached: boolean) => ({
   "Cache-Control": cached ? "private, max-age=31536000, immutable" : "no-store",
 });
 
-/** Takes a JSON `{clientId}` body under the auth body cap, so any id that can connect fits. */
-const clientIdBody = createMiddleware<{ Variables: { clientId: string } }>(async (c, next) => {
-  let raw: Uint8Array | null;
+const isString = (value: unknown): value is string => typeof value === "string";
+const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
+
+/**
+ * Takes a JSON body under the auth body cap, so any client id that can connect fits, and sets
+ * `field` to its member `name` when `accepts` does.
+ */
+const jsonField = <T>(name: string, accepts: (value: unknown) => value is T) =>
+  createMiddleware<{ Variables: { field: T } }>(async (c, next) => {
+    let raw: Uint8Array | null;
+    try {
+      raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
+    } catch (error) {
+      if (!(error instanceof BodyTooLarge)) throw error;
+      return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()))[name];
+    } catch {}
+    if (!accepts(value)) {
+      return c.json({ code: "BAD_REQUEST", message: `Send a JSON body with a ${name}.` }, 400);
+    }
+    c.set("field", value);
+    await next();
+  });
+
+/** A refused key action answers 400 with the rule's own message; anything else is thrown on. */
+function keyAction(c: Context, act: () => Response): Response {
   try {
-    raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
+    return act();
   } catch (error) {
-    if (!(error instanceof BodyTooLarge)) throw error;
-    return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
+    if (!(error instanceof AgentKeyError || error instanceof KeyStoreError)) throw error;
+    return c.json({ code: error.code, message: error.message }, 400, NO_STORE);
   }
-  let clientId: unknown;
-  try {
-    clientId = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array())).clientId;
-  } catch {}
-  if (typeof clientId !== "string") {
-    return c.json({ code: "BAD_REQUEST", message: "Send a JSON body with a clientId." }, 400);
-  }
-  c.set("clientId", clientId);
-  await next();
-});
+}
 
 /**
  * The web door. `/login` and the OAuth error page are the only pages served without a session:
@@ -72,6 +90,7 @@ export function webApp({
   withAuthLock,
   consent,
   connections,
+  keys,
 }: {
   deps: SearchLinksDeps & { images: LinkImageReader };
   auth: Auth;
@@ -82,6 +101,13 @@ export function webApp({
   connections: {
     list: (owner: OwnerId) => Promise<ConnectionRow[]>;
     disconnect: (owner: OwnerId, clientId: string) => Promise<unknown>;
+  };
+  /** The owner's agent keys. A refused action throws `AgentKeyError` or `KeyStoreError`. */
+  keys: {
+    list: (owner: OwnerId) => KeyInfo[];
+    create: (owner: OwnerId, name: string) => { id: number; name: string; key: string };
+    turnOff: (owner: OwnerId, id: number) => void;
+    turnOn: (owner: OwnerId, id: number) => void;
   };
 }) {
   const app = new Hono<SessionEnv>();
@@ -117,16 +143,44 @@ export function webApp({
     return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
   });
 
-  app.get("/connections", session, async (c) =>
-    c.html(connectionsPage(await connections.list(c.get("caller").owner)), 200, NO_STORE),
-  );
+  app.get("/connections", session, async (c) => {
+    const { owner } = c.get("caller");
+    const now = (deps.now ?? (() => new Date()))();
+    const page = connectionsPage({
+      connections: await connections.list(owner),
+      keys: keys.list(owner),
+      now,
+    });
+    return c.html(page, 200, NO_STORE);
+  });
 
-  // The body is read, capped, before the session read takes the lock. 204 whether or not the app
-  // was connected; the page reloads either way.
-  app.post("/connections/disconnect", clientIdBody, session, async (c) => {
-    await connections.disconnect(c.get("caller").owner, c.get("clientId"));
+  // Each POST's body is read, capped, before the session read takes the lock.
+
+  // 204 whether or not the app was connected; the page reloads either way.
+  app.post("/connections/disconnect", jsonField("clientId", isString), session, async (c) => {
+    await connections.disconnect(c.get("caller").owner, c.get("field"));
     return c.body(null, 204, NO_STORE);
   });
+
+  // The key is in this response only; the page shows it once and never puts it in a URL.
+  app.post("/connections/keys", jsonField("name", isString), session, (c) =>
+    keyAction(c, () => c.json(keys.create(c.get("caller").owner, c.get("field")), 200, NO_STORE)),
+  );
+
+  app.post("/connections/keys/turn-off", jsonField("id", isId), session, (c) =>
+    keyAction(c, () => {
+      keys.turnOff(c.get("caller").owner, c.get("field"));
+      return c.body(null, 204, NO_STORE);
+    }),
+  );
+
+  // The Undo of a turn-off.
+  app.post("/connections/keys/turn-on", jsonField("id", isId), session, (c) =>
+    keyAction(c, () => {
+      keys.turnOn(c.get("caller").owner, c.get("field"));
+      return c.body(null, 204, NO_STORE);
+    }),
+  );
 
   if (consent) {
     app.get("/consent", session, async (c) => {

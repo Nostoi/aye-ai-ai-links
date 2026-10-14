@@ -71,12 +71,29 @@ describe("keys CLI", () => {
     expect(again.out).toBe("");
   });
 
-  it("revokes a key, then shows it revoked and allows a new one", () => {
+  it("revokes a key, saying it is turned off, then lists it turned off and allows a new one", () => {
     const vars = env();
     exec(["create", "codex"], vars);
-    expect(exec(["revoke", "codex"], vars).code).toBe(0);
-    expect(exec(["list"], vars).out).toMatch(/revoked/);
+    const revoked = exec(["revoke", "codex"], vars);
+    expect(revoked.code).toBe(0);
+    expect(revoked.out).toBe("Turned off the key for codex.");
+    expect(exec(["list"], vars).out).toMatch(/\tturned off \d{4}-/);
     expect(exec(["create", "codex"], vars).code).toBe(0);
+  });
+
+  it.each([
+    ["a name over 60 characters", "a".repeat(61), /60 characters/],
+    ["the name web", "Web", /"web"/],
+    ["a name with a tab", "codex\tlaptop", /printable/],
+    ["a name with a line break", "codex\nlaptop", /printable/],
+    ["a name with a lone surrogate", "\ud800codex", /printable/],
+  ])("refuses %s, making no key", (_, agent, message) => {
+    const vars = env();
+    const r = exec(["create", agent], vars);
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(message);
+    expect(r.out).toBe("");
+    expect(exec(["list"], vars).out).toBe("");
   });
 
   it("revoking an unknown agent is a clear error", () => {

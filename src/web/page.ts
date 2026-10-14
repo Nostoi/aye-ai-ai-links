@@ -29,16 +29,17 @@ document.getElementById("sign-out").addEventListener("click", async () => {
 });
 </script>`;
 
-/** How long the Undo bar stays up. The server allows an undo for longer (`UNDO_WINDOW_MS`). */
+/** Idle and maximum times the Undo bar stays up; the maximum is below `UNDO_WINDOW_MS`. */
 export const UNDO_BAR_MS = 10_000;
+export const UNDO_BAR_MAX_MS = 45_000;
 
 const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>`;
 
 /**
  * Defines `showUndo(message, undo)` for the page's own script, which calls it after an action has
  * already been done. The bar shows `message` and moves focus to its Undo button. It closes
- * `UNDO_BAR_MS` after it last had neither focus nor the pointer, so it stays up until focus
- * leaves it. Undo runs `undo` once, with the button disabled until it settles, then closes the
+ * `UNDO_BAR_MS` after it last had neither focus nor the pointer.
+ * Undo runs `undo` once, with the button disabled until it settles, then closes the
  * bar. A new message replaces the bar, and a pending undo only closes the bar if it is still its
  * own. When the bar closes with focus on it, focus goes back to what had it before the first
  * message, if that is still on the page.
@@ -67,6 +68,7 @@ const showUndo = (() => {
   const close = (action, held = false) => {
     if (current !== action) return;
     clearTimeout(action.timer);
+    clearTimeout(action.ceiling);
     current = null;
     const now = document.activeElement;
     const hadFocus = bar.contains(now) || (held && (!now || now === document.body));
@@ -98,6 +100,7 @@ const showUndo = (() => {
     if (!action || action.running) return;
     action.running = true;
     clearTimeout(action.timer);
+    clearTimeout(action.ceiling);
     const held = bar.contains(document.activeElement);
     button.disabled = true;
     try {
@@ -108,9 +111,12 @@ const showUndo = (() => {
     }
   });
   return (message, undo) => {
-    if (current) clearTimeout(current.timer);
-    else returnTo = document.activeElement;
+    if (current) {
+      clearTimeout(current.timer);
+      clearTimeout(current.ceiling);
+    } else returnTo = document.activeElement;
     const action = { undo, running: false };
+    action.ceiling = setTimeout(() => close(action), ${UNDO_BAR_MAX_MS});
     current = action;
     text.textContent = message;
     button.disabled = false;

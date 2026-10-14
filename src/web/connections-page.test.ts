@@ -43,6 +43,8 @@ function load(answer: (sent: Sent) => Answer, keys = [key(7, "codex"), key(8, "c
     };
   };
   const noTimer = () => 0;
+  const location = { reloads: 0, reload: () => location.reloads++ };
+  const onWindow = new Map<string, (event: unknown) => void>();
   new Function(
     "document",
     "fetch",
@@ -56,10 +58,10 @@ function load(answer: (sent: Sent) => Answer, keys = [key(7, "codex"), key(8, "c
   )(
     document,
     fetch,
-    {},
+    location,
     {},
     () => ({}),
-    () => {},
+    (type: string, fn: (event: unknown) => void) => onWindow.set(type, fn),
     noTimer,
     () => {},
   );
@@ -71,7 +73,9 @@ function load(answer: (sent: Sent) => Answer, keys = [key(7, "codex"), key(8, "c
   const rows = () =>
     [...document.querySelectorAll("#keys li")].map((li) => (li as HTMLElement).dataset.keyId);
   const settle = () => new Promise((r) => setTimeout(r, 0));
-  return { $, click, submit, rows, sent, settle, html };
+  /** A window event, such as `pageshow`, sent to what the script registered. */
+  const fire = (type: string, event: unknown) => onWindow.get(type)?.(event);
+  return { $, click, submit, rows, sent, settle, html, location, fire };
 }
 
 const turnOffButton = (id: number) => `li[data-key-id="${id}"] button`;
@@ -87,6 +91,14 @@ describe("turning a key off on the page", () => {
     expect(page.rows()).toEqual(["8"]);
     expect(page.$("#undo-bar").hidden).toBe(false);
     expect(page.$("#undo-bar span").textContent).toBe("Key for codex turned off.");
+  });
+
+  it("sends one turn-off while one is pending", async () => {
+    const page = load(() => ({ status: 204 }));
+    page.click(turnOffButton(7));
+    page.click(turnOffButton(7));
+    await page.settle();
+    expect(page.sent).toHaveLength(1);
   });
 
   it("Undo posts the same id to turn it back on and puts the row back where it was", async () => {
@@ -196,6 +208,20 @@ describe("making a key on the page", () => {
     expect(page.$("#new-key-value").textContent).toBe("");
     expect(page.rows()).toEqual(["7", "8"]);
     expect(page.$("#keys-error").textContent).toMatch(message);
+  });
+});
+
+describe("the page restored from the back-forward cache", () => {
+  it("reloads, so the amber panel never comes back", () => {
+    const page = load(() => ({ status: 204 }));
+    page.fire("pageshow", { persisted: true });
+    expect(page.location.reloads).toBe(1);
+  });
+
+  it("does not reload on an ordinary page show", () => {
+    const page = load(() => ({ status: 204 }));
+    page.fire("pageshow", { persisted: false });
+    expect(page.location.reloads).toBe(0);
   });
 });
 

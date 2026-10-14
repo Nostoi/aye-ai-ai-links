@@ -25,9 +25,9 @@ class UnknownNote extends Error {
 }
 
 /** Thrown inside the transaction so the rollback undoes the writes made before it. */
-class SourceChanged extends Error {
+class NoteChanged extends Error {
   constructor(readonly conflictId: string) {
-    super(`Profile note "${conflictId}" changed source since it was read.`);
+    super(`Profile note "${conflictId}" changed since it was read.`);
   }
 }
 
@@ -47,6 +47,9 @@ const toFocus = (r: FocusRow): FocusEntry => ({
   createdAt: new Date(r.created_at),
 });
 
+/** A note that has not been removed. Every read and guard of `profile_notes` includes it. */
+const LIVE = "removed_at IS NULL";
+
 function ms(d: Date): number {
   const t = d.getTime();
   if (!Number.isFinite(t)) throw new RangeError("Cannot store an invalid date.");
@@ -65,10 +68,27 @@ export class SqliteProfileStore implements ProfileStore {
     return this.focus(owner, limit);
   }
 
+  async restoreNote(owner: OwnerId, id: string, removedSince: Date) {
+    const since = ms(removedSince);
+    const noteId = parseId(id);
+    return this.db
+      .transaction(() => {
+        this.purge(owner, since);
+        if (noteId === null) return false;
+        const restored = this.db
+          .prepare(
+            "UPDATE profile_notes SET removed_at = NULL WHERE id = ? AND owner_id = ? AND removed_at >= ?",
+          )
+          .run(noteId, owner, since);
+        return restored.changes === 1;
+      })
+      .immediate();
+  }
+
   async apply(
     owner: OwnerId,
     changes: ProfileChanges,
-    context: { writtenBy: string; at: Date; focusLimit: number },
+    context: { writtenBy: string; at: Date; focusLimit: number; purgeBefore: Date },
   ): Promise<ProfileApplyResult> {
     try {
       const written = this.db
@@ -77,7 +97,7 @@ export class SqliteProfileStore implements ProfileStore {
       return { ok: true, ...written };
     } catch (e) {
       if (e instanceof UnknownNote) return { ok: false, unknownId: e.unknownId };
-      if (e instanceof SourceChanged) return { ok: false, conflictId: e.conflictId };
+      if (e instanceof NoteChanged) return { ok: false, conflictId: e.conflictId };
       if ((e as { code?: string }).code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
         throw new StoreError(
           "unknown_owner",
@@ -91,31 +111,42 @@ export class SqliteProfileStore implements ProfileStore {
   private applySync(
     owner: OwnerId,
     changes: ProfileChanges,
-    { writtenBy, at, focusLimit }: { writtenBy: string; at: Date; focusLimit: number },
+    {
+      writtenBy,
+      at,
+      focusLimit,
+      purgeBefore,
+    }: { writtenBy: string; at: Date; focusLimit: number; purgeBefore: Date },
   ): ProfileWrite {
     const when = ms(at);
+    this.purge(owner, ms(purgeBefore));
+    const guard = `id = ? AND owner_id = ? AND ${LIVE} AND source = ? AND (? IS NULL OR updated_at = ?)`;
     const edit = this.db.prepare(
-      "UPDATE profile_notes SET text = ?, source = ?, written_by = ?, updated_at = ? WHERE id = ? AND owner_id = ? AND source = ?",
+      `UPDATE profile_notes SET text = ?, source = ?, written_by = ?, updated_at = ? WHERE ${guard}`,
     );
-    const remove = this.db.prepare(
-      "DELETE FROM profile_notes WHERE id = ? AND owner_id = ? AND source = ?",
+    const remove = this.db.prepare(`UPDATE profile_notes SET removed_at = ? WHERE ${guard}`);
+    const exists = this.db.prepare(
+      `SELECT 1 FROM profile_notes WHERE id = ? AND owner_id = ? AND ${LIVE}`,
     );
-    const exists = this.db.prepare("SELECT 1 FROM profile_notes WHERE id = ? AND owner_id = ?");
-    /** A guarded write matched no row: the note is absent, or its source moved. */
+    /** A guarded write matched no row: the note is absent or removed, or it changed. */
     const miss = (raw: string, id: number | null): Error =>
-      id !== null && exists.get(id, owner) ? new SourceChanged(raw) : new UnknownNote(raw);
+      id !== null && exists.get(id, owner) ? new NoteChanged(raw) : new UnknownNote(raw);
+    const expected = (e: { expectedSource: Source; expectedUpdatedAt?: Date }) => {
+      const version = e.expectedUpdatedAt === undefined ? null : ms(e.expectedUpdatedAt);
+      return [e.expectedSource, version, version] as const;
+    };
     for (const e of changes.editNotes) {
       const id = parseId(e.id);
       if (
         id === null ||
-        edit.run(e.text, e.source, writtenBy, when, id, owner, e.expectedSource).changes === 0
+        edit.run(e.text, e.source, writtenBy, when, id, owner, ...expected(e)).changes === 0
       ) {
         throw miss(e.id, id);
       }
     }
     for (const r of changes.removeNotes) {
       const id = parseId(r.id);
-      if (id === null || remove.run(id, owner, r.expectedSource).changes === 0) {
+      if (id === null || remove.run(when, id, owner, ...expected(r)).changes === 0) {
         throw miss(r.id, id);
       }
     }
@@ -139,10 +170,19 @@ export class SqliteProfileStore implements ProfileStore {
     };
   }
 
+  /** Deletes the owner's notes removed before `before` (ms). */
+  private purge(owner: OwnerId, before: number) {
+    this.db
+      .prepare(
+        "DELETE FROM profile_notes WHERE owner_id = ? AND removed_at IS NOT NULL AND removed_at < ?",
+      )
+      .run(owner, before);
+  }
+
   private notes(owner: OwnerId): ProfileNote[] {
     const rows = this.db
       .prepare(
-        "SELECT id, text, source, written_by, updated_at FROM profile_notes WHERE owner_id = ? ORDER BY id",
+        `SELECT id, text, source, written_by, updated_at FROM profile_notes WHERE owner_id = ? AND ${LIVE} ORDER BY id`,
       )
       .all(owner) as NoteRow[];
     return rows.map(toNote);

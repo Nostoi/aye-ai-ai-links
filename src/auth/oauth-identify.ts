@@ -4,6 +4,7 @@ import { type Auth, LINKS_SCOPE } from "./better-auth.js";
 import type { Identify, Identity } from "./caller.js";
 import type { InternalClient } from "./internal-client.js";
 import type { OAuthClients } from "./oauth-clients.js";
+import { namesWeb } from "./session.js";
 
 type Introspection = Record<string, unknown>;
 
@@ -32,8 +33,9 @@ export function acceptsToken(result: Introspection, resource: string): boolean {
 /**
  * Identifies `/mcp` callers. An `aak_` bearer is an agent key. Any other bearer is an OAuth
  * access token, introspected in-process under the auth lock through the internal client. The
- * caller's `savedBy` is the client's registered name, else its id, and its requests count
- * against a bucket per client.
+ * caller's `savedBy` is the client's registered name, else its id; a name that `namesWeb` would
+ * take for the owner's own is replaced by the id too. Its requests count against a bucket per
+ * client.
  */
 export const oauthIdentify =
   ({
@@ -72,9 +74,10 @@ export const oauthIdentify =
       }
       if (!acceptsToken(result, resource)) return null;
       const clientId = result.client_id as string;
+      const name = clients.name(clientId);
       return {
         owner: result.sub as string,
-        savedBy: clients.name(clientId) ?? clientId,
+        savedBy: name && !namesWeb(name) ? name : clientId,
         rateKey: `oauth:${clientId}`,
       };
     });

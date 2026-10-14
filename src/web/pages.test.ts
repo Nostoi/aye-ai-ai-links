@@ -10,6 +10,7 @@ import {
   oauthErrorPage,
   searchPage,
 } from "./pages.js";
+import { profilePage } from "./profile-page.js";
 import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
@@ -225,17 +226,20 @@ describe("the header", () => {
 });
 
 describe("the menu", () => {
-  it("is on home, search, tags and connections, holds only Tags, Apps and keys and Sign out, and is not on the others", () => {
+  it("is on home, search, tags, connections and profile, holds only Tags, Profile, Apps and keys and Sign out, and is not on the others", () => {
     const withMenu = [
       homePage(),
       searchPage({ query: "", links: [], now: new Date(0) }),
       tagsPage({ tags: [] }),
       connectionsPage({ connections: [], keys: [], now: new Date(0) }),
+      profilePage({ notes: [], focus: [], now: new Date(0) }),
     ];
     for (const html of withMenu) {
-      expect(html).toContain('<a href="/tags">Tags</a><a href="/connections">Apps and keys</a>');
+      expect(html).toContain(
+        '<a href="/tags">Tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a>',
+      );
       expect(html).toContain('<button id="sign-out"');
-      expect(html).not.toMatch(/href="\/(all|profile)"/);
+      expect(html).not.toMatch(/href="\/all"/);
     }
     const without = [loginPage({ next: "/" }), oauthErrorPage("x"), consentExpiredPage()];
     for (const html of without) expect(html).not.toContain('id="sign-out"');
@@ -345,6 +349,23 @@ describe("the search page's cards", () => {
     expect(html).not.toMatch(/<i>|<u>|<script>x/);
     expect(html).toContain('value="&quot;&gt;&lt;script&gt;x"');
     expect(html).toContain("a&amp;amp;b.example, saved");
+  });
+
+  it("shows a stored image from this site, by its versioned URL, and the plain tile otherwise", () => {
+    const remote = { status: "ok" as const, fetchedAt: NOW, title: null, description: null };
+    const html = searchPage({
+      query: "q",
+      links: [
+        link({ id: "7", snapshot: { ...remote, imageUrl: "https://cdn.example/7.png" } }),
+        link({ id: "8", snapshot: { ...remote, imageUrl: "https://cdn.example/8.png" } }),
+      ],
+      now: NOW,
+      images: new Map([["7", "abc123"]]),
+    });
+    expect(html).toContain('<img class="tile" src="/images/7?v=abc123" alt="" loading="lazy">');
+    expect(html.match(/<div class="tile" aria-hidden="true"><\/div>/g)).toHaveLength(1);
+    expect(html).not.toContain("cdn.example");
+    expect(outsideRefs(html)).toEqual([]);
   });
 
   it("says when nothing matched, above the 'Not it?' box that links to the newest links", () => {

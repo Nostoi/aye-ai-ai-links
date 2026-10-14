@@ -237,7 +237,8 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     const { changes } = this.db
       .prepare(
         `UPDATE snapshots SET fetch_status = ?, attempts = ?, next_fetch_at = ?, fetched_at = ?,
-           title = ?, description = ?, image_url = ?, text = ?, last_error = ?,
+           title = ?, description = ?, image_url = ?,
+           image_status = CASE WHEN ? IS NULL THEN NULL ELSE 'pending' END, text = ?, last_error = ?,
            lease_token = lease_token + 1
          WHERE link_id = ? AND owner_id = ? AND lease_token = ?`,
       )
@@ -248,6 +249,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
         toMs(r.fetchedAt),
         r.title,
         r.description,
+        r.imageUrl,
         r.imageUrl,
         r.text,
         r.lastError,

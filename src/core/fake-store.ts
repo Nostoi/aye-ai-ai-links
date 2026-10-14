@@ -1,3 +1,13 @@
+import { createHash } from "node:crypto";
+import {
+  type ImageBytes,
+  type ImageEnd,
+  type ImageStore,
+  imageVersion,
+  type LinkImageReader,
+  type PendingImage,
+  type StoredImage,
+} from "./image-store.js";
 import {
   hasConsistentSchedule,
   type SnapshotLease,
@@ -16,13 +26,19 @@ import type {
   TagPatch,
 } from "./types.js";
 
+type ImageStatus = "pending" | "ok" | ImageEnd;
+const imageKey = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
+
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
-export class FakeStore implements LinkStore, SnapshotStore {
+export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImageReader {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
   private tokens = new Map<OwnerId, Map<string, number>>();
   private links = new Map<OwnerId, Map<string, Link>>();
   private tags = new Map<OwnerId, Map<string, Tag>>();
+  /** Each link's image status, and its stored image, by `imageKey`. */
+  private imageStates = new Map<string, { status: ImageStatus }>();
+  private storedImages = new Map<string, StoredImage>();
   private nextId = 1;
 
   private owned(owner: OwnerId): Map<string, Link> {
@@ -151,6 +167,8 @@ export class FakeStore implements LinkStore, SnapshotStore {
     if (!mine.has(linkId) || this.tokenOf(owner, linkId) !== claim) return false;
     if (!hasConsistentSchedule(result)) return false;
     mine.set(linkId, structuredClone(result));
+    if (result.imageUrl === null) this.imageStates.delete(imageKey(owner, linkId));
+    else this.imageStates.set(imageKey(owner, linkId), { status: "pending" });
     this.bumpToken(owner, linkId);
     return true;
   }
@@ -265,6 +283,58 @@ export class FakeStore implements LinkStore, SnapshotStore {
       claimed.push({ link: this.view(owner, found), previousSurfacedAt });
     }
     return claimed;
+  }
+
+  async pendingImages(afterId: string | null, limit: number): Promise<PendingImage[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const pending: PendingImage[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [linkId, s] of mine) {
+        const state = this.imageStates.get(imageKey(owner, linkId));
+        if (s.imageUrl === null || state?.status !== "pending") continue;
+        if (afterId !== null && order(linkId) <= order(afterId)) continue;
+        pending.push({ owner, linkId, imageUrl: s.imageUrl });
+      }
+    }
+    return pending.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
+  }
+
+  async writeImage(owner: OwnerId, linkId: string, imageUrl: string, image: ImageBytes) {
+    if (!this.settle(owner, linkId, imageUrl, "ok")) return false;
+    const sha256 = createHash("sha256").update(image.bytes).digest("hex");
+    this.storedImages.set(imageKey(owner, linkId), {
+      contentType: image.contentType,
+      bytes: new Uint8Array(image.bytes),
+      version: imageVersion(sha256),
+    });
+    return true;
+  }
+
+  async endImage(owner: OwnerId, linkId: string, imageUrl: string, end: ImageEnd) {
+    return this.settle(owner, linkId, imageUrl, end);
+  }
+
+  async imageVersions(owner: OwnerId, linkIds: string[]) {
+    const versions = new Map<string, string>();
+    for (const id of linkIds) {
+      const stored = this.storedImages.get(imageKey(owner, id));
+      if (stored) versions.set(id, stored.version);
+    }
+    return versions;
+  }
+
+  async image(owner: OwnerId, linkId: string): Promise<StoredImage | null> {
+    const stored = this.storedImages.get(imageKey(owner, linkId));
+    return stored ? structuredClone(stored) : null;
+  }
+
+  private settle(owner: OwnerId, linkId: string, imageUrl: string, status: ImageStatus): boolean {
+    const key = imageKey(owner, linkId);
+    const state = this.imageStates.get(key);
+    const url = this.snapshots.get(owner)?.get(linkId)?.imageUrl;
+    if (state?.status !== "pending" || url !== imageUrl) return false;
+    this.imageStates.set(key, { status });
+    return true;
   }
 
   seedTag(owner: OwnerId, tag: Tag): void {

@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { UNDO_WINDOW_MS } from "../auth/agent-keys.js";
+import { NOTE_UNDO_WINDOW_MS } from "../core/profile.js";
 import { page, UNDO_BAR_MAX_MS, UNDO_BAR_MS } from "./page.js";
 
 /**
@@ -159,6 +160,7 @@ describe("the Undo bar", () => {
 
   it("closes well before the server stops allowing an undo", () => {
     expect(UNDO_BAR_MAX_MS).toBeLessThanOrEqual(UNDO_WINDOW_MS - 10_000);
+    expect(UNDO_BAR_MAX_MS).toBeLessThanOrEqual(NOTE_UNDO_WINDOW_MS - 10_000);
   });
 
   it("after Undo, closes and gives focus back to what had it before", async () => {

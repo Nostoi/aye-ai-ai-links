@@ -22,8 +22,10 @@ import {
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { createDeps } from "../deps.js";
+import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { SqliteImageStore } from "../store/sqlite-image-store.js";
 import { outsideRefs } from "../web/outside-refs-test-kit.js";
 
 /**
@@ -106,6 +108,7 @@ const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
 ];
 const KNOWN_OWNED_TABLES = [
   "focus_log",
+  "link_images",
   "link_tags",
   "link_vectors",
   "links",
@@ -439,6 +442,27 @@ describe("owner isolation coverage", () => {
       })
       .replaceAll("*", "x");
 
+  /** A's stored image: a PNG header with bytes no other response holds. */
+  const A_IMAGE = png(321, 123, Buffer.from("A's own image bytes for the route guard"));
+
+  /** Records the link's snapshot as fetched with `imageUrl`, so its image is pending. */
+  const recordImageUrl = async (world: World, linkId: string, imageUrl: string) => {
+    world.links
+      .prepare(
+        `UPDATE snapshots SET fetch_status = 'ok', next_fetch_at = NULL, image_url = ?,
+           image_status = 'pending' WHERE link_id = ?`,
+      )
+      .run(imageUrl, Number(linkId));
+  };
+  const storeImage = async (world: World, linkId: string, bytes: Buffer) => {
+    const imageUrl = "https://a.example/stored.png";
+    await recordImageUrl(world, linkId, imageUrl);
+    const images = new SqliteImageStore(world.links);
+    expect(
+      await images.writeImage(A, linkId, imageUrl, { contentType: "image/png", bytes }, new Date()),
+    ).toBe(true);
+  };
+
   type Marker = string | Buffer | string[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
@@ -448,12 +472,17 @@ describe("owner isolation coverage", () => {
       request: "/connections",
       marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
     },
+    "GET /profile": {
+      request: "/profile",
+      marker: () => "A private note for the route guard",
+    },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
     },
     "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
+    "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
   };
   const readKey = (path: string) => `GET ${path}`;
   const readablePaths = (world: World) => {
@@ -505,6 +534,15 @@ describe("owner isolation coverage", () => {
       title: "Quokka habitat notes",
       tags: [{ name: A_TAG_NAME, source: "stated" }],
     });
+    await storeImage(world, aLinkId, A_IMAGE);
+    // A second link whose page named a remote image and has none stored: its card must not
+    // fall back to the remote URL, or A's search page makes an outside request.
+    const { link: remote } = await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, {
+      url: "https://a.example/remote-image",
+      savedBy: "seed",
+      title: "Quokka burrow photos",
+    });
+    await recordImageUrl(world, remote.id, "https://images.example/quokka.png");
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,
@@ -595,6 +633,11 @@ describe("owner isolation coverage", () => {
     "POST /tags/color": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/kind": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/status": "the two-owner tag actions test in web/tags-routes.test.ts",
+    "POST /profile/notes/add": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/edit": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/confirm": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/remove": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /profile/notes/restore": "the two-owner profile tests in web/profile-page.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

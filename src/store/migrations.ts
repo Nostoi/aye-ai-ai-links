@@ -156,6 +156,32 @@ export const MIGRATIONS: string[] = [
   // origin was not recorded, so each is shown as a guess. Additive; rebuilds nothing.
   `ALTER TABLE tags ADD COLUMN kind_source TEXT NOT NULL DEFAULT 'inferred'
     CHECK (kind_source IN ('stated', 'asked', 'inferred'))`,
+  // Preview images the server keeps (#94). `image_status` is pending from when a snapshot is
+  // recorded with an image URL until the image pass stores it or gives up; the backfill makes
+  // every existing image URL pending. The byte cap is the image fetcher's 2 MiB. Additive;
+  // rebuilds nothing.
+  `
+  ALTER TABLE snapshots ADD COLUMN image_status TEXT
+    CHECK (image_status IN ('pending', 'ok', 'none', 'refused'));
+  UPDATE snapshots SET image_status = 'pending' WHERE image_url IS NOT NULL;
+  CREATE INDEX snapshots_image_pending ON snapshots (link_id) WHERE image_status = 'pending';
+
+  CREATE TABLE link_images (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    content_type TEXT NOT NULL
+      CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    bytes BLOB NOT NULL,
+    sha256 TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (typeof(bytes) = 'blob' AND length(bytes) <= 2097152)
+  );
+  `,
+  // When a profile note was removed (#98): removal is soft, so Undo can bring the note back
+  // until it is purged. NULL is a live note. Additive; rebuilds nothing.
+  "ALTER TABLE profile_notes ADD COLUMN removed_at INTEGER",
 ];
 
 /**

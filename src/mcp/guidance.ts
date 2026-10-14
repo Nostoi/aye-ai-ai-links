@@ -76,4 +76,4 @@ Each call marks the links it returns as shown, so the next call returns others. 
 
 export const EDIT_PROFILE = `Change or remove existing profile notes. Use it only when the owner asks for the change or confirms it. To record something new, use add_profile.
 
-editNotes REPLACES a note's text and source, so send both. A note the owner stated can only be edited with source "stated"; to add your own guess, call add_profile instead. removeNotes deletes notes permanently by id: remove a stated note only on the owner's instruction. Call get_profile for the ids. All changes in one call apply together or not at all.`;
+editNotes REPLACES a note's text and source, so send both. A note the owner stated can only be edited with source "stated"; to add your own guess, call add_profile instead. removeNotes removes notes by id: remove a stated note only on the owner's instruction. Call get_profile for the ids. All changes in one call apply together or not at all.`;

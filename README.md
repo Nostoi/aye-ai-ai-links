@@ -15,8 +15,9 @@ You talk to your AI; it uses the library for you.
 - **Tidy up.** Ask your AI to change a link's summary, why or tags, or archive it.
 - **Topics and projects.** A tag is a topic by default. Say "make home batteries a project" and it becomes a project you can filter by. Every tag records who decided its kind: you, or your AI's guess. A project your AI only guessed is presented as a guess until you confirm it, and so is a project from before this was recorded. A topic is never shown as a guess, since every tag starts as one.
 - **Tags page.** Signed in, open **Tags** from the menu to see every tag. **Pin to home** makes a tag one of your spaces, and it gets a color no other tag has while one is free (past six colored tags, two spaces may share one). **Edit** lets you confirm or switch its kind, pick one of six colors, and mark a project **Done** or reopen it; a done project stops being suggested to your AI for filing. Unpinning and marking done show an **Undo** bar.
-- **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask.
+- **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask, and you can see and fix the notes yourself on the Profile page.
 - **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.
+- **Page images.** When a page names a preview image, the server fetches it in the background and keeps its own copy (PNG, JPEG, GIF or WebP, up to 2 MiB), so the web page shows it without asking any other site. The first start after upgrading to this version fetches the images of links already saved. Your browser keeps a copy of each image it shows, and signing out asks your browser to clear it.
 - **Digests.** Ask "anything I should look at?" and your AI gets up to five saved links worth another look, each with its reasons: it shares words with something you're working on, it has no why yet, it was saved over 30 days ago and no AI has recorded you opening it in that time, or it has never come up before. Your AI turns those into a short nudge, and can ask why you saved one, snooze it or archive it. A link that comes up in a digest stays out of digests for two weeks, so the next digest brings different links. Snoozed links stay out until the snooze ends, and archived links never come up.
 
 Each AI has its own key or its own app connection, and every link records which AI saved it.
@@ -37,14 +38,14 @@ The tools your AI uses:
 
 ### Still to come
 
-- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a search page (describe a link however you remember it and see the best matches, each with its why), the Tags page, and an Apps and keys page, where you can disconnect an app and make or turn off your AIs' keys. Your spaces don't show on the home page yet.
+- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a search page (describe a link however you remember it and see the best matches, each with its page's image and its why), the Tags page, a Profile page, and an Apps and keys page, where you can disconnect an app and make or turn off your AIs' keys. The Profile page shows the notes your AIs keep about you and what you've been working on lately, with each AI's guesses marked as guesses. You can add a note, edit one, confirm a guess with **That's right**, or remove one. A removed note is gone for your AIs at once, and for a few seconds an **Undo** bar can bring it back. If an AI changed a note after the page loaded, your change is refused and the page asks you to reload. Your spaces don't show on the home page yet.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save and their images, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
 
 ## Run it on your Mac
 

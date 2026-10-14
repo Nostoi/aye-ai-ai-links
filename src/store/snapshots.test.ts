@@ -54,7 +54,7 @@ describe("lease columns", () => {
     const db = legacy();
     migrate(db, MIGRATIONS.slice(0, 5));
     const before = db.prepare("SELECT * FROM snapshots ORDER BY link_id").all();
-    migrate(db);
+    migrate(db, MIGRATIONS.slice(0, 6));
     const after = db.prepare("SELECT * FROM snapshots ORDER BY link_id").all();
     expect(after).toEqual(before.map((r) => ({ ...(r as object), lease_token: 0 })));
     expect(after).toHaveLength(2);

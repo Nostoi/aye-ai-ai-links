@@ -38,6 +38,16 @@ it("outlines inputs with the field token", () => {
   expect(themeCss).toMatch(/input\{[^}]*border:1\.5px solid var\(--field\)/);
 });
 
+it("sizes a desktop image tile like the plain tile, whatever the image's shape, and caps it on a phone", () => {
+  const desktop = /^img\.tile\{([^}]*)\}/m.exec(themeCss)?.[1] ?? "";
+  expect(desktop).toContain("width:168px");
+  expect(desktop).toContain("contain:size");
+  expect(desktop).toContain("object-fit:cover");
+  const phone = /@media \(max-width:600px\)\{.*img\.tile\{([^}]*)\}/.exec(themeCss)?.[1] ?? "";
+  expect(phone).toContain("contain:none");
+  expect(phone).toContain("max-height:200px");
+});
+
 describe("the theme css", () => {
   const names = Object.keys(tokens.light) as (keyof typeof tokens.light)[];
   const dark = /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(

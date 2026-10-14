@@ -12,7 +12,7 @@ import { connectClaude, oauthWorld } from "./auth/oauth-test-kit.js";
 import { setOwnerLogin } from "./auth/owner-login.js";
 import type { ServerConfig } from "./config.js";
 import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
-import type { FetchOutcome, PageFetcher } from "./core/fetch.js";
+import type { FetchOutcome, ImageFetcher, ImageOutcome, PageFetcher } from "./core/fetch.js";
 import { saveLink } from "./core/links.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
@@ -49,6 +49,18 @@ const PAGE: ExtractOutcome = {
   text: "page text",
 };
 
+const IMAGE_URL = "https://example.com/preview.png";
+/** A page whose metadata names a preview image. */
+const PAGE_WITH_IMAGE: ExtractOutcome = {
+  ...PAGE,
+  metadata: { title: "Page title", description: null, imageUrl: IMAGE_URL },
+};
+const PNG: ImageOutcome = {
+  kind: "ok",
+  contentType: "image/png",
+  bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1]),
+};
+
 const okPage = (url: string): FetchOutcome => ({
   kind: "ok",
   finalUrl: url,
@@ -71,6 +83,7 @@ function fakePipeline(
   o: {
     fetch?: (url: string, signal?: AbortSignal) => Promise<FetchOutcome>;
     extract?: () => Promise<ExtractOutcome>;
+    fetchImage?: (url: string, signal?: AbortSignal) => Promise<ImageOutcome>;
   } = {},
 ) {
   const log: string[] = [];
@@ -100,7 +113,19 @@ function fakePipeline(
       log.push("extractor.close");
     },
   };
-  return { fetcher, extractor, embedder: new FakeEmbedder(DIMS), log, closed, fetched };
+  const imageFetcher: ImageFetcher = {
+    fetch: (url, signal) => (o.fetchImage ? o.fetchImage(url, signal) : Promise.resolve(PNG)),
+    close: async () => {},
+  };
+  return {
+    fetcher,
+    extractor,
+    imageFetcher,
+    embedder: new FakeEmbedder(DIMS),
+    log,
+    closed,
+    fetched,
+  };
 }
 
 /** Collects unhandled rejections and uncaught exceptions while a test runs. */
@@ -813,6 +838,68 @@ describe("startServer", () => {
       } finally {
         faults.dispose();
       }
+    });
+  });
+
+  describe("preview images", () => {
+    const images = () =>
+      read<{ status: string | null; stored: number }>(
+        `SELECT s.image_status AS status, (SELECT count(*) FROM link_images) AS stored
+         FROM snapshots s ORDER BY s.link_id`,
+      );
+
+    it("stores a saved page's preview image in the background", async () => {
+      const { port } = await start({
+        ...fakePipeline({ extract: async () => PAGE_WITH_IMAGE }),
+        imagePollMs: 20,
+      });
+      expect((await post(port, SAVE)).status).toBe(200);
+      await until(() => images()[0]?.status === "ok", "a stored image");
+      expect(images()).toEqual([{ status: "ok", stored: 1 }]);
+    });
+
+    it("answers save_link with the fetched page while the image fetch hangs", async () => {
+      const fetching = gate();
+      const pipeline = fakePipeline({
+        extract: async () => PAGE_WITH_IMAGE,
+        fetchImage: (_url, signal) =>
+          new Promise<ImageOutcome>((resolve) => {
+            fetching.open();
+            signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
+          }),
+      });
+      const { port } = await start({ ...pipeline, imagePollMs: 20 });
+      const res = await json(await post(port, SAVE));
+      expect(res.result.structuredContent.link.snapshot).toMatchObject({
+        status: "ok",
+        imageUrl: IMAGE_URL,
+      });
+      await fetching.opened;
+      expect(images()).toEqual([{ status: "pending", stored: 0 }]);
+    });
+
+    it("on stop, aborts an image fetch in flight and waits for it before closing the image fetcher, leaving it pending", async () => {
+      await seed("https://example.com/backlog");
+      const events: string[] = [];
+      const pipeline = fakePipeline({ extract: async () => PAGE_WITH_IMAGE });
+      const imageFetcher: ImageFetcher = {
+        fetch: (_url, signal) =>
+          new Promise<ImageOutcome>((resolve) => {
+            events.push("fetching");
+            signal?.addEventListener("abort", () =>
+              setTimeout(() => {
+                events.push("aborted");
+                resolve({ kind: "aborted" });
+              }, 20),
+            );
+          }),
+        close: async () => void events.push("image fetcher closed"),
+      };
+      const { stop } = await start({ ...pipeline, imageFetcher, imagePollMs: 20 });
+      await until(() => events.includes("fetching"), "an image fetch");
+      await stop();
+      expect(events).toEqual(["fetching", "aborted", "image fetcher closed"]);
+      expect(images()).toEqual([{ status: "pending", stored: 0 }]);
     });
   });
 

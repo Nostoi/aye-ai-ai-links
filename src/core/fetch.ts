@@ -7,17 +7,21 @@ export type RefusedReason =
   | "bad_redirect"
   | "too_many_redirects";
 
-/** Every way a fetch can end. Programmer errors aside, `fetch()` returns one of these and never throws. */
-export type FetchOutcome =
-  | { kind: "ok"; finalUrl: string; contentType: string; html: string }
+/** The ways any guarded fetch can end without a usable body, whatever it was fetching. */
+export type FetchFailure =
   | { kind: "refused"; reason: RefusedReason }
-  | { kind: "not_html"; contentType: string }
   | { kind: "http_error"; status: number }
   | { kind: "network_error"; code: string }
   | { kind: "too_large" }
   | { kind: "timeout" }
   /** The caller's signal fired; distinct from `timeout`, which is the fetcher's own deadline. */
   | { kind: "aborted" };
+
+/** Every way a fetch can end. Programmer errors aside, `fetch()` returns one of these and never throws. */
+export type FetchOutcome =
+  | { kind: "ok"; finalUrl: string; contentType: string; html: string }
+  | { kind: "not_html"; contentType: string }
+  | FetchFailure;
 
 /**
  * Fetches one web page for a snapshot.
@@ -28,5 +32,24 @@ export type FetchOutcome =
  */
 export interface PageFetcher {
   fetch(url: string, signal?: AbortSignal): Promise<FetchOutcome>;
+  close(): Promise<void>;
+}
+
+/** The image types kept: the magic bytes decide, never the server's `Content-Type`. */
+export type ImageType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+
+/**
+ * Every way an image fetch can end. `too_large` also covers an image whose header declares too
+ * many pixels; `not_image` covers a body that is not one of the kept types, or whose header
+ * cannot be read.
+ */
+export type ImageOutcome =
+  | { kind: "ok"; contentType: ImageType; bytes: Uint8Array }
+  | { kind: "not_image"; contentType: string }
+  | FetchFailure;
+
+/** Fetches a link's preview image, under the same address rules as `PageFetcher`. */
+export interface ImageFetcher {
+  fetch(url: string, signal?: AbortSignal): Promise<ImageOutcome>;
   close(): Promise<void>;
 }

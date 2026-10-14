@@ -8,6 +8,15 @@ import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError } from "../core/errors.js";
+import type { LinkImageReader } from "../core/image-store.js";
+import {
+  addOwnerNote,
+  editOwnerNote,
+  profileContext,
+  removeNote,
+  restoreNote,
+} from "../core/profile.js";
+import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -23,15 +32,35 @@ import {
   oauthErrorPage,
   searchPage,
 } from "./pages.js";
+import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 import { tagsPage } from "./tags-page.js";
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
 
+/** A link's stored preview image. The id must be digits; anything else is not this route. */
+export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
+
+/**
+ * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
+ * The one exception to `NO_STORE` (owner ruling on #94): a URL carrying the image's current
+ * version is cached privately for a year, since a new image gets a new version, and the sign-out
+ * response sends `Clear-Site-Data: "cache"` (`src/auth/http.ts`).
+ */
+const imageHeaders = (contentType: string, cached: boolean) => ({
+  "Content-Type": contentType,
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "default-src 'none'; sandbox",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Content-Disposition": "inline",
+  "Cache-Control": cached ? "private, max-age=31536000, immutable" : "no-store",
+});
+
 type Check<T> = (value: unknown) => value is T;
 const isString: Check<string> = (value) => typeof value === "string";
 const isBoolean: Check<boolean> = (value) => typeof value === "boolean";
+const isSafeInteger = (value: unknown): value is number => Number.isSafeInteger(value);
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 
 /** The object a shape of member checks accepts. */
@@ -70,6 +99,30 @@ const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
     c.set("body", value as Shaped<S>);
     await next();
   });
+
+/** What the owner is told when a note action is refused, by core's error code. */
+const NOTE_REFUSALS = {
+  not_found: { status: 404, message: "That note is gone. Reload." },
+  conflict: { status: 409, message: "An AI changed this note. Reload." },
+} as const;
+
+/**
+ * Runs a note action and answers 204. A refusal answers with the owner's wording: 404 for a note
+ * that is gone, 409 for one an AI changed, and 400 with core's own message for invalid text.
+ */
+async function noteAction(c: Context, act: () => Promise<void>): Promise<Response> {
+  try {
+    await act();
+    return c.body(null, 204, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError)) throw error;
+    if (error.code === "not_found" || error.code === "conflict") {
+      const { status, message } = NOTE_REFUSALS[error.code];
+      return c.json({ code: error.code, message }, status, NO_STORE);
+    }
+    return c.json({ code: error.code, message: error.message }, 400, NO_STORE);
+  }
+}
 
 /** A refused key action answers 400 with the rule's own message; anything else is thrown on. */
 function keyAction(c: Context, act: () => Response): Response {
@@ -115,7 +168,7 @@ export function webApp({
   connections,
   keys,
 }: {
-  deps: SearchLinksDeps;
+  deps: SearchLinksDeps & { images: LinkImageReader; profile: ProfileStore; now: () => Date };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -150,8 +203,20 @@ export function webApp({
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
     const links = await searchLinks(deps, caller.owner, { query }, caller.savedBy);
+    const images = await deps.images.imageVersions(
+      caller.owner,
+      links.map((l) => l.id),
+    );
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now }), 200, NO_STORE);
+    return c.html(searchPage({ query, links, now, images }), 200, NO_STORE);
+  });
+
+  // Another owner's link, a link without an image and an id never issued all get this same 404.
+  app.get(IMAGE_ROUTE, session, async (c) => {
+    const image = await deps.images.image(c.get("caller").owner, c.req.param("id"));
+    if (!image) return c.text("Not found.", 404, NO_STORE);
+    const cached = c.req.query("v") === image.version;
+    return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
   });
 
   app.get("/connections", session, async (c) => {
@@ -237,6 +302,45 @@ export function webApp({
         status: c.get("body").status as "active" | "done",
       }),
     ),
+  );
+
+  app.get("/profile", session, async (c) => {
+    const { owner } = c.get("caller");
+    const { notes, recentFocus } = await profileContext(deps, owner);
+    return c.html(profilePage({ notes, focus: recentFocus, now: deps.now() }), 200, NO_STORE);
+  });
+
+  app.post("/profile/notes/add", jsonBody({ text: isString }), session, (c) =>
+    noteAction(c, () => {
+      const { owner, savedBy } = c.get("caller");
+      return addOwnerNote(deps, owner, savedBy, c.get("body").text);
+    }),
+  );
+
+  const noteVersion = { id: isString, updatedAt: isSafeInteger };
+
+  // Edit and That's right: confirming a guess is an edit with the text shown.
+  for (const path of ["/profile/notes/edit", "/profile/notes/confirm"]) {
+    app.post(path, jsonBody({ ...noteVersion, text: isString }), session, (c) =>
+      noteAction(c, () => {
+        const { owner, savedBy } = c.get("caller");
+        const { id, updatedAt, text } = c.get("body");
+        return editOwnerNote(deps, owner, savedBy, { id, text, updatedAt: new Date(updatedAt) });
+      }),
+    );
+  }
+
+  app.post("/profile/notes/remove", jsonBody(noteVersion), session, (c) =>
+    noteAction(c, () => {
+      const { owner, savedBy } = c.get("caller");
+      const { id, updatedAt } = c.get("body");
+      return removeNote(deps, owner, savedBy, { id, updatedAt: new Date(updatedAt) });
+    }),
+  );
+
+  // The Undo of a remove.
+  app.post("/profile/notes/restore", jsonBody({ id: isString }), session, (c) =>
+    noteAction(c, () => restoreNote(deps, c.get("caller").owner, c.get("body").id)),
   );
 
   if (consent) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
-import type { Labelled } from "../core/types.js";
+import type { Labelled, LinkPatch } from "../core/types.js";
 import { SNOOZE_MS } from "../core/worth-a-look.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -101,6 +101,19 @@ describe("the home card actions", () => {
     expect(row(world, id).snoozed_until).toBe(ai.getTime());
   });
 
+  it("/home/snooze after an AI snoozed the link is a 409, leaving its snooze and surfacing as they were", async () => {
+    const { world, browser, id } = await home();
+    await browser.send("/");
+    const ai = new Date(Date.now() + 3 * 86_400_000);
+    await updateLink(linkDeps(world), A, id, { snoozedUntil: ai });
+    const before = row(world, id);
+    const res = await browser.send("/home/snooze", post({ id }));
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ message: "This link is already put off. Reload." });
+    expect(row(world, id)).toEqual(before);
+    expect(before).toMatchObject({ snoozed_until: ai.getTime(), last_surfaced_at: null });
+  });
+
   it("/home/archive archives it and /home/unarchive makes it active again; a second undo is a 409", async () => {
     const { world, browser, id } = await home();
     expect((await browser.send("/home/archive", post({ id }))).status).toBe(204);
@@ -145,21 +158,24 @@ describe("the home card actions", () => {
 /** A snooze the two-owner test seeds, which the unsnooze body names. */
 const SEED_UNTIL = new Date("2030-01-01T00:00:00.000Z");
 
-/** Each POST, with a body naming the card's link. */
-const ROUTES: [string, (id: string) => Record<string, unknown>][] = [
-  ["/home/opened", (id) => ({ id })],
-  ["/home/snooze", (id) => ({ id })],
-  ["/home/unsnooze", (id) => ({ id, until: SEED_UNTIL.toISOString() })],
-  ["/home/archive", (id) => ({ id })],
-  ["/home/unarchive", (id) => ({ id })],
-  ["/home/why", (id) => ({ id, text: "because" })],
+/** Each POST, with a body naming the card's link, and the state of A's link it acts on. */
+const ROUTES: [string, (id: string) => Record<string, unknown>, LinkPatch][] = [
+  ["/home/opened", (id) => ({ id }), {}],
+  ["/home/snooze", (id) => ({ id }), {}],
+  [
+    "/home/unsnooze",
+    (id) => ({ id, until: SEED_UNTIL.toISOString() }),
+    { snoozedUntil: SEED_UNTIL },
+  ],
+  ["/home/archive", (id) => ({ id }), {}],
+  ["/home/unarchive", (id) => ({ id }), { state: "archived" }],
+  ["/home/why", (id) => ({ id, text: "because" }), {}],
 ];
 
-describe.each(ROUTES)("POST %s", (path, body) => {
+describe.each(ROUTES)("POST %s", (path, body, seed) => {
   it("acts for the signed-in owner only: B naming A's link gets 404 and A's rows are unchanged", async () => {
     const { world, browser, id } = await home();
-    // A's link in every state an action or its undo could look for.
-    await updateLink(linkDeps(world), A, id, { state: "archived", snoozedUntil: SEED_UNTIL });
+    await updateLink(linkDeps(world), A, id, seed);
     const bBrowser = await addSecondUser(world);
     const before = ownedRows(world, A);
     const res = await bBrowser.send(path, post(body(id)));

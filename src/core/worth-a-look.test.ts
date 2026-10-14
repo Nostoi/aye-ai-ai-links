@@ -239,6 +239,32 @@ describe("Not now", () => {
     expect(until.getTime() - (after.lastSurfacedAt as Date).getTime()).toBe(SNOOZE_MS);
   });
 
+  it("will not override a snooze an AI set after the page was shown: a conflict, nothing written", async () => {
+    const l = await link();
+    await store.update(A, l.id, { snoozedUntil: at(3 * DAY) });
+    const before = await get(l.id);
+    expect(await code(snoozeLink(deps(), A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toEqual(before);
+  });
+
+  it("will not override an AI's snooze written after its read: a conflict, the AI's value kept", async () => {
+    const l = await link();
+    const racing = Object.create(store) as FakeStore;
+    racing.get = async (owner, id) => {
+      const read = await store.get(owner, id);
+      await store.update(A, l.id, { snoozedUntil: at(3 * DAY) });
+      return read;
+    };
+    expect(await code(snoozeLink({ ...deps(), store: racing }, A, l.id))).toBe("conflict");
+    expect(await get(l.id)).toMatchObject({ snoozedUntil: at(3 * DAY), lastSurfacedAt: null });
+  });
+
+  it("puts off a link whose earlier snooze has ended", async () => {
+    const l = await link(A, { snoozedUntil: NOW });
+    await snoozeLink(deps(), A, l.id);
+    expect((await get(l.id)).snoozedUntil).toEqual(at(SNOOZE_MS));
+  });
+
   it("undo clears the snooze it set", async () => {
     const l = await link();
     const until = await snoozeLink(deps(), A, l.id);

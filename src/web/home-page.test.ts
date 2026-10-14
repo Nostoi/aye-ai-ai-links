@@ -362,6 +362,23 @@ describe("the home page's script", () => {
     },
   );
 
+  it.each([
+    ["snooze", "This link is already put off. Reload."],
+    ["archive", "Changed since."],
+  ])(
+    "puts the card back with the refusal's words and offers no Undo when %s gets a 409",
+    async (act, message) => {
+      const cards = two();
+      const page = load(() => ({ status: 409, body: { code: "conflict", message } }), cards);
+      page.dispatch(`.worth-lead button[data-act=${act}]`, "click");
+      await page.settle();
+      expect(page.hidden(cards[0]?.link.id as string)).toBe(false);
+      expect(page.$("#undo-bar").hidden).toBe(true);
+      expect(page.$("#home-error").textContent).toBe(message);
+      expect(page.sent).toHaveLength(1);
+    },
+  );
+
   it("keeps the card gone and says why when Undo is refused", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;

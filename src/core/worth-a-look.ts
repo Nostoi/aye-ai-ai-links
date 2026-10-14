@@ -43,11 +43,19 @@ export async function markOpened(deps: WorthDeps, owner: OwnerId, id: string): P
 /** Not now: marks the link surfaced, then snoozes it for SNOOZE_MS. Returns when the snooze ends. */
 export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<Date> {
   const now = deps.now();
+  const link = await deps.store.get(owner, id);
+  if (!link) throw new CoreError("not_found", "That link is gone. Reload the page.");
+  if (link.snoozedUntil !== null && link.snoozedUntil > now) {
+    throw new CoreError("conflict", ALREADY_PUT_OFF);
+  }
   await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
   const until = new Date(now.getTime() + SNOOZE_MS);
-  await updateLink(deps, owner, id, { snoozedUntil: until });
+  const expected = { snoozedUntil: link.snoozedUntil };
+  await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF);
   return until;
 }
+
+const ALREADY_PUT_OFF = "This link is already put off. Reload.";
 
 /** The Undo of Not now: clears the snooze only while it is still the one Not now set (`until`). */
 export async function unsnoozeLink(

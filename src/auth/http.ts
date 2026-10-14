@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { createRateLimiter, type RateLimiter, type RateLimitOptions } from "../http/rate-limit.js";
 import type { WithAuthLock } from "./auth-lock.js";
 import { AUTH_BASE_PATH } from "./better-auth.js";
+import { authorizeWithOfflineAccess } from "./offline-access.js";
 
 /** The global limits that apply before the lock, each counted for everyone together. */
 export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register";
@@ -14,12 +15,14 @@ export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register"
  * - `refuseJwksUri`: a DCR client's `jwks_uri` would be fetched with the global `fetch`, outside
  *   the guarded fetcher, so registrations naming one are refused.
  * - `gate`: authorize goes through the authorize gate instead of straight to better-auth.
+ * - `offlineAccess`: `offline_access` is added to the query's scope (`offline-access.ts`).
  */
 export type RoutePolicy = {
   origin: "same" | "optional";
   limit?: RouteLimit;
   refuseJwksUri?: true;
   gate?: true;
+  offlineAccess?: true;
 };
 
 /**
@@ -31,7 +34,10 @@ export const AUTH_ROUTES: ReadonlyMap<string, RoutePolicy> = new Map<string, Rou
   ["POST /sign-in/email", { origin: "same", limit: "login" }],
   ["POST /sign-out", { origin: "same" }],
   ["GET /get-session", { origin: "optional" }],
-  ["GET /oauth2/authorize", { origin: "optional", limit: "authorize", gate: true }],
+  [
+    "GET /oauth2/authorize",
+    { origin: "optional", limit: "authorize", gate: true, offlineAccess: true },
+  ],
   ["POST /oauth2/consent", { origin: "same" }],
   ["POST /oauth2/token", { origin: "optional", limit: "token" }],
   ["POST /oauth2/revoke", { origin: "optional", limit: "revoke" }],
@@ -181,7 +187,8 @@ export function authApp({
       const refusal = registrationRefusal(raw, body);
       if (refusal) return refusal;
     }
-    const request = new Request(raw.url, { method: raw.method, headers: raw.headers, body });
+    const url = policy.offlineAccess ? authorizeWithOfflineAccess(raw.url) : raw.url;
+    const request = new Request(url, { method: raw.method, headers: raw.headers, body });
     if (policy.gate && authorize) return authorize(request);
     return withAuthLock(() => handle(request));
   });

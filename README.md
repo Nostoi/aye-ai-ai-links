@@ -172,7 +172,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
 
    **ChatGPT:** add a custom MCP server with the URL `https://links.<your-domain>/mcp` and OAuth as its authentication. When tested, ChatGPT did not ask for confirmation before saving or editing.
 
-   Each app opens the server's sign-in page, then asks you to allow it to read and save links in your library. Once you allow it, every link it saves records the app's own name (for example "Claude"). Claude and ChatGPT identify themselves with a client document they publish; the server reloads it every few minutes, and refuses the app while it is gone or has not loaded for 5 minutes. At most 5 new apps can wait for your approval at once.
+   Each app opens the server's sign-in page, then asks you to allow it to read and save links in your library. Once you allow it, every link it saves records the app's own name (for example "Claude"). Every app you allow gets a refresh token, even when it doesn't ask for one, so it stays connected while you use it instead of asking you to sign in again each hour. Claude and ChatGPT identify themselves with a client document they publish; the server reloads it every few minutes, and refuses the app while it is gone or has not loaded for 5 minutes. At most 5 new apps can wait for your approval at once.
 
    To disconnect an app, open **Apps and keys** from the menu at the top of any page (`/connections`) and choose **Disconnect**. Its tokens, your approval and its unused sign-in codes are deleted, so it is refused from its next request; to use it again, connect it again and approve it.
 

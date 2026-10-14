@@ -19,7 +19,7 @@ export const savedOn = (savedAt: Date, now: Date) =>
 const NAME = "Aye-AI-AI Links";
 const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</span>`;
 
-const MENU = `<nav class="menu" aria-label="Main"><a href="/connections">Apps and keys</a><button id="sign-out" type="button">Sign out</button></nav>`;
+const MENU = `<nav class="menu" aria-label="Main"><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><button id="sign-out" type="button">Sign out</button></nav>`;
 
 /** Ends the session, then goes to the sign-in page. */
 const MENU_SCRIPT = `<script>

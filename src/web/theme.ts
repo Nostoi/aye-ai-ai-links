@@ -96,6 +96,26 @@ button:disabled{opacity:.6;cursor:default}
 .new-key code{flex:1 1 280px;min-width:0;overflow-wrap:anywhere;background:var(--surface);color:var(--ink);border-radius:12px;padding:10px 14px;font-size:15px}
 .key-form{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
 .key-form input{flex:1 1 260px;min-width:0;width:auto;margin:0;padding:12px 20px}
+.profile>.lead{max-width:62ch;margin-bottom:32px}
+.profile h1{margin-bottom:8px}
+.profile-columns{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.profile-notes{flex:999 1 520px;min-width:0}
+.profile h2{margin-bottom:14px}
+.notes{list-style:none;padding:0;margin:0 0 18px;display:flex;flex-direction:column;gap:12px}
+.note{max-width:none;margin:0;background:var(--surface);border:1.5px solid transparent;border-radius:18px;padding:16px 20px;box-shadow:0 2px 10px #0000000b}
+.note.guess{border:1.5px dashed var(--field)}
+.note-text{margin:0 0 6px;font-size:16.5px;overflow-wrap:anywhere}
+.note-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;font-size:14px;color:var(--soft)}
+.note.guess .note-source{font-style:italic}
+.note-meta button{min-height:44px;padding:0 16px}
+button.link{background:none;border:0;padding:0 6px;font-weight:400;text-decoration:underline;text-underline-offset:3px}
+.note-edit textarea{display:block;width:100%;margin:0 0 10px;padding:12px 16px;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--field);border-radius:14px;resize:vertical}
+.focus-panel{flex:1 1 300px;min-width:0;background:var(--surface);border-radius:20px;padding:22px 24px;box-shadow:0 2px 10px #0000000b}
+.focus-panel h2{font-size:20px;margin-bottom:4px}
+.focus-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:14px}
+.focus-list li{margin:0}
+.focus-list p{margin:0}
+.focus-text{font-weight:600;overflow-wrap:anywhere}
 .undo-bar{position:fixed;left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100% - 32px);display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--surface);border-radius:28px;padding:6px 6px 6px 22px;box-shadow:0 6px 24px #00000026;font-size:15.5px}
 .undo-bar span{min-width:0;overflow-wrap:anywhere}
 .undo-bar button{font-weight:700;padding:0 18px;min-height:44px;border:0}

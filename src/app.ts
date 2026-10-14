@@ -48,6 +48,12 @@ const CHECKED_PAGES = [
   "/connections/keys",
   "/connections/keys/turn-off",
   "/connections/keys/turn-on",
+  "/profile",
+  "/profile/notes/add",
+  "/profile/notes/edit",
+  "/profile/notes/confirm",
+  "/profile/notes/remove",
+  "/profile/notes/restore",
   OAUTH_ERROR_PATH,
 ];
 

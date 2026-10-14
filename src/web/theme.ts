@@ -1,3 +1,5 @@
+import { SPACE_COLORS } from "../core/tag-space.js";
+
 /** Light and dark values for every theme token; `page()` inlines them as CSS custom properties. */
 export const tokens = {
   light: {
@@ -42,9 +44,9 @@ const declarations = (values: Record<string, string>) =>
     .join("");
 
 /** Each space owns one color everywhere (`--space`). Amber is never a space color. */
-const spaceClasses = ["teal", "clay", "violet", "blue", "green", "rose"]
-  .map((name) => `.space-${name}{--space:var(--${name})}`)
-  .join("\n");
+const spaceClasses = SPACE_COLORS.map((name) => `.space-${name}{--space:var(--${name})}`).join(
+  "\n",
+);
 
 export const themeCss = `:root{${declarations(tokens.light)}}
 @media (prefers-color-scheme: dark){:root{${declarations(tokens.dark)}}}

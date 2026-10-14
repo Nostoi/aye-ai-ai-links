@@ -37,11 +37,11 @@ async function registerDcr(world: World) {
   return field(registered, "client_id");
 }
 
-/** Registers and connects a DCR client end to end; `scope` without offline_access gives no refresh token. */
-async function connectDcr(world: World, scope = "links offline_access") {
+/** Registers and connects a DCR client end to end. */
+async function connectDcr(world: World) {
   const clientId = await registerDcr(world);
   const p = pkce();
-  const { code } = await approve(world, clientId, DCR_REDIRECT, { challenge: p.challenge, scope });
+  const { code } = await approve(world, clientId, DCR_REDIRECT, { challenge: p.challenge });
   const tokens = await exchange(world, code, p.verifier, {
     client_id: clientId,
     redirect_uri: DCR_REDIRECT,
@@ -147,8 +147,10 @@ describe("disconnect", () => {
 
   it("deletes an access token that has no refresh token", async () => {
     const world = await oauthWorld();
-    const dcr = await connectDcr(world, "links");
-    expect(dcr.refresh).toBeNull();
+    const dcr = await connectDcr(world);
+    // Connections made before every app got offline_access (#102) have no refresh token.
+    world.db.prepare("UPDATE oauthAccessToken SET refreshId = NULL").run();
+    world.db.prepare("DELETE FROM oauthRefreshToken").run();
     const nulls = world.db.prepare(
       "SELECT count(*) AS n FROM oauthAccessToken WHERE clientId = ? AND refreshId IS NULL",
     );

@@ -97,7 +97,7 @@ export const consentPage = ({
     "Approve a connection · Aye-AI-AI Links",
     `<main>
 <h1>Connect ${escapeHtml(clientName)}?</h1>
-<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>.</p>
+<p><strong>${escapeHtml(clientName)}</strong> asks to read and save links in your library. If you allow it, you are sent back to <strong>${escapeHtml(redirectHost)}</strong>. It stays connected while you use it, until you disconnect it on the Connected apps page.</p>
 <p class="actions"><button class="primary" id="accept" type="button">Allow</button> <button id="deny" type="button">Deny</button></p>
 <p id="error" role="alert"></p>
 </main>

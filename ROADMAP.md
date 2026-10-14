@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** Every app the owner allows gets a refresh token (#102, comments 6169832338 and 6170186544). ChatGPT asked for `links` only, so it had to reconnect every hour.
+  - **The server adds `offline_access`.** The MCP spec says servers "SHOULD NOT include `offline_access` in `WWW-Authenticate` scope or Protected Resource Metadata `scopes_supported`" and that "the AS retains discretion". So `src/auth/offline-access.ts` adds it to an authorize request's one `scope` when it is missing; better-auth decides the rest.
+  - **Refreshes too.** A refresh asking for less would get a successor token that never rotates (#105), so the same rule applies to refresh requests.
+  - **Unchanged.** A missing, empty or repeated `scope` is left for better-auth to answer. The consent page says the app stays connected until it is disconnected.
+
 - **2026-10-14:** The public address moves from Tailscale Funnel to a Cloudflare Tunnel on the owner's domain (#102; comments 6159690488, 6168949364 and 6169170865).
   - **Why.** ChatGPT's servers got a 502 through the Funnel address, and the app recorded no request from them; a request from ChatGPT through a Cloudflare tunnel reached the app.
   - **Tailnet.** Tailscale Serve stays for agent keys.

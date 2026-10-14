@@ -14,13 +14,16 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 ## Color
 
 - Each space (pinned tag) owns one color everywhere, through the `.space-*` classes.
-- Amber only ever means "needs you". Never use it for a space.
+- Amber only ever means "needs you". Never use it for a space, or for the reason a card is shown: that uses its space's color.
 - Everything else is neutral. The teal logo is the one brand exception.
 
 ## Pages
 
 - Pages make no outside requests: no remote images, scripts, stylesheets or fonts. Link navigation is fine.
 - Every page renders through `page()` and the theme tokens in `theme.ts`; no page brings its own colors.
+- Controls are at least 44px tall. Fields are outlined with `--field`.
+- Removing or turning something off shows an Undo bar instead of asking first.
+- Page designs: #12 comment 6158134489.
 
 ## New routes
 

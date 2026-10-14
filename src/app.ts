@@ -42,6 +42,7 @@ export type AuthDeps = {
 
 /** Web pages whose Origin is checked here, before the web door. */
 const CHECKED_PAGES = [
+  "/",
   "/consent",
   "/connections",
   "/search",
@@ -106,13 +107,7 @@ export function createApp(options: AppOptions) {
   if (web && auth && baseUrl) {
     if (allowedHosts) {
       const hosts = hostHeaderValidation(allowedHosts);
-      for (const path of [
-        `${AUTH_BASE_PATH}/*`,
-        "/.well-known/*",
-        "/",
-        "/login",
-        ...CHECKED_PAGES,
-      ]) {
+      for (const path of [`${AUTH_BASE_PATH}/*`, "/.well-known/*", "/login", ...CHECKED_PAGES]) {
         app.use(path, hosts);
       }
     }

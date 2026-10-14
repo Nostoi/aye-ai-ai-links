@@ -56,6 +56,22 @@ describe("GET /", () => {
     expect(html).toContain("Tell me why");
   });
 
+  it("refuses another site's Origin or Host with 403, showing no card; a plain GET still shows it", async () => {
+    const { browser } = await home();
+    const foreign: Record<string, string>[] = [
+      { origin: "https://evil.example" },
+      { host: "evil.example" },
+    ];
+    for (const headers of foreign) {
+      const res = await browser.send("/", { headers });
+      expect(res.status).toBe(403);
+      expect(String(res.body)).not.toContain("A&#39;s home card");
+    }
+    const plain = await browser.send("/", { origin: false });
+    expect(plain.status).toBe(200);
+    expect(String(plain.body)).toContain("A&#39;s home card");
+  });
+
   it("twice leaves every row byte-identical", async () => {
     const { world, browser } = await home();
     const before = allRows(world);

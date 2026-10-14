@@ -16,6 +16,7 @@ import {
   homePage,
   loginPage,
   oauthErrorPage,
+  searchPage,
 } from "./pages.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 
@@ -75,10 +76,14 @@ export function webApp({
     c.html(oauthErrorPage(oauthErrorMessage(c.req.query("error"))), 200, NO_STORE),
   );
 
-  app.get("/", session, async (c) => {
+  app.get("/", session, (c) => c.html(homePage(), 200, NO_STORE));
+
+  app.get("/search", session, async (c) => {
     const caller = c.get("caller");
-    const links = await searchLinks(deps, caller.owner, { query: "" }, caller.savedBy);
-    return c.html(homePage(links), 200, NO_STORE);
+    const query = c.req.query("q") ?? "";
+    const links = await searchLinks(deps, caller.owner, { query }, caller.savedBy);
+    const now = (deps.now ?? (() => new Date()))();
+    return c.html(searchPage({ query, links, now }), 200, NO_STORE);
   });
 
   app.get("/connections", session, async (c) =>

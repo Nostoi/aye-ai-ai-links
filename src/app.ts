@@ -29,7 +29,13 @@ export type AuthDeps = {
 };
 
 /** Web pages whose Origin is checked here, before the web door. */
-const CHECKED_PAGES = ["/consent", "/connections", "/connections/disconnect", OAUTH_ERROR_PATH];
+const CHECKED_PAGES = [
+  "/consent",
+  "/connections",
+  "/search",
+  "/connections/disconnect",
+  OAUTH_ERROR_PATH,
+];
 
 /** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
 export function resourceChallenge(baseUrl: string): string {
@@ -114,7 +120,8 @@ export function createApp({
     app.route(
       "/",
       webApp({
-        deps,
+        // Owner ruling on #93: web searches aren't logged until opens are recorded.
+        deps: { ...deps, searchLog: undefined },
         auth: betterAuth,
         withAuthLock,
         consent: consentDetails({ auth: betterAuth, withAuthLock, clients }),

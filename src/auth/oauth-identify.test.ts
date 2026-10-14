@@ -86,7 +86,7 @@ describe("oauthIdentify", () => {
       redirect_uri: DCR_REDIRECT,
     });
     const access = field(tokens, "access_token");
-    const key = createAgentKey(world.keyStore, {
+    const { key } = createAgentKey(world.keyStore, {
       owner: "owner",
       ownerName: "Owner",
       agent: "codex",

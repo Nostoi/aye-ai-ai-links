@@ -136,8 +136,8 @@ const grantsOf = (world: World, userId: string) =>
 type Door = { a: string; b: string; savedByB: string };
 const doors: Record<string, (world: World) => Promise<Door>> = {
   "agent key": async (world) => ({
-    a: createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" }),
-    b: createAgentKey(world.keyStore, { owner: B, ownerName: "B", agent: "agent-b" }),
+    a: createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" }).key,
+    b: createAgentKey(world.keyStore, { owner: B, ownerName: "B", agent: "agent-b" }).key,
     savedByB: "agent-b",
   }),
   "OAuth token": async (world) => ({
@@ -392,7 +392,11 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
 describe("owner isolation coverage", () => {
   it("the door lists exactly the tools this suite exercises across two owners", async () => {
     const { world } = await fixture();
-    const token = createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" });
+    const { key: token } = createAgentKey(world.keyStore, {
+      owner: A,
+      ownerName: "A",
+      agent: "agent-a",
+    });
     const res = await world.app.fetch(
       new Request("https://links.example/mcp", {
         method: "POST",
@@ -596,7 +600,7 @@ describe("owner isolation in search", () => {
   it("T7: B's search finds B's link though A saved sixty newer links with the same words", async () => {
     const { world } = await fixture();
     const key = (owner: string, agent: string) =>
-      createAgentKey(world.keyStore, { owner, ownerName: owner, agent });
+      createAgentKey(world.keyStore, { owner, ownerName: owner, agent }).key;
     const [a, b] = [key(A, "agent-a"), key(B, "agent-b")];
     const mine = await tool<SavedLink>(world, b, "save_link", { url: B_URL, title: "secretword" });
     const deps = createDeps(world.links, new FakeEmbedder(DIMS));

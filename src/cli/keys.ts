@@ -25,13 +25,13 @@ export function run(
     try {
       const keys = new SqliteKeyStore(db);
       if (command === "create") {
-        out(createAgentKey(keys, { owner, ownerName, agent: agent ?? "" }));
+        out(createAgentKey(keys, { owner, ownerName, agent: agent ?? "" }).key);
       } else if (command === "revoke") {
         revokeAgentKey(keys, owner, agent ?? "");
-        out(`Revoked the key for ${agent}.`);
+        out(`Turned off the key for ${agent}.`);
       } else {
         for (const k of listAgentKeys(keys, owner)) {
-          const state = k.revokedAt ? `revoked ${k.revokedAt.toISOString()}` : "live";
+          const state = k.revokedAt ? `turned off ${k.revokedAt.toISOString()}` : "live";
           out(`${k.name}\tcreated ${k.createdAt.toISOString()}\t${state}`);
         }
       }

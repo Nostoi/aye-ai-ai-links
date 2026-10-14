@@ -36,9 +36,12 @@ const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden>
 
 /**
  * Defines `showUndo(message, undo)` for the page's own script, which calls it after an action has
- * already been done. The bar shows `message` with an Undo button for `UNDO_BAR_MS`; Undo runs
- * `undo` once, with the button disabled until it settles, then closes the bar. A new message
- * replaces the bar, and a pending undo only closes the bar if it is still its own.
+ * already been done. The bar shows `message` and moves focus to its Undo button. It closes
+ * `UNDO_BAR_MS` after it last had neither focus nor the pointer, so it stays up until focus
+ * leaves it. Undo runs `undo` once, with the button disabled until it settles, then closes the
+ * bar. A new message replaces the bar, and a pending undo only closes the bar if it is still its
+ * own. When the bar closes with focus on it, focus goes back to what had it before the first
+ * message, if that is still on the page.
  */
 const UNDO_SCRIPT = `<script>
 const showUndo = (() => {
@@ -46,12 +49,47 @@ const showUndo = (() => {
   const text = bar.querySelector("span");
   const button = bar.querySelector("button");
   let current = null;
+  let focused = false;
+  let hovered = false;
+  let returnTo = null;
+  const arm = (action) => {
+    clearTimeout(action.timer);
+    if (!focused && !hovered) action.timer = setTimeout(() => close(action), ${UNDO_BAR_MS});
+  };
+  const pause = () => {
+    if (current) clearTimeout(current.timer);
+  };
+  const resume = () => {
+    if (current && !current.running) arm(current);
+  };
   const close = (action) => {
     if (current !== action) return;
     clearTimeout(action.timer);
     current = null;
+    const hadFocus = bar.contains(document.activeElement);
     bar.hidden = true;
+    focused = false;
+    hovered = false;
+    if (hadFocus && returnTo && returnTo.isConnected) returnTo.focus();
+    returnTo = null;
   };
+  bar.addEventListener("focusin", () => {
+    focused = true;
+    pause();
+  });
+  bar.addEventListener("focusout", (event) => {
+    if (bar.contains(event.relatedTarget)) return;
+    focused = false;
+    resume();
+  });
+  bar.addEventListener("mouseenter", () => {
+    hovered = true;
+    pause();
+  });
+  bar.addEventListener("mouseleave", () => {
+    hovered = false;
+    resume();
+  });
   button.addEventListener("click", async () => {
     const action = current;
     if (!action || action.running) return;
@@ -67,12 +105,14 @@ const showUndo = (() => {
   });
   return (message, undo) => {
     if (current) clearTimeout(current.timer);
+    else returnTo = document.activeElement;
     const action = { undo, running: false };
-    action.timer = setTimeout(() => close(action), ${UNDO_BAR_MS});
     current = action;
     text.textContent = message;
     button.disabled = false;
     bar.hidden = false;
+    arm(action);
+    button.focus();
   };
 })();
 </script>`;

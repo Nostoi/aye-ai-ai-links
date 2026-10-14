@@ -209,6 +209,13 @@ describe("key names", () => {
     ["web", "web", /"web"/],
     ["Web with spaces", " Web ", /"web"/],
     ["WEB", "WEB", /"web"/],
+    ["a lone high surrogate", "\ud800abc", /printable/],
+    ["a lone low surrogate", "abc\udc00", /printable/],
+    ["a tab inside", "a\tb", /printable/],
+    ["a NUL", "a\u0000b", /printable/],
+    ["a line break inside", "a\nb", /printable/],
+    ["DEL", "a\u007fb", /printable/],
+    ["a C1 control", "a\u0085b", /printable/],
   ])("refuses %s, writing no owner and no key", (_, agent, message) => {
     const { db, keys } = setup();
     const count = () => db.prepare("SELECT count(*) AS n FROM users").get();

@@ -84,6 +84,9 @@ describe("keys CLI", () => {
   it.each([
     ["a name over 60 characters", "a".repeat(61), /60 characters/],
     ["the name web", "Web", /"web"/],
+    ["a name with a tab", "codex\tlaptop", /printable/],
+    ["a name with a line break", "codex\nlaptop", /printable/],
+    ["a name with a lone surrogate", "\ud800codex", /printable/],
   ])("refuses %s, making no key", (_, agent, message) => {
     const vars = env();
     const r = exec(["create", agent], vars);

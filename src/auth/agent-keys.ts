@@ -73,6 +73,12 @@ function agentName(raw: string): string {
       `Keep the name to ${MAX_AGENT_NAME} characters or fewer.`,
     );
   }
+  if (/[\p{Cc}\p{Cs}]/u.test(agent)) {
+    throw new AgentKeyError(
+      "invalid_agent",
+      "Use only printable characters: no tabs, line breaks or other control characters.",
+    );
+  }
   if (agent.toLowerCase() === WEB_SAVED_BY) {
     throw new AgentKeyError(
       "invalid_agent",

@@ -45,6 +45,8 @@ type Input = {
   now: Date;
   /** The links you're done with, rather than the active ones. */
   done: boolean;
+  /** A page after the first. */
+  later?: boolean;
 };
 
 /**
@@ -97,7 +99,7 @@ if (older && list) {
     if (!res || !res.ok || res.redirected) return go();
     const next = new DOMParser().parseFromString(await res.text(), "text/html");
     const cards = next.getElementById("space-links");
-    if (!cards) return go();
+    if (!cards) return older.remove();
     const added = [...cards.children];
     list.append(...added);
     const more = next.getElementById("older");
@@ -120,10 +122,15 @@ if (older && list) {
  * the links given; `older` is the cursor of the next page, or null.
  */
 export function spacePage(input: Input): string {
-  const { tag, links, older, done } = input;
+  const { tag, links, older, done, later } = input;
+  const empty = later
+    ? "No older links."
+    : done
+      ? "Nothing here is done yet."
+      : "No links in this space yet.";
   const list =
     links.length === 0
-      ? `<p>${done ? "Nothing here is done yet." : "No links in this space yet."}</p>`
+      ? `<p>${empty}</p>`
       : `<ul class="link-cards" id="space-links">\n${links.map((l) => card(l, input)).join("\n")}\n</ul>`;
   const more = older
     ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, before: older }))}">Show older links</a></p>\n`

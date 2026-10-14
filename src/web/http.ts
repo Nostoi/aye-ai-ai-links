@@ -240,7 +240,8 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const done = state === "archived";
-      const html = spacePage({ tag, catalog, ...page, images, now: deps.now(), done });
+      const later = before !== undefined;
+      const html = spacePage({ tag, catalog, ...page, images, now: deps.now(), done, later });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;

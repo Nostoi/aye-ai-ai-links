@@ -238,6 +238,13 @@ describe("a space page", () => {
     expect(space()).toContain("No links in this space yet.");
   });
 
+  it("says a later page has no older links, not that the space is empty", () => {
+    const html = space({ later: true });
+    expect(html).toContain("No older links.");
+    expect(html).not.toContain("No links in this space yet.");
+    expect(space({ later: true, done: true })).not.toContain("Nothing here is done yet.");
+  });
+
   it("shows Show older links only when older links exist, as a real link to the next page", () => {
     expect(dom(space({ links: [link("1")] })).querySelector("#older")).toBeNull();
     const html = space({ links: [link("1")], older: "100.1" });
@@ -348,6 +355,14 @@ describe("Show older links", () => {
     const r = await clickOlder(first, { ok: true, redirected: false, text: more });
     const href = r.document.getElementById("older")?.getAttribute("href") as string;
     expect(new URL(href, ORIGIN).searchParams.get("before")).toBe("1.1");
+  });
+
+  it("drops the button and stays put when the older links were all moved away meanwhile", async () => {
+    const empty = space({ links: [], older: null, later: true });
+    const r = await clickOlder(first, { ok: true, redirected: false, text: empty });
+    expect(r.location.href).toBe(`${ORIGIN}/spaces?tag=x`);
+    expect(r.document.getElementById("older")).toBeNull();
+    expect(r.document.querySelectorAll("#space-links > li")).toHaveLength(2);
   });
 
   it.each([

@@ -184,3 +184,80 @@ export async function editProfile(
   const result = await write(deps, owner, writtenBy, changes);
   return { notes: result.notes, recentFocus: result.recentFocus };
 }
+
+/** A note the owner adds in their own words is stated. */
+export async function addOwnerNote(
+  deps: ProfileDeps,
+  owner: OwnerId,
+  writtenBy: string,
+  text: string,
+): Promise<void> {
+  await addProfile(deps, owner, writtenBy, { addNotes: [{ text, source: "stated" }] });
+}
+
+/**
+ * The owner's change to note `id`, as it was shown with `updatedAt`. If an agent changed the
+ * note since, nothing is written and the answer is `conflict`; a missing or removed note is
+ * `not_found`. The store checks `updatedAt` again inside the write, so a change landing after
+ * this read is refused too.
+ */
+async function ownerChange(
+  deps: ProfileDeps,
+  owner: OwnerId,
+  writtenBy: string,
+  { id, updatedAt }: { id: string; updatedAt: Date },
+  change: (expected: { expectedSource: Source; expectedUpdatedAt: Date }) => ProfileChanges,
+): Promise<void> {
+  const note = (await deps.profile.listNotes(owner)).find((n) => n.id === id);
+  if (!note) throw notFound(id);
+  if (note.updatedAt.getTime() !== updatedAt.getTime()) throw conflict(id);
+  await write(
+    deps,
+    owner,
+    writtenBy,
+    change({ expectedSource: note.source, expectedUpdatedAt: updatedAt }),
+  );
+}
+
+/**
+ * The owner edits a note, or confirms a guess by sending the text shown; either way it becomes
+ * stated. Guarded by the `updatedAt` the owner saw (`ownerChange`).
+ */
+export async function editOwnerNote(
+  deps: ProfileDeps,
+  owner: OwnerId,
+  writtenBy: string,
+  input: { id: string; text: string; updatedAt: Date },
+): Promise<void> {
+  const text = cleanText(input.text, MAX_NOTE_CHARS, "profile note");
+  await ownerChange(deps, owner, writtenBy, input, (expected) => ({
+    ...noChanges(),
+    editNotes: [{ id: input.id, text, source: "stated", ...expected }],
+  }));
+}
+
+/**
+ * The owner removes a note at once. It can be restored for `NOTE_UNDO_WINDOW_MS`. Guarded by
+ * the `updatedAt` the owner saw (`ownerChange`).
+ */
+export async function removeNote(
+  deps: ProfileDeps,
+  owner: OwnerId,
+  writtenBy: string,
+  input: { id: string; updatedAt: Date },
+): Promise<void> {
+  await ownerChange(deps, owner, writtenBy, input, (expected) => ({
+    ...noChanges(),
+    removeNotes: [{ id: input.id, ...expected }],
+  }));
+}
+
+/** Undoes a removal made within `NOTE_UNDO_WINDOW_MS`; `not_found` otherwise. */
+export async function restoreNote(deps: ProfileDeps, owner: OwnerId, id: string): Promise<void> {
+  if (!(await deps.profile.restoreNote(owner, id, undoCutoff(deps.now())))) {
+    throw new CoreError(
+      "not_found",
+      `No note "${id}" was removed in the last ${NOTE_UNDO_WINDOW_MS / 1000} seconds, so there is nothing to restore. Nothing was changed.`,
+    );
+  }
+}

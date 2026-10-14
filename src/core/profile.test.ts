@@ -3,14 +3,19 @@ import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import { filingContext } from "./filing-context.js";
 import {
+  addOwnerNote,
   addProfile,
+  editOwnerNote,
   editProfile,
   getProfile,
   MAX_FOCUS_CHARS,
   MAX_NOTE_CHARS,
+  NOTE_UNDO_WINDOW_MS,
   profileContext,
   RECENT_FOCUS,
   recentFocus,
+  removeNote,
+  restoreNote,
 } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import { A, B, describeProfileStoreContract } from "./profile-store-contract.js";
@@ -484,6 +489,142 @@ describe("profile use cases", () => {
         expect(counts()).toEqual({ reads: 1, applies: 1 });
         expect((await notes())[0]?.text).toBe("lives in York");
       });
+    });
+  });
+
+  describe("the owner's own writes", () => {
+    const LATER = new Date(NOW.getTime() + 5000);
+    const at = (when: Date) => ({ profile, now: () => when });
+    /** One of A's notes, as the page shows it. */
+    const shown = async (id: string) => (await notes()).find((n) => n.id === id);
+
+    it("adds a stated note in the owner's own words, trimmed", async () => {
+      await addOwnerNote(deps, A, "web", "  bakes bread on weekends ");
+      expect(await notes()).toEqual([
+        {
+          id: expect.any(String),
+          text: "bakes bread on weekends",
+          source: "stated",
+          writtenBy: "web",
+          updatedAt: NOW,
+        },
+      ]);
+    });
+
+    it("refuses a blank note and writes nothing", async () => {
+      expect((await code(addOwnerNote(deps, A, "web", "  ")))?.code).toBe("invalid_input");
+      expect(await notes()).toEqual([]);
+    });
+
+    it("confirms a guess with the text shown: it becomes stated, by the owner", async () => {
+      const id = await addNote("bakes bread", "inferred");
+      await editOwnerNote(at(LATER), A, "web", { id, text: "bakes bread", updatedAt: NOW });
+      expect(await notes()).toEqual([
+        { id, text: "bakes bread", source: "stated", writtenBy: "web", updatedAt: LATER },
+      ]);
+    });
+
+    it("edits a note to the owner's text, stated", async () => {
+      const id = await addNote("lives in York", "asked");
+      await editOwnerNote(at(LATER), A, "web", { id, text: " lives in Leeds ", updatedAt: NOW });
+      expect(await shown(id)).toMatchObject({ text: "lives in Leeds", source: "stated" });
+    });
+
+    it("accepts an edit of exactly the cap in code points and refuses one longer, unchanged", async () => {
+      const id = await addNote("short", "inferred");
+      const astral = "😀".repeat(MAX_NOTE_CHARS);
+      await editOwnerNote(at(LATER), A, "web", { id, text: astral, updatedAt: NOW });
+      expect((await shown(id))?.text).toBe(astral);
+      const err = await code(
+        editOwnerNote(at(NOW), A, "web", { id, text: `${astral}x`, updatedAt: LATER }),
+      );
+      expect(err?.code).toBe("invalid_input");
+      expect((await shown(id))?.text).toBe(astral);
+    });
+
+    describe.each([
+      [
+        "an edit",
+        (id: string, updatedAt: Date) =>
+          editOwnerNote(at(LATER), A, "web", { id, text: "owner's", updatedAt }),
+      ],
+      [
+        "a removal",
+        (id: string, updatedAt: Date) => removeNote(at(LATER), A, "web", { id, updatedAt }),
+      ],
+    ])("%s", (_, act) => {
+      it("answers conflict when an AI changed the note since it was shown, and changes nothing", async () => {
+        const id = await addNote("a guess", "inferred");
+        await editProfile(at(new Date(NOW.getTime() + 1)), A, "claude", {
+          editNotes: [{ id, text: "a better guess", source: "inferred" }],
+        });
+        const before = await notes();
+        expect((await code(act(id, NOW)))?.code).toBe("conflict");
+        expect(await notes()).toEqual(before);
+      });
+
+      it("answers not_found for a missing, removed or other owner's note", async () => {
+        const removed = await addNote("gone", "inferred");
+        await removeNote(deps, A, "web", { id: removed, updatedAt: NOW });
+        const theirs = await addNote("b's", "inferred", B);
+        const before = { a: await notes(), b: await notes(B) };
+        for (const id of ["999", removed, theirs]) {
+          expect((await code(act(id, NOW)))?.code, id).toBe("not_found");
+        }
+        expect({ a: await notes(), b: await notes(B) }).toEqual(before);
+      });
+    });
+
+    it("removes a note at once, and it is gone from every reader and from edit_profile", async () => {
+      const id = await addNote("a guess", "inferred");
+      await removeNote(deps, A, "web", { id, updatedAt: NOW });
+      expect((await profileContext(deps, A)).notes).toEqual([]);
+      const err = await code(
+        editProfile(deps, A, W, { editNotes: [{ id, text: "x", source: "inferred" }] }),
+      );
+      expect(err?.code).toBe("not_found");
+    });
+
+    it("restores a removed note unchanged within the window, and only once", async () => {
+      const id = await addNote("a guess", "inferred");
+      const before = await notes();
+      await removeNote(deps, A, "web", { id, updatedAt: NOW });
+      await restoreNote(at(new Date(NOW.getTime() + NOTE_UNDO_WINDOW_MS)), A, id);
+      expect(await notes()).toEqual(before);
+      expect((await code(restoreNote(deps, A, id)))?.code).toBe("not_found");
+      expect(await notes()).toEqual(before);
+    });
+
+    it("refuses a restore after the window, and the note stays removed", async () => {
+      const id = await addNote("a guess", "inferred");
+      await removeNote(deps, A, "web", { id, updatedAt: NOW });
+      const late = at(new Date(NOW.getTime() + NOTE_UNDO_WINDOW_MS + 1));
+      expect((await code(restoreNote(late, A, id)))?.code).toBe("not_found");
+      expect(await notes()).toEqual([]);
+    });
+
+    it("refuses a restore of another owner's removed note, which stays restorable by its owner", async () => {
+      const id = await addNote("b's", "inferred", B);
+      await removeNote(deps, B, "web", { id, updatedAt: NOW });
+      expect((await code(restoreNote(deps, A, id)))?.code).toBe("not_found");
+      expect(await notes(A)).toEqual([]);
+      await restoreNote(deps, B, id);
+      expect((await notes(B)).map((n) => n.id)).toEqual([id]);
+    });
+
+    it("purges a removed note at the owner's first profile write after the window, not before", async () => {
+      const kept = await addNote("kept", "inferred");
+      const gone = await addNote("gone", "inferred");
+      await removeNote(deps, A, "web", { id: kept, updatedAt: NOW });
+      await removeNote(deps, A, "web", { id: gone, updatedAt: NOW });
+      await addProfile(at(new Date(NOW.getTime() + NOTE_UNDO_WINDOW_MS)), A, W, {
+        addFocus: [{ text: "f", source: "stated" }],
+      });
+      expect(await profile.restoreNote(A, kept, new Date(0))).toBe(true);
+      await addProfile(at(new Date(NOW.getTime() + NOTE_UNDO_WINDOW_MS + 1)), A, W, {
+        addFocus: [{ text: "g", source: "stated" }],
+      });
+      expect(await profile.restoreNote(A, gone, new Date(0))).toBe(false);
     });
   });
 });

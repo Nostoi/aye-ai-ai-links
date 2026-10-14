@@ -22,6 +22,16 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** The Tags page (#97; plan in comment 6173556769, revised by comments 6173827375, 6173935487 and 6174590317).
+  - **Owner rulings (comment 6173827375).**
+    - **Only an inferred project is a guess.** It reads "Project? (a guess)" until the owner confirms it; a topic always shows plainly, since every tag starts as one. This narrows spec §5's "Inferred values are always shown as guesses" for tag kinds.
+    - **Colors are shared when needed.** There is no cap on spaces; past six colored tags, two spaces may share a color.
+    - **Unpinning shows the Undo bar.** Undo pins the tag again, with the color it kept.
+  - **Project status on the web (owner request, comment 6173935487).** This amends the 2026-10-13 page design, whose Tags edit panel held only kind and color (#12 comment 6158134489, item 2). `setProjectStatus` marks a project done or reopens it and refuses a topic; marking done shows the Undo bar.
+  - **The color rule (comment 6173827375).** A new pin takes the first color no tag holds, then the first no pinned tag holds, then teal. The pin fills the color in the same write (`COALESCE`), so a color chosen meanwhile is kept, and unpinning keeps it. A pinned tag always has a color: `pinTag` is the only write of `pinned`, and no write clears a color.
+  - **Implementation.**
+    - Pin and color are store methods (`pinTag`, `colorTag`) rather than `updateTag` fields, since a `COALESCE` pin cannot be a patch field.
+    - From #99's review (comment 6174590317), `showUndo` moves focus to Undo, and the bar stays while it has focus or the pointer, up to 45 s after it was shown (`UNDO_BAR_MAX_MS`), inside the 60 s server undo windows. When it closes, focus goes back to what had it. The web door reads a JSON body as one checked object (`jsonBody`), the Profile page's routes included.
 - **2026-10-14:** The Profile page (#98; plan in comment 6173556256, revised by comment 6173758666).
   - **Labels.** A note written on the web shows "You confirmed this". An inferred note or focus entry shows as a guess by the AI that wrote it.
   - **Undo acts now** (the #99 ruling, comment 6173113093). Remove is done at once and Undo restores the note, unchanged, within 60 seconds (`NOTE_UNDO_WINDOW_MS` in `core/profile.ts`).

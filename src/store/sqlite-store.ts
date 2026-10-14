@@ -139,6 +139,35 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     return row ? { ...row, pinned: row.pinned === 1 } : null;
   }
 
+  async pinTag(
+    owner: OwnerId,
+    key: string,
+    pin: { pinned: true; color: string } | { pinned: false },
+  ) {
+    const row = (
+      pin.pinned
+        ? this.db
+            .prepare(
+              `UPDATE tags SET pinned = 1, color = COALESCE(color, ?) WHERE owner_id = ? AND key = ?
+               RETURNING ${TAG_COLUMNS}`,
+            )
+            .get(pin.color, owner, key)
+        : this.db
+            .prepare(
+              `UPDATE tags SET pinned = 0 WHERE owner_id = ? AND key = ? RETURNING ${TAG_COLUMNS}`,
+            )
+            .get(owner, key)
+    ) as TagRow | undefined;
+    return row ? { ...row, pinned: row.pinned === 1 } : null;
+  }
+
+  async colorTag(owner: OwnerId, key: string, color: string) {
+    const row = this.db
+      .prepare(`UPDATE tags SET color = ? WHERE owner_id = ? AND key = ? RETURNING ${TAG_COLUMNS}`)
+      .get(color, owner, key) as TagRow | undefined;
+    return row ? { ...row, pinned: row.pinned === 1 } : null;
+  }
+
   async listLinks(owner: OwnerId) {
     return this.db.transaction(() => this.readAll(owner))();
   }

@@ -16,7 +16,8 @@ import type {
  *   changes another owner's links or tags.
  * - Tags: identity is `key`, per owner. A key the owner has not used before is
  *   created with the attached name, kind and kindSource. Attaching an existing tag never
- *   changes its name, kind, kindSource, colour, pin or project fields; only updateTag does.
+ *   changes its name, kind, kindSource, colour, pin or project fields; only updateTag, pinTag
+ *   and colorTag do.
  *   Every returned LinkTag.name, .kind and .kindSource is the catalog's for its key, not the
  *   one passed in; each LinkTag keeps its own source. Tags come back in the order
  *   they were attached.
@@ -74,6 +75,26 @@ export interface LinkStore {
     patch: TagPatch,
     expectedKind: TagKind,
   ): Promise<Tag | null>;
+
+  /**
+   * Pin or unpin the owner's tag with this key, in one write, whatever its kind. Pinning gives
+   * the tag `color` only if it has none, so a color written just before is kept; unpinning keeps
+   * the color. A pinned tag therefore always has a color: this is the only write of `pinned`, and
+   * no write clears a color. Returns the tag as it is afterwards, or null when the owner has no
+   * such key; then nothing is written. Which colors are allowed is a core rule.
+   */
+  pinTag(
+    owner: OwnerId,
+    key: string,
+    pin: { pinned: true; color: string } | { pinned: false },
+  ): Promise<Tag | null>;
+
+  /**
+   * Set the color of the owner's tag with this key, whatever its kind or pin. Returns the tag as
+   * it is afterwards, or null when the owner has no such key; then nothing is written. Which
+   * colors are allowed is a core rule.
+   */
+  colorTag(owner: OwnerId, key: string, color: string): Promise<Tag | null>;
 
   /**
    * Every one of the owner's links, in every state, each as `get` returns it, in the order the

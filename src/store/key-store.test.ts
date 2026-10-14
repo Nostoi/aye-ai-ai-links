@@ -125,6 +125,25 @@ describe("SqliteKeyStore", () => {
       expect(keys.findLiveByHash("h1")).toBeNull();
       expect(keys.findLiveByHash("h2")).toEqual({ owner: "mark", name: "codex" });
     });
+
+    it("refuses with name_taken when the key with the same name made since is off too, and the old stays off", () => {
+      const { keys, id } = offKey();
+      const newer = keys.create("mark", "Mark", "codex", "h2", LATER);
+      keys.revokeById("mark", newer, LATER);
+      expect(() => keys.restore("mark", id, OFF)).toThrow(
+        expect.objectContaining({ name: "KeyStoreError", code: "name_taken" }),
+      );
+      expect(keys.findLiveByHash("h1")).toBeNull();
+      expect(keys.list("mark")[0]?.revokedAt).toEqual(OFF);
+    });
+
+    it("still restores when only another owner or another name has a newer key", () => {
+      const { keys, id } = offKey();
+      keys.create("alice", "Alice", "codex", "ha", LATER);
+      keys.create("mark", "Mark", "claude", "hc", LATER);
+      expect(keys.restore("mark", id, OFF)).toBe(true);
+      expect(keys.findLiveByHash("h1")).toEqual({ owner: "mark", name: "codex" });
+    });
   });
 
   it("refuses a second live key for the same owner and agent", () => {

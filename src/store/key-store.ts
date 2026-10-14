@@ -80,28 +80,30 @@ export class SqliteKeyStore {
     return result.changes > 0;
   }
 
-  /**
-   * Makes the owner's key `id` live again if it was revoked at or after `since`. True when it
-   * was. The live-name index refuses it when a key with its name was made since: `name_taken`.
-   */
   restore(owner: OwnerId, id: number, since: Date): boolean {
-    try {
-      const result = this.db
-        .prepare(
-          "UPDATE agent_keys SET revoked_at = NULL WHERE owner_id = ? AND id = ? AND revoked_at >= ?",
-        )
-        .run(owner, id, since.getTime());
-      return result.changes > 0;
-    } catch (error) {
-      if ((error as { code?: unknown }).code !== "SQLITE_CONSTRAINT_UNIQUE") throw error;
-      const { name } = this.db
-        .prepare("SELECT name FROM agent_keys WHERE owner_id = ? AND id = ?")
-        .get(owner, id) as { name: string };
-      throw new KeyStoreError(
-        "name_taken",
-        `A new key for "${name}" was made since, so this one stays off.`,
-      );
-    }
+    return this.db
+      .transaction(() => {
+        const newer = this.db
+          .prepare(
+            `SELECT k.name FROM agent_keys k JOIN agent_keys n
+             ON n.owner_id = k.owner_id AND n.name = k.name AND n.id > k.id
+             WHERE k.owner_id = ? AND k.id = ? LIMIT 1`,
+          )
+          .get(owner, id) as { name: string } | undefined;
+        if (newer) {
+          throw new KeyStoreError(
+            "name_taken",
+            `A new key for "${newer.name}" was made since, so this one stays off.`,
+          );
+        }
+        const result = this.db
+          .prepare(
+            "UPDATE agent_keys SET revoked_at = NULL WHERE owner_id = ? AND id = ? AND revoked_at >= ?",
+          )
+          .run(owner, id, since.getTime());
+        return result.changes > 0;
+      })
+      .immediate();
   }
 
   /** The one lookup that is not owner-scoped: it is how a request finds its owner. */

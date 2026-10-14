@@ -649,6 +649,23 @@ describe("agent keys on the connections page", () => {
     expect(await works(world, field(fresh, "key"))).toBe(200);
   });
 
+  it("refuses an undo once a new key with the same name was made, even after that one is turned off too", async () => {
+    const world = await oauthWorld();
+    const old = ownerKey(world);
+    const browser = await signedIn(world);
+    await browser.send(TURN_OFF, posting({ id: old.id }));
+    const fresh = await browser.send(MAKE, posting({ name: "Codex on laptop" }));
+    const freshId = (fresh.body as { id: number }).id;
+    expect((await browser.send(TURN_OFF, posting({ id: freshId }))).status).toBe(204);
+    const before = keyRows(world);
+    const res = await browser.send(TURN_ON, posting({ id: old.id }));
+    expect(res.status).toBe(400);
+    expect(field(res, "message")).toMatch(/was made since/);
+    expect(keyRows(world)).toEqual(before);
+    expect(await works(world, old.key)).toBe(401);
+    expect(await works(world, field(fresh, "key"))).toBe(401);
+  });
+
   it("a stale turn-off of the old key's id leaves the new key with the same name on", async () => {
     const world = await oauthWorld();
     const old = ownerKey(world);

@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** The server keeps its own copy of each link's preview image (#94; plan in comments 6171805935 and 6173115474, the second winning).
+  - **Owner ruling: images are cached, and wiped on sign-out.** `/images/:id?v=<sha256 prefix>` answers `Cache-Control: private, max-age=31536000, immutable` when `v` is the stored image's version; any other answer, and every 404, is `no-store`. Sign-out answers `Clear-Site-Data: "cache"`. This is the one exception to the web door's `no-store` rule.
+  - **A separate image pass** (`core/image-indexer.ts`) sweeps every 15 s, one fetch at a time, beside the vector indexer, so a save never waits for an image. A snapshot recorded with an image URL is `pending` (migration 10 backfills every stored image URL). Writes compare and set on `pending` for the same URL, so a late result cannot replace a stored image.
+  - **Retries.** A network error, timeout, 408, 429 or 5xx retries after 1 min, doubling up to 1 h, and ends as `none` on the fifth failure. A refusal by the address rules ends as `refused`; a non-image, a body over 2 MB, a header over 40 megapixels or another 4xx ends as `none` at once. Backoffs are kept in memory, so a restart tries every pending image again. A shutdown abort leaves the image `pending`.
+  - **Types.** The magic bytes decide (PNG, JPEG, GIF, WebP); SVG and AVIF are refused. An upstream `image/*`, `application/octet-stream` or `binary/octet-stream` is read.
+  - **One rule set.** The page and image fetchers share `fetch/guarded-request.ts`. The JSON fetcher for OAuth metadata, which never follows redirects, keeps its own.
+  - **Not in this change:** a space-color fallback for a card with no image (#96, #97), images in MCP output, re-fetching when a page changes.
+
 - **2026-10-14:** Every app the owner allows gets a refresh token (#102, comments 6169832338 and 6170186544). ChatGPT asked for `links` only, so it had to reconnect every hour.
   - **The server adds `offline_access`.** The MCP spec says servers "SHOULD NOT include `offline_access` in `WWW-Authenticate` scope or Protected Resource Metadata `scopes_supported`" and that "the AS retains discretion". So `src/auth/offline-access.ts` adds it to an authorize request's one `scope` when it is missing; better-auth decides the rest.
   - **Refreshes too.** A refresh asking for less would get a successor token that never rotates (#105), so the same rule applies to refresh requests.

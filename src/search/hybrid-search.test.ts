@@ -391,6 +391,26 @@ describe("HybridSearch over a real database", () => {
     );
     expect(none.traces[0]).toMatchObject({ mode: "hybrid", meaningCandidates: 0 });
   });
+
+  it("passes `before` to a blank listing and refuses it with a word query", async () => {
+    const db = openDatabase(":memory:");
+    dbs.push(db);
+    const store = new SqliteStore(db);
+    store.ensureUser(OWNER, OWNER);
+    let clock = 1;
+    const deps = { store, now: () => new Date(clock++) };
+    const ids: string[] = [];
+    for (const i of [0, 1, 2]) {
+      const { link } = await saveLink(deps, OWNER, { url: `https://ex.com/${i}`, savedBy: "t" });
+      ids.push(link.id);
+    }
+    const { embedder, texts } = countingEmbedder();
+    const hybrid = new HybridSearch(new FtsSearch(db), fakeVectors([]), embedder, KEY);
+    const before = { savedAt: new Date(3), id: ids[2] as string };
+    expect(await hybrid.search(OWNER, "", { before }, 5)).toEqual([ids[1], ids[0]]);
+    await expect(hybrid.search(OWNER, "solar", { before }, 5)).rejects.toThrow(/blank query/);
+    expect(texts).toEqual([]);
+  });
 });
 
 describe("HybridSearch query timeout (D-T11)", () => {

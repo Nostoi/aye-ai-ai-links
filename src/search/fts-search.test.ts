@@ -179,6 +179,41 @@ describe("FtsSearch filters", () => {
     expect(await s.find("", { savedFrom: from, savedTo: to })).toEqual([late, mid]);
     expect(await s.find("", { savedFrom: new Date(2_001), savedTo: new Date(2_999) })).toEqual([]);
   });
+
+  it("filters by state, in a query and in a blank listing", async () => {
+    const s = setup();
+    const active = await s.save("a", { title: "quokka" });
+    const done = await s.save("a", { title: "quokka" });
+    await s.deps.store.update("a", done, { state: "archived" });
+    expect(await s.find("quokka", { state: "active" })).toEqual([active]);
+    expect(await s.find("", { state: "active" })).toEqual([active]);
+    expect(await s.find("", { state: "archived" })).toEqual([done]);
+    expect(await s.find("")).toEqual([done, active]);
+  });
+
+  it("lists a blank query's links older than `before`, ties broken by id", async () => {
+    const s = setup();
+    const first = await s.save("a", { at: 1_000 });
+    const tiedLow = await s.save("a", { at: 2_000 });
+    const tiedHigh = await s.save("a", { at: 2_000 });
+    const newest = await s.save("a", { at: 3_000 });
+    await s.save("b", { at: 1_500 });
+    expect(await s.find("")).toEqual([newest, tiedHigh, tiedLow, first]);
+    const olderThan = (id: string, at: number) =>
+      s.find("", { before: { savedAt: new Date(at), id } });
+    expect(await olderThan(newest, 3_000)).toEqual([tiedHigh, tiedLow, first]);
+    expect(await olderThan(tiedHigh, 2_000)).toEqual([tiedLow, first]);
+    expect(await olderThan(tiedLow, 2_000)).toEqual([first]);
+    expect(await olderThan(first, 1_000)).toEqual([]);
+  });
+
+  it("refuses `before` with a word query", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "quokka" });
+    await expect(s.find("quokka", { before: { savedAt: new Date(9_999), id } })).rejects.toThrow(
+      /blank query/,
+    );
+  });
 });
 
 describe("FtsSearch query handling", () => {

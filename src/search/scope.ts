@@ -2,8 +2,8 @@ import type { SearchFilters } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 
 /**
- * The owner, tag, project and date conditions every query shares; `ownerCol` is its owner column.
- * Callers must alias `links` as `l`.
+ * The owner, tag, project, date and state conditions every query shares; `ownerCol` is its owner
+ * column. Callers must alias `links` as `l`. `before` is not one: only a blank listing pages.
  */
 export function scope(ownerCol: string, owner: OwnerId, filters: SearchFilters) {
   const where = [`${ownerCol} = ?`];
@@ -24,6 +24,10 @@ export function scope(ownerCol: string, owner: OwnerId, filters: SearchFilters) 
   if (filters.savedTo) {
     where.push("l.saved_at <= ?");
     params.push(filters.savedTo.getTime());
+  }
+  if (filters.state !== undefined) {
+    where.push("l.state = ?");
+    params.push(filters.state);
   }
   return { where: where.join(" AND "), params };
 }

@@ -39,6 +39,15 @@ export function queryKind(query: string): QueryKind {
   return buildMatch(query) === "" ? "no_words" : "words";
 }
 
+/** The query's kind; `before` with a non-blank query is refused, as `LinkSearch` says. */
+export function checkedKind(query: string, filters: SearchFilters): QueryKind {
+  const kind = queryKind(query);
+  if (filters.before && kind !== "blank") {
+    throw new Error("`before` pages a blank query only; this query is not blank.");
+  }
+  return kind;
+}
+
 /** Keyword search over the `link_search` and `snapshot_search` tables that the store's triggers keep current. */
 export class FtsSearch implements LinkSearch {
   constructor(private readonly db: Database) {}
@@ -50,13 +59,17 @@ export class FtsSearch implements LinkSearch {
     limit: number,
     trace?: (t: SearchTrace) => void,
   ) {
-    const kind = queryKind(query);
+    const kind = checkedKind(query, filters);
     if (kind === "no_words") return [];
     if (kind === "blank") {
       const q = scope("l.owner_id", owner, filters);
+      const { before } = filters;
+      const older = before ? " AND (l.saved_at < ? OR (l.saved_at = ? AND l.id < ?))" : "";
+      const at = before?.savedAt.getTime() ?? 0;
       return this.ids(
-        `SELECT l.id FROM links l WHERE ${q.where} ORDER BY ${NEWEST} LIMIT ?`,
+        `SELECT l.id FROM links l WHERE ${q.where}${older} ORDER BY ${NEWEST} LIMIT ?`,
         ...q.params,
+        ...(before ? [at, at, Number(before.id)] : []),
         limit,
       );
     }

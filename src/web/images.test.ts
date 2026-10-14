@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
-import { png } from "../fetch/image-fixtures.js";
+import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";

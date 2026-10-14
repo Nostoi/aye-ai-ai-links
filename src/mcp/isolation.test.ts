@@ -22,7 +22,7 @@ import {
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { createDeps } from "../deps.js";
-import { png } from "../fetch/image-fixtures.js";
+import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";

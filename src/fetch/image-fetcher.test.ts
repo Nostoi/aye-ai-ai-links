@@ -7,7 +7,7 @@ import type { ImageFetcher, ImageOutcome } from "../core/fetch.js";
 import { isPublicAddress } from "./address-policy.js";
 import type { Resolve } from "./guarded-lookup.js";
 import { createImageFetcher, MAX_IMAGE_BYTES } from "./image-fetcher.js";
-import { gif, png, svg } from "./image-fixtures.js";
+import { gif, png, svg } from "./image-test-kit.js";
 
 /*
  * The layout of guarded-fetcher.test.ts. No test touches the network.
@@ -53,6 +53,8 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return send("image/png", gif(10, 10));
     case "png-untyped":
       return send(null, PNG);
+    case "png-as-html":
+      return send("text/html", PNG);
     case "svg-as-png":
       return send("image/png", svg);
     case "svg":
@@ -182,7 +184,8 @@ describe("what is not kept", () => {
     ["an SVG", "/svg", "image/svg+xml"],
     ["an HTML page", "/html", "text/html"],
     ["an untyped body", "/png-untyped", ""],
-  ])("refuses %s by its header, as not_image", async (_, path, contentType) => {
+    ["a real PNG served as text/html", "/png-as-html", "text/html"],
+  ])("refuses %s as not_image, reporting the server's type", async (_, path, contentType) => {
     expect(await fetchPath(path)).toEqual({ kind: "not_image", contentType });
   });
 

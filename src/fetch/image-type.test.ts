@@ -8,7 +8,7 @@ import {
   webpExtended,
   webpLossless,
   webpLossy,
-} from "./image-fixtures.js";
+} from "./image-test-kit.js";
 import { readImageHeader } from "./image-type.js";
 
 describe("readImageHeader", () => {

@@ -30,8 +30,8 @@ export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
 /**
  * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
  * The one exception to `NO_STORE` (owner ruling on #94): a URL carrying the image's current
- * version is cached privately for a year, since a new image gets a new version, and signing out
- * clears the browser's cache (`src/auth/http.ts`).
+ * version is cached privately for a year, since a new image gets a new version, and the sign-out
+ * response sends `Clear-Site-Data: "cache"` (`src/auth/http.ts`).
  */
 const imageHeaders = (contentType: string, cached: boolean) => ({
   "Content-Type": contentType,

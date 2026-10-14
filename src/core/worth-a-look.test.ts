@@ -133,6 +133,14 @@ describe("markOpened", () => {
     expect(await ids()).toContain(l.id);
   });
 
+  it("records the opening and the surfacing at one instant, though the clock moves", async () => {
+    const l = await link();
+    let tick = 0;
+    await markOpened({ ...deps(), now: () => at(tick++) }, A, l.id);
+    const after = await get(l.id);
+    expect(after.lastSurfacedAt).toEqual(after.lastOpenedAt);
+  });
+
   it("writes no search log row", async () => {
     const l = await link();
     await markOpened(deps(), A, l.id);
@@ -160,6 +168,15 @@ describe("Not now", () => {
     expect(until).toEqual(at(SNOOZE_MS));
     expect(SNOOZE_MS).toBe(14 * DAY);
     expect(await get(l.id)).toMatchObject({ lastSurfacedAt: NOW, snoozedUntil: at(SNOOZE_MS) });
+  });
+
+  it("marks and snoozes from one instant, though the clock moves while it runs", async () => {
+    const l = await link();
+    let tick = 0;
+    const until = await snoozeLink({ ...deps(), now: () => at(tick++) }, A, l.id);
+    const after = await get(l.id);
+    expect(after.snoozedUntil).toEqual(until);
+    expect(until.getTime() - (after.lastSurfacedAt as Date).getTime()).toBe(SNOOZE_MS);
   });
 
   it("undo clears the snooze it set", async () => {

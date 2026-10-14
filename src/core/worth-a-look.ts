@@ -34,14 +34,17 @@ export async function worthALook(deps: WorthDeps, owner: OwnerId): Promise<Diges
  * it out for the digest's cooldown. Never logged as a search result's open.
  */
 export async function markOpened(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
-  await updateLink(deps, owner, id, { opened: true });
-  await claimSurfaced(deps, owner, [id]);
+  const now = deps.now();
+  const at = { store: deps.store, now: () => now };
+  await updateLink(at, owner, id, { opened: true });
+  await claimSurfaced(at, owner, [id]);
 }
 
 /** Not now: marks the link surfaced, then snoozes it for SNOOZE_MS. Returns when the snooze ends. */
 export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<Date> {
-  await claimSurfaced(deps, owner, [id]);
-  const until = new Date(deps.now().getTime() + SNOOZE_MS);
+  const now = deps.now();
+  await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
+  const until = new Date(now.getTime() + SNOOZE_MS);
   await updateLink(deps, owner, id, { snoozedUntil: until });
   return until;
 }

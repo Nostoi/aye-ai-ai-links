@@ -96,11 +96,14 @@ describe("readImageHeader", () => {
     });
   });
 
-  it("refuses a JPEG with a restart marker before its frame, which would desync the walk", () => {
+  it.each([
+    ["a restart marker", 0xd0],
+    ["a stuffed zero", 0x00],
+  ])("refuses a JPEG with %s before its frame, which would desync the walk", (_, marker) => {
     const payload = Buffer.alloc(65_530);
     Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x01, 0x00, 0x01]).copy(payload, 65_515);
     const crafted = Buffer.concat([
-      Buffer.from([0xff, 0xd8, 0xff, 0xd0]),
+      Buffer.from([0xff, 0xd8, 0xff, marker]),
       jpegSegment(0xef, payload),
       jpeg(8000, 8000).subarray(2 + 18),
     ]);
@@ -110,6 +113,8 @@ describe("readImageHeader", () => {
   it.each([
     ["RST7", 0xd7],
     ["TEM", 0x01],
+    ["SOS", 0xda],
+    ["JPG0", 0xf0],
   ])("refuses a JPEG with %s before its frame", (_, marker) => {
     const bytes = jpeg(640, 480);
     const withMarker = Buffer.concat([

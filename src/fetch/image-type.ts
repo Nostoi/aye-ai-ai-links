@@ -40,6 +40,13 @@ function gif(b: Buffer): ImageHeader | null {
   return null;
 }
 
+/** Segments a decoder skips before the frame: DHT, DAC, DQT, DNL, DRI, APP0-APP15 and COM. */
+function skippedBeforeFrame(marker: number): boolean {
+  return (
+    [0xc4, 0xcc, 0xdb, 0xdc, 0xdd, 0xfe].includes(marker) || (marker >= 0xe0 && marker <= 0xef)
+  );
+}
+
 /** Walks the marker segments to the first frame header (SOF0-SOF15, except DHT, JPG and DAC). */
 function jpeg(b: Buffer): ImageHeader | null {
   const end = Math.min(b.length, JPEG_SCAN_BYTES);
@@ -51,13 +58,13 @@ function jpeg(b: Buffer): ImageHeader | null {
       at += 1;
       continue;
     }
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) return null;
     const length = b.readUInt16BE(at + 2);
     if (length < 2) return null;
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
       if (at + 9 > end) return null;
       return { type: "image/jpeg", width: b.readUInt16BE(at + 7), height: b.readUInt16BE(at + 5) };
     }
+    if (!skippedBeforeFrame(marker)) return null;
     at += 2 + length;
   }
   return null;

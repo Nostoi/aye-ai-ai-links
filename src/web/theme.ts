@@ -90,7 +90,7 @@ kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);bo
 .home form{max-width:620px;margin:0 auto}
 .question{text-align:center;font-size:30px;font-weight:700;letter-spacing:-.3px;margin:0 0 18px}
 .hint{text-align:center;margin:12px 0 0}
-main>form{max-width:720px;margin:0 0 36px}
+.search-page{max-width:720px;margin:0 0 36px}
 .results{list-style:none;padding:0;margin:0 0 40px;display:flex;flex-direction:column;gap:16px}
 .result{display:flex;flex-wrap:wrap;max-width:none;margin:0;background:var(--surface);border-radius:18px;overflow:hidden;box-shadow:0 2px 10px #0000000b}
 .tile{flex:0 0 168px;min-height:120px;background:var(--line)}

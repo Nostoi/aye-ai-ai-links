@@ -267,7 +267,7 @@ export const searchPage = ({ query, links, now }: { query: string; links: Link[]
   page(
     "Search · Aye-AI-AI Links",
     `<main>
-<form action="/search" method="get" role="search">
+<form class="search-page" action="/search" method="get" role="search">
 <label class="visually-hidden" for="q">Search your links</label>
 <div class="search-box">
 <input id="q" name="q" type="search" value="${escapeHtml(query)}">

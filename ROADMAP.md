@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** The web search page (#93; rulings in comments [6170507254](https://github.com/Nostoi/aye-ai-ai-links/issues/93#issuecomment-6170507254) and [6170580076](https://github.com/Nostoi/aye-ai-ai-links/issues/93#issuecomment-6170580076)). Web searches are not logged until the page records which link is opened, so `search_log` holds agent searches only. A blank search lists the newest links. A saved link opens in a new tab (`src/web/AGENTS.md`). The menu shows only pages that exist.
 - **2026-10-14:** The public address moves from Tailscale Funnel to a Cloudflare Tunnel on the owner's domain (#102; comments 6159690488, 6168949364 and 6169170865).
   - **Why.** ChatGPT's servers got a 502 through the Funnel address, and the app recorded no request from them; a request from ChatGPT through a Cloudflare tunnel reached the app.
   - **Tailnet.** Tailscale Serve stays for agent keys.

@@ -43,6 +43,7 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     updateTag: (owner, key, patch, expected) => inner.updateTag(owner, key, patch, expected),
     listLinks: (owner) => inner.listLinks(owner),
     claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
+    updateIf: (owner, id, expected, patch) => inner.updateIf(owner, id, expected, patch),
     ...over,
   };
 }
@@ -923,6 +924,7 @@ export function describeStoreContract(
         get: (s: LinkStore, id: string) => s.get(A, id),
         update: (s: LinkStore, id: string) => s.update(A, id, patch),
         fillWhyIfMissing: (s: LinkStore, id: string) => s.fillWhyIfMissing(A, id, why),
+        updateIf: (s: LinkStore, id: string) => s.updateIf(A, id, {}, patch),
       };
       const snapshot = async () => [
         await h.all(A),
@@ -1111,6 +1113,89 @@ export function describeStoreContract(
         expect(await h.store.claimSurfaced(A, [], when)).toEqual([]);
         expect(await h.store.claimSurfaced(B, [mine.id], when)).toEqual([]);
         expect((await h.store.get(A, mine.id))?.lastSurfacedAt).toBeNull();
+      });
+    });
+
+    describe("updateIf", () => {
+      const snoozed = new Date("2026-04-01T10:20:30.456Z");
+      const seed = async (owner: string, n: number, over: Partial<Link> = {}) =>
+        (
+          await h.store.insertIfAbsent(owner, {
+            url: `https://ex.com/${n}`,
+            urlKey: `https://ex.com/${n}`,
+            title: "t",
+            summary: null,
+            why: null,
+            tags: [],
+            savedAt: new Date("2026-01-01T00:00:00Z"),
+            savedBy: "t",
+            lastOpenedAt: null,
+            lastSurfacedAt: null,
+            snoozedUntil: null,
+            state: "active",
+            ...over,
+          })
+        ).link;
+
+      it("applies the patch while state and snoozedUntil still match, and says so", async () => {
+        const link = await seed(A, 1, { state: "archived", snoozedUntil: snoozed });
+        const result = await h.store.updateIf(
+          A,
+          link.id,
+          { state: "archived", snoozedUntil: new Date(snoozed) },
+          { state: "active", snoozedUntil: null },
+        );
+        expect(result?.applied).toBe(true);
+        expect(result?.link).toMatchObject({ state: "active", snoozedUntil: null });
+        expect(await h.store.get(A, link.id)).toEqual(result?.link);
+      });
+
+      it("writes nothing once a field moved on, and returns the link as it is", async () => {
+        const link = await seed(A, 1, { state: "archived", snoozedUntil: snoozed });
+        const before = await h.store.get(A, link.id);
+        const later = new Date(snoozed.getTime() + 1);
+        for (const expected of [
+          { state: "active" as const },
+          { snoozedUntil: later },
+          { snoozedUntil: null },
+          { state: "archived" as const, snoozedUntil: later },
+        ]) {
+          const result = await h.store.updateIf(A, link.id, expected, { title: "changed" });
+          expect(result, JSON.stringify(expected)).toEqual({ link: before, applied: false });
+        }
+        expect(await h.store.get(A, link.id)).toEqual(before);
+      });
+
+      it("matches a why only by its source, with null for no why", async () => {
+        const none = await seed(A, 1);
+        const guess = await seed(A, 2, { why: { text: "g", source: "inferred" } });
+        const said = await seed(A, 3, { why: { text: "s", source: "stated" } });
+        const asked = await seed(A, 4, { why: { text: "a", source: "asked" } });
+        const answer: Labelled = { text: "mine", source: "asked" };
+        const results = [];
+        for (const link of [none, guess, said, asked]) {
+          const result = await h.store.updateIf(
+            A,
+            link.id,
+            { whySource: [null, "inferred"] },
+            { why: answer },
+          );
+          results.push(result?.applied);
+        }
+        expect(results).toEqual([true, true, false, false]);
+        expect((await h.store.get(A, none.id))?.why).toEqual(answer);
+        expect((await h.store.get(A, guess.id))?.why).toEqual(answer);
+        expect((await h.store.get(A, said.id))?.why).toEqual({ text: "s", source: "stated" });
+        expect((await h.store.get(A, asked.id))?.why).toEqual({ text: "a", source: "asked" });
+      });
+
+      it("never matches another owner's link: null, and that link is unchanged", async () => {
+        const theirs = await seed(B, 1, { state: "archived" });
+        const before = structuredClone(await h.all(B));
+        expect(
+          await h.store.updateIf(A, theirs.id, { state: "archived" }, { state: "active" }),
+        ).toBeNull();
+        expect(await h.all(B)).toEqual(before);
       });
     });
 

@@ -14,7 +14,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
-import type { LinkStore, SurfacedClaim } from "./store.js";
+import type { LinkExpectation, LinkStore, SurfacedClaim } from "./store.js";
 import type {
   Labelled,
   Link,
@@ -238,6 +238,18 @@ export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImag
     if (patch.kindSource !== undefined) entry.kindSource = patch.kindSource;
     if (patch.projectStatus !== undefined) entry.projectStatus = patch.projectStatus;
     return structuredClone(entry);
+  }
+
+  async updateIf(owner: OwnerId, id: string, expected: LinkExpectation, patch: LinkPatch) {
+    const found = this.owned(owner).get(id);
+    if (!found) return null;
+    const matches =
+      (expected.state === undefined || found.state === expected.state) &&
+      (expected.snoozedUntil === undefined ||
+        (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
+      (expected.whySource === undefined || expected.whySource.includes(found.why?.source ?? null));
+    if (!matches) return { link: this.view(owner, found), applied: false };
+    return { link: (await this.update(owner, id, patch)) as Link, applied: true };
   }
 
   async listLinks(owner: OwnerId) {

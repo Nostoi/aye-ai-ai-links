@@ -2,8 +2,10 @@ import type {
   Labelled,
   Link,
   LinkPatch,
+  LinkState,
   NewLink,
   OwnerId,
+  Source,
   Tag,
   TagKind,
   TagPatch,
@@ -94,6 +96,29 @@ export interface LinkStore {
     ids: string[],
     when: { at: Date; notSurfacedAfter: Date; now: Date },
   ): Promise<SurfacedClaim[]>;
+
+  /**
+   * Conditional write, in one atomic step: apply `patch` as `update` does, but only while the
+   * link still matches every field `expected` names. Returns the link as it is afterwards, with
+   * `applied` saying whether the patch was written, or null when absent or foreign; then nothing
+   * is written.
+   */
+  updateIf(
+    owner: OwnerId,
+    id: string,
+    expected: LinkExpectation,
+    patch: LinkPatch,
+  ): Promise<{ link: Link; applied: boolean } | null>;
 }
+
+/**
+ * What a conditional write expects of a link. `snoozedUntil` matches to the millisecond, and
+ * `whySource` lists the accepted sources of its why, with null for no why.
+ */
+export type LinkExpectation = {
+  state?: LinkState;
+  snoozedUntil?: Date | null;
+  whySource?: (Source | null)[];
+};
 
 export type SurfacedClaim = { link: Link; previousSurfacedAt: Date | null };

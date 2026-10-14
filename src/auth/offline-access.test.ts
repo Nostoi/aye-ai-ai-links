@@ -61,19 +61,23 @@ describe("refresh tokens for connected apps", () => {
     expect(res.status).toBe(200);
   });
 
-  it("keeps rotating when an app refreshes asking for links only, so a used refresh token is refused", async () => {
-    const world = await oauthWorld();
-    const { refresh: r0 } = await connectClaude(world);
-    const first = await refresh(world, r0, { client_id: CLAUDE_ID, scope: "links" });
-    expect(first.status).toBe(200);
-    const r1 = field(first, "refresh_token");
-    const second = await refresh(world, r1, { client_id: CLAUDE_ID, scope: "links" });
-    expect(second.status).toBe(200);
-    expect(field(second, "refresh_token")).not.toBe("");
-    const replay = await refresh(world, r1, { client_id: CLAUDE_ID, scope: "links" });
-    expect(replay.status).toBe(400);
-    expect(field(replay, "error")).toBe("invalid_grant");
-  });
+  it.each([["refresh_token"], ["refresh_token "], [" refresh_token"], ["refresh_token\t"]])(
+    "keeps rotating when an app refreshes asking for links only (grant_type %j), so a used refresh token is refused",
+    async (grantType) => {
+      const world = await oauthWorld();
+      const { refresh: r0 } = await connectClaude(world);
+      const form = { client_id: CLAUDE_ID, scope: "links", grant_type: grantType };
+      const first = await refresh(world, r0, form);
+      expect(first.status).toBe(200);
+      const r1 = field(first, "refresh_token");
+      const second = await refresh(world, r1, form);
+      expect(second.status).toBe(200);
+      expect(field(second, "refresh_token")).not.toBe("");
+      const replay = await refresh(world, r1, form);
+      expect(replay.status).toBe(400);
+      expect(field(replay, "error")).toBe("invalid_grant");
+    },
+  );
 
   it("still refuses an authorize request with two scope parameters", async () => {
     const world = await oauthWorld();

@@ -44,6 +44,5 @@ export function tokenForm(contentType: string | null, body: Uint8Array | null): 
   if (new Set(names).size !== names.length) {
     return { status: 400, description: "A parameter was repeated." };
   }
-  const widened = form.get("grant_type") === "refresh_token" ? withOfflineAccess(form) : null;
-  return { body: new TextEncoder().encode((widened ?? form).toString()) };
+  return { body: new TextEncoder().encode((withOfflineAccess(form) ?? form).toString()) };
 }

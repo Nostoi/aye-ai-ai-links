@@ -119,6 +119,25 @@ kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);bo
 .result p{margin:0 0 8px}
 .not-it{max-width:720px;background:var(--surface);border-radius:18px;padding:18px 22px}
 .not-it p{margin:0 0 4px}
+.tags{max-width:760px}
+.tags h1{margin-bottom:8px}
+.tags .lead{margin-bottom:28px}
+.tag-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
+.tag{max-width:none;margin:0;background:var(--surface);border-radius:18px;padding:12px 14px 12px 22px;box-shadow:0 2px 10px #0000000b}
+.tag-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.tag-row h2{flex:1 1 200px;min-width:0;font-size:18px;margin:0;overflow-wrap:anywhere}
+.tag .kind{margin-left:10px;font-size:14px;font-weight:400;color:var(--soft);white-space:nowrap}
+.dot{display:inline-block;width:14px;height:14px;margin-right:10px;border-radius:50%;background:var(--space,var(--line))}
+.tag button{min-height:44px;padding:0 18px}
+.tag .pill{border-color:var(--field)}
+.tag .pill[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.tag-edit{display:flex;flex-wrap:wrap;gap:16px 32px;padding:16px 0 6px;margin-top:12px;border-top:1.5px solid var(--line)}
+.tag-edit fieldset{border:0;margin:0;padding:0;min-width:0}
+.tag-edit legend{font-size:14px;color:var(--soft);padding:0;margin:0 0 8px}
+.tag-edit p{margin:8px 0 0}
+.choices,.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.tag .swatch{width:44px;padding:0;border-radius:50%;background:var(--space);border:4px solid var(--surface);box-shadow:0 0 0 2px transparent}
+.tag .swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--ink)}
 ${spaceClasses}
 @media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;

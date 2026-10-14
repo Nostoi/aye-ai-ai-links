@@ -120,4 +120,44 @@ describe("refresh tokens for connected apps", () => {
       },
     );
   });
+
+  describe("a token request whose Content-Type is not exactly the form type", () => {
+    const FORM = "application/x-www-form-urlencoded";
+    const types = [
+      `text/plain, ${FORM}`,
+      `${FORM}, ${FORM}`,
+      `${FORM},`,
+      `multipart/form-data; boundary=x, ${FORM}`,
+      "application/json",
+    ];
+    const tokenPost = (world: World, contentType: string, r0: string) =>
+      world.agent().send("/api/auth/oauth2/token", {
+        method: "POST",
+        origin: false,
+        headers: { "content-type": contentType },
+        rawForm: `grant_type=refresh_token&refresh_token=${r0}&client_id=${encodeURIComponent(CLAUDE_ID)}&resource=${encodeURIComponent(RESOURCE)}&scope=links`,
+      });
+
+    it.each(types)("is refused for %s, leaving the refresh token unspent", async (contentType) => {
+      const world = await oauthWorld();
+      const { refresh: r0 } = await connectClaude(world);
+      const refused = await tokenPost(world, contentType, r0);
+      expect(refused.status).toBe(415);
+      expect(field(refused, "error")).toBe("invalid_request");
+      const first = await refresh(world, r0, { client_id: CLAUDE_ID, scope: "links" });
+      expect(first.status).toBe(200);
+      const replay = await refresh(world, r0, { client_id: CLAUDE_ID, scope: "links" });
+      expect(replay.status).toBe(400);
+      expect(field(replay, "error")).toBe("invalid_grant");
+    });
+
+    it("still serves a form with a charset parameter", async () => {
+      const world = await oauthWorld();
+      const { refresh: r0 } = await connectClaude(world);
+      const res = await tokenPost(world, `${FORM}; charset=UTF-8`, r0);
+      expect(res.status).toBe(200);
+      expect(field(res, "scope")).toBe("links offline_access");
+      expect(field(res, "refresh_token")).not.toBe("");
+    });
+  });
 });

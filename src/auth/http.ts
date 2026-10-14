@@ -2,11 +2,7 @@ import { Hono } from "hono";
 import { createRateLimiter, type RateLimiter, type RateLimitOptions } from "../http/rate-limit.js";
 import type { WithAuthLock } from "./auth-lock.js";
 import { AUTH_BASE_PATH } from "./better-auth.js";
-import {
-  authorizeWithOfflineAccess,
-  refreshWithOfflineAccess,
-  repeatsParameter,
-} from "./offline-access.js";
+import { authorizeWithOfflineAccess, tokenForm } from "./offline-access.js";
 
 /** The global limits that apply before the lock, each counted for everyone together. */
 export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register";
@@ -195,17 +191,16 @@ export function authApp({
     const headers = new Headers(raw.headers);
     if (policy.offlineAccess === "query") url = authorizeWithOfflineAccess(url);
     if (policy.offlineAccess === "form") {
-      if (repeatsParameter(raw.headers.get("content-type"), body)) {
+      const form = tokenForm(raw.headers.get("content-type"), body);
+      if ("status" in form) {
         return c.json(
-          { error: "invalid_request", error_description: "A parameter was repeated." },
-          400,
+          { error: "invalid_request", error_description: form.description },
+          form.status,
         );
       }
-      const widened = refreshWithOfflineAccess(raw.headers.get("content-type"), body);
-      if (widened) {
-        body = widened;
-        headers.delete("content-length");
-      }
+      body = form.body;
+      headers.set("content-type", "application/x-www-form-urlencoded");
+      headers.delete("content-length");
     }
     const request = new Request(url, { method: raw.method, headers, body });
     if (policy.gate && authorize) return authorize(request);

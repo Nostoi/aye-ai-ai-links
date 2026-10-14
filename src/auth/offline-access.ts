@@ -27,28 +27,23 @@ export function authorizeWithOfflineAccess(url: string): string {
   return parsed.toString();
 }
 
-function formOf(contentType: string | null, body: Uint8Array | null): URLSearchParams | null {
-  if (!body || !/^application\/x-www-form-urlencoded\s*(?:;|$)/i.test(contentType ?? "")) {
-    return null;
+const FORM_TYPE = /^application\/x-www-form-urlencoded\s*(?:;|$)/i;
+
+/** What the token route forwards: the form re-encoded, or the refusal to send back. */
+export type TokenForm =
+  | { body: Uint8Array<ArrayBuffer> }
+  | { status: 400 | 415; description: string };
+
+/** Parses a token request's body once and re-encodes it, so better-auth reads only what was checked. */
+export function tokenForm(contentType: string | null, body: Uint8Array | null): TokenForm {
+  if (!FORM_TYPE.test(contentType ?? "")) {
+    return { status: 415, description: "The body must be application/x-www-form-urlencoded." };
   }
-  return new URLSearchParams(new TextDecoder().decode(body));
-}
-
-/** Whether a form-encoded body names any parameter more than once. */
-export function repeatsParameter(contentType: string | null, body: Uint8Array | null): boolean {
-  const form = formOf(contentType, body);
-  if (!form) return false;
+  const form = new URLSearchParams(body ? new TextDecoder().decode(body) : "");
   const names = [...form.keys()];
-  return new Set(names).size !== names.length;
-}
-
-/** A form-encoded refresh request's body with `offline_access` added, or null to keep it. */
-export function refreshWithOfflineAccess(
-  contentType: string | null,
-  body: Uint8Array | null,
-): Uint8Array<ArrayBuffer> | null {
-  const form = formOf(contentType, body);
-  if (form?.get("grant_type") !== "refresh_token") return null;
-  const params = withOfflineAccess(form);
-  return params ? new TextEncoder().encode(params.toString()) : null;
+  if (new Set(names).size !== names.length) {
+    return { status: 400, description: "A parameter was repeated." };
+  }
+  const widened = form.get("grant_type") === "refresh_token" ? withOfflineAccess(form) : null;
+  return { body: new TextEncoder().encode((widened ?? form).toString()) };
 }

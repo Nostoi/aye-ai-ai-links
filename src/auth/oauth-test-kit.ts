@@ -156,7 +156,7 @@ export class Agent {
       headers?: Record<string, string>;
       json?: unknown;
       form?: Record<string, string>;
-      /** A form body sent as written, for names a record cannot repeat. */
+      /** A form body sent as written, for names a record cannot repeat; a `content-type` header is kept. */
       rawForm?: string;
       origin?: boolean;
     } = {},
@@ -172,7 +172,7 @@ export class Agent {
       body = new URLSearchParams(form).toString();
     }
     if (rawForm !== undefined) {
-      h.set("content-type", "application/x-www-form-urlencoded");
+      if (!h.has("content-type")) h.set("content-type", "application/x-www-form-urlencoded");
       body = rawForm;
     }
     if (origin && !h.has("origin")) h.set("origin", TEST_BASE_URL);

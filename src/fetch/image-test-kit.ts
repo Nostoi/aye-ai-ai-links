@@ -27,17 +27,41 @@ export const png = (width: number, height: number, tail: Buffer = Buffer.alloc(1
     tail,
   ]);
 
-export const gif = (width: number, height: number) =>
-  Buffer.concat([Buffer.from("GIF89a"), u16le(width), u16le(height), Buffer.alloc(8)]);
+type GifFrame = { left: number; top: number; width: number; height: number };
 
-/** A JPEG with an APP0 segment before its baseline SOF0 frame header. */
-export const jpeg = (width: number, height: number) =>
+export const gif = (
+  width: number,
+  height: number,
+  { frame, extensions = [] }: { frame?: GifFrame; extensions?: Buffer[] } = {},
+) => {
+  const f = frame ?? { left: 0, top: 0, width, height };
+  return Buffer.concat([
+    Buffer.from("GIF89a"),
+    u16le(width),
+    u16le(height),
+    Buffer.from([0x80, 0, 0]),
+    Buffer.alloc(6),
+    ...extensions,
+    Buffer.from([0x2c]),
+    u16le(f.left),
+    u16le(f.top),
+    u16le(f.width),
+    u16le(f.height),
+    Buffer.from([0, 2, 2, 0x4c, 0x01, 0, 0x3b]),
+  ]);
+};
+
+export const gifExtension = (label: number, data: Buffer) =>
+  Buffer.concat([Buffer.from([0x21, label, data.length]), data, Buffer.from([0])]);
+
+export const jpeg = (
+  width: number,
+  height: number,
+  before: Buffer[] = [jpegSegment(0xe0, Buffer.from("JFIF\0\0\0\0\0\0\0\0\0\0"))],
+) =>
   Buffer.concat([
     Buffer.from([0xff, 0xd8]),
-    Buffer.from([0xff, 0xe0]),
-    u16be(16),
-    Buffer.from("JFIF\0"),
-    Buffer.alloc(9),
+    ...before,
     Buffer.from([0xff, 0xc0]),
     u16be(17),
     Buffer.from([8]),
@@ -45,6 +69,9 @@ export const jpeg = (width: number, height: number) =>
     u16be(width),
     Buffer.alloc(10),
   ]);
+
+export const jpegSegment = (marker: number, data: Buffer) =>
+  Buffer.concat([Buffer.from([0xff, marker]), u16be(data.length + 2), data]);
 
 const riff = (chunk: string, body: Buffer) =>
   Buffer.concat([

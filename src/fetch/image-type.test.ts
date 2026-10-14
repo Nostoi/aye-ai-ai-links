@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   avif,
   gif,
+  gifExtension,
   jpeg,
+  jpegSegment,
   png,
   svg,
   webpExtended,
@@ -31,7 +33,7 @@ describe("readImageHeader", () => {
   // Each is cut one byte before the end of its size field.
   it.each([
     ["PNG", png(640, 480), 23],
-    ["GIF", gif(640, 480), 9],
+    ["GIF", gif(640, 480), 27],
     ["JPEG", jpeg(640, 480), 28],
     ["lossy WebP", webpLossy(640, 480), 29],
     ["lossless WebP", webpLossless(640, 480), 24],
@@ -39,6 +41,83 @@ describe("readImageHeader", () => {
   ])("refuses a %s cut off before its size", (_, bytes, cut) => {
     expect(readImageHeader(bytes.subarray(0, cut + 1))).not.toBeNull();
     expect(readImageHeader(bytes.subarray(0, cut))).toBeNull();
+  });
+
+  it("reads a GIF's size as the larger of its screen and its first frame's extent", () => {
+    const frame = { left: 0, top: 0, width: 20_000, height: 20_000 };
+    expect(readImageHeader(gif(1, 1, { frame }))).toEqual({
+      type: "image/gif",
+      width: 20_000,
+      height: 20_000,
+    });
+    const offset = { left: 5, top: 7, width: 10, height: 10 };
+    expect(readImageHeader(gif(10, 10, { frame: offset }))).toMatchObject({
+      width: 15,
+      height: 17,
+    });
+    expect(readImageHeader(gif(640, 480, { frame: { ...offset, width: 1 } }))).toMatchObject({
+      width: 640,
+      height: 480,
+    });
+  });
+
+  it("reads a GIF's frame past graphic control, application and comment extensions", () => {
+    const extensions = [
+      gifExtension(0xf9, Buffer.from([0, 10, 0, 0])),
+      gifExtension(0xff, Buffer.from("NETSCAPE2.0")),
+      gifExtension(0xfe, Buffer.from("made by a test")),
+    ];
+    expect(readImageHeader(gif(640, 480, { extensions }))).toEqual({
+      type: "image/gif",
+      width: 640,
+      height: 480,
+    });
+  });
+
+  it("refuses a GIF that ends, or reaches an unknown block, before any frame", () => {
+    const screen = gif(640, 480).subarray(0, 19);
+    expect(readImageHeader(Buffer.concat([screen, Buffer.from([0x3b])]))).toBeNull();
+    expect(readImageHeader(Buffer.concat([screen, Buffer.from([0x99, 0, 0, 0])]))).toBeNull();
+    const unended = Buffer.concat([screen, Buffer.from([0x21, 0xfe, 5, 1, 2])]);
+    expect(readImageHeader(unended)).toBeNull();
+  });
+
+  it("reads a JPEG's frame past APP0, APP1, DQT and DHT segments", () => {
+    const before = [
+      jpegSegment(0xe0, Buffer.from("JFIF\0\x01\x01\0\0\x01\0\x01\0\0")),
+      jpegSegment(0xe1, Buffer.concat([Buffer.from("Exif\0\0"), Buffer.alloc(40)])),
+      jpegSegment(0xdb, Buffer.alloc(65)),
+      jpegSegment(0xc4, Buffer.alloc(30)),
+    ];
+    expect(readImageHeader(jpeg(640, 480, before))).toEqual({
+      type: "image/jpeg",
+      width: 640,
+      height: 480,
+    });
+  });
+
+  it("refuses a JPEG with a restart marker before its frame, which would desync the walk", () => {
+    const payload = Buffer.alloc(65_530);
+    Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x01, 0x00, 0x01]).copy(payload, 65_515);
+    const crafted = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xd0]),
+      jpegSegment(0xef, payload),
+      jpeg(8000, 8000).subarray(2 + 18),
+    ]);
+    expect(readImageHeader(crafted)).toBeNull();
+  });
+
+  it.each([
+    ["RST7", 0xd7],
+    ["TEM", 0x01],
+  ])("refuses a JPEG with %s before its frame", (_, marker) => {
+    const bytes = jpeg(640, 480);
+    const withMarker = Buffer.concat([
+      bytes.subarray(0, 2),
+      Buffer.from([0xff, marker]),
+      bytes.subarray(2),
+    ]);
+    expect(readImageHeader(withMarker)).toBeNull();
   });
 
   it("refuses a JPEG whose markers end before any frame header", () => {

@@ -15,8 +15,29 @@ function png(b: Buffer): ImageHeader | null {
 }
 
 function gif(b: Buffer): ImageHeader | null {
-  if (b.length < 10) return null;
-  return { type: "image/gif", width: b.readUInt16LE(6), height: b.readUInt16LE(8) };
+  if (b.length < 13) return null;
+  const packed = b[10] as number;
+  let at = 13 + (packed & 0x80 ? 3 * 2 ** ((packed & 7) + 1) : 0);
+  while (at < b.length) {
+    const block = b[at];
+    if (block === 0x2c) {
+      if (at + 9 > b.length) return null;
+      return {
+        type: "image/gif",
+        width: Math.max(b.readUInt16LE(6), b.readUInt16LE(at + 1) + b.readUInt16LE(at + 5)),
+        height: Math.max(b.readUInt16LE(8), b.readUInt16LE(at + 3) + b.readUInt16LE(at + 7)),
+      };
+    }
+    if (block !== 0x21) return null;
+    at += 2;
+    for (;;) {
+      if (at >= b.length) return null;
+      const size = b[at] as number;
+      at += 1 + size;
+      if (size === 0) break;
+    }
+  }
+  return null;
 }
 
 /** Walks the marker segments to the first frame header (SOF0-SOF15, except DHT, JPG and DAC). */
@@ -30,6 +51,7 @@ function jpeg(b: Buffer): ImageHeader | null {
       at += 1;
       continue;
     }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) return null;
     const length = b.readUInt16BE(at + 2);
     if (length < 2) return null;
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {

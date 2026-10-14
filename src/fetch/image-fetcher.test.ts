@@ -55,6 +55,11 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return send(null, PNG);
     case "png-as-html":
       return send("text/html", PNG);
+    case "gif-huge-frame":
+      return send(
+        "image/gif",
+        gif(1, 1, { frame: { left: 0, top: 0, width: 20_000, height: 20_000 } }),
+      );
     case "svg-as-png":
       return send("image/png", svg);
     case "svg":
@@ -197,6 +202,10 @@ describe("what is not kept", () => {
     expect(await fetchPath("/bomb")).toEqual({ kind: "too_large" });
   });
 
+  it("refuses a GIF with a 1×1 screen and a 20,000 × 20,000 frame as too_large", async () => {
+    expect(await fetchPath("/gif-huge-frame")).toEqual({ kind: "too_large" });
+  });
+
   it("refuses a PNG declaring 100,000 × 100,000 pixels as too_large", async () => {
     expect(await fetchPath("/huge-pixels")).toEqual({ kind: "too_large" });
   });
@@ -213,6 +222,16 @@ describe("addresses that must never be requested", () => {
     ["to a link-local IP", "/r-link-local"],
   ])("refuses a redirect %s, never reaching it", async (_, path) => {
     expect(await fetchPath(path)).toEqual({ kind: "refused", reason: "address" });
+    expect(targetHits).toBe(0);
+  });
+
+  it.each([
+    ["a loopback", () => `http://127.0.0.1:${targetPort}/x.png`],
+    ["a link-local", () => "http://169.254.169.254/latest/meta-data/"],
+  ])("refuses %s image URL under the default address rule, without a request", async (_, url) => {
+    const f = createImageFetcher();
+    open.push(f);
+    expect(await f.fetch(url())).toEqual({ kind: "refused", reason: "address" });
     expect(targetHits).toBe(0);
   });
 

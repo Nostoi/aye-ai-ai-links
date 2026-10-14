@@ -24,15 +24,22 @@ import { requireSession, type SessionEnv } from "./require-session.js";
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
 
-const isString = (value: unknown): value is string => typeof value === "string";
+type Check<T> = (value: unknown) => value is T;
+const isString: Check<string> = (value) => typeof value === "string";
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
+
+/** The object a shape of member checks accepts. */
+type Shaped<S extends Record<string, Check<unknown>>> = {
+  [K in keyof S]: S[K] extends Check<infer T> ? T : never;
+};
 
 /**
  * Takes a JSON body under the auth body cap, so any client id that can connect fits, and sets
- * `field` to its member `name` when `accepts` does.
+ * `body` to it when it is an object whose members pass each check in `shape`. Other members are
+ * ignored. This checks types only; the rules are core's.
  */
-const jsonField = <T>(name: string, accepts: (value: unknown) => value is T) =>
-  createMiddleware<{ Variables: { field: T } }>(async (c, next) => {
+const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
+  createMiddleware<{ Variables: { body: Shaped<S> } }>(async (c, next) => {
     let raw: Uint8Array | null;
     try {
       raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
@@ -42,12 +49,19 @@ const jsonField = <T>(name: string, accepts: (value: unknown) => value is T) =>
     }
     let value: unknown;
     try {
-      value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()))[name];
+      value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()));
     } catch {}
-    if (!accepts(value)) {
-      return c.json({ code: "BAD_REQUEST", message: `Send a JSON body with a ${name}.` }, 400);
+    const fits =
+      typeof value === "object" &&
+      value !== null &&
+      Object.entries(shape).every(([name, check]) =>
+        check((value as Record<string, unknown>)[name]),
+      );
+    if (!fits) {
+      const names = Object.keys(shape).join(" and ");
+      return c.json({ code: "BAD_REQUEST", message: `Send a JSON body with ${names}.` }, 400);
     }
-    c.set("field", value);
+    c.set("body", value as Shaped<S>);
     await next();
   });
 
@@ -126,27 +140,29 @@ export function webApp({
   // Each POST's body is read, capped, before the session read takes the lock.
 
   // 204 whether or not the app was connected; the page reloads either way.
-  app.post("/connections/disconnect", jsonField("clientId", isString), session, async (c) => {
-    await connections.disconnect(c.get("caller").owner, c.get("field"));
+  app.post("/connections/disconnect", jsonBody({ clientId: isString }), session, async (c) => {
+    await connections.disconnect(c.get("caller").owner, c.get("body").clientId);
     return c.body(null, 204, NO_STORE);
   });
 
   // The key is in this response only; the page shows it once and never puts it in a URL.
-  app.post("/connections/keys", jsonField("name", isString), session, (c) =>
-    keyAction(c, () => c.json(keys.create(c.get("caller").owner, c.get("field")), 200, NO_STORE)),
+  app.post("/connections/keys", jsonBody({ name: isString }), session, (c) =>
+    keyAction(c, () =>
+      c.json(keys.create(c.get("caller").owner, c.get("body").name), 200, NO_STORE),
+    ),
   );
 
-  app.post("/connections/keys/turn-off", jsonField("id", isId), session, (c) =>
+  app.post("/connections/keys/turn-off", jsonBody({ id: isId }), session, (c) =>
     keyAction(c, () => {
-      keys.turnOff(c.get("caller").owner, c.get("field"));
+      keys.turnOff(c.get("caller").owner, c.get("body").id);
       return c.body(null, 204, NO_STORE);
     }),
   );
 
   // The Undo of a turn-off.
-  app.post("/connections/keys/turn-on", jsonField("id", isId), session, (c) =>
+  app.post("/connections/keys/turn-on", jsonBody({ id: isId }), session, (c) =>
     keyAction(c, () => {
-      keys.turnOn(c.get("caller").owner, c.get("field"));
+      keys.turnOn(c.get("caller").owner, c.get("body").id);
       return c.body(null, 204, NO_STORE);
     }),
   );

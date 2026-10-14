@@ -1,12 +1,40 @@
 import type { Database } from "better-sqlite3";
-import type { LinkSearch, SearchFilters, SearchTrace } from "../core/search.js";
+import type {
+  LinkCount,
+  LinkOrder,
+  LinkSearch,
+  SearchFilters,
+  SearchTrace,
+} from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 import { listRanks } from "./list-ranks.js";
 import { scope } from "./scope.js";
 import { STOP_WORDS } from "./stop-words.js";
 
 const withoutControls = (s: string): string => s.replace(/\p{Cc}/gu, " ");
-const NEWEST = "l.saved_at DESC, l.id DESC";
+
+/**
+ * Each order of a blank listing: its sort, the condition keeping rows after a `before` position
+ * (bound to its time twice, then its id), and the condition for being in the list at all.
+ */
+const ORDERS: Record<LinkOrder, { sort: string; after: string; listed: string | null }> = {
+  newest: {
+    sort: "l.saved_at DESC, l.id DESC",
+    after: "(l.saved_at < ? OR (l.saved_at = ? AND l.id < ?))",
+    listed: null,
+  },
+  oldest: {
+    sort: "l.saved_at ASC, l.id ASC",
+    after: "(l.saved_at > ? OR (l.saved_at = ? AND l.id > ?))",
+    listed: null,
+  },
+  opened: {
+    sort: "l.last_opened_at DESC, l.id DESC",
+    after: "(l.last_opened_at < ? OR (l.last_opened_at = ? AND l.id < ?))",
+    listed: "l.last_opened_at IS NOT NULL",
+  },
+};
+const NEWEST = ORDERS.newest.sort;
 
 /** The words of a fragment as the index tokenizer (`unicode61 remove_diacritics 2`) sees them. */
 const tokens = (fragment: string): string[] =>
@@ -39,17 +67,28 @@ export function queryKind(query: string): QueryKind {
   return buildMatch(query) === "" ? "no_words" : "words";
 }
 
-/** The query's kind; `before` with a non-blank query is refused, as `LinkSearch` says. */
+/** The query's kind; `order` or `before` with a non-blank query is refused, as `LinkSearch` says. */
 export function checkedKind(query: string, filters: SearchFilters): QueryKind {
   const kind = queryKind(query);
-  if (filters.before && kind !== "blank") {
-    throw new Error("`before` pages a blank query only; this query is not blank.");
+  if ((filters.before || filters.order !== undefined) && kind !== "blank") {
+    throw new Error("`order` and `before` list a blank query only; this query is not blank.");
   }
   return kind;
 }
 
+/** The owner's links in a blank listing's order, with its scope and its list condition. */
+function listing(owner: OwnerId, filters: SearchFilters) {
+  const order = ORDERS[filters.order ?? "newest"];
+  const q = scope("l.owner_id", owner, filters);
+  return {
+    order,
+    where: order.listed ? `${q.where} AND ${order.listed}` : q.where,
+    params: q.params,
+  };
+}
+
 /** Keyword search over the `link_search` and `snapshot_search` tables that the store's triggers keep current. */
-export class FtsSearch implements LinkSearch {
+export class FtsSearch implements LinkSearch, LinkCount {
   constructor(private readonly db: Database) {}
 
   async search(
@@ -62,13 +101,13 @@ export class FtsSearch implements LinkSearch {
     const kind = checkedKind(query, filters);
     if (kind === "no_words") return [];
     if (kind === "blank") {
-      const q = scope("l.owner_id", owner, filters);
+      const { order, where, params } = listing(owner, filters);
       const { before } = filters;
-      const older = before ? " AND (l.saved_at < ? OR (l.saved_at = ? AND l.id < ?))" : "";
-      const at = before?.savedAt.getTime() ?? 0;
+      const after = before ? ` AND ${order.after}` : "";
+      const at = before?.at.getTime() ?? 0;
       return this.ids(
-        `SELECT l.id FROM links l WHERE ${q.where}${older} ORDER BY ${NEWEST} LIMIT ?`,
-        ...q.params,
+        `SELECT l.id FROM links l WHERE ${where}${after} ORDER BY ${order.sort} LIMIT ?`,
+        ...params,
         ...(before ? [at, at, Number(before.id)] : []),
         limit,
       );
@@ -84,6 +123,13 @@ export class FtsSearch implements LinkSearch {
       ranks: listRanks(ids, { field: fields, page: pageOnly }),
     });
     return ids;
+  }
+
+  /** `LinkCount`: the rows a blank listing in that order pages through. */
+  async count(owner: OwnerId, filters: Omit<SearchFilters, "before">) {
+    const { where, params } = listing(owner, filters);
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM links l WHERE ${where}`).get(...params);
+    return (row as { n: number }).n;
   }
 
   /**

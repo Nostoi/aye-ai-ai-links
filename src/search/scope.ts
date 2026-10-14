@@ -3,7 +3,8 @@ import type { OwnerId } from "../core/types.js";
 
 /**
  * The owner, tag, project, date and state conditions every query shares; `ownerCol` is its owner
- * column. Callers must alias `links` as `l`. `before` is not one: only a blank listing pages.
+ * column. Callers must alias `links` as `l`. `order` and `before` are not: only a blank listing
+ * orders and pages.
  */
 export function scope(ownerCol: string, owner: OwnerId, filters: SearchFilters) {
   const where = [`${ownerCol} = ?`];

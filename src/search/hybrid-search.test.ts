@@ -406,7 +406,7 @@ describe("HybridSearch over a real database", () => {
     }
     const { embedder, texts } = countingEmbedder();
     const hybrid = new HybridSearch(new FtsSearch(db), fakeVectors([]), embedder, KEY);
-    const before = { savedAt: new Date(3), id: ids[2] as string };
+    const before = { at: new Date(3), id: ids[2] as string };
     expect(await hybrid.search(OWNER, "", { before }, 5)).toEqual([ids[1], ids[0]]);
     await expect(hybrid.search(OWNER, "solar", { before }, 5)).rejects.toThrow(/blank query/);
     expect(texts).toEqual([]);

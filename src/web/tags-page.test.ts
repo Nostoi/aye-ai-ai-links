@@ -54,6 +54,23 @@ function load(answer: (sent: Sent) => Answer, tags: Tag[] = [KITCHEN, BAKING, HO
       },
     };
   };
+  // linkedom tracks no focus: `focused` stands in for it, and as in Chrome, disabling the
+  // focused button drops focus to the body.
+  let focused: Element | null = null;
+  Object.defineProperty(document, "activeElement", { get: () => focused });
+  for (const el of document.querySelectorAll("button")) {
+    (el as HTMLElement).focus = () => {
+      focused = el;
+    };
+    let disabled = false;
+    Object.defineProperty(el, "disabled", {
+      get: () => disabled,
+      set: (on: boolean) => {
+        disabled = on;
+        if (on && focused === el) focused = document.body;
+      },
+    });
+  }
   new Function("document", "fetch", "setTimeout", "clearTimeout", code)(
     document,
     fetch,
@@ -65,7 +82,7 @@ function load(answer: (sent: Sent) => Answer, tags: Tag[] = [KITCHEN, BAKING, HO
   const inRow = (key: string, selector: string) => row(key).querySelector(selector) as HTMLElement;
   const click = (el: HTMLElement) => el.dispatchEvent(new window.Event("click", { bubbles: true }));
   const settle = () => new Promise((r) => setTimeout(r, 0));
-  return { $, row, inRow, click, settle, sent, document };
+  return { $, row, inRow, click, settle, sent, document, focused: () => focused };
 }
 
 const pressedOf = (el: HTMLElement) => el.getAttribute("aria-pressed");
@@ -192,6 +209,20 @@ describe("pinning on the page", () => {
     expect(page.$("#undo-bar").hidden).toBe(true);
   });
 
+  it("moves focus to Undo after unpinning, and back to the pin button after Undo", async () => {
+    const page = load((sent) =>
+      ok({ ...KITCHEN, pinned: (sent.body as { pinned: boolean }).pinned }),
+    );
+    const pin = page.inRow("kitchen", '[data-action="pin"]');
+    pin.focus();
+    page.click(pin);
+    await page.settle();
+    expect(page.focused()).toBe(page.$("#undo-bar button"));
+    page.click(page.$("#undo-bar button"));
+    await page.settle();
+    expect(page.focused()).toBe(pin);
+  });
+
   it.each([
     ["a redirect to the sign-in page", REDIRECT, /did not work/],
     ["a 200 for another tag", ok(BAKING), /did not work/],
@@ -283,6 +314,15 @@ describe("editing a tag on the page", () => {
     });
     expect(pressedOf(page.inRow("kitchen", '[data-status="active"]'))).toBe("true");
     expect(pressedOf(page.inRow("kitchen", '[data-status="done"]'))).toBe("false");
+  });
+
+  it("Done on a project already done sends nothing and offers no Undo that would reopen it", async () => {
+    const done = { ...KITCHEN, kindSource: "stated" as const, projectStatus: "done" as const };
+    const page = load(() => ok(done), [done]);
+    page.click(page.inRow("kitchen", '[data-status="done"]'));
+    await page.settle();
+    expect(page.sent).toEqual([]);
+    expect(page.$("#undo-bar").hidden).toBe(true);
   });
 
   it("reopening a done project offers no Undo", async () => {

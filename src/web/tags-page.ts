@@ -174,6 +174,8 @@ const run = async (button, row) => {
     return null;
   }
   if (button.dataset.status) {
+    // The status it already has: an Undo here would undo something done before.
+    if (button.getAttribute("aria-pressed") === "true") return null;
     const tag = await act(row, "/tags/status", { status: button.dataset.status });
     return tag && button.dataset.status === "done"
       ? [name + " marked done.", () => act(row, "/tags/status", { status: "active" })]
@@ -190,10 +192,12 @@ if (list) {
     const row = button && button.closest("li[data-key]");
     if (!row || button.disabled) return;
     if (button.dataset.action === "edit") return toggleEdit(button, row);
+    // Disabling the focused button drops focus to the page, so it is given back after.
+    const hadFocus = document.activeElement === button;
     button.disabled = true;
     const undo = await run(button, row);
-    // Enabled before the Undo bar takes focus, so focus can come back to it.
     button.disabled = false;
+    if (hadFocus) button.focus();
     if (undo) showUndo(undo[0], undo[1]);
   });
 }

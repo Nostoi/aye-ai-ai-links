@@ -62,11 +62,14 @@ const showUndo = (() => {
   const resume = () => {
     if (current && !current.running) arm(current);
   };
-  const close = (action) => {
+  // \`held\`: the bar had focus when Undo was clicked; disabling the button may have dropped it
+  // to the body since.
+  const close = (action, held = false) => {
     if (current !== action) return;
     clearTimeout(action.timer);
     current = null;
-    const hadFocus = bar.contains(document.activeElement);
+    const now = document.activeElement;
+    const hadFocus = bar.contains(now) || (held && (!now || now === document.body));
     bar.hidden = true;
     focused = false;
     hovered = false;
@@ -95,12 +98,13 @@ const showUndo = (() => {
     if (!action || action.running) return;
     action.running = true;
     clearTimeout(action.timer);
+    const held = bar.contains(document.activeElement);
     button.disabled = true;
     try {
       await action.undo();
     } finally {
       if (current === action) button.disabled = false;
-      close(action);
+      close(action, held);
     }
   });
   return (message, undo) => {

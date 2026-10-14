@@ -5,6 +5,7 @@ import { page, UNDO_BAR_MS } from "./page.js";
 /**
  * A page with the Undo bar in linkedom, its script run with recorded timers. linkedom has no
  * focus tracking, so `focused` stands in for `document.activeElement` and each focus call sets it.
+ * As in Chrome, disabling the focused button moves focus to the body.
  */
 function load() {
   const html = page("t", '<main><button id="pin" type="button">Unpin</button></main>', {
@@ -21,6 +22,14 @@ function load() {
     (el as HTMLElement).focus = () => {
       focused = el;
     };
+    let disabled = false;
+    Object.defineProperty(el, "disabled", {
+      get: () => disabled,
+      set: (on: boolean) => {
+        disabled = on;
+        if (on && focused === el) focused = document.body;
+      },
+    });
   }
   let nextId = 1;
   const timers = new Map<number, { fn: () => void; ms: number }>();
@@ -120,7 +129,7 @@ describe("the Undo bar", () => {
     expect(p.focused()).toBe(p.$("#pin"));
   });
 
-  it("leaves focus alone on close when what had it before is gone", async () => {
+  it("gives focus to nothing removed from the page on close", async () => {
     const p = load();
     const pin = p.$("#pin");
     p.focus(pin);
@@ -130,7 +139,7 @@ describe("the Undo bar", () => {
     p.fire(p.undoButton, "click");
     await p.settle();
     expect(p.bar.hidden).toBe(true);
-    expect(p.focused()).toBe(p.undoButton);
+    expect(p.focused()).not.toBe(pin);
   });
 
   it("a second message keeps the first one's place to give focus back to", async () => {

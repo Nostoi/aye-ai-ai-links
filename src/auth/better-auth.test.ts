@@ -56,7 +56,11 @@ describe("authOptions", () => {
     expect(o.telemetry).toEqual({ enabled: false });
     expect(o.advanced).toMatchObject({ useSecureCookies: true });
     expect(o).not.toHaveProperty("socialProviders");
-    expect(o.plugins.map((p) => p.id)).toEqual(["oauth-provider", "aye-client-admission"]);
+    expect(o.plugins.map((p) => p.id)).toEqual([
+      "oauth-provider",
+      "aye-client-admission",
+      "aye-offline-access",
+    ]);
     expect(o).not.toHaveProperty("session.cookieCache");
     db.close();
   });

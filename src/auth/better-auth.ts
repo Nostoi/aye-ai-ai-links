@@ -5,7 +5,7 @@ import Database from "better-sqlite3";
 import { createAuthLock } from "./auth-lock.js";
 import { type Admission, clientAdmission, NO_ADMISSION } from "./client-admission.js";
 import { OAUTH_ERROR_PATH } from "./oauth-error.js";
-import { OFFLINE_ACCESS } from "./offline-access.js";
+import { OFFLINE_ACCESS, offlineAccess } from "./offline-access.js";
 
 /** Where better-auth's handler is mounted. */
 export const AUTH_BASE_PATH = "/api/auth";
@@ -82,6 +82,7 @@ export function authOptions({
         allowUnauthenticatedClientRegistration: true,
       }),
       clientAdmission(admission),
+      offlineAccess(),
     ],
   };
 }

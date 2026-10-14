@@ -728,6 +728,8 @@ describe("MCP door over HTTP", () => {
     expect((await call(app, "key-b", "list_links", {})).body.result.structuredContent.total).toBe(
       1,
     );
+    // Listing is not searching: nothing goes in the search log.
+    expect(db.prepare("SELECT COUNT(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
   it("list_links refuses a cursor from another order as a tool error", async () => {

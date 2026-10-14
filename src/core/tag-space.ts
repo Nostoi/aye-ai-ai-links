@@ -21,7 +21,7 @@ const notFound = (name: string) =>
 
 /**
  * The color a new pin takes: the first color no tag holds, then the first no pinned tag holds,
- * then teal. Spaces share a color only once every color is taken.
+ * then teal. So a pin makes two spaces share a color only once every color is taken.
  */
 function freeColor(tags: Tag[]): SpaceColor {
   const held = (pinnedOnly: boolean) =>

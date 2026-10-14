@@ -43,7 +43,7 @@ const declarations = (values: Record<string, string>) =>
     .map(([name, value]) => `--${name}:${value};`)
     .join("");
 
-/** Each space owns one color everywhere (`--space`). Amber is never a space color. */
+/** Each space keeps one color everywhere (`--space`). Amber is never a space color. */
 const spaceClasses = SPACE_COLORS.map((name) => `.space-${name}{--space:var(--${name})}`).join(
   "\n",
 );

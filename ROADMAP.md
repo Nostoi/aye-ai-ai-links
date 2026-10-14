@@ -22,6 +22,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** The Tags page (#97; plan in comment 6173556769, revised by comments 6173827375, 6173935487 and 6174590317). Owner rulings, in session:
+  - **Only an inferred project is a guess.** It reads "Project? (a guess)" until the owner confirms it; a topic always shows plainly, since every tag starts as one. This narrows spec §5's "Inferred values are always shown as guesses" for tag kinds.
+  - **Colors are shared when needed.** There is no cap on spaces. A new pin takes the first color no tag holds, then the first no pinned tag holds, then teal. The pin fills the color in the same write (`COALESCE`), so a color chosen meanwhile is kept, and unpinning keeps it. A pinned tag always has a color: `pinTag` is the only write of `pinned`, and no write clears a color. These are store methods (`pinTag`, `colorTag`) rather than `updateTag` fields, because a `COALESCE` pin cannot be a patch field.
+  - **Unpinning shows the Undo bar.** Undo pins the tag again, with the color it kept.
+  - **Project status on the web.** This amends the 2026-10-13 page design, whose Tags edit panel held only kind and color (#12 comment 6158134489, item 2). `setProjectStatus` marks a project done or reopens it and refuses a topic; marking done shows the Undo bar.
+  - **The Undo bar takes focus.** `showUndo` moves focus to Undo, the bar stays while it has focus or the pointer, and on close focus goes back to what had it. The web door reads a JSON body as one checked object (`jsonBody`).
+
 - **2026-10-14:** Agent keys on the Apps and keys page (#99; plan in comment 6171805481, revised by comment 6173113093). Owner rulings, in session:
   - **Web creation.** The signed-in owner can make a key on the page, with no re-entered password and from any network.
   - **Names.** A name is at most 60 characters, and "web" in any case is refused, after trimming. Both rules live in `createAgentKey`, so they hold for the CLI too.

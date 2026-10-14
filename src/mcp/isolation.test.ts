@@ -35,6 +35,7 @@ const A = "owner";
 const B = SECOND_USER.id;
 const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
+const A_KEY_NAME = "agent-a route guard";
 
 type Called = { status: number; isError: boolean; data: unknown; text: string };
 type Row = { id: string };
@@ -136,8 +137,8 @@ const grantsOf = (world: World, userId: string) =>
 type Door = { a: string; b: string; savedByB: string };
 const doors: Record<string, (world: World) => Promise<Door>> = {
   "agent key": async (world) => ({
-    a: createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" }),
-    b: createAgentKey(world.keyStore, { owner: B, ownerName: "B", agent: "agent-b" }),
+    a: createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" }).key,
+    b: createAgentKey(world.keyStore, { owner: B, ownerName: "B", agent: "agent-b" }).key,
     savedByB: "agent-b",
   }),
   "OAuth token": async (world) => ({
@@ -392,7 +393,11 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
 describe("owner isolation coverage", () => {
   it("the door lists exactly the tools this suite exercises across two owners", async () => {
     const { world } = await fixture();
-    const token = createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: "agent-a" });
+    const { key: token } = createAgentKey(world.keyStore, {
+      owner: A,
+      ownerName: "A",
+      agent: "agent-a",
+    });
     const res = await world.app.fetch(
       new Request("https://links.example/mcp", {
         method: "POST",
@@ -438,7 +443,10 @@ describe("owner isolation coverage", () => {
   const READ_ROUTES: Record<string, ReadEntry> = {
     "GET /": { noOwnerData: "the question and a search field, no links" },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
-    "GET /connections": { request: "/connections", marker: () => "Claude" },
+    "GET /connections": {
+      request: "/connections",
+      marker: () => ["<strong>Claude</strong>", `<strong>${A_KEY_NAME}</strong>`],
+    },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
@@ -483,6 +491,7 @@ describe("owner isolation coverage", () => {
     const world = await oauthWorld();
     const a = await connectClaude(world);
     await saveLinkWith(world, a.access, A_URL);
+    createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: A_KEY_NAME });
     const note = "A private note for the route guard";
     await addProfile(createDeps(world.links, new FakeEmbedder(DIMS)), A, "seed", {
       addNotes: [{ text: note, source: "stated" }],
@@ -576,6 +585,9 @@ describe("owner isolation coverage", () => {
   /** Each web route that can change data, and the two-owner test that covers it. */
   const WRITE_ROUTES_TESTED: Record<string, string> = {
     "POST /connections/disconnect": "T9, T11 and the two-owner disconnect test in web/http.test.ts",
+    "POST /connections/keys": "the two-owner agent keys test in web/http.test.ts",
+    "POST /connections/keys/turn-off": "the two-owner agent keys test in web/http.test.ts",
+    "POST /connections/keys/turn-on": "the two-owner agent keys test in web/http.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {
@@ -596,7 +608,7 @@ describe("owner isolation in search", () => {
   it("T7: B's search finds B's link though A saved sixty newer links with the same words", async () => {
     const { world } = await fixture();
     const key = (owner: string, agent: string) =>
-      createAgentKey(world.keyStore, { owner, ownerName: owner, agent });
+      createAgentKey(world.keyStore, { owner, ownerName: owner, agent }).key;
     const [a, b] = [key(A, "agent-a"), key(B, "agent-b")];
     const mine = await tool<SavedLink>(world, b, "save_link", { url: B_URL, title: "secretword" });
     const deps = createDeps(world.links, new FakeEmbedder(DIMS));

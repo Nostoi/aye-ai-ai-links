@@ -22,7 +22,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 - Pages make no outside requests: no remote images, scripts, stylesheets or fonts. Link navigation is fine.
 - Every page renders through `page()` and the theme tokens in `theme.ts`; no page brings its own colors.
 - Controls are at least 44px tall. Fields are outlined with `--field`.
-- Removing or turning something off shows an Undo bar instead of asking first.
+- Removing or turning something off shows an Undo bar instead of asking first. The action is done at once, and Undo reverses it with a second request; nothing waits for the bar to close. The bar is `page()`'s `undo` option and its `showUndo`.
 - A saved link opens in a new tab: `target="_blank" rel="noopener noreferrer"`.
 - Page designs: #12 comment 6158134489.
 

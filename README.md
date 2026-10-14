@@ -36,7 +36,7 @@ The tools your AI uses:
 
 ### Still to come
 
-- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a search page (describe a link however you remember it and see the best matches, each with its why), and a page of the apps you've connected, where you can disconnect one.
+- **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows a search page (describe a link however you remember it and see the best matches, each with its why), and an Apps and keys page, where you can disconnect an app and make or turn off your AIs' keys.
 - **A JSON API** for scripts and shortcuts.
 
 ## How it works
@@ -115,7 +115,9 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
 
    The password must be 8 to 128 characters. Then sign in at `https://links.<your-domain>/login`. Run the same commands to change the email or password; that also signs out every session. Sign-up is closed: this is the only way to make a login, and it belongs to the owner named by `AYE_OWNER` (default `owner`), so you see the same library as your AIs. Sign-in allows 10 attempts per 15 minutes from everyone together, so strangers can use them up and keep you out for the rest of the 15 minutes. Restarting the server resets the count.
 
-5. Make a key for each AI. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
+5. Make a key for each AI. Signed in, open **Apps and keys** from the menu (`/connections`), type which agent it is for, such as "Codex on laptop", and choose **Make a key**. The key is shown once, so copy it straight away. **Turn off** stops a key from its next request. For a few seconds after, an **Undo** bar can turn it back on, unless a new key with the same name was made since. A name is up to 60 characters, and "web" is taken: it marks links saved on the web page.
+
+   The same works from a shell. Run key commands from `current`, so they use the same build as the server, and not at the same time as a deploy.
 
    ```sh
    keys() { node --env-file="$HOME/.aye-links/aye.env" "$HOME/.aye-links/current/dist/cli/keys-main.js" "$@"; }
@@ -123,13 +125,13 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    keys list
    ```
 
-   `create` prints the key once, so store it straight away. To stop a key working, revoke it:
+   `create` prints the key once, so store it straight away. To turn a key off:
 
    ```sh
    keys revoke codex
    ```
 
-   New keys belong to the owner named by `AYE_OWNER` and `AYE_OWNER_NAME`, which default to `owner` and `Owner`. Leave them unset for a library of your own.
+   Keys made in a shell belong to the owner named by `AYE_OWNER` and `AYE_OWNER_NAME`, which default to `owner` and `Owner`; keys made on the page belong to the web login, which is the same owner. Leave both settings unset for a library of your own.
 
 6. Connect each AI with its own key.
 

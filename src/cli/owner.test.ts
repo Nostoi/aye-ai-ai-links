@@ -12,6 +12,7 @@ import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
+import { SqliteKeyStore } from "../store/key-store.js";
 import { run } from "./owner.js";
 
 const BASE = "https://links.example";
@@ -92,7 +93,11 @@ async function server(vars: Record<string, string | undefined>) {
     },
     keys: async () => null,
   });
-  const { app } = createApp({ deps, identify: async () => null, auth });
+  const { app } = createApp({
+    deps,
+    identify: async () => null,
+    auth: { ...auth, keys: new SqliteKeyStore(db) },
+  });
   const signIn = async (password: string, email = EMAIL) => {
     const res = await app.fetch(
       new Request(`${BASE}/api/auth/sign-in/email`, {

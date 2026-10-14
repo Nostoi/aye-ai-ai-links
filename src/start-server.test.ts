@@ -161,7 +161,7 @@ describe("startServer", () => {
       owner: "owner",
       ownerName: "Owner",
       agent: "codex",
-    });
+    }).key;
     db.close();
   });
 

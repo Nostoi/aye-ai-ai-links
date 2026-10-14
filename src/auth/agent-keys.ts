@@ -2,10 +2,11 @@ import { createHash, randomBytes } from "node:crypto";
 import type { OwnerId } from "../core/types.js";
 import type { KeyInfo, SqliteKeyStore } from "../store/key-store.js";
 import type { Identify } from "./caller.js";
+import { WEB_SAVED_BY } from "./session.js";
 
 export class AgentKeyError extends Error {
   constructor(
-    readonly code: "invalid_agent" | "unknown_agent",
+    readonly code: "invalid_agent" | "unknown_agent" | "unknown_key" | "undo_expired",
     message: string,
   ) {
     super(message);
@@ -51,19 +52,52 @@ export const keyIdentify =
       : null;
   };
 
-/** Returns the new key's plaintext, which is not stored and cannot be shown again. */
+/** Counted in characters, not UTF-16 units, after trimming. */
+export const MAX_AGENT_NAME = 60;
+
+/** How long after a key is turned off it can be turned back on. */
+export const UNDO_WINDOW_MS = 60_000;
+
+/**
+ * The agent's name, trimmed. It is refused when blank, longer than `MAX_AGENT_NAME`, or "web" in
+ * any case, which is the `savedBy` of links saved on the web page.
+ */
+function agentName(raw: string): string {
+  const agent = raw.trim();
+  if (agent === "") {
+    throw new AgentKeyError("invalid_agent", "Give the agent a name, such as codex.");
+  }
+  if ([...agent].length > MAX_AGENT_NAME) {
+    throw new AgentKeyError(
+      "invalid_agent",
+      `Keep the name to ${MAX_AGENT_NAME} characters or fewer.`,
+    );
+  }
+  if (/[\p{Cc}\p{Cs}]/u.test(agent)) {
+    throw new AgentKeyError(
+      "invalid_agent",
+      "Use only printable characters: no tabs, line breaks or other control characters.",
+    );
+  }
+  if (agent.toLowerCase() === WEB_SAVED_BY) {
+    throw new AgentKeyError(
+      "invalid_agent",
+      `"${WEB_SAVED_BY}" names links saved on the web page. Choose another name.`,
+    );
+  }
+  return agent;
+}
+
+/** The new key's plaintext is not stored and cannot be shown again. */
 export function createAgentKey(
   keys: SqliteKeyStore,
   who: { owner: OwnerId; ownerName: string; agent: string },
   now: Date = new Date(),
-): string {
-  const agent = who.agent.trim();
-  if (agent === "") {
-    throw new AgentKeyError("invalid_agent", "Give the agent a name, such as codex.");
-  }
+): { id: number; name: string; key: string } {
+  const name = agentName(who.agent);
   const key = generateKey();
-  keys.create(who.owner, who.ownerName, agent, hashKey(key), now);
-  return key;
+  const id = keys.create(who.owner, who.ownerName, name, hashKey(key), now);
+  return { id, name, key };
 }
 
 export const listAgentKeys = (keys: SqliteKeyStore, owner: OwnerId): KeyInfo[] => keys.list(owner);
@@ -75,6 +109,33 @@ export function revokeAgentKey(
   now: Date = new Date(),
 ): void {
   if (!keys.revoke(owner, agent.trim(), now)) {
-    throw new AgentKeyError("unknown_agent", `Agent "${agent}" has no live key to revoke.`);
+    throw new AgentKeyError("unknown_agent", `Agent "${agent}" has no live key to turn off.`);
+  }
+}
+
+/** Turns off the owner's key `id`; the next request with it is refused. */
+export function turnOffAgentKey(
+  keys: SqliteKeyStore,
+  owner: OwnerId,
+  id: number,
+  now: Date = new Date(),
+): void {
+  if (!keys.revokeById(owner, id, now)) {
+    throw new AgentKeyError("unknown_key", "That key is already off. Reload the page.");
+  }
+}
+
+/**
+ * Turns the owner's key `id` back on, if it was turned off within `UNDO_WINDOW_MS`. A key whose
+ * name has a new key since stays off (`KeyStoreError` `name_taken`).
+ */
+export function turnOnAgentKey(
+  keys: SqliteKeyStore,
+  owner: OwnerId,
+  id: number,
+  now: Date = new Date(),
+): void {
+  if (!keys.restore(owner, id, new Date(now.getTime() - UNDO_WINDOW_MS))) {
+    throw new AgentKeyError("undo_expired", "It's too late to undo. That key stays off.");
   }
 }

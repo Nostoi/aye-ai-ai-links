@@ -36,6 +36,11 @@ node_path="$(command -v node)" || { echo "node is not on PATH." >&2; exit 1; }
 sha="$(git -C "$source_repo" rev-parse --verify "$ref^{commit}")"
 release="$home/releases/$sha"
 
+if [ "$(readlink "$home/current" || true)" = "$release" ] && [ "$(cat "$release/VERSION" 2> /dev/null || true)" != "$version" ]; then
+  echo "$sha is the running release, and ${version:-no version} would change the version it runs as. Deploy it with that same version, or deploy a different commit. Nothing was changed." >&2
+  exit 1
+fi
+
 mkdir -p "$home/releases" "$home/data/backups" "$home/logs" "$HOME/Library/LaunchAgents"
 
 # A release is complete only once .ready exists; a leftover without it is a failed build.

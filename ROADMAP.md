@@ -15,12 +15,18 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | done |
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | in progress |
-| Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | not started |
+| Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
 | Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-15:** Phase 4 is done, and the repo is public.
+  - **The web page shipped** across #92–#99 and #37. #12, the phase's headline issue, closes with this entry.
+  - **Secrets review (#100):** file history, every issue, PR, comment and release, and edit histories. Five comments that named the dev Mac's tailnet address or the local username were reposted with those details removed, and the originals deleted (#100 comment 6183768272). Owner's ruling: the author email in the commits stays public, since PR refs keep the old commits.
+  - **Public since 2026-10-15,** by the owner's go-ahead. Public repos get free Actions minutes, which ends the 2026-10-14 merge-on-local-check workaround once CI runs again.
+  - **Outgoing User-Agent** names the deployed version, which MCP also reports (#117).
 
 - **2026-10-14:** Versions and the list of changes (#115; design in its comments 6181038307 and 6181186661, the second winning).
   - **One date version per deployed commit,** `vYYYY.MM.DD` with `.2`, `.3` for later deploys that day. GitHub's tags are the only place names live: `deploy/release.sh next` picks the name from them on a machine where `gh` is signed in, and a commit already tagged keeps its name. The server never needs GitHub.

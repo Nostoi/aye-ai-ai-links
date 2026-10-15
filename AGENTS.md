@@ -63,7 +63,7 @@ aye-ai-ai-links/
 │  └─ design/     approved visual references (layout A only)
 ├─ .githooks/     pre-push runs `npm run check`
 ├─ .github/       CI: `npm run check` on pull requests
-├─ deploy/        LaunchAgent plist and `deploy.sh`
+├─ deploy/        LaunchAgent plist, `deploy.sh`, and `release.sh` (names and publishes deploys; run where `gh` is signed in)
 └─ src/
    ├─ core/       rules and use cases
    ├─ store/      SQLite persistence (swappable)

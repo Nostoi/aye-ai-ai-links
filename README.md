@@ -4,7 +4,7 @@
 
 You save a link, forget where, forget when, and forget why. Aye-AI-AI Links is a personal link library that your AI assistants run for you. It works with Claude Code, Codex, Claude Desktop, or any AI that speaks [MCP](https://modelcontextprotocol.io).
 
-> **Status: in use, still growing.** The server runs on a home Mac. AIs on the same [tailnet](https://tailscale.com/kb/1136/tailnet) connect with keys, and the Claude and ChatGPT apps connect over the internet through a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). Some features are still to come; [ROADMAP.md](ROADMAP.md) has the phases.
+> **Status: in use, still growing.** The server runs on a home Mac. AIs on the same [tailnet](https://tailscale.com/kb/1136/tailnet) connect with keys, and the Claude and ChatGPT apps connect over the internet through a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). Some features are still to come; [ROADMAP.md](ROADMAP.md) has the phases. Each deploy of the home server is a [release](https://github.com/Nostoi/aye-ai-ai-links/releases) named by its date, and its notes list the pull requests merged since the last one.
 
 ## What it does
 
@@ -84,7 +84,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    deploy/deploy.sh main
    ```
 
-   This builds and tests the commit, then downloads and checks the meaning-search model (about 35 MB, into `~/.aye-links/models`; only missing files are fetched) before it stops the service. It then backs up both databases, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded. A failed build, test or model check leaves the running install alone, and a failure while switching rolls back to the previous release.
+   This builds and tests the commit, then downloads and checks the meaning-search model (about 35 MB, into `~/.aye-links/models`; only missing files are fetched) before it stops the service. It then backs up both databases, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded, and only then exits 0. A failed build, test or model check leaves the running install alone, and a failure while switching rolls back to the previous release.
 
    <details>
    <summary>Exactly what happens when a deploy fails</summary>
@@ -98,6 +98,16 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    - Once the new release is listening, the deploy has succeeded; the script then removes old releases and backups, and interrupting that leaves the new release running. Only the current and previous releases and the 10 newest backups of each database are kept.
 
    </details>
+
+   The server tells your AIs its version when they connect. It is `dev` unless you give the deploy one, such as `deploy/deploy.sh main v2026.10.14`; the deploy then prints `Deployed <sha> as v2026.10.14.` This project's own deploys are named and published from a machine where `gh` is signed in, never from the server:
+
+   ```sh
+   version="$(deploy/release.sh next <sha>)"   # vYYYY.MM.DD, .2, .3 for later deploys that day; a commit already released keeps its name
+   deploy/deploy.sh <sha> "$version"           # on the server
+   deploy/release.sh publish "$version" <sha>  # only after the deploy exits 0
+   ```
+
+   `publish` tags the commit and makes its GitHub release, with notes generated from the merged pull requests. It refuses if the tag already names another commit, and running it again finishes a release it did not.
 
 3. Serve it. On the tailnet, for your AIs' keys:
 

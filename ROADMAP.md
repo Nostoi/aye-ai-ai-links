@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-14:** Versions and the list of changes (#115; design in its comments 6181038307 and 6181186661, the second winning).
+  - **One date version per deployed commit,** `vYYYY.MM.DD` with `.2`, `.3` for later deploys that day. GitHub's tags are the only place names live: `deploy/release.sh next` picks the name from them on a machine where `gh` is signed in, and a commit already tagged keeps its name. The server never needs GitHub.
+  - **The release list is the changelog.** `deploy/release.sh publish` tags the commit, then makes a GitHub release with generated notes. It runs only after `deploy.sh` exits 0, so a failed or rolled-back deploy is never tagged. There is no `CHANGELOG.md`. Deploys before this one are not tagged.
+  - **The server reports the version.** `deploy.sh <ref> [version]` writes the release's `VERSION` file before it stops anything; the server reads it at start (`dev` when missing) and MCP sends it as `serverInfo.version`. A rollback runs the previous release with its own file; a release built before this still reports `0.1.0`.
+
 - **2026-10-14:** Browse the whole library: `list_links` and All links (#37). Owner rulings, in session, and the sources in `docs/specs/2026-10-14-list-links-sources.md`:
   - **A new read-only tool, `list_links`.** It returns `{links, total, nextCursor}`; `search_links` keeps its input and output, and its description points to `list_links`. MCP's cursor pagination covers list operations such as `tools/list`, not tool results (the 2026-07-28 Pagination page), so the cursor is an argument and a result field, as the Tools page's "Stateful Tools" guidance describes. A cursor that doesn't fit is an `isError` result, not the -32602 that page gives list operations.
   - **The total goes to AIs only.** The page designs put no totals anywhere (#12 comment 6158134489), so the web shows no count. `total` counts the links that pass the filters in that order, all pages together, in a separate read from the page.

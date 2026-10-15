@@ -45,6 +45,7 @@ let targetHits = 0;
 let site: http.Server;
 let sitePort = 0;
 let siteHits: string[] = [];
+const VERSION = "v2099.01.02";
 let lastRequestHeaders: http.IncomingHttpHeaders = {};
 
 const BOMB_BYTES = 20_000_000;
@@ -189,7 +190,12 @@ function fetcherWith(
     limits?: Partial<FetcherLimits>;
   } = {},
 ): PageFetcher {
-  const fetcher = createGuardedFetcher({ resolve, isAllowed: allowSite, ...options });
+  const fetcher = createGuardedFetcher({
+    version: VERSION,
+    resolve,
+    isAllowed: allowSite,
+    ...options,
+  });
   open.push(fetcher);
   return fetcher;
 }
@@ -220,7 +226,9 @@ describe("a page on an allowed address", () => {
 
   it("identifies itself and offers the encodings it can decode", async () => {
     await ok(fetcherWith().fetch(siteUrl("/ok")));
-    expect(lastRequestHeaders["user-agent"]).toMatch(/aye-ai-ai-links/);
+    expect(lastRequestHeaders["user-agent"]).toBe(
+      `aye-ai-ai-links/${VERSION} (personal link library; fetches pages its owner saved)`,
+    );
     expect(lastRequestHeaders["accept-encoding"]).toBe("gzip, deflate, br");
   });
 
@@ -296,6 +304,7 @@ describe("URLs that must never be requested", () => {
     const url = template.replace("PORT", String(targetPort));
     // The default policy, not the test one: nothing here may be allowed.
     const fetcher = createGuardedFetcher({
+      version: VERSION,
       resolve: (h) =>
         h === "localhost" ? Promise.resolve([V4_LOOPBACK, V6_LOOPBACK]) : resolve(h),
     });
@@ -319,7 +328,7 @@ describe("URLs that must never be requested", () => {
       throw new Error("a socket was opened");
     });
     try {
-      expect(await createGuardedFetcher().fetch(url)).toEqual({
+      expect(await createGuardedFetcher({ version: VERSION }).fetch(url)).toEqual({
         kind: "refused",
         reason: "address",
       });

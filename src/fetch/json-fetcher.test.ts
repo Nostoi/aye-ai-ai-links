@@ -48,6 +48,7 @@ let targetHits = 0;
 let site: https.Server;
 let sitePort = 0;
 let siteHits: string[] = [];
+const VERSION = "v2099.01.02";
 let lastHeaders: IncomingMessage["headers"] = {};
 
 function handle(req: IncomingMessage, res: ServerResponse) {
@@ -147,8 +148,14 @@ afterEach(async () => {
   await Promise.all(open.splice(0).map((f) => f.close()));
 });
 
-function fetcherWith(options: JsonFetcherOptions = {}) {
-  const fetcher = createJsonFetcher({ resolve, isAllowed: allowSite, ca: cert, ...options });
+function fetcherWith(options: Omit<JsonFetcherOptions, "version"> = {}) {
+  const fetcher = createJsonFetcher({
+    version: VERSION,
+    resolve,
+    isAllowed: allowSite,
+    ca: cert,
+    ...options,
+  });
   open.push(fetcher);
   return fetcher;
 }
@@ -169,7 +176,7 @@ describe("addresses that must never be connected to", () => {
 
   it.each(["https://127.0.0.1", "https://[::1]"])("refuses the literal %s", async (origin) => {
     // The test policy would allow ::1, so this one uses the real policy.
-    const fetcher = createJsonFetcher({ ca: cert });
+    const fetcher = createJsonFetcher({ version: VERSION, ca: cert });
     open.push(fetcher);
     await expect(fetcher.fetch(`${origin}:${targetPort}/`)).rejects.toThrow(/address/);
     expect(targetHits).toBe(0);
@@ -304,7 +311,9 @@ describe("request headers", () => {
     expect(lastHeaders.cookie).toBeUndefined();
     expect(lastHeaders.authorization).toBeUndefined();
     expect(lastHeaders["x-other"]).toBeUndefined();
-    expect(String(lastHeaders["user-agent"])).toMatch(/aye-ai-ai-links/);
+    expect(lastHeaders["user-agent"]).toBe(
+      `aye-ai-ai-links/${VERSION} (personal link library; fetches OAuth client documents)`,
+    );
   });
 
   it("takes its headers from a Request input", async () => {

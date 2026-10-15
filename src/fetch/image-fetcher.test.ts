@@ -35,10 +35,13 @@ let targetPort = 0;
 let targetHits = 0;
 let site: http.Server;
 let sitePort = 0;
+const VERSION = "v2099.01.02";
 let lastAccept: string | undefined;
+let lastUserAgent: string | undefined;
 
 function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   lastAccept = req.headers.accept;
+  lastUserAgent = req.headers["user-agent"];
   const send = (type: string | null, body: Buffer, extra: http.OutgoingHttpHeaders = {}) => {
     res.writeHead(200, type === null ? extra : { "content-type": type, ...extra });
     res.end(body);
@@ -134,7 +137,7 @@ beforeEach(() => {
 
 const open: ImageFetcher[] = [];
 function fetcher(): ImageFetcher {
-  const f = createImageFetcher({ resolve, isAllowed: allowSite });
+  const f = createImageFetcher({ version: VERSION, resolve, isAllowed: allowSite });
   open.push(f);
   return f;
 }
@@ -150,6 +153,13 @@ describe("an image on an allowed address", () => {
     const outcome = await fetchPath("/png");
     expect(outcome).toEqual({ kind: "ok", contentType: "image/png", bytes: new Uint8Array(PNG) });
     expect(lastAccept).toBe("image/webp,image/png,image/jpeg,image/gif;q=0.9");
+  });
+
+  it("names the deployed version in its User-Agent", async () => {
+    await fetchPath("/png");
+    expect(lastUserAgent).toBe(
+      `aye-ai-ai-links/${VERSION} (personal link library; fetches pages its owner saved)`,
+    );
   });
 
   it("is typed by its bytes, not the server's header", async () => {
@@ -229,7 +239,7 @@ describe("addresses that must never be requested", () => {
     ["a loopback", () => `http://127.0.0.1:${targetPort}/x.png`],
     ["a link-local", () => "http://169.254.169.254/latest/meta-data/"],
   ])("refuses %s image URL under the default address rule, without a request", async (_, url) => {
-    const f = createImageFetcher();
+    const f = createImageFetcher({ version: VERSION });
     open.push(f);
     expect(await f.fetch(url())).toEqual({ kind: "refused", reason: "address" });
     expect(targetHits).toBe(0);

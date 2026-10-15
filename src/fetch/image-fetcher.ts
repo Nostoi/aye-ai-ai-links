@@ -3,6 +3,7 @@ import type { Resolve } from "./guarded-lookup.js";
 import { createGuardedRequest, discard } from "./guarded-request.js";
 import { readImageHeader } from "./image-type.js";
 import { decodersFor, readBody } from "./read-body.js";
+import { userAgent } from "./user-agent.js";
 
 /** Largest image kept, counted after decompression. The `link_images` table holds the same cap. */
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -10,17 +11,19 @@ export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 40_000_000;
 
 export type ImageFetcherOptions = {
+  /** The deployed version, named in the User-Agent. */
+  version: string;
   /** DNS. Tests inject a fake; the default asks the system resolver. */
   resolve?: Resolve;
   /** The address rule. Tests inject one that also allows a loopback test server. */
   isAllowed?: (ip: string) => boolean;
 };
 
-const HEADERS = {
-  "user-agent": "aye-ai-ai-links/0.1 (personal link library; fetches pages its owner saved)",
+const headersFor = (version: string) => ({
+  "user-agent": userAgent(version, "fetches pages its owner saved"),
   accept: "image/webp,image/png,image/jpeg,image/gif;q=0.9",
   "accept-encoding": "gzip, deflate, br",
-};
+});
 
 /** Servers label images loosely, so a generic binary type is read too; the bytes decide. */
 const READABLE_TYPE =
@@ -31,13 +34,13 @@ const READABLE_TYPE =
  * share one address rule. The kept type is the one the magic bytes name (PNG, JPEG, GIF or WebP),
  * never the server's; SVG and AVIF are refused.
  */
-export function createImageFetcher(options: ImageFetcherOptions = {}): ImageFetcher {
+export function createImageFetcher(options: ImageFetcherOptions): ImageFetcher {
   const requests = createGuardedRequest({
     resolve: options.resolve,
     isAllowed: options.isAllowed,
     maxRedirects: 5,
     deadlineMs: 15_000,
-    headers: HEADERS,
+    headers: headersFor(options.version),
   });
 
   return {

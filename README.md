@@ -103,8 +103,8 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
 
    ```sh
    version="$(deploy/release.sh next <sha>)"   # vYYYY.MM.DD, .2, .3 for later deploys that day; a commit already released keeps its name
-   deploy/deploy.sh <sha> "$version"           # on the server
-   deploy/release.sh publish "$version" <sha>  # only after the deploy exits 0
+   ssh <server> "cd <checkout> && deploy/deploy.sh <sha> $version" &&
+     deploy/release.sh publish "$version" <sha>  # && publishes only if the deploy exited 0
    ```
 
    `publish` tags the commit and makes its GitHub release, with notes generated from the merged pull requests. It refuses if the tag already names another commit, and running it again finishes a release it did not.

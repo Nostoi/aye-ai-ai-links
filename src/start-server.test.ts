@@ -229,6 +229,7 @@ describe("startServer", () => {
     dbPath: links,
     port,
     auth: { dbPath: authPath(), secret: SECRET, baseUrl: BASE },
+    version: "v2099.01.02.3",
   });
 
   /** Read through a second connection, which fails while the server holds the auth file. */
@@ -291,6 +292,21 @@ describe("startServer", () => {
     const res = await post(port, SAVE);
     expect(res.status).toBe(200);
     expect(rows()).toEqual([{ url: URL_A, savedBy: "codex" }]);
+  });
+
+  it("reports the configured version to MCP clients", async () => {
+    const { port } = await start();
+    const res = await post(port, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "test", version: "0" },
+      },
+    });
+    expect((await json(res)).result.serverInfo.version).toBe("v2099.01.02.3");
   });
 
   it("refuses a request without a valid key and writes nothing", async () => {

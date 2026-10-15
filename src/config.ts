@@ -1,4 +1,4 @@
-import { realpathSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
@@ -10,6 +10,23 @@ export type Env = Record<string, string | undefined>;
  */
 export function modelRoot(): string {
   return join(homedir(), ".aye-links", "models");
+}
+
+/** `deploy.sh` writes the release's version here, at the package root; found from this file, not the working directory. */
+export const VERSION_FILE = new URL("../VERSION", import.meta.url);
+
+/** The deployed version, or `dev` when no `VERSION` file was written. Any other read error refuses the start. */
+export function appVersion(file: string | URL = VERSION_FILE): string {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "dev";
+    throw error;
+  }
+  const version = text.trim();
+  if (version === "") throw new Error(`${file} is empty.`);
+  return version;
 }
 
 const DEFAULT_PORT = 3002;
@@ -112,6 +129,7 @@ export type ServerConfig = {
   port: number;
   allowedHosts?: string[];
   auth: AuthConfig;
+  version: string;
 };
 
 export function serverConfig(env: Env): ServerConfig {
@@ -121,5 +139,6 @@ export function serverConfig(env: Env): ServerConfig {
     port: port(env.AYE_PORT),
     ...(hosts && { allowedHosts: hosts }),
     auth: authConfig(env),
+    version: appVersion(),
   };
 }

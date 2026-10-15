@@ -152,7 +152,7 @@ export async function startServer(
     });
     refresher = auth.refresher;
     const built = createApp({
-      deps: { ...deps, snapshots: runner, saveWaitMs },
+      deps: { ...deps, snapshots: runner, saveWaitMs, version: config.version },
       identify: auth.identify,
       auth: { ...auth, keys },
       allowedHosts: config.allowedHosts,

@@ -170,6 +170,43 @@ describe("MCP door over HTTP", () => {
     expect(res.body.result.instructions).toContain("inferred");
   });
 
+  it("reports the deployed version in both initialize and server/discover", async () => {
+    const versioned = appFor({ deps: { ...deps, version: "v2026.10.14.2" }, identify });
+    const init = await post(versioned, "key-a", {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "test", version: "0" },
+      },
+    });
+    expect(init.body.result.serverInfo).toEqual({
+      name: "aye-ai-ai-links",
+      version: "v2026.10.14.2",
+    });
+    const discover = await post(
+      versioned,
+      "key-a",
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "server/discover",
+        params: {
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
+      },
+      { "mcp-protocol-version": "2026-07-28", "mcp-method": "server/discover" },
+    );
+    expect(discover.body.result._meta["io.modelcontextprotocol/serverInfo"].version).toBe(
+      "v2026.10.14.2",
+    );
+  });
+
   it("lists the ten tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));

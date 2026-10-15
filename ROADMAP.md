@@ -22,10 +22,10 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
-- **2026-10-15:** Phase 4 is done, and the repo is public.
+- **2026-10-14:** Phase 4 is done, and the repo is public.
   - **The web page shipped** across #92–#99 and #37. #12, the phase's headline issue, closes with this entry.
   - **Secrets review (#100):** file history, every issue, PR, comment and release, and edit histories. Five comments that named the dev Mac's tailnet address or the local username were reposted with those details removed, and the originals deleted (#100 comment 6183768272). Owner's ruling: the author email in the commits stays public, since PR refs keep the old commits.
-  - **Public since 2026-10-15,** by the owner's go-ahead. Public repos get free Actions minutes, which ends the 2026-10-14 merge-on-local-check workaround once CI runs again.
+  - **Public since 2026-10-14,** by the owner's go-ahead.
   - **Outgoing User-Agent** names the deployed version, which MCP also reports (#117).
 
 - **2026-10-14:** Versions and the list of changes (#115; design in its comments 6181038307 and 6181186661, the second winning).

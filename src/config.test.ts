@@ -1,12 +1,58 @@
-import { linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { authConfig, databasePath, modelRoot, serverConfig } from "./config.js";
+import {
+  appVersion,
+  authConfig,
+  databasePath,
+  modelRoot,
+  serverConfig,
+  VERSION_FILE,
+} from "./config.js";
 
 describe("modelRoot", () => {
   it("is ~/.aye-links/models", () => {
     expect(modelRoot()).toBe(join(homedir(), ".aye-links", "models"));
+  });
+});
+
+describe("appVersion", () => {
+  let dir = "";
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = "";
+  });
+  const fresh = () => {
+    dir = mkdtempSync(join(tmpdir(), "aye-version-"));
+    return join(dir, "VERSION");
+  };
+
+  it("reads VERSION at the package root, beside src/ and dist/", () => {
+    expect(fileURLToPath(VERSION_FILE)).toBe(join(process.cwd(), "VERSION"));
+  });
+
+  it("returns the file's version without its newline", () => {
+    const file = fresh();
+    writeFileSync(file, "v2026.10.14.2\n");
+    expect(appVersion(file)).toBe("v2026.10.14.2");
+  });
+
+  it("is dev when the file is missing", () => {
+    expect(appVersion(fresh())).toBe("dev");
+  });
+
+  it("refuses an empty file", () => {
+    const file = fresh();
+    writeFileSync(file, "\n");
+    expect(() => appVersion(file)).toThrow("is empty");
+  });
+
+  it("refuses a file it cannot read, rather than reporting dev", () => {
+    const file = fresh();
+    mkdirSync(file);
+    expect(() => appVersion(file)).toThrow(/EISDIR/);
   });
 });
 
@@ -155,8 +201,13 @@ describe("serverConfig", () => {
   const base = AUTH;
   const auth = authConfig(AUTH);
 
-  it("defaults the port to 3002 and leaves allowed hosts unset", () => {
-    expect(serverConfig(base)).toEqual({ dbPath: "/data/links.db", port: 3002, auth });
+  it("defaults the port to 3002, leaves allowed hosts unset and reads the version file", () => {
+    expect(serverConfig(base)).toEqual({
+      dbPath: "/data/links.db",
+      port: 3002,
+      auth,
+      version: appVersion(),
+    });
   });
 
   it("refuses a missing database like the key CLI does", () => {

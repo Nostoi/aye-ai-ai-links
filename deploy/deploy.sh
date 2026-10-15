@@ -1,15 +1,22 @@
 #!/bin/bash
 # Deploy a commit as the running LaunchAgent.
-#   deploy/deploy.sh <git-ref>
+#   deploy/deploy.sh <git-ref> [version]
 # Builds the commit in ~/.aye-links/releases/<sha> and tests it there, then downloads and checks
 # the meaning-search model in ~/.aye-links/models. Only if both succeed does it stop the service,
 # wait for every process using aye.env to exit, back up both databases, point ~/.aye-links/current
 # at the new release and start the service again. A failed build or model check leaves the
-# running install untouched.
+# running install untouched. It exits 0 only once the new release is listening.
+# The version (from `deploy/release.sh next`) goes in the release's VERSION file, which the server
+# reports; without one the server reports `dev`.
 # Run it from the source checkout, or set AYE_SOURCE to one. Run deploys, key commands and owner commands one at a time.
 set -eEuo pipefail
 
-ref="${1:?Usage: deploy/deploy.sh <git-ref>}"
+ref="${1:?Usage: deploy/deploy.sh <git-ref> [version]}"
+version="${2:-}"
+if [ -n "$version" ] && ! [[ "$version" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; then
+  echo "The version must look like v2026.10.14 or v2026.10.14.2, not $version. Nothing was changed." >&2
+  exit 1
+fi
 source_repo="${AYE_SOURCE:-$(cd "$(dirname "$0")/.." && pwd)}"
 home="$HOME/.aye-links"
 env_file="$home/aye.env"
@@ -28,6 +35,11 @@ node_path="$(command -v node)" || { echo "node is not on PATH." >&2; exit 1; }
 
 sha="$(git -C "$source_repo" rev-parse --verify "$ref^{commit}")"
 release="$home/releases/$sha"
+
+if [ "$(readlink "$home/current" || true)" = "$release" ] && [ "$(cat "$release/VERSION" 2> /dev/null || true)" != "$version" ]; then
+  echo "$sha is the running release, and ${version:-no version} would change the version it runs as. Deploy it with that same version, or deploy a different commit. Nothing was changed." >&2
+  exit 1
+fi
 
 mkdir -p "$home/releases" "$home/data/backups" "$home/logs" "$HOME/Library/LaunchAgents"
 
@@ -55,6 +67,13 @@ fi
 if [ -e "$release/dist/cli/prefetch-model-main.js" ] && ! "$node_path" "$release/dist/cli/prefetch-model-main.js"; then
   echo "Model prefetch failed for $sha. The running install was not changed." >&2
   exit 1
+fi
+
+# A release dir is reused for its commit, so a deploy without a version removes an earlier one.
+if [ -n "$version" ]; then
+  printf '%s\n' "$version" > "$release/VERSION"
+else
+  rm -f "$release/VERSION"
 fi
 
 read_env() { env -i "$node_path" --env-file="$env_file" -e "console.log(process.env.$1 ?? \"$2\")"; }
@@ -271,5 +290,5 @@ if ! listening; then
 fi
 trap - ERR INT TERM HUP
 
-echo "Deployed $sha."
+echo "Deployed $sha${version:+ as $version}."
 prune || echo "Warning: removing old releases or backups failed. The deploy itself succeeded." >&2

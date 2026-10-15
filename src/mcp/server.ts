@@ -45,6 +45,8 @@ export type McpDeps = {
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
   pages: PageTextReader;
   saveWaitMs?: number | undefined;
+  /** What `serverInfo` reports; `dev` when left out. */
+  version?: string | undefined;
 };
 
 /** Wraps each tool call's promise; `mcpApp` uses it to count calls still running. */
@@ -194,7 +196,7 @@ export function buildMcpServer(
   track: TrackCall = (call) => call,
 ): McpServer {
   const server = new McpServer(
-    { name: "aye-ai-ai-links", version: "0.1.0" },
+    { name: "aye-ai-ai-links", version: deps.version ?? "dev" },
     { instructions: guidance.INSTRUCTIONS },
   );
   const { owner, savedBy } = caller;

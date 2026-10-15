@@ -4,6 +4,7 @@ import { Agent, request } from "undici";
 import { isPublicAddress } from "./address-policy.js";
 import { guardedLookup, type Resolve, systemResolve } from "./guarded-lookup.js";
 import { decodersFor, readBody } from "./read-body.js";
+import { userAgent } from "./user-agent.js";
 
 export type JsonFetcherLimits = {
   /** Largest body, counted after decompression. */
@@ -13,6 +14,8 @@ export type JsonFetcherLimits = {
 };
 
 export type JsonFetcherOptions = {
+  /** The deployed version, named in the User-Agent. */
+  version: string;
   /** DNS. Tests inject a fake; the default asks the system resolver. */
   resolve?: Resolve;
   /** The address rule. Tests inject one that also allows a loopback test server. */
@@ -23,8 +26,6 @@ export type JsonFetcherOptions = {
 };
 
 const DEFAULT_LIMITS: JsonFetcherLimits = { maxBytes: 64 * 1024, deadlineMs: 5_000 };
-
-const USER_AGENT = "aye-ai-ai-links/0.1 (personal link library; fetches OAuth client documents)";
 
 /** The only caller headers that reach the remote server. Anything else could carry a credential. */
 const FORWARDED_REQUEST_HEADERS = ["accept", "if-none-match", "if-modified-since"];
@@ -59,7 +60,7 @@ function discard(body: Readable) {
  * one connected to. Redirects are never followed. `undici.request` is used rather than `fetch` so
  * redirect handling stays ours and no port list filters the request.
  */
-export function createJsonFetcher(options: JsonFetcherOptions = {}) {
+export function createJsonFetcher(options: JsonFetcherOptions) {
   const limits = { ...DEFAULT_LIMITS, ...options.limits };
   const isAllowed = options.isAllowed ?? isPublicAddress;
   const agent = new Agent({
@@ -101,7 +102,7 @@ export function createJsonFetcher(options: JsonFetcherOptions = {}) {
 
       const source = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
       const headers: Record<string, string> = {
-        "user-agent": USER_AGENT,
+        "user-agent": userAgent(options.version, "fetches OAuth client documents"),
         "accept-encoding": "gzip, deflate, br",
       };
       for (const name of FORWARDED_REQUEST_HEADERS) {

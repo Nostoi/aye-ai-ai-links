@@ -3,6 +3,7 @@ import { decodeHtml } from "./decode-html.js";
 import type { Resolve } from "./guarded-lookup.js";
 import { createGuardedRequest, discard } from "./guarded-request.js";
 import { decodersFor, readBody } from "./read-body.js";
+import { userAgent } from "./user-agent.js";
 
 export type FetcherLimits = {
   /** Largest page, counted after decompression. */
@@ -13,6 +14,8 @@ export type FetcherLimits = {
 };
 
 export type GuardedFetcherOptions = {
+  /** The deployed version, named in the User-Agent. */
+  version: string;
   /** DNS. Tests inject a fake; the default asks the system resolver. */
   resolve?: Resolve;
   /** The address rule. Tests inject one that also allows a loopback test server. */
@@ -26,23 +29,23 @@ const DEFAULT_LIMITS: FetcherLimits = {
   deadlineMs: 15_000,
 };
 
-const HEADERS = {
-  "user-agent": "aye-ai-ai-links/0.1 (personal link library; fetches pages its owner saved)",
+const headersFor = (version: string) => ({
+  "user-agent": userAgent(version, "fetches pages its owner saved"),
   accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
   "accept-encoding": "gzip, deflate, br",
-};
+});
 
 const HTML_TYPE = /^\s*(text\/html|application\/xhtml\+xml)\s*(;|$)/i;
 
 /** Fetches pages from public addresses only, through the guarded request (`guarded-request.ts`). */
-export function createGuardedFetcher(options: GuardedFetcherOptions = {}): PageFetcher {
+export function createGuardedFetcher(options: GuardedFetcherOptions): PageFetcher {
   const limits = { ...DEFAULT_LIMITS, ...options.limits };
   const requests = createGuardedRequest({
     resolve: options.resolve,
     isAllowed: options.isAllowed,
     maxRedirects: limits.maxRedirects,
     deadlineMs: limits.deadlineMs,
-    headers: HEADERS,
+    headers: headersFor(options.version),
   });
 
   return {

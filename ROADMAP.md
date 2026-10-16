@@ -28,6 +28,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **An unpinned tag is to show no color.** Its space page band goes neutral, matching its cards, and the stored color comes back when it is pinned again. This settles the #96 open question; #120 makes the change.
   - **Undo of I'm done with it keeps no time limit.** The Undo bar closes within 45 s (`UNDO_BAR_MAX_MS`), `/home/unarchive` is origin-checked, and it acts only while the link is still archived, so a late Undo can only make the owner's own link active again. A limit would need a stored archive time for no protection.
   - **Deletion waits.** What a page cursor naming a deleted link does is decided with deletion itself, which is not planned yet.
+  - **A sign-in that resumes an app's authorize no longer reports a wrong password (#121).** When better-auth refuses the resumed authorize with an OAuth `error` (the app's document went stale, or the signed query expired or was tampered with), `src/auth/resumed-sign-in.ts` answers with a redirect to `/oauth-error?error=<code>` instead, keeping any session cookie and logging the code (never the description). Owner ruling: the expired-query case is included, so an expired query with a wrong password shows the connection message too (#121 comment 6224709211).
 
 - **2026-10-14:** Phase 4 is done, and the repo is public.
   - **The web page shipped** across #92–#99 and #37. #12, the phase's headline issue, closes with this entry.

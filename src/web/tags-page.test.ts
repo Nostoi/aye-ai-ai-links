@@ -150,6 +150,15 @@ describe("the Tags page as served", () => {
     expect(row("kitchen").querySelector('[data-color="amber"], .space-amber')).toBeNull();
   });
 
+  it("shows an unpinned tag's kept color, since this page edits it", () => {
+    const kept = tag({ key: "kept", color: "violet" });
+    const page = parseHTML(tagsPage({ tags: [kept] })).document;
+    expect(page.querySelector('li[data-key="kept"] .dot')?.className).toBe("dot space-violet");
+    expect(
+      page.querySelector('li[data-key="kept"] [data-color="violet"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
   it("says whether each tag is pinned", () => {
     const pin = (key: string) => row(key).querySelector('[data-action="pin"]') as HTMLElement;
     expect(pin("kitchen").textContent).toBe("Pinned to home");
@@ -188,13 +197,14 @@ describe("pinning on the page", () => {
     expect(page.$("#undo-bar").hidden).toBe(true);
   });
 
-  it("unpinning offers Undo, which pins it again with the color it kept", async () => {
+  it("unpinning keeps showing the kept color and offers Undo, which pins it again with it", async () => {
     const page = load((sent) =>
       ok({ ...KITCHEN, pinned: (sent.body as { pinned: boolean }).pinned }),
     );
     page.click(page.inRow("kitchen", '[data-action="pin"]'));
     await page.settle();
     expect(page.inRow("kitchen", '[data-action="pin"]').textContent).toBe("Pin to home");
+    expect(page.inRow("kitchen", ".dot").className).toBe("dot space-clay");
     expect(page.$("#undo-bar").hidden).toBe(false);
     expect(page.$("#undo-bar span").textContent).toBe("Kitchen unpinned.");
     page.click(page.$("#undo-bar button"));

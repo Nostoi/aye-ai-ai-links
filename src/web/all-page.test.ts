@@ -196,7 +196,7 @@ describe("the All links page", () => {
     [{}, "No links yet."],
     [
       { order: "opened" as const },
-      "Nothing opened yet. Links you open from these pages show here.",
+      "Nothing opened yet. Links you open from this site show here.",
     ],
     [{ done: true }, "Nothing here is done yet."],
     [

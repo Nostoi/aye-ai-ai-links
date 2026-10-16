@@ -100,7 +100,7 @@ function empty({ order, done, later }: Input): string {
   if (done && order === "opened") return "You haven't opened any of the links you're done with.";
   if (done) return "Nothing here is done yet.";
   if (order === "opened") {
-    return "Nothing opened yet. Links you open from these pages show here.";
+    return "Nothing opened yet. Links you open from this site show here.";
   }
   return "No links yet.";
 }

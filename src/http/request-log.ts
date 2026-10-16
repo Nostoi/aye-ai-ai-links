@@ -4,6 +4,21 @@ const MAX_AGENT = 200;
 const MAX_DESCRIPTION = 200;
 
 /**
+ * The context key a door sets to the error code of a refusal it answers with a success status,
+ * so the line still records the code. Never a description.
+ */
+export const LOGGED_REFUSAL = "loggedRefusal";
+
+declare module "hono" {
+  interface ContextVariableMap {
+    [LOGGED_REFUSAL]: string;
+  }
+}
+
+const plainToken = (value: unknown) =>
+  typeof value === "string" && /^[\w.-]{1,64}$/.test(value) ? value : undefined;
+
+/**
  * One line per request. The query string, other headers and bodies are never written:
  * they carry codes, tokens, cookies and client assertions.
  */
@@ -21,7 +36,8 @@ export function requestLog(log: (line: string) => void): MiddlewareHandler {
       `${Date.now() - start}ms`,
     ];
     const refusal = status >= 400 ? await refusalOf(c.res) : {};
-    if (refusal.error) parts.push(`error=${refusal.error}`);
+    const error = refusal.error ?? plainToken(c.get(LOGGED_REFUSAL));
+    if (error) parts.push(`error=${error}`);
     if (refusal.description) parts.push(`description=${JSON.stringify(refusal.description)}`);
     const agent = c.req.header("user-agent");
     parts.push(`ua=${agent ? JSON.stringify(agent.slice(0, MAX_AGENT)) : "-"}`);
@@ -38,9 +54,8 @@ async function refusalOf(res: Response): Promise<{ error?: string; description?:
     const body: unknown = await res.clone().json();
     if (typeof body !== "object" || body === null) return {};
     const { error, code, error_description } = body as Record<string, unknown>;
-    const value = typeof error === "string" ? error : code;
     return {
-      error: typeof value === "string" && /^[\w.-]{1,64}$/.test(value) ? value : undefined,
+      error: plainToken(typeof error === "string" ? error : code),
       description:
         typeof error_description === "string"
           ? error_description.slice(0, MAX_DESCRIPTION)

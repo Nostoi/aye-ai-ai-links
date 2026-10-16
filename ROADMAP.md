@@ -2,7 +2,7 @@
 
 **Goal:** save links by talking to any AI, find them again from a vague memory, get nudged back to the ones that matter now, and see them on a calm, visual page. Full design: `docs/specs/2026-10-10-aye-ai-ai-links-design.md`.
 
-**Current phase:** Phase 3 · Phone
+**Current phase:** Later
 
 Tasks live in GitHub issues under each phase's milestone: https://github.com/Nostoi/aye-ai-ai-links/milestones
 
@@ -14,13 +14,20 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 1 · Save & find | Core, SQLite store, keyword search, MCP over the tailnet with agent keys. Claude Code and Codex can save, search and get links | done |
 | Phase 1b · ChatGPT spike | Throwaway toy MCP server answers: can ChatGPT Business add a write-tool connector, does it work on mobile, does no-auth allow writes, do read-only annotations skip confirmation | done |
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
-| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | in progress |
+| Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
 | Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-16:** Phase 3 is done; the current phase is Later. Owner rulings, in session.
+  - **Phase 3's last checks.** ChatGPT kept its connection by refreshing for about 11 hours, across two deploys (#102 comment 6184365831). #105 is fixed by `offline-access.ts` and closed with no upstream report to better-auth (owner ruling, 2026-10-14). #77 B2's F1 moved to Later as #119.
+  - **A stale connected app gets the error page (#119).** A connected CIMD app whose snapshot is not current is sent to `/oauth-error` by the authorize gate, signed in or not, instead of getting admission's raw JSON 400. Admission still refuses it either way.
+  - **An unpinned tag shows no color.** Its space page band is neutral, matching its cards; the stored color comes back when it is pinned again. This settles the #96 open question; the change is #120.
+  - **Undo of I'm done with it keeps no time limit.** The Undo bar closes within 45 s (`UNDO_BAR_MAX_MS`), `/home/unarchive` is origin-checked, and it acts only while the link is still archived, so a late Undo can only make the owner's own link active again. A limit would need a stored archive time for no protection.
+  - **Deletion waits.** What a page cursor naming a deleted link does is decided with deletion itself, which is not planned yet.
 
 - **2026-10-14:** Phase 4 is done, and the repo is public.
   - **The web page shipped** across #92–#99 and #37. #12, the phase's headline issue, closes with this entry.

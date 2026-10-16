@@ -6,6 +6,7 @@ import {
   CHATGPT_ID,
   CHATGPT_REDIRECT,
   CLAUDE_ID,
+  CLAUDE_REDIRECT,
   chatgptDocument,
   clientAssertion,
   connectClaude,
@@ -112,6 +113,42 @@ describe("client admission", () => {
     expect((await saveLinkWith(world, claude.access, "https://e.example/2")).status).toBe(401);
     expect((await refresh(world, claude.refresh, { client_id: CLAUDE_ID })).status).toBe(400);
     expect(world.savedBy()).toEqual(["Claude"]);
+  });
+
+  it("sends the owner's browser to the error page when a connected client's document is withdrawn", async () => {
+    const world = await oauthWorld();
+    await connectClaude(world);
+    world.net.status(CLAUDE_ID, 404);
+    await world.refresher.cycle();
+    const fetched = world.net.calls.length;
+    const browser = world.agent();
+    expect((await browser.signIn()).status).toBe(200);
+    for (const agent of [browser, world.agent()]) {
+      const az = await agent.send(authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, pkce().challenge));
+      expect(az.status).toBe(302);
+      expect(az.headers.get("location")).toBe("/oauth-error?error=invalid_client");
+      expect(az.headers.get("cache-control")).toBe("no-store");
+      const page = await agent.send(az.headers.get("location") ?? "");
+      expect(page.bytes.toString()).toContain("This app is not connected");
+    }
+    expect(world.net.calls.length).toBe(fetched);
+    expect(world.count("oauthAccessToken")).toBe(1);
+  });
+
+  it("sends the owner to the error page once a failing client's snapshot is F old, and not before", async () => {
+    const clock = stashClock();
+    const world = await oauthWorld({ now: clock.now });
+    await connectClaude(world);
+    world.net.status(CLAUDE_ID, 503);
+    clock.advance(FRESHNESS_MS - 1_000);
+    await world.refresher.cycle();
+    const browser = world.agent();
+    expect((await browser.signIn()).status).toBe(200);
+    const authorize = () =>
+      browser.send(authorizePath(CLAUDE_ID, CLAUDE_REDIRECT, pkce().challenge));
+    expect((await authorize()).headers.get("location")).toMatch(`${CLAUDE_REDIRECT}?code=`);
+    clock.advance(1_000);
+    expect((await authorize()).headers.get("location")).toBe("/oauth-error?error=invalid_client");
   });
 
   it("keeps a client through failed refreshes until F after its last success, then refuses it", async () => {

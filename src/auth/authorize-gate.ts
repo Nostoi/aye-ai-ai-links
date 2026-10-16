@@ -9,6 +9,12 @@ import { readSession } from "./session.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 
+const invalidClient = () =>
+  new Response(null, {
+    status: 302,
+    headers: { location: `${OAUTH_ERROR_PATH}?error=invalid_client`, ...NO_STORE },
+  });
+
 /**
  * Answers `GET /oauth2/authorize`.
  * - For a client that is not connected, without a session: the app's own redirect to
@@ -17,6 +23,8 @@ const NO_STORE = { "cache-control": "no-store" };
  *   snapshot is fetched outside the lock and pinned for the signed query's lifetime, so the
  *   consent step can resolve it; refused while too many others are pending. When no current
  *   snapshot results, the browser goes to the OAuth error page.
+ * - A connected CIMD client with no current snapshot also goes to the error page, with or without
+ *   a session. One that lapses while better-auth runs still gets admission's JSON 400.
  * - Anything else goes to better-auth under the lock.
  * This is a usability and database-growth guard. The admission check holds without it.
  */
@@ -55,14 +63,15 @@ export function authorizeGate({
           );
         } else if (result !== "ok") {
           // Admission would refuse it with a JSON 400; the owner's browser gets the error page.
-          response = new Response(null, {
-            status: 302,
-            headers: { location: `${OAUTH_ERROR_PATH}?error=invalid_client`, ...NO_STORE },
-          });
+          response = invalidClient();
         }
         pending = result === "ok";
       }
       response ??= await withAuthLock(async () => {
+        // A connected client whose snapshot lapsed: admission would refuse it with a JSON 400.
+        if (connected && isCimdClientIdUrlCandidate(clientId) && !stash.isCurrent(clientId)) {
+          return invalidClient();
+        }
         // Pinned again here, so the pin outlasts the signed query better-auth is about to sign.
         if (pending) stash.pin(clientId);
         return handle(request);

@@ -194,10 +194,7 @@ describe("the All links page", () => {
 
   it.each([
     [{}, "No links yet."],
-    [
-      { order: "opened" as const },
-      "Nothing opened yet. Links you open from this site show here.",
-    ],
+    [{ order: "opened" as const }, "Nothing opened yet. Links you open from this site show here."],
     [{ done: true }, "Nothing here is done yet."],
     [
       { done: true, order: "opened" as const },

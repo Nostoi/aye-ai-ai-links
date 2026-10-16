@@ -41,10 +41,18 @@ const signInForm = (browser: Agent, oauthQuery: string, password = TEST_PASSWORD
 const signInJson = (browser: Agent, oauthQuery: string, password = TEST_PASSWORD) =>
   browser.signIn({ password, oauth_query: oauthQuery });
 
+/** better-auth reads a repeated form field's last value, so an empty first one still resumes. */
+const signInRepeatedForm = (browser: Agent, oauthQuery: string, password = TEST_PASSWORD) =>
+  browser.send("/api/auth/sign-in/email", {
+    method: "POST",
+    rawForm: `${new URLSearchParams({ email: TEST_EMAIL, password, oauth_query: "" })}&${new URLSearchParams({ oauth_query: oauthQuery })}`,
+  });
+
 describe("a sign-in that resumes an authorize", () => {
   it.each([
     ["JSON", signInJson],
     ["a form", signInForm],
+    ["a form whose oauth_query is repeated, the first empty", signInRepeatedForm],
   ])(
     "sent as %s, for a client whose document was withdrawn, goes to the error page signed in, with no code or token",
     async (_, signIn) => {

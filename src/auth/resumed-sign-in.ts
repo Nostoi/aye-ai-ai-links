@@ -23,7 +23,7 @@ export function carriesOAuthQuery(request: Request, body: Uint8Array | null): bo
     }
   }
   if (/application\/x-www-form-urlencoded/i.test(type)) {
-    return Boolean(new URLSearchParams(text).get("oauth_query"));
+    return Boolean(new URLSearchParams(text).getAll("oauth_query").at(-1));
   }
   return false;
 }

@@ -2,6 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { HomeSpace } from "../core/spaces.js";
 import type { Link, Tag } from "../core/types.js";
+import { itRecordsOpenings, openAppended } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage } from "./pages.js";
 import { spaceHref, spacePage } from "./space-page.js";
@@ -506,6 +507,24 @@ describe("the Tags page's links to spaces", () => {
     expect(names.map((a) => tagOf(a.getAttribute("href") as string))).toEqual([
       ODD_KEY,
       "home batteries",
+    ]);
+  });
+});
+
+describe("openings on a space page (#124)", () => {
+  const web = [link("3"), link("2")];
+  const shown = [...web, link("1", { url: "notes:kept" })];
+  describe("its active links", () => {
+    itRecordsOpenings(() => space({ links: shown }), web, "/links/opened");
+  });
+  describe("its links you're done with", () => {
+    itRecordsOpenings(() => space({ links: shown, done: true }), web, "/links/opened");
+  });
+  it("records a link Show older links appended", async () => {
+    const first = space({ links: [link("3")], older: "3.3" });
+    const next = space({ links: [link("1")], older: null, later: true });
+    expect(await openAppended(first, next, "1")).toEqual([
+      { url: "/links/opened", body: { id: "1" }, redirect: "manual", keepalive: true },
     ]);
   });
 });

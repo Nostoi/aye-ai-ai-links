@@ -1,8 +1,9 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import { linkSpace } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
+import { isWebUrl, linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { isWebUrl, spaceClass, tile } from "./pages.js";
+import { spaceClass, tile } from "./pages.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
@@ -46,14 +47,6 @@ function meta(link: Link, now: Date, withDate: boolean): string {
   return `<p class="small meta">${[date, why].filter((p) => p !== null).join(", ")}</p>`;
 }
 
-/** The title, linked to open in a new tab when it is a web link. */
-function title(link: Link): string {
-  const label = escapeHtml(link.title ?? link.url);
-  return isWebUrl(link.url)
-    ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" data-open>${label}</a>`
-    : label;
-}
-
 const BUTTONS = `<button type="button" data-act="snooze">Not now</button>
 <button type="button" data-act="archive">I'm done with it</button>`;
 
@@ -64,14 +57,12 @@ function classes(base: string, link: Link, catalog: Tag[]): string {
 function leadCard(d: DigestLink, cards: WorthCards): string {
   const { link } = d;
   const why = reason(d, cards.now);
-  const open = isWebUrl(link.url)
-    ? `<a class="button primary" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" data-open>Open it</a>\n`
-    : "";
+  const open = isWebUrl(link.url) ? `${openLink(link, "Open it", "button primary")}\n` : "";
   return `<article class="${classes("worth-card worth-lead", link, cards.catalog)}" data-id="${escapeHtml(link.id)}">
 ${tile(link, cards.images.get(link.id), "worth-image")}
 <div class="worth-body">
 <p class="reason">${why.text}</p>
-<h3>${title(link)}</h3>
+<h3>${linkTitle(link)}</h3>
 ${meta(link, cards.now, !why.plain)}
 ${askWhy(link)}
 <div class="actions">
@@ -85,7 +76,7 @@ function smallCard({ link }: DigestLink, cards: WorthCards): string {
   return `<article class="${classes("worth-card worth-small", link, cards.catalog)}" data-id="${escapeHtml(link.id)}">
 ${tile(link, cards.images.get(link.id), "worth-tile")}
 <div class="worth-body">
-<h3>${title(link)}</h3>
+<h3>${linkTitle(link)}</h3>
 ${meta(link, cards.now, true)}
 ${askWhy(link)}
 <div class="actions small-actions">
@@ -121,8 +112,8 @@ document.addEventListener("keydown", (event) => {
 </script>`;
 
 /**
- * The cards' buttons. Opening a link (a click, or a middle click) records it with a keepalive post
- * and lets the link open. Not now and I'm done hide the card at once and put it back if the server
+ * The cards' buttons. Opening a link is recorded by `openedScript` with `/home/opened`, which also
+ * marks the link surfaced. Not now and I'm done hide the card at once and put it back if the server
  * refuses; Undo asks the server to reverse, and the card stays gone if it cannot. Tell me why is
  * `tellWhyScript`.
  */
@@ -131,11 +122,6 @@ ${CARD_FETCH}
 ${tellWhyScript("worth-cards", "home-error")}
 const homeError = document.getElementById("home-error");
 const cards = document.getElementById("worth-cards");
-const opened = (event) => {
-  const link = event.target.closest("a[data-open]");
-  if (!link || (event.type === "auxclick" && event.button !== 1)) return;
-  post("/home/opened", { id: link.closest("[data-id]").dataset.id }, { keepalive: true });
-};
 const hideFor = async (card, act) => {
   const id = card.dataset.id;
   homeError.textContent = "";
@@ -163,8 +149,6 @@ const hideFor = async (card, act) => {
   });
 };
 if (cards) {
-  cards.addEventListener("click", opened);
-  cards.addEventListener("auxclick", opened);
   cards.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-act]");
     if (!button) return;
@@ -198,6 +182,7 @@ ${worthSection(worth)}
 ${spaces}
 </main>
 ${SLASH_SCRIPT}
-${CARDS_SCRIPT}`,
+${CARDS_SCRIPT}
+${openedScript("worth-cards", "/home/opened")}`,
     { menu: true, undo: true },
   );

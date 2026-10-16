@@ -1,9 +1,7 @@
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
+import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-
-/** Only web links are made clickable; anything else is shown as text. */
-export const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
@@ -153,16 +151,12 @@ function resultItem(
   version: string | undefined,
   space: Space | null,
 ): string {
-  const label = escapeHtml(link.title ?? link.url);
-  const title = isWebUrl(link.url)
-    ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-    : label;
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
-  return `<li class="result${spaceClass(space)}">
+  return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}">
 ${tile(link, version)}
 <div class="result-body">
-<h2>${title}</h2>
+<h2>${linkTitle(link)}</h2>
 <p class="small">${saved}</p>
 ${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${spaceName(space)}${whyLine(link.why)}</p>
 </div>
@@ -198,11 +192,12 @@ export const searchPage = ({
 </div>
 </form>
 <h1>${query.trim() === "" ? "Your newest links" : "Best matches first"}</h1>
-${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog))).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=">your newest links</a>.</p>
 </div>
-</main>`,
+</main>
+${openedScript("results", "/links/opened")}`,
     { menu: true },
   );

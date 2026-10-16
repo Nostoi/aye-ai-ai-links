@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LinkOrder } from "../core/search.js";
 import type { Link, Tag } from "../core/types.js";
 import { allHref, allPage } from "./all-page.js";
+import { itRecordsOpenings, openAppended } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 
 const ORIGIN = "https://links.example";
@@ -195,7 +196,7 @@ describe("the All links page", () => {
     [{}, "No links yet."],
     [
       { order: "opened" as const },
-      "Nothing opened yet. Links you open from the home page's cards show here.",
+      "Nothing opened yet. Links you open from these pages show here.",
     ],
     [{ done: true }, "Nothing here is done yet."],
     [
@@ -262,5 +263,23 @@ describe("Show older links on All links", () => {
       [...document.querySelectorAll("#all-links h3")].map((h) => h.textContent?.trim()),
     ).toEqual(["Link 3", "Link 2", "Link 1", "Link 0"]);
     expect(document.getElementById("older")).toBeNull();
+  });
+});
+
+describe("openings on All links (#124)", () => {
+  const web = [link("3"), link("2")];
+  const shown = [...web, link("1", { url: "notes:kept" })];
+  describe("its active links", () => {
+    itRecordsOpenings(() => all({ links: shown }), web, "/links/opened");
+  });
+  describe("its links you're done with", () => {
+    itRecordsOpenings(() => all({ links: shown, done: true }), web, "/links/opened");
+  });
+  it("records a link Show older links appended", async () => {
+    const first = all({ links: [link("3")], older: "c3" });
+    const next = all({ links: [link("1")], older: null, later: true });
+    expect(await openAppended(first, next, "1")).toEqual([
+      { url: "/links/opened", body: { id: "1" }, redirect: "manual", keepalive: true },
+    ]);
   });
 });

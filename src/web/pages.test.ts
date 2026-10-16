@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
 import { connectionsPage } from "./connections-page.js";
 import { homePage } from "./home-page.js";
+import { itRecordsOpenings } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
@@ -335,7 +336,7 @@ describe("the search page's cards", () => {
   it("shows the title as a link that opens in a new tab, the host and the date, and the summary", () => {
     const html = results([link({ summary: "Side-by-side <costs>" })]);
     expect(html).toContain(
-      '<a href="https://example.com/a" target="_blank" rel="noopener noreferrer">A title</a>',
+      '<a href="https://example.com/a" target="_blank" rel="noopener noreferrer" data-open>A title</a>',
     );
     expect(html).toContain("example.com, saved March 12");
     expect(html).toContain("Side-by-side &lt;costs&gt;");
@@ -410,4 +411,13 @@ describe("the search page's cards", () => {
     expect(results([link()], "  ")).toContain("Your newest links");
     expect(results([link()], "  ")).not.toContain("Best matches first");
   });
+});
+
+describe("openings from search results (#124)", () => {
+  const web = [
+    link({ id: "2", url: "https://example.com/b" }),
+    link({ id: "1", url: "https://example.com/a" }),
+  ];
+  const shown = [...web, link({ id: "3", url: "notes:kept" })];
+  itRecordsOpenings(() => results(shown), web, "/links/opened");
 });

@@ -10,6 +10,7 @@ import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { checkedOrder, linkPage } from "../core/link-pages.js";
+import { recordOpening } from "../core/links.js";
 import {
   addOwnerNote,
   editOwnerNote,
@@ -350,6 +351,14 @@ export function webApp({
   app.post("/home/opened", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
       await markOpened(deps, c.get("caller").owner, c.get("body").id);
+      return done(c);
+    }),
+  );
+
+  // An opening from any other page (search, All links, a space): recorded, but not a nudge.
+  app.post("/links/opened", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      await recordOpening(deps, c.get("caller").owner, c.get("body").id);
       return done(c);
     }),
   );

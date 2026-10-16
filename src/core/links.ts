@@ -195,6 +195,14 @@ export async function updateLink(
   return link;
 }
 
+/**
+ * The owner opened the link: records when, and only that. It is not a nudge, so it never marks
+ * the link surfaced, and it is not a search's open, so it is never logged.
+ */
+export async function recordOpening(deps: Deps, owner: OwnerId, id: string): Promise<Link> {
+  return updateLink(deps, owner, id, { opened: true });
+}
+
 function notFound(id: string): CoreError {
   return new CoreError(
     "not_found",

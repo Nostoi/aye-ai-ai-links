@@ -132,6 +132,8 @@ describe("a space page", () => {
     await save(world, B, "https://b.example/k", ["kitchen"], "Kitchen link of B");
     await setTagColor(depsOf(world), A, { name: "kitchen", color: "clay" });
     await setTagColor(depsOf(world), B, { name: "kitchen", color: "violet" });
+    await setTagPinned(depsOf(world), A, { name: "kitchen", pinned: true });
+    await setTagPinned(depsOf(world), B, { name: "kitchen", pinned: true });
     const a = await signedIn(world);
     const asA = html(await a.send("/spaces?tag=kitchen"));
     const asB = html(await b.send("/spaces?tag=kitchen"));
@@ -141,6 +143,21 @@ describe("a space page", () => {
     expect(asB).toContain("Kitchen link of B");
     expect(asB).not.toContain("Kitchen link of A");
     expect(asB).toMatch(/class="band space-violet"/);
+  });
+
+  it("colors the band only while the tag is pinned, keeping its color while unpinned", async () => {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/k", ["Kitchen"]);
+    await setTagColor(depsOf(world), A, { name: "kitchen", color: "clay" });
+    const browser = await signedIn(world);
+    const band = async () =>
+      parseHTML(html(await browser.send("/spaces?tag=kitchen"))).document.querySelector(".band")
+        ?.className;
+    expect(await band()).toBe("band");
+    await setTagPinned(depsOf(world), A, { name: "kitchen", pinned: true });
+    expect(await band()).toBe("band space-clay");
+    await setTagPinned(depsOf(world), A, { name: "kitchen", pinned: false });
+    expect(await band()).toBe("band");
   });
 
   it("sends a browser without a session to /login, and refuses another site's Origin", async () => {

@@ -71,11 +71,16 @@ describe("linkSpace", () => {
 });
 
 describe("spaceColor", () => {
-  it("is a tag's color only when it is a space color, pinned or not", () => {
-    expect(spaceColor(BAKING)).toBe("violet");
+  it("is a pinned tag's color only when it is a space color", () => {
     expect(spaceColor(KITCHEN)).toBe("clay");
     for (const color of ["amber", "Teal", "teal;x", "", null]) {
-      expect(spaceColor(tag({ key: "x", color }))).toBeNull();
+      expect(spaceColor(tag({ key: "x", color, pinned: true }))).toBeNull();
     }
+  });
+
+  it("is null for an unpinned tag, whose kept color shows again once it is pinned", () => {
+    expect(BAKING.color).toBe("violet");
+    expect(spaceColor(BAKING)).toBeNull();
+    expect(spaceColor({ ...BAKING, pinned: true })).toBe("violet");
   });
 });

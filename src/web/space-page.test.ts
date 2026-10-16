@@ -152,10 +152,22 @@ describe("a space page", () => {
     ["a stored color that is not a space color", "amber"],
     ["CSS in the color", "teal;x"],
   ])("draws a neutral band for a tag with %s", (_, color) => {
-    const html = space({ tag: tag({ key: "k", color }) });
+    const html = space({ tag: tag({ key: "k", color, pinned: true }) });
     expect(dom(html).querySelector(".band")?.className).not.toMatch(/space-/);
     expect(html).not.toContain("space-amber");
     expect(html).not.toContain("teal;x");
+  });
+
+  it("draws a neutral band for an unpinned tag that kept a space color, matching its cards", () => {
+    const kept = tag({ key: "baking", name: "Baking", color: "violet" });
+    const links = [link("a", { tags: onTag("baking") })];
+    const html = space({ tag: kept, catalog: [kept], links });
+    expect(dom(html).querySelector(".band")?.className).not.toMatch(/space-/);
+    expect(dom(html).querySelector(".link-card")?.className).not.toMatch(/space-/);
+    const pinned = { ...kept, pinned: true };
+    const again = space({ tag: pinned, catalog: [pinned], links });
+    expect(dom(again).querySelector(".band")?.className).toContain("space-violet");
+    expect(dom(again).querySelector(".link-card")?.className).toContain("space-violet");
   });
 
   it("gives an unpinned tag with no color a page with a neutral band", () => {

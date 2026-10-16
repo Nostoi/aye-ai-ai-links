@@ -1,8 +1,10 @@
 import { Hono } from "hono";
 import { createRateLimiter, type RateLimiter, type RateLimitOptions } from "../http/rate-limit.js";
+import { LOGGED_REFUSAL } from "../http/request-log.js";
 import type { WithAuthLock } from "./auth-lock.js";
 import { AUTH_BASE_PATH } from "./better-auth.js";
 import { authorizeWithOfflineAccess } from "./offline-access.js";
+import { carriesOAuthQuery, resumedRefusal } from "./resumed-sign-in.js";
 
 /** The global limits that apply before the lock, each counted for everyone together. */
 export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register";
@@ -18,6 +20,8 @@ export type RouteLimit = "login" | "authorize" | "token" | "revoke" | "register"
  * - `offlineAccess`: `offline_access` is added to the query's scope (`offline-access.ts`).
  * - `clearCache`: the response tells the browser to drop its cache, which holds the owner's
  *   long-cached preview images (`IMAGE_ROUTE` in `src/web/http.ts`).
+ * - `resumesAuthorize`: a sign-in carrying `oauth_query` resumes an authorization, and its OAuth
+ *   refusal goes to the error page (`resumed-sign-in.ts`), its code still logged.
  */
 export type RoutePolicy = {
   origin: "same" | "optional";
@@ -26,6 +30,7 @@ export type RoutePolicy = {
   gate?: true;
   offlineAccess?: true;
   clearCache?: true;
+  resumesAuthorize?: true;
 };
 
 /**
@@ -34,7 +39,7 @@ export type RoutePolicy = {
  * userinfo, continue, client and consent management, and every password-changing route.
  */
 export const AUTH_ROUTES: ReadonlyMap<string, RoutePolicy> = new Map<string, RoutePolicy>([
-  ["POST /sign-in/email", { origin: "same", limit: "login" }],
+  ["POST /sign-in/email", { origin: "same", limit: "login", resumesAuthorize: true }],
   ["POST /sign-out", { origin: "same", clearCache: true }],
   ["GET /get-session", { origin: "optional" }],
   [
@@ -194,6 +199,13 @@ export function authApp({
     const request = new Request(url, { method: raw.method, headers: raw.headers, body });
     if (policy.gate && authorize) return authorize(request);
     const response = await withAuthLock(() => handle(request));
+    if (policy.resumesAuthorize && carriesOAuthQuery(raw, body)) {
+      const refusal = await resumedRefusal(response);
+      if (refusal) {
+        c.set(LOGGED_REFUSAL, refusal.error);
+        return refusal.response;
+      }
+    }
     return policy.clearCache ? clearingCache(response) : response;
   });
   return app;

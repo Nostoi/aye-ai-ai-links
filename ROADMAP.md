@@ -16,7 +16,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | Import/export, dead-link checks, share sheet or bookmarklet, notifications, scheduled digests | — |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere | current |
 
 ## Decision log
 
@@ -27,7 +27,10 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **A stale connected app gets the error page (#119).** A connected CIMD app whose snapshot is not current is sent to `/oauth-error` by the authorize gate, signed in or not, instead of getting admission's raw JSON 400. Admission still refuses it either way.
   - **An unpinned tag shows no color (#120).** `spaceColor` gives a color only for a pinned tag, so its space page band is neutral, matching its cards, and the stored color comes back when it is pinned again. This settles the #96 open question and replaces that entry's band rule. The Tags page is the exception: it is where the kept color is edited, so it still shows it (#120 comment 6224673456).
   - **Undo of I'm done with it keeps no time limit.** The Undo bar closes within 45 s (`UNDO_BAR_MAX_MS`), `/home/unarchive` is origin-checked, and it acts only while the link is still archived, so a late Undo can only make the owner's own link active again. A limit would need a stored archive time for no protection.
-  - **Deletion waits.** What a page cursor naming a deleted link does is decided with deletion itself, which is not planned yet.
+  - **Delete is web only, with Undo (#126).** No MCP tool deletes. A soft delete hides the link at once and Undo restores it within 60 s, with no confirmation. A page cursor naming a deleted link restarts from the newest links rather than showing an error. This settles the hand-off in the 2026-10-14 `list_links` entry.
+  - **A sign-in that resumes an app's authorize no longer reports a wrong password (#121).** When better-auth refuses the resumed authorize with an OAuth `error` (the app's document went stale, or the signed query expired or was tampered with), `src/auth/resumed-sign-in.ts` answers with a redirect to `/oauth-error?error=<code>` instead, keeping any session cookie and logging the code (never the description). Owner ruling: the expired-query case is included, so an expired query with a wrong password shows the connection message too (#121 comment 6224709211).
+  - **Tools you use regularly get Keep handy (#125).** A fourth choice on Worth a look marks a link as a tool. A tool leaves the ordinary nudges and joins a Handy shelf on home. Instead, it is asked about alone ("Still using it?") once it goes unopened for a wait. The wait counts from the later of its last recorded opening or its last answer, starts at 30 days, doubles on each "Still using it" with no opening since, stops at 120 days, and goes back to 30 on any opening.
+  - **Openings are recorded from every web page (#124),** storing only the last one. Clicks the app can't see, such as browser bookmarks, stay unrecorded.
 
 - **2026-10-14:** Phase 4 is done, and the repo is public.
   - **The web page shipped** across #92–#99 and #37. #12, the phase's headline issue, closes with this entry.

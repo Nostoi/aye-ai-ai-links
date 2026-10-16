@@ -4,9 +4,12 @@ import type { Link, Tag } from "./types.js";
 /** A space a link is shown in: a pinned tag with a valid space color. */
 export type Space = { key: string; name: string; color: SpaceColor };
 
-/** A tag's color when it is one of `SPACE_COLORS`, pinned or not; anything else is null. */
-export const spaceColor = (tag: Pick<Tag, "color">): SpaceColor | null =>
-  isSpaceColor(tag.color) ? tag.color : null;
+/**
+ * A pinned tag's color when it is one of `SPACE_COLORS`; anything else is null. An unpinned tag
+ * keeps its stored color, which shows again once it is pinned.
+ */
+export const spaceColor = (tag: Pick<Tag, "color" | "pinned">): SpaceColor | null =>
+  tag.pinned && isSpaceColor(tag.color) ? tag.color : null;
 
 /**
  * The space whose color a link is shown in. `within` (a tag key, such as the space page being
@@ -22,7 +25,7 @@ export function linkSpace(
   const byKey = new Map(catalog.map((t) => [t.key, t]));
   const spaces = link.tags.flatMap((t): Space[] => {
     const entry = byKey.get(t.key);
-    const color = entry?.pinned ? spaceColor(entry) : null;
+    const color = entry ? spaceColor(entry) : null;
     return entry && color ? [{ key: entry.key, name: entry.name, color }] : [];
   });
   return spaces.find((s) => s.key === within) ?? spaces[0] ?? null;

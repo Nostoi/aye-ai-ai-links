@@ -85,7 +85,7 @@ ${tellWhyScript("space-links", "space-error")}
 `;
 
 /**
- * A tag's space: a header in its color (neutral when its color is not a space color), then its
+ * A tag's space: a header in its color (`spaceColor`: neutral while it is unpinned), then its
  * active links newest first, or with `done` the links you're done with. Each page has at most
  * the links given; `older` is the cursor of the next page, or null.
  */

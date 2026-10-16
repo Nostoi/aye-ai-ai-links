@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome, PageExtractor } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome, PageFetcher } from "./fetch.js";
-import { getLinkWithText, SAVE_WAIT_MS, saveLink, updateLink } from "./links.js";
+import { getLinkWithText, recordOpening, SAVE_WAIT_MS, saveLink, updateLink } from "./links.js";
 import { createSnapshotRunner } from "./snapshot-runner.js";
 import { EXCERPT_CHARS, TEXT_CHARS } from "./snapshot-text.js";
 import { describeStoreContract, type StoreHarness } from "./store-contract.js";
@@ -348,5 +348,35 @@ describe("getLinkWithText", () => {
     const got = await getLinkWithText(deps, "a", link.id, "t");
     expect(got.link.snapshot?.status).toBe("ok");
     expect(got.snapshotText).toEqual({ text: "y".repeat(TEXT_CHARS), truncated: true });
+  });
+});
+
+describe("recordOpening", () => {
+  const setup = () => {
+    const store = new FakeStore();
+    const logged: string[] = [];
+    const searchLog = {
+      record: async () => void logged.push("record"),
+      pairOpen: async () => void logged.push("pairOpen"),
+    };
+    return { store, logged, deps: { store, searchLog, now: () => T0 } };
+  };
+
+  it("records when the owner opened the link and nothing else: no surfacing, no search log", async () => {
+    const { store, logged, deps } = setup();
+    const { link } = await saveLink(deps, "a", URL_A);
+    await recordOpening(deps, "a", link.id);
+    const [after] = store.all("a");
+    expect(after).toEqual({ ...link, lastOpenedAt: T0 });
+    expect(after?.lastSurfacedAt).toBeNull();
+    expect(logged).toEqual([]);
+  });
+
+  it("refuses another owner's link as not found, changing nothing", async () => {
+    const { store, deps } = setup();
+    const { link } = await saveLink(deps, "b", URL_A);
+    const before = structuredClone(store.all("b"));
+    await expect(recordOpening(deps, "a", link.id)).rejects.toMatchObject({ code: "not_found" });
+    expect(store.all("b")).toEqual(before);
   });
 });

@@ -12,7 +12,9 @@ describe("list_links guidance", () => {
 
   it("says what each order lists, what the total counts, and how cursors behave", () => {
     for (const order of ['"newest"', '"oldest"', '"opened"']) expect(LIST_LINKS).toContain(order);
-    expect(LIST_LINKS).toMatch(/opened: true.*home page/s);
+    // #124: openings are recorded from every web page, not only home's cards.
+    expect(LIST_LINKS).toMatch(/opened: true.*from the web page.*bookmark/s);
+    expect(LIST_LINKS).not.toMatch(/home page/);
     expect(LIST_LINKS).toMatch(/total counts/);
     expect(LIST_LINKS).toMatch(/nextCursor is null on the last page/);
     expect(LIST_LINKS).toMatch(/opened while you page.*missed/s);
@@ -55,8 +57,10 @@ describe("get_digest guidance", () => {
     expect(GET_DIGEST).toMatch(/marks the links it returns as shown.*Don't call it again/s);
   });
 
-  it("says the web home page records openings too, and does not claim agents are the only source", () => {
+  it("says the web page records openings too, and does not claim agents are the only source", () => {
     expect(GET_DIGEST).not.toContain("recorded only when an agent sends opened: true");
-    expect(GET_DIGEST).toMatch(/opened: true.*home page/s);
+    // #124: openings are recorded from every web page, not only home's cards.
+    expect(GET_DIGEST).toMatch(/opened: true.*from the web page.*bookmark/s);
+    expect(GET_DIGEST).not.toMatch(/home page/);
   });
 });

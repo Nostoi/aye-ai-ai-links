@@ -7,7 +7,7 @@ import {
   unclaimSurfaced,
 } from "./digest.js";
 import { CoreError } from "./errors.js";
-import { updateLink } from "./links.js";
+import { recordOpening } from "./links.js";
 import type { LinkExpectation } from "./store.js";
 import type { Link, LinkPatch, OwnerId } from "./types.js";
 
@@ -42,7 +42,7 @@ export async function worthALook(deps: WorthDeps, owner: OwnerId): Promise<Diges
 export async function markOpened(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
   const now = deps.now();
   const at = { store: deps.store, now: () => now };
-  await updateLink(at, owner, id, { opened: true });
+  await recordOpening(at, owner, id);
   await claimSurfaced(at, owner, [id]);
 }
 

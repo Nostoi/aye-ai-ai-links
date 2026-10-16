@@ -109,6 +109,16 @@ describe("the home card actions", () => {
     expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
+  it("/links/opened, from any other page, records the opening only: not surfaced, not logged", async () => {
+    const { world, browser, id } = await home();
+    const res = await browser.send("/links/opened", post({ id }));
+    expect(res.status).toBe(204);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(row(world, id).last_opened_at).toEqual(expect.any(Number));
+    expect(row(world, id).last_surfaced_at).toBeNull();
+    expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
+  });
+
   it("/home/snooze marks it surfaced and snoozes two weeks, answering both; /home/unsnooze reverses both, so the card is back", async () => {
     const { world, browser, id } = await home();
     const res = await browser.send("/home/snooze", post({ id }));
@@ -225,6 +235,7 @@ type Seed = LinkPatch & { lastSurfacedAt?: Date };
 /** Each POST, with a body naming the card's link, and the state of A's link it acts on. */
 const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
   ["/home/opened", (id) => ({ id }), {}],
+  ["/links/opened", (id) => ({ id }), {}],
   ["/home/snooze", (id) => ({ id }), {}],
   [
     "/home/unsnooze",

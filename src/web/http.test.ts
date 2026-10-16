@@ -133,7 +133,7 @@ describe("web door", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const html = await res.text();
     expect(html).toContain(
-      `<a href="${OWN}" target="_blank" rel="noopener noreferrer">Own &lt;b&gt;link&lt;/b&gt;</a>`,
+      `<a href="${OWN}" target="_blank" rel="noopener noreferrer" data-open>Own &lt;b&gt;link&lt;/b&gt;</a>`,
     );
     expect(html).not.toContain(OTHER);
     expect(html).not.toContain("Other owner");

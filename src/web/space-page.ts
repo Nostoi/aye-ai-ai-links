@@ -1,7 +1,8 @@
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
+import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { hostOf, isWebUrl, spaceClass, tile, whyLine } from "./pages.js";
+import { hostOf, spaceClass, tile, whyLine } from "./pages.js";
 import { olderScript } from "./show-older.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
@@ -56,10 +57,6 @@ type Input = {
  * does, and its picture is faded while its text stays at full contrast.
  */
 function card(link: Link, { tag, catalog, images, now, done }: Input): string {
-  const label = escapeHtml(link.title ?? link.url);
-  const title = isWebUrl(link.url)
-    ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-    : label;
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
   const why =
@@ -70,7 +67,7 @@ function card(link: Link, { tag, catalog, images, now, done }: Input): string {
   return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}">
 ${tile(link, images.get(link.id), "card-image")}
 <div class="card-body">
-<h3>${title}</h3>
+<h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
 </div>
@@ -118,7 +115,7 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : WHY_SCRIPT}${older ? olderScript("space-links") : ""}`,
+${done ? "" : WHY_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
     { menu: true },
   );
 }

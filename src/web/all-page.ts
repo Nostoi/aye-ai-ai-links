@@ -1,8 +1,9 @@
 import { linkSpace } from "../core/link-space.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { Link, Tag } from "../core/types.js";
+import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
-import { hostOf, isWebUrl, spaceClass, tile } from "./pages.js";
+import { hostOf, spaceClass, tile } from "./pages.js";
 import { olderScript } from "./show-older.js";
 
 /**
@@ -59,17 +60,13 @@ const monthName = (d: Date, now: Date) =>
 
 /** One card: the picture or a tint, the title, and the space and site. No why and no actions. */
 function card(link: Link, { catalog, images, done }: Input): string {
-  const label = escapeHtml(link.title ?? link.url);
-  const title = isWebUrl(link.url)
-    ? `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-    : label;
   const space = linkSpace(link, catalog);
   const site = [space?.name, hostOf(link.url)].filter(Boolean).join(", ");
   const dot = space ? `<span class="dot" aria-hidden="true"></span>` : "";
-  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}">
+  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}">
 ${tile(link, images.get(link.id), "card-image")}
 <div class="card-body">
-<h3>${title}</h3>
+<h3>${linkTitle(link)}</h3>
 ${site ? `<p class="card-site">${dot}${escapeHtml(site)}</p>\n` : ""}</div>
 </li>`;
 }
@@ -103,7 +100,7 @@ function empty({ order, done, later }: Input): string {
   if (done && order === "opened") return "You haven't opened any of the links you're done with.";
   if (done) return "Nothing here is done yet.";
   if (order === "opened") {
-    return "Nothing opened yet. Links you open from the home page's cards show here.";
+    return "Nothing opened yet. Links you open from this site show here.";
   }
   return "No links yet.";
 }
@@ -140,7 +137,7 @@ export function allPage(input: Input): string {
 ${list}
 <div class="all-foot">${more}${other}</div>
 </main>
-${older ? olderScript("all-links") : ""}`,
+${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     { menu: true },
   );
 }

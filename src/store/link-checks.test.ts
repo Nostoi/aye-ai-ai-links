@@ -1,12 +1,27 @@
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
+import { describeLinkCheckStoreContract } from "../core/link-check-store-contract.js";
+import { openDatabase } from "./database.js";
 import { MIGRATIONS, migrate } from "./migrations.js";
+import { SqliteLinkCheckStore } from "./sqlite-link-checks.js";
+import { SqliteStore } from "./sqlite-store.js";
 
 type Db = Database.Database;
 
 const open: Db[] = [];
 afterEach(() => {
   for (const db of open.splice(0)) if (db.open) db.close();
+});
+
+describeLinkCheckStoreContract("SqliteLinkCheckStore", () => {
+  const db = openDatabase(":memory:");
+  open.push(db);
+  const links = new SqliteStore(db);
+  return {
+    links,
+    checks: new SqliteLinkCheckStore(db),
+    addOwner: (o) => links.ensureUser(o, o),
+  };
 });
 
 /** The migration that adds `link_checks`; everything before it is the schema it starts from. */

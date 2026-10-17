@@ -59,14 +59,14 @@ type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
   project_status AS projectStatus`;
 
-function toMs(d: Date | null): number | null {
+export function toMs(d: Date | null): number | null {
   if (d === null) return null;
   const ms = d.getTime();
   if (!Number.isFinite(ms)) throw new RangeError("Cannot store an invalid date.");
   return ms;
 }
 
-const fromMs = (ms: number | null): Date | null => (ms === null ? null : new Date(ms));
+export const fromMs = (ms: number | null): Date | null => (ms === null ? null : new Date(ms));
 
 /** Canonical decimal ids in 1..MAX_SAFE_INTEGER; anything else was never issued. */
 export function parseId(id: string): number | null {
@@ -197,7 +197,13 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   async claimSurfaced(
     owner: OwnerId,
     ids: string[],
-    when: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
+    when: {
+      at: Date;
+      notSurfacedAfter: Date;
+      now: Date;
+      exceptKeptTools?: boolean;
+      exceptGone?: boolean;
+    },
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
     return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
@@ -476,7 +482,14 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
       notSurfacedAfter,
       now,
       exceptKeptTools,
-    }: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
+      exceptGone,
+    }: {
+      at: Date;
+      notSurfacedAfter: Date;
+      now: Date;
+      exceptKeptTools?: boolean;
+      exceptGone?: boolean;
+    },
   ): SurfacedClaim[] {
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
@@ -484,7 +497,9 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
          AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
-           WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))`,
+           WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))
+         AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_checks c
+           WHERE c.owner_id = links.owner_id AND c.link_id = links.id AND c.flagged_at IS NOT NULL))`,
     );
     const mark = this.db.prepare(
       "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ?",
@@ -497,6 +512,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
         toMs(now),
         toMs(notSurfacedAfter),
         exceptKeptTools ? 1 : 0,
+        exceptGone ? 1 : 0,
       ) as { last_surfaced_at: number | null } | undefined;
       if (!row) continue;
       mark.run(toMs(at), id, owner);

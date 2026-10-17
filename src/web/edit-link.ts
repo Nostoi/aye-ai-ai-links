@@ -94,7 +94,8 @@ export const SHRINK_SIDE = 1600;
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
  *   Save stays off until its answer comes. An answer that comes after the dialog closed or reopened
- *   still updates its own card and offers Undo, but leaves the dialog alone.
+ *   still updates its own card and offers Undo, but leaves the dialog alone; a refusal that comes then
+ *   shows in the page's alert.
  * - Focus goes back to the card's ⋯ when the dialog closes.
  */
 export const editLinkScript = (root: string, error: string) => `{
@@ -364,6 +365,7 @@ form.addEventListener("submit", async (event) => {
   }
   if (!answer) {
     if (current) editError.textContent = refused;
+    else editAlert.textContent = refused;
     return;
   }
   showCard(target, answer);

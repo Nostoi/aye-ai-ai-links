@@ -697,13 +697,14 @@ describe("the edit dialog's script", () => {
     });
   });
 
-  it("a refusal answered after the dialog was reopened writes nothing into it", async () => {
+  it("a refusal answered after the dialog was reopened shows in the page's alert, not in the dialog", async () => {
     const p = await reopenedDuringSave({
       status: 400,
       body: { code: "invalid_input", message: "A title can be at most 200 characters." },
     });
     expect(p.dialog.open).toBe(true);
     expect(p.$("#edit-error").textContent).toBe("");
+    expect(p.$("#results-error").textContent).toBe("A title can be at most 200 characters.");
     expect(p.$('[data-id="1"] h2 a').textContent).toBe("Link 1");
   });
 

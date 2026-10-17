@@ -93,6 +93,8 @@ export const SHRINK_SIDE = 1600;
  * - Save sends only what changed, as a form. The card shows the server's answer, not what was
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
+ *   Save stays off until its answer comes. An answer that comes after the dialog closed or reopened
+ *   still updates its own card and offers Undo, but leaves the dialog alone.
  * - Focus goes back to the card's ⋯ when the dialog closes.
  */
 export const editLinkScript = (root: string, error: string) => `{
@@ -119,13 +121,19 @@ let picture = null;
 let pickUrl = null;
 let pickTurn = 0;
 let dragDepth = 0;
-const busy = (on) => {
-  for (const b of saves) b.disabled = on;
+// Save is off while a pick is prepared or a Save is answered. saveTurn moves on each open and
+// close, so a Save answered later updates only its own card.
+let preparing = false;
+let saving = false;
+let saveTurn = 0;
+const syncBusy = () => {
+  for (const b of saves) b.disabled = preparing || saving;
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
 const dropPick = () => {
   pickTurn++;
+  preparing = false;
   if (pickUrl) URL.revokeObjectURL(pickUrl);
   pickUrl = null;
 };
@@ -187,11 +195,13 @@ const pick = async (file) => {
   if (!file || !card) return;
   const turn = ++pickTurn;
   editError.textContent = "";
-  busy(true);
+  preparing = true;
+  syncBusy();
   render(${JSON.stringify("Preparing…")});
   const ready = await shrink(file);
   if (turn !== pickTurn) return;
-  busy(false);
+  preparing = false;
+  syncBusy();
   if (!ready) {
     render();
     editError.textContent = ${JSON.stringify("That file can't be opened as a picture. Try a PNG, JPEG, GIF or WebP.")};
@@ -235,6 +245,8 @@ const finish = () => {
 const open = (from, menu) => {
   card = from;
   opener = menu.querySelector("summary");
+  saveTurn++;
+  saving = false;
   dropPick();
   picture = null;
   dragDepth = 0;
@@ -246,7 +258,7 @@ const open = (from, menu) => {
   pageLine.hidden = page === "" || page === d.title.trim();
   preview.className = ["edit-preview", ...[...card.classList].filter((c) => c.startsWith("space-"))].join(" ");
   editError.textContent = "";
-  busy(false);
+  syncBusy();
   render();
   dialog.showModal();
   titleField.focus();
@@ -260,6 +272,8 @@ editRoot.addEventListener("click", (event) => {
 });
 // Esc closes the dialog natively; focus goes back to the ⋯ unless something else already took it.
 dialog.addEventListener("close", () => {
+  saveTurn++;
+  saving = false;
   dropPick();
   const now = document.activeElement;
   if (!now || now === document.body || dialog.contains(now)) giveFocusBack();
@@ -278,7 +292,7 @@ fileField.addEventListener("change", () => {
 removeButton.addEventListener("click", () => {
   const own = card.dataset.own === "1";
   dropPick();
-  busy(false);
+  syncBusy();
   picture = own ? { kind: "page" } : null;
   editError.textContent = "";
   render();
@@ -335,17 +349,25 @@ form.addEventListener("submit", async (event) => {
   if (!changed) return finish();
   editError.textContent = "";
   editAlert.textContent = "";
-  busy(true);
+  const target = card;
+  const turn = ++saveTurn;
+  saving = true;
+  syncBusy();
   const res = await fetch("/links/edit", { method: "POST", body, redirect: "manual" }).catch(() => null);
   const answer = res && res.status === 200 ? await res.json().catch(() => null) : null;
-  busy(false);
+  const refused = answer ? "" : await failure(res);
+  // Closed or reopened since: the dialog is no longer this Save's.
+  const current = turn === saveTurn;
+  if (current) {
+    saving = false;
+    syncBusy();
+  }
   if (!answer) {
-    editError.textContent = await failure(res);
+    if (current) editError.textContent = refused;
     return;
   }
-  const target = card;
   showCard(target, answer);
-  finish();
+  if (current) finish();
   if (!answer.editId) return;
   showUndo(${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });

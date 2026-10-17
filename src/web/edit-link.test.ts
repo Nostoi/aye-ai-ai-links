@@ -285,10 +285,11 @@ function opened(
   reply: (sent: Post) => Answer = () => ({ status: 200, body: answer() }),
   pictures: Map<string, PictureInfo> = new Map([["1", { own: false, pageVersion: PAGE }]]),
   images: Map<string, string> = new Map([["1", PAGE]]),
+  links: Link[] = [link("1")],
 ) {
   const html = searchPage({
     query: "",
-    links: [link("1")],
+    links,
     now: NOW,
     images,
     catalog: [KITCHEN],
@@ -652,6 +653,84 @@ describe("the edit dialog's script", () => {
     p.submit();
     await p.settle();
     expect(p.$("#results-error").textContent).toBe("");
+  });
+
+  /** A Save on card 1 whose answer waits, then Cancel and the dialog reopened for card 2. */
+  async function reopenedDuringSave(reply: Answer) {
+    let release = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const p = opened(
+      (sent) => (sent.url === "/links/edit" ? { ...reply, wait } : { status: 200, body: answer() }),
+      undefined,
+      undefined,
+      [link("1"), link("2")],
+    );
+    p.open();
+    p.title.value = "Edited";
+    p.submit();
+    await p.settle();
+    p.dispatch(p.$(".edit-foot [data-edit=cancel]"), "click");
+    p.dispatch(p.$('[data-id="2"] button[data-act=edit]'), "click");
+    release();
+    await p.settle();
+    return p;
+  }
+
+  it("a Save answered after the dialog was reopened for another card updates its own card and leaves the dialog alone", async () => {
+    const p = await reopenedDuringSave({
+      status: 200,
+      body: answer({ title: "Edited", editId: "e1" }),
+    });
+    expect(p.$('[data-id="1"] h2 a').textContent).toBe("Edited");
+    expect(p.$('[data-id="1"]').getAttribute("data-title")).toBe("Edited");
+    expect(p.$('[data-id="2"] h2 a').textContent).toBe("Link 2");
+    expect(p.$('[data-id="2"]').getAttribute("data-title")).toBe("Link 2");
+    expect(p.dialog.open).toBe(true);
+    expect(p.title.value).toBe("Link 2");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toMatchObject({
+      url: "/links/edit/undo",
+      body: { id: "1", editId: "e1" },
+    });
+  });
+
+  it("a refusal answered after the dialog was reopened writes nothing into it", async () => {
+    const p = await reopenedDuringSave({
+      status: 400,
+      body: { code: "invalid_input", message: "A title can be at most 200 characters." },
+    });
+    expect(p.dialog.open).toBe(true);
+    expect(p.$("#edit-error").textContent).toBe("");
+    expect(p.$('[data-id="1"] h2 a').textContent).toBe("Link 1");
+  });
+
+  it("while a Save is pending, a paste or Remove keeps Save disabled, so a second press sends nothing", async () => {
+    fakeImages([{ width: 64, height: 48 }]);
+    let release = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const p = opened(() => ({ status: 200, wait, body: answer({ title: "Edited" }) }));
+    p.open();
+    p.title.value = "Edited";
+    p.submit();
+    await p.settle();
+    p.dispatch(p.dialog, "paste", { clipboardData: { files: [SHOT] } });
+    await p.settle();
+    expect(p.saves().every((b) => b.disabled)).toBe(true);
+    p.submit();
+    await p.settle();
+    p.dispatch(p.$("[data-edit=remove]"), "click");
+    expect(p.saves().every((b) => b.disabled)).toBe(true);
+    p.submit();
+    await p.settle();
+    expect(p.sent).toHaveLength(1);
+    release();
+    await p.settle();
+    expect(p.dialog.open).toBe(false);
   });
 
   it("shows a refusal inside the dialog and keeps it open", async () => {

@@ -181,7 +181,7 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .handy-tile .small-actions button{min-height:44px;min-width:44px;padding:0 4px}
 .tile-menu{position:absolute;top:2px;right:2px;z-index:3}
 .tile-menu-dot{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgb(0 0 0 / .5);color:#fff;font-size:18px;line-height:1}
-.tile-menu .actions{position:absolute;top:46px;right:0;margin:0;padding:0 12px;border-radius:12px;background:var(--surface);box-shadow:0 4px 14px #00000033;white-space:nowrap}
+.tile-menu .actions{position:absolute;top:46px;right:0;margin:0;padding:0 4px;border-radius:12px;background:var(--surface);box-shadow:0 4px 14px #00000033;width:max-content;max-width:148px;white-space:normal}
 .handy-tile p{margin:0 0 4px}
 .worth-small .meta{font-size:14px;margin:0 0 4px}
 .small-actions{gap:0 18px}

@@ -136,6 +136,13 @@ describe("the Handy postcards", () => {
     expect(rule(".handy-tile")).toContain("overflow:visible");
   });
 
+  it("keeps the open menu inside a 156px phone card, so the sideways row doesn't clip it", () => {
+    const max = /max-width:(\d+)px/.exec(rule(".tile-menu .actions"))?.[1];
+    expect(Number(max)).toBeGreaterThan(0);
+    expect(Number(max)).toBeLessThanOrEqual(148);
+    expect(rule(".tile-menu .actions")).toContain("white-space:normal");
+  });
+
   it("sets the title in white over a dark fade, whatever the theme", () => {
     expect(rule(".handy-caption")).toMatch(/linear-gradient\([^)]*rgb\(0 0 0/);
     expect(rule(".handy-caption")).toContain("color:#fff");

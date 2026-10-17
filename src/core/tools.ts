@@ -171,3 +171,26 @@ export async function stillUsing(
     return { ...current, answeredAt: now, waitDays };
   });
 }
+
+/**
+ * The Undo of a tool action: puts `previous` back (null removes the row), but only while the row
+ * still holds the values `expectedCurrent` (the action's written row) has, compared by value. If
+ * it differs, that is a conflict and nothing changes, as with home's Undo. A later change that
+ * leaves the row with identical values is not detected.
+ */
+export async function restoreTool(
+  deps: Pick<ToolsDeps, "tools">,
+  owner: OwnerId,
+  id: string,
+  previous: ToolRecord | null,
+  expectedCurrent: ToolRecord,
+): Promise<void> {
+  const result = await deps.tools.updateToolIf(owner, id, expectedCurrent, previous);
+  if (!result) throw notFound(id);
+  if (!result.applied) {
+    throw new CoreError(
+      "conflict",
+      "That link's Keep handy state was changed since, so it stays as it is.",
+    );
+  }
+}

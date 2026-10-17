@@ -11,6 +11,7 @@ import {
   isDue,
   keepHandy,
   notHandy,
+  restoreTool,
   stillUsing,
 } from "./tools.js";
 import type { Link } from "./types.js";
@@ -389,5 +390,54 @@ describe("stillUsing", () => {
     expect(await code(stillUsing(deps(), A, suggested, "stated"))).toBe("conflict");
     expect(await code(stillUsing(deps(), A, kept, "inferred"))).toBe("invalid_input");
     expect(await store.getTool(A, kept)).toEqual(tool());
+  });
+});
+
+describe("restoreTool", () => {
+  it("undoing a first keep restores exact absence, so the link can be suggested again", async () => {
+    const id = await saved();
+    const kept = await keepHandy(deps(), A, id, "stated");
+    await restoreTool(deps(), A, id, kept.previous, kept.tool);
+    expect(await store.getTool(A, id)).toBeNull();
+    expect(await store.listTools(A)).toEqual(new Map());
+    clock = day(1);
+    expect((await keepHandy(deps(), A, id, "inferred")).tool).toEqual(
+      tool({ status: "suggested", source: "inferred", since: day(1) }),
+    );
+  });
+
+  it("undoing not handy, an answer to a suggestion or Still using puts the earlier row back", async () => {
+    const declined = await saved();
+    const answered = await saved();
+    const used = await saved();
+    await keepHandy(deps(), A, declined, "stated");
+    await keepHandy(deps(), A, answered, "inferred");
+    await keepHandy(deps(), A, used, "stated");
+    clock = day(30);
+    const changes = [
+      [declined, await notHandy(deps(), A, declined, "stated")],
+      [answered, await answerSuggestion(deps(), A, answered, false)],
+      [used, await stillUsing(deps(), A, used, "stated")],
+    ] as const;
+    for (const [id, change] of changes) {
+      await restoreTool(deps(), A, id, change.previous, change.tool);
+      expect(await store.getTool(A, id)).toEqual(change.previous);
+    }
+  });
+
+  it("refuses an undo once the row has changed since, and changes nothing", async () => {
+    const id = await saved();
+    const kept = await keepHandy(deps(), A, id, "stated");
+    clock = day(30);
+    const used = await stillUsing(deps(), A, id, "stated");
+    expect(await code(restoreTool(deps(), A, id, kept.previous, kept.tool))).toBe("conflict");
+    expect(await store.getTool(A, id)).toEqual(used.tool);
+  });
+
+  it("refuses another owner's link as not found, changing nothing", async () => {
+    const id = await saved();
+    const kept = await keepHandy(deps(), A, id, "stated");
+    expect(await code(restoreTool(deps(), B, id, kept.previous, kept.tool))).toBe("not_found");
+    expect(await store.getTool(A, id)).toEqual(kept.tool);
   });
 });

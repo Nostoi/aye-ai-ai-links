@@ -34,14 +34,15 @@ Every rule lives here. The web door and the MCP door only translate requests int
 - **Answer a suggestion.** Yes sets `kept` with source `asked`. No sets `declined`.
 - **Not handy anymore** sets `declined`, so no agent re-suggests the link.
 - **Last check** is the later of `answered_at` and `since`. **Clock start** is the latest of `lastOpenedAt`, `answered_at` and `since`.
-- **Current wait** is 30 days when `lastOpenedAt` is after the last check (any opening resets the wait to 30 from that opening); otherwise it is the stored `wait_days`.
+- **Current wait** is 30 days when `lastOpenedAt` is at or after the last check (an opening in the same millisecond counts) (any opening resets the wait to 30 from that opening); otherwise it is the stored `wait_days`.
 - **Due** means a `kept` tool on an active link with `now − clock start ≥ current wait` days. An archived link is never due.
 - **Still using it**, answered while the tool is due: `wait_days = min(2 × wait_days, 120)` when nothing was opened since the last check, otherwise `wait_days = 30`. Answered while it is not due, the wait is unchanged except that an opening since the last check sets it to 30; nothing doubles, so a repeated or unprompted answer can't jump the wait. In every case `answered_at = now`. (Corrected 2026-10-16 before implementation: the first draft compared `lastOpenedAt` with the clock start, which always doubled, and ignored openings when checking due, against the #125 ruling.)
 - **No write on opening.** An opening of any kind moves the clock start through `lastOpenedAt`: a web opening (#124) or `update_link` with `opened: true`. Neither path needs to know about tools (#125 comment 6225715918).
 
 ## Digest (`core/digest.ts`)
 
-- A `kept` tool gets no reading reason: no `no_why`, `not_opened_recently`, `never_surfaced` or `focus_words`.
+- A `kept` tool gets no reading reason: no `no_why`, `not_opened_recently`, `never_surfaced` or `focus_words`. The surfaced claim enforces this too, so a link kept between selection and claim is neither returned nor marked surfaced.
+- PR 2 keeps a due tool out of home's ordinary Worth a look cards (`worthALook` reads `previewDigest`); it shows on the shelf instead.
 - A due tool is a separate item with reason `still_using_check` and its days since `lastOpenedAt` (null when never opened). At most one appears per digest, and it takes one of the 5 slots.
 - It uses the same surfaced claim and 14-day cooldown as other picks.
 - Suggested and declined links are ordinary links in the digest.

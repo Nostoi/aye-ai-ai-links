@@ -1,6 +1,6 @@
 import type { StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { SNAPSHOT_STATUSES, SOURCES, STATES, TAG_KINDS } from "../core/types.js";
+import { SNAPSHOT_STATUSES, SOURCES, STATES, TAG_KINDS, TOOL_STATUSES } from "../core/types.js";
 
 // The JSON form of core's results: `ok()` in server.ts turns each Date into a string.
 // Timestamps are plain strings because `Date#toJSON` is not always a four-digit ISO year.
@@ -61,6 +61,13 @@ const snapshotOutput = z.strictObject({
   imageUrl: z.string().nullable(),
 });
 
+// A link's Keep handy state. Adding a status is a breaking change (ROADMAP #39).
+const handyOutput = z.strictObject({
+  status: z.enum(TOOL_STATUSES),
+  source,
+  due: z.boolean(),
+});
+
 export const linkOutput = z.strictObject({
   id: z.string(),
   url: z.string(),
@@ -76,6 +83,7 @@ export const linkOutput = z.strictObject({
   snoozedUntil: timestamp.nullable(),
   state: z.enum(STATES),
   snapshot: snapshotOutput.nullable(),
+  handy: handyOutput.nullable(),
 });
 
 export const tagOutput = z.strictObject({
@@ -145,11 +153,16 @@ export const listLinksOutput = z.strictObject({
 });
 export const updateTagOutput = z.strictObject({ tag: tagOutput });
 
+// Adding a reason is a breaking change for a client holding an earlier tools/list (ROADMAP #39).
 const digestReasonOutput = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput }),
   z.strictObject({ kind: z.literal("no_why") }),
   z.strictObject({ kind: z.literal("not_opened_recently") }),
   z.strictObject({ kind: z.literal("never_surfaced") }),
+  z.strictObject({
+    kind: z.literal("still_using_check"),
+    daysSinceOpened: z.number().int().nullable(),
+  }),
 ]);
 export const getDigestOutput = z.strictObject({
   links: z.array(z.strictObject({ link: linkOutput, reasons: z.array(digestReasonOutput) })),

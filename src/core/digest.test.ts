@@ -565,3 +565,84 @@ describe("dueTool", () => {
     },
   );
 });
+
+describe("getDigest's still_using_check", () => {
+  /** A link kept handy 40 days before now: due unless something says otherwise. */
+  async function due(over: Partial<NewLink> = {}): Promise<Link> {
+    const l = await link(over);
+    clock = at(-40 * DAY);
+    await keepHandy(deps(), OWNER, l.id, "stated");
+    clock = NOW;
+    return l;
+  }
+  const check = (daysSinceOpened: number | null): DigestReason => ({
+    kind: "still_using_check",
+    daysSinceOpened,
+  });
+  const shown = async () =>
+    (await getDigest(deps(), OWNER)).links.map((d) => [d.link.id, d.reasons]);
+
+  it("adds the due tool last, as its own item with whole days since its opening, and marks it surfaced", async () => {
+    const reading = await link({ why: null });
+    const tool = await due({ lastOpenedAt: at(-45 * DAY - HOUR) });
+    expect(await shown()).toEqual([
+      [reading.id, [{ kind: "no_why" }]],
+      [tool.id, [check(45)]],
+    ]);
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
+  it("gives null days for a tool never opened", async () => {
+    const tool = await due();
+    expect(await shown()).toEqual([[tool.id, [check(null)]]]);
+  });
+
+  it("holds at most one check, leaving a second due tool unmarked", async () => {
+    const first = await due();
+    const second = await due();
+    expect(await shown()).toEqual([[first.id, [check(null)]]]);
+    expect((await store.get(OWNER, second.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("takes one of the DIGEST_SIZE slots: the reading link it displaces is neither returned nor marked", async () => {
+    const reading: Link[] = [];
+    for (let i = 0; i < DIGEST_SIZE; i++) reading.push(await link({ why: null }));
+    const tool = await due();
+    const digest = await getDigest(deps(), OWNER);
+    expect(digest.links.map((d) => d.link.id)).toEqual([
+      ...reading.slice(0, DIGEST_SIZE - 1).map((l) => l.id),
+      tool.id,
+    ]);
+    const displaced = reading[DIGEST_SIZE - 1] as Link;
+    expect((await store.get(OWNER, displaced.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("frees its slot when the tool is no longer due once claimed, leaving the tool marked", async () => {
+    const reading: Link[] = [];
+    for (let i = 0; i < DIGEST_SIZE; i++) reading.push(await link({ why: null }));
+    const tool = await due();
+    const digest = await getDigest(
+      deps({ store: racing(() => recordOpening(deps(), OWNER, tool.id)) }),
+      OWNER,
+    );
+    expect(digest.links.map((d) => d.link.id)).toEqual(reading.map((l) => l.id));
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
+  it("uses the digest's cooldown: no check again until SURFACE_COOLDOWN_MS after it was shown", async () => {
+    const tool = await due();
+    await getDigest(deps(), OWNER);
+    clock = at(SURFACE_COOLDOWN_MS - 1);
+    expect(await shown()).toEqual([]);
+    clock = at(SURFACE_COOLDOWN_MS);
+    expect(await shown()).toEqual([[tool.id, [check(null)]]]);
+  });
+
+  it("previewDigest leaves the check out and writes nothing", async () => {
+    const reading = await link({ why: null });
+    await due();
+    const before = structuredClone(store.all(OWNER));
+    expect((await previewDigest(deps(), OWNER)).links.map((d) => d.link.id)).toEqual([reading.id]);
+    expect(store.all(OWNER)).toEqual(before);
+  });
+});

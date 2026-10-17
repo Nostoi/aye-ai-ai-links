@@ -29,7 +29,7 @@ You talk to your AI; it uses the library for you.
   - Each tool is a square postcard showing the title, with the site name under it. The link's saved picture fills the card, with a light fade behind the title. A link with no picture shows its space's color and the title's initials instead. The whole card opens the link.
   - Opening one from the shelf counts as an opening but doesn't mark it as shown.
   - When a tool goes unopened, from the web page or by your AI, for a wait counted from the latest of its last recorded opening, its last answer and the day you kept it, its tile asks **Still using?**. The wait starts at 30 days. When the tool comes up unopened and you say you're still using it, the wait doubles, up to 120 days, and any recorded opening sets it back to 30. **Yes** keeps the tool, and **Done** archives it, with an **Undo** bar.
-  - **Add**, beside the shelf's heading, opens a search that asks you to find the link to keep. It lists only active links, each with **Keep handy**. Active links in search results, All links and space pages have the same button, which reads **Handy · Not handy anymore** once a link is kept.
+  - **Add**, beside the shelf's heading (or under it when the shelf is empty), opens a search that asks you to find the link to keep. It lists only active links, each with **Keep handy**. Active links in search results, All links and space pages have the same button, which reads **Handy · Not handy anymore** once a link is kept.
   - Up to two tools an AI only guessed at show faded at the end of the shelf, asking **Keep handy?** with **Yes** and **No**.
   - Each tile's **⋯** menu, in its top-right corner, has **Not handy anymore**, with an **Undo** bar.
 

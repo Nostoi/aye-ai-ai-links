@@ -4,6 +4,7 @@ import type { ProfileStore } from "./profile-store.js";
 import type { LinkSearch } from "./search.js";
 import type { LinkStore, SurfacedClaim } from "./store.js";
 import type { ToolStore } from "./tool-store.js";
+import { isDue } from "./tools.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
 
 // Uncalibrated defaults (ROADMAP #34); the owner may change them.
@@ -219,4 +220,54 @@ export async function getDigest(
     }))
     .filter((d) => d.reasons.length > 0);
   return { links };
+}
+
+/** A due kept tool for the digest's still-using check, with whole days since its last recorded opening (null: never opened). */
+export type DueTool = { link: Link; daysSinceOpened: number | null };
+
+/**
+ * At most one kept tool that is due and eligible as digest links are (active, not snoozed at now,
+ * surfaced at or before now - SURFACE_COOLDOWN_MS), the first in the digest's rotation. Reads
+ * only; the caller claims it as it claims other picks.
+ */
+export async function dueTool(
+  deps: Pick<DigestDeps, "store" | "tools" | "now">,
+  owner: OwnerId,
+): Promise<DueTool | null> {
+  const now = deps.now();
+  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
+  const tools = await deps.tools.listTools(owner);
+  const [link] = (await deps.store.listLinks(owner))
+    .filter((l) => eligible(l, now, notSurfacedAfter) && isDue(l, tools.get(l.id) ?? null, now))
+    .sort(rotation);
+  return link ? dueToolOf(link, now) : null;
+}
+
+/**
+ * Claims `dueTool`'s pick as the digest claims its other picks, then judges it again from the link
+ * as claimed and its Keep handy row read after the claim. One no longer due is left out but stays
+ * marked, as a digest pick left with no reason is.
+ */
+export async function claimDueTool(
+  deps: Pick<DigestDeps, "store" | "tools" | "now">,
+  owner: OwnerId,
+): Promise<DueTool | null> {
+  const now = deps.now();
+  const picked = await dueTool({ ...deps, now: () => now }, owner);
+  if (!picked) return null;
+  const [claim] = await claimSurfaced({ store: deps.store, now: () => now }, owner, [
+    picked.link.id,
+  ]);
+  if (!claim) return null;
+  const tool = await deps.tools.getTool(owner, claim.link.id);
+  return isDue(claim.link, tool, now) ? dueToolOf(claim.link, now) : null;
+}
+
+function dueToolOf(link: Link, now: Date): DueTool {
+  const opened = link.lastOpenedAt;
+  return {
+    link,
+    daysSinceOpened:
+      opened === null ? null : Math.floor((now.getTime() - opened.getTime()) / DAY_MS),
+  };
 }

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  claimDueTool,
   compareIds,
   DIGEST_SIZE,
   type DigestReason,
+  dueTool,
   FOCUS_MATCHES_PER_ENTRY,
   FOCUS_SLOTS,
   FOCUS_WINDOW_MS,
@@ -13,9 +15,10 @@ import {
 } from "./digest.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
+import { recordOpening } from "./links.js";
 import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
 import type { LinkStore } from "./store.js";
-import { keepHandy, notHandy } from "./tools.js";
+import { keepHandy, notHandy, stillUsing } from "./tools.js";
 import type { FocusEntry, Link, NewLink, Source } from "./types.js";
 
 const OWNER = "o";
@@ -371,16 +374,16 @@ describe("getDigest order", () => {
   });
 });
 
-describe("getDigest claim", () => {
-  /** Runs `meanwhile` after selection and before the claim reaches the store. */
-  const racing = (meanwhile: () => Promise<unknown>): LinkStore =>
-    Object.assign(Object.create(store) as FakeStore, {
-      claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
-        await meanwhile();
-        return store.claimSurfaced(...args);
-      },
-    });
+/** Runs `meanwhile` after selection and before the claim reaches the store. */
+const racing = (meanwhile: () => Promise<unknown>): LinkStore =>
+  Object.assign(Object.create(store) as FakeStore, {
+    claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
+      await meanwhile();
+      return store.claimSurfaced(...args);
+    },
+  });
 
+describe("getDigest claim", () => {
   it("judges reasons from the claimed link, dropping one left with none and skipping one snoozed", async () => {
     const filled = await link({ why: null });
     const halfFilled = await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: null });
@@ -491,4 +494,74 @@ describe("kept tools", () => {
       [declined.id, [{ kind: "no_why" }]],
     ]);
   });
+});
+
+describe("dueTool", () => {
+  /** A link kept handy 40 days before now, so it is due unless something says otherwise. */
+  async function dueLink(over: Partial<NewLink> = {}): Promise<Link> {
+    const l = await link(over);
+    clock = at(-40 * DAY);
+    await keepHandy(deps(), OWNER, l.id, "stated");
+    clock = NOW;
+    return l;
+  }
+
+  it("is null when no kept tool is due", async () => {
+    const fresh = await link();
+    await keepHandy(deps(), OWNER, fresh.id, "stated");
+    await link({ why: null });
+    expect(await dueTool(deps(), OWNER)).toBeNull();
+  });
+
+  it("returns one due tool, first in the digest's rotation, with whole days since its opening", async () => {
+    await dueLink({ lastSurfacedAt: null });
+    const first = await dueLink({ lastOpenedAt: at(-45 * DAY - HOUR) });
+    expect(await dueTool(deps(), OWNER)).toEqual({
+      link: await store.get(OWNER, first.id),
+      daysSinceOpened: 45,
+    });
+  });
+
+  it("gives null days for a tool never opened", async () => {
+    const never = await dueLink();
+    expect(await dueTool(deps(), OWNER)).toEqual({
+      link: await store.get(OWNER, never.id),
+      daysSinceOpened: null,
+    });
+  });
+
+  it("skips a due tool surfaced within the cooldown, snoozed or archived, and writes nothing", async () => {
+    const recent = await dueLink({ lastSurfacedAt: at(-DAY) });
+    await dueLink({ snoozedUntil: at(DAY) });
+    await dueLink({ state: "archived" });
+    expect(await dueTool(deps(), OWNER)).toBeNull();
+    expect((await store.get(OWNER, recent.id))?.lastSurfacedAt).toEqual(at(-DAY));
+    const ready = await dueLink({ lastSurfacedAt: CUTOFF });
+    expect((await dueTool(deps(), OWNER))?.link.id).toBe(ready.id);
+  });
+
+  it("claimDueTool claims the due tool, marking it surfaced", async () => {
+    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
+    expect(await claimDueTool(deps(), OWNER)).toEqual({
+      link: await store.get(OWNER, tool.id),
+      daysSinceOpened: 45,
+    });
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+    expect(await claimDueTool(deps(), OWNER)).toBeNull();
+  });
+
+  it.each([
+    ["an opening", (id: string) => recordOpening(deps(), OWNER, id)],
+    ["Not handy anymore", (id: string) => notHandy(deps(), OWNER, id, "stated")],
+    ["a Still using answer", (id: string) => stillUsing(deps(), OWNER, id, "stated")],
+  ])(
+    "claimDueTool drops a tool %s made not due between selection and claim, leaving it marked",
+    async (_, meanwhile) => {
+      const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
+      expect(
+        await claimDueTool(deps({ store: racing(() => meanwhile(tool.id)) }), OWNER),
+      ).toBeNull();
+      expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+    },
+  );
 });

@@ -598,13 +598,14 @@ describe("listShelf", () => {
     const gone = await saved();
     for (const id of [plain, due, gone]) await keepHandy(deps(), A, id, "stated");
     await store.update(A, plain, { lastOpenedAt: day(20) });
+    await store.update(A, gone, { lastOpenedAt: day(25) });
     await flag(gone);
     clock = day(31);
     const shelf = await listShelf(deps(), A);
     expect(shelf.map((s) => [s.link.id, s.due, s.gone])).toEqual([
       [due, true, false],
-      [plain, false, false],
       [gone, false, true],
+      [plain, false, false],
     ]);
   });
 

@@ -1,6 +1,6 @@
 import type { PictureInfo } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
-import { TITLE_MAX } from "../core/links.js";
+import { titleFits } from "../core/links.js";
 import type { Link } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
 import { initialsText } from "./initials.js";
@@ -28,7 +28,7 @@ export function editData(
   const page = link.snapshot?.title ?? "";
   const data: [string, string][] = [
     ["title", link.title ?? ""],
-    ["page-title", [...page.trim()].length > TITLE_MAX ? "" : page],
+    ["page-title", titleFits(page) ? page : ""],
     ["version", version ?? ""],
     ["own", info?.own ? "1" : "0"],
     ["page-version", info?.pageVersion ?? ""],

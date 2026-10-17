@@ -95,11 +95,13 @@ export const TITLE_MAX = 200;
 export function normalizeTitle(title: string | null): string | null {
   if (title === null) return null;
   const trimmed = title.trim();
-  if ([...trimmed].length > TITLE_MAX) {
+  if (!titleFits(trimmed)) {
     throw invalid(`A title can be at most ${TITLE_MAX} characters.`);
   }
   return trimmed === "" ? null : trimmed;
 }
+
+export const titleFits = (title: string) => [...title.trim()].length <= TITLE_MAX;
 
 /** Waits for `job`, or `ms`, whichever ends first, and leaves no timer behind. */
 async function settledWithin(job: Promise<void>, ms: number): Promise<void> {

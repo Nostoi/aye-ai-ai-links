@@ -8,6 +8,7 @@ import {
   recordOpening,
   SAVE_WAIT_MS,
   saveLink,
+  titleFits,
   updateLink,
 } from "./links.js";
 import { createSnapshotRunner } from "./snapshot-runner.js";
@@ -401,6 +402,11 @@ describe("normalizeTitle", () => {
         message: "A title can be at most 200 characters.",
       }),
     );
+  });
+
+  it("titleFits agrees with it: trimmed, counted in characters, 200 fits and 201 does not", () => {
+    expect(titleFits(` ${"😀".repeat(200)} `)).toBe(true);
+    expect(titleFits("😀".repeat(201))).toBe(false);
   });
 
   it("counts characters, not UTF-16 units: 200 emoji pass", () => {

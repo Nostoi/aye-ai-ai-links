@@ -83,4 +83,16 @@ describe("the theme css", () => {
     expect(themeCss).toContain("prefers-reduced-motion");
     expect(themeCss).toContain('ui-rounded, "SF Pro Rounded", system-ui, sans-serif');
   });
+
+  it("lays the shelf out in the spaces grid, and on a phone as one sideways row showing part of the next tile", () => {
+    expect(themeCss).toMatch(
+      /\.home-spaces,\.handy-row\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(200px,1fr\)\)/,
+    );
+    const phone = /@media \(max-width:600px\)\{(.*)\}$/m.exec(themeCss)?.[1] ?? "";
+    const rule = (sel: string) =>
+      new RegExp(`${sel.replace(/[.>]/g, "\\$&")}\\{([^}]*)\\}`).exec(phone)?.[1] ?? "";
+    expect(rule(".handy-row")).toContain("display:flex");
+    expect(rule(".handy-row")).toContain("overflow-x:auto");
+    expect(rule(".handy-row>.handy-tile")).toContain("flex:0 0 72%");
+  });
 });

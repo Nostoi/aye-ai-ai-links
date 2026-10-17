@@ -16,7 +16,7 @@ import type { Link, OwnerId, Source } from "../core/types.js";
 /** A link as the door returns it: with its Keep handy view (null for an ordinary link). */
 export type HandyLink = Link & { handy: HandyView | null };
 
-type ViewDeps = Pick<ToolsDeps, "tools" | "now">;
+type ViewDeps = Pick<ToolsDeps, "tools" | "checks" | "now">;
 
 export async function linkWithHandy(
   deps: ViewDeps,

@@ -552,6 +552,19 @@ describe("dueTool", () => {
     expect(await dueTool(deps(), OWNER)).toBeNull();
   });
 
+  it("skips a gone tool, writing nothing (#128)", async () => {
+    const tool = await dueLink();
+    await flag(tool.id);
+    expect(await dueTool(deps(), OWNER)).toBeNull();
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("claimDueTool drops a tool flagged between selection and claim, leaving it unmarked (#128)", async () => {
+    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
+    expect(await claimDueTool(deps({ store: racing(() => flag(tool.id)) }), OWNER)).toBeNull();
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
   it("returns one due tool, first in the digest's rotation, with whole days since its opening", async () => {
     await dueLink({ lastSurfacedAt: null });
     const first = await dueLink({ lastOpenedAt: at(-45 * DAY - HOUR) });
@@ -629,6 +642,13 @@ describe("getDigest's still_using_check", () => {
       [tool.id, [check(45)]],
     ]);
     expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
+  it("asks nothing about a gone tool, and the reading link keeps its slot (#128)", async () => {
+    const reading = await link({ why: null });
+    const tool = await due();
+    await flag(tool.id);
+    expect(await shown()).toEqual([[reading.id, [{ kind: "no_why" }]]]);
   });
 
   it("gives null days for a tool never opened", async () => {

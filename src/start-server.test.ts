@@ -12,7 +12,14 @@ import { connectClaude, oauthWorld } from "./auth/oauth-test-kit.js";
 import { setOwnerLogin } from "./auth/owner-login.js";
 import type { ServerConfig } from "./config.js";
 import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
-import type { FetchOutcome, ImageFetcher, ImageOutcome, PageFetcher } from "./core/fetch.js";
+import type {
+  FetchOutcome,
+  ImageFetcher,
+  ImageOutcome,
+  LinkChecker,
+  LinkCheckOutcome,
+  PageFetcher,
+} from "./core/fetch.js";
 import { saveLink } from "./core/links.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
@@ -117,10 +124,15 @@ function fakePipeline(
     fetch: (url, signal) => (o.fetchImage ? o.fetchImage(url, signal) : Promise.resolve(PNG)),
     close: async () => {},
   };
+  const linkChecker: LinkChecker = {
+    check: async (url): Promise<LinkCheckOutcome> => ({ kind: "ok", finalUrl: url }),
+    close: async () => {},
+  };
   return {
     fetcher,
     extractor,
     imageFetcher,
+    linkChecker,
     embedder: new FakeEmbedder(DIMS),
     log,
     closed,
@@ -916,6 +928,64 @@ describe("startServer", () => {
       await stop();
       expect(events).toEqual(["fetching", "aborted", "image fetcher closed"]);
       expect(images()).toEqual([{ status: "pending", stored: 0 }]);
+    });
+  });
+
+  describe("link checks", () => {
+    const checkRows = () =>
+      read<{ url: string; result: string; detail: string | null }>(
+        `SELECT l.url, c.result, c.detail FROM link_checks c JOIN links l ON l.id = c.link_id
+         ORDER BY l.id`,
+      );
+
+    /** A link saved eight days before now, so its first check is due as soon as the server starts. */
+    const seedWeekOld = async (url: string) => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = {
+          ...createDeps(db, new FakeEmbedder(DIMS)),
+          now: () => new Date(Date.now() - 8 * 86_400_000),
+        };
+        await saveLink(deps, "owner", { url, savedBy: "seed" });
+      } finally {
+        db.close();
+      }
+    };
+
+    it("checks a link saved over a week ago in the background and records what it found", async () => {
+      await seedWeekOld("https://example.com/old");
+      const linkChecker: LinkChecker = {
+        check: async () => ({ kind: "http_error", status: 404 }),
+        close: async () => {},
+      };
+      await start({ linkChecker, checkPollMs: 20 });
+      await until(() => checkRows().length === 1, "a recorded check");
+      expect(checkRows()).toEqual([
+        { url: "https://example.com/old", result: "dead", detail: "http:404" },
+      ]);
+    });
+
+    it("on stop, aborts a check in flight and waits for it before closing the checker, writing nothing", async () => {
+      await seedWeekOld("https://example.com/old");
+      const events: string[] = [];
+      const linkChecker: LinkChecker = {
+        check: (_url, signal) =>
+          new Promise<LinkCheckOutcome>((resolve) => {
+            events.push("checking");
+            signal?.addEventListener("abort", () =>
+              setTimeout(() => {
+                events.push("aborted");
+                resolve({ kind: "aborted" });
+              }, 20),
+            );
+          }),
+        close: async () => void events.push("checker closed"),
+      };
+      const { stop } = await start({ linkChecker, checkPollMs: 20 });
+      await until(() => events.includes("checking"), "a link check");
+      await stop();
+      expect(events).toEqual(["checking", "aborted", "checker closed"]);
+      expect(checkRows()).toEqual([]);
     });
   });
 

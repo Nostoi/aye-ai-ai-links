@@ -7,12 +7,13 @@ import { loadVectorFunctions, VectorSearch } from "./search/vector-search.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
 import { SqliteSearchLog } from "./store/search-log.js";
 import { SqliteImageStore } from "./store/sqlite-image-store.js";
+import { SqliteLinkCheckStore } from "./store/sqlite-link-checks.js";
 import { SqliteLinkEditStore } from "./store/sqlite-link-edits.js";
 import { SqliteStore } from "./store/sqlite-store.js";
 import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
 
 /**
- * Builds the store, search, search log, vector index, image store, edit store, profile and page-text reader from ONE database handle.
+ * Builds the store, search, search log, vector index, image store, edit store, check store, profile and page-text reader from ONE database handle.
  * They must share it: ids ranked or saved in one database and read through another come back as the
  * wrong links, or with another link's page text.
  */
@@ -37,6 +38,8 @@ export function createDeps(db: Database, embedder: Embedder) {
     pages: store,
     /** Keep handy rows: the digest and the tools rules read them. */
     tools: store,
+    /** Dead-link checks (#128): the check runner writes them; the digest and Keep handy read them. */
+    checks: new SqliteLinkCheckStore(db),
     now: () => new Date(),
   };
 }

@@ -9,8 +9,9 @@ import type { MetadataRefresher } from "./auth/metadata-refresher.js";
 import type { JsonFetch } from "./auth/metadata-stash.js";
 import { modelRoot, type ServerConfig } from "./config.js";
 import type { PageExtractor } from "./core/extract.js";
-import type { ImageFetcher, PageFetcher } from "./core/fetch.js";
+import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
+import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-runner.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
@@ -18,6 +19,7 @@ import { createChildExtractor } from "./fetch/extract-runner.js";
 import { createGuardedFetcher } from "./fetch/guarded-fetcher.js";
 import { createImageFetcher } from "./fetch/image-fetcher.js";
 import { createJsonFetcher } from "./fetch/json-fetcher.js";
+import { createLinkChecker } from "./fetch/link-checker.js";
 import type { Embedder } from "./search/embedder.js";
 import { MODEL_KEY, revisionDir } from "./search/model.js";
 import { loadTransformersEmbedder } from "./search/transformers-embedder.js";
@@ -33,7 +35,8 @@ const SETTLE_MS = 5_000;
  * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
  * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
  * fetcher (5 MiB cap) and the child extractor. `imageFetcher` replaces the guarded image fetcher
- * the image pass uses. `wrapAuthMigrations` runs around the auth migrations, so a test can hold
+ * the image pass uses. `linkChecker` replaces the guarded link checker the check runner uses.
+ * `wrapAuthMigrations` runs around the auth migrations, so a test can hold
  * them. `jsonFetcher` replaces the guarded JSON fetcher that fetches OAuth client metadata.
  */
 export type StartOptions = {
@@ -49,6 +52,10 @@ export type StartOptions = {
   imageFetcher?: ImageFetcher;
   /** Time between image pass sweeps; its 15 s default when left out. */
   imagePollMs?: number;
+  /** Replaces the guarded link checker the dead-link checks use. */
+  linkChecker?: LinkChecker;
+  /** Time between check sweeps; its 60 s default when left out. */
+  checkPollMs?: number;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
   jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
   refresherIntervalMs?: number;
@@ -62,19 +69,21 @@ export type StartOptions = {
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
- * The snapshot runner, the vector indexer, the image pass and the metadata refresher start once
- * the server is listening. Any failure before that closes what was already opened.
+ * The snapshot runner, the vector indexer, the image pass, the check runner and the metadata
+ * refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
- * 1. The runner, the indexer and the image pass take no new work; running jobs, an embedding
- *    and an image fetch in flight carry on.
+ * 1. The runner, the indexer, the image pass and the check runner take no new work; running jobs,
+ *    an embedding, an image fetch and a link check in flight carry on.
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
- * 3. The runner aborts its jobs, which give their attempts back, and the image pass aborts its
- *    fetch, leaving that image pending. Stop waits for them, for the indexer's sweep and for any
- *    tool call still running, up to the settle limit.
+ * 3. The runner aborts its jobs, which give their attempts back, the image pass aborts its fetch,
+ *    leaving that image pending, and the check runner aborts its check, recording nothing, so the
+ *    link stays due. Stop waits for them, for the indexer's sweep and for any tool call still
+ *    running, up to the settle limit.
  * 4. The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
- *    The image pass's stop is awaited again. Then the JSON fetcher closes, the image fetcher,
- *    the page fetcher, and the extractor (killing any child).
+ *    The image pass's and the check runner's stops are awaited again. Then the JSON fetcher
+ *    closes, the image fetcher, the link checker, the page fetcher, and the extractor (killing
+ *    any child).
  * 5. The MCP handler closes, then the database, then the auth database.
  * A call or job still running after step 3 fails on the closed database; the error is caught
  * and logged.
@@ -91,6 +100,8 @@ export async function startServer(
     extractor = createChildExtractor(),
     imageFetcher = createImageFetcher({ version: config.version }),
     imagePollMs,
+    linkChecker = createLinkChecker({ version: config.version }),
+    checkPollMs,
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher({ version: config.version }),
     refresherIntervalMs,
@@ -105,12 +116,16 @@ export async function startServer(
   let closeApp: (() => Promise<void>) | undefined;
   let refresher: MetadataRefresher | undefined;
   let images: ImageIndexer | undefined;
+  let checks: LinkCheckRunner | undefined;
   const closeAll = async () => {
     await refresher?.stop();
     // Its fetch must end before the fetcher closes, or a closed fetcher would end it as a failure.
     await images?.stop();
+    // The same for the check in flight and its checker.
+    await checks?.stop();
     await jsonFetcher.close();
     await imageFetcher.close();
+    await linkChecker.close();
     await fetcher.close();
     await extractor.close();
     await closeApp?.();
@@ -138,6 +153,12 @@ export async function startServer(
       fetcher: imageFetcher,
       now: deps.now,
       ...(imagePollMs !== undefined && { pollMs: imagePollMs }),
+    });
+    checks = createLinkCheckRunner({
+      checks: deps.checks,
+      checker: linkChecker,
+      now: deps.now,
+      ...(checkPollMs !== undefined && { pollMs: checkPollMs }),
     });
     authDb = openAuthDatabase(config.auth.dbPath);
     const keys = new SqliteKeyStore(db);
@@ -176,6 +197,7 @@ export async function startServer(
   runner.start();
   indexer.start();
   images?.start();
+  checks?.start();
   refresher.start();
 
   const address = server.address();
@@ -208,17 +230,25 @@ export async function startServer(
     const imagesStopped = (images?.stop() ?? Promise.resolve()).then(() => {
       imagesEnded = true;
     });
+    let checksEnded = false;
+    const checksStopped = (checks?.stop() ?? Promise.resolve()).then(() => {
+      checksEnded = true;
+    });
     let bound: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<true>((resolve) => {
       bound = setTimeout(() => resolve(true), settleMs);
     });
-    const ended = Promise.all([stopped, indexStopped, imagesStopped, calls().ended]).then(
-      () => false as const,
-    );
+    const ended = Promise.all([
+      stopped,
+      indexStopped,
+      imagesStopped,
+      checksStopped,
+      calls().ended,
+    ]).then(() => false as const);
     try {
       if (await Promise.race([ended, timedOut])) {
         console.error(
-          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}`,
+          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
         );
       }
     } finally {
@@ -230,6 +260,7 @@ export async function startServer(
     runner.quiesce();
     indexer.quiesce();
     images?.quiesce();
+    checks?.quiesce();
     await drain();
     await settle();
     await closeAll();

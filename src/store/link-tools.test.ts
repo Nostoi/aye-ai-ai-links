@@ -1,12 +1,22 @@
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
+import { describeToolStoreContract } from "../core/tool-store-contract.js";
+import { openDatabase } from "./database.js";
 import { MIGRATIONS, migrate } from "./migrations.js";
+import { SqliteStore } from "./sqlite-store.js";
 
 type Db = Database.Database;
 
 const open: Db[] = [];
 afterEach(() => {
   for (const db of open.splice(0)) if (db.open) db.close();
+});
+
+describeToolStoreContract("SqliteStore tools", () => {
+  const db = openDatabase(":memory:");
+  open.push(db);
+  const store = new SqliteStore(db);
+  return { store, addOwner: (o) => store.ensureUser(o, o) };
 });
 
 /** The migration that adds `link_tools`; everything before it is the schema it starts from. */

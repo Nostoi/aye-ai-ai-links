@@ -132,6 +132,7 @@ export function describeToolStoreContract(
       for (const id of ["", "no-such-id", "0", "-1", "99999", "1e3"]) {
         expect(await store.getTool(A, id)).toBeNull();
         expect(await store.updateToolIf(A, id, null, kept())).toBeNull();
+        expect(await store.updateToolIf(A, id, kept(), null)).toBeNull();
       }
     });
   });

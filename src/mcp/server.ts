@@ -19,11 +19,18 @@ import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { PageTextReader } from "../core/snapshot-text.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
+import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
 import { handyOfLinks } from "../core/tools.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
-import { linksWithHandy, linkWithHandy } from "./handy.js";
+import {
+  applyHandy,
+  applyHandyToSaved,
+  HANDY_ACTIONS,
+  linksWithHandy,
+  linkWithHandy,
+} from "./handy.js";
 import {
   addProfileOutput,
   advertisedOpen,
@@ -88,12 +95,19 @@ const tags = z.array(
   }),
 );
 
+const handy = z
+  .object({ action: z.enum(HANDY_ACTIONS), source })
+  .describe(
+    'Keep handy, for a tool the owner uses regularly. keep: "stated" or "asked" keeps it; "inferred" only suggests it. still_using answers a still_using_check and not_handy declines it; both take "stated" or "asked" only.',
+  );
+
 const saveLinkInput = z.object({
   url: z.string(),
   title: z.string().optional(),
   summary: z.string().optional(),
   why: why.optional(),
   tags: tags.optional(),
+  handy: handy.optional(),
 });
 const updateLinkInput = z.object({
   id: z.string(),
@@ -101,6 +115,7 @@ const updateLinkInput = z.object({
   summary: z.string().nullable().optional(),
   why: why.nullable().optional(),
   tags: tags.optional(),
+  handy: handy.optional(),
   state: z.enum(STATES).optional(),
   snoozedUntil: timestamp.nullable().optional(),
   opened: z.literal(true).optional(),
@@ -234,11 +249,16 @@ export function buildMcpServer(
         openWorldHint: true,
       },
     },
-    async (args) => {
-      const saved = await saveLink(deps, owner, { ...args, savedBy });
+    async ({ handy, ...args }) => {
+      // One instant for the save and its keep, as getDigest and markOpened do.
+      const now = deps.now();
+      const at = { ...deps, now: () => now };
+      const saved = await saveLink(at, owner, { ...args, savedBy });
+      // A repeat save keeps its contract (only a missing why is filled), so handy is ignored.
+      if (handy && saved.created) await applyHandyToSaved(at, owner, saved.link.id, handy);
       return {
         ...saved,
-        link: await linkWithHandy(deps, owner, saved.link),
+        link: await linkWithHandy(at, owner, saved.link),
         filingContext: await filingContext(deps, owner),
         profile: await profileContext(deps, owner),
       };
@@ -258,14 +278,24 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ id, snoozedUntil, ...rest }) => {
-      const link = await updateLink(deps, owner, id, {
+    async ({ id, snoozedUntil, handy, ...rest }) => {
+      // One instant for the handy write, the link write and the view, so an opening sent with an
+      // answer lands at the answer's millisecond, never a jittered one after it.
+      const now = deps.now();
+      const at = { ...deps, now: () => now };
+      // handy first, so a refused handy writes nothing. Past the schema, updateLink refuses only a
+      // blank tag name (normalizeTags) or a missing link, so check the tags before handy too.
+      if (handy) {
+        if (rest.tags) normalizeTags(rest.tags);
+        await applyHandy(at, owner, id, handy);
+      }
+      const link = await updateLink(at, owner, id, {
         ...rest,
         ...(snoozedUntil !== undefined && {
           snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
         }),
       });
-      return { link: await linkWithHandy(deps, owner, link) };
+      return { link: await linkWithHandy(at, owner, link) };
     },
   );
 

@@ -1,5 +1,5 @@
 import type { Link } from "../core/types.js";
-import { hostOf } from "./pages.js";
+import { hostOf } from "./host.js";
 
 /** The first letter or digit of each of the first two words that have one, uppercased. */
 export const initialsOf = (text: string) =>

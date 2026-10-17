@@ -2,10 +2,11 @@ import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
+import { hostOf } from "./host.js";
 import { initialsText } from "./initials.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
-import { hostOf, spaceClass, tile } from "./pages.js";
+import { spaceClass, tile } from "./pages.js";
 
 /** Tiles the shelf shows before Show all (#125). */
 export const SHELF_SIZE = 8;

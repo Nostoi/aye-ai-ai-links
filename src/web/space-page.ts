@@ -3,10 +3,11 @@ import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { hostOf } from "./host.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { hostOf, spaceClass, tile, whyLine } from "./pages.js";
+import { spaceClass, tile, whyLine } from "./pages.js";
 import { olderScript } from "./show-older.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 

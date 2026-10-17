@@ -3,6 +3,7 @@ import { linkSpace, type Space } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { hostOf } from "./host.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -115,14 +116,6 @@ export const oauthErrorPage = (message: string) =>
 <p>${escapeHtml(message)}</p>
 </main>`,
   );
-
-export const hostOf = (url: string) => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return "";
-  }
-};
 
 /** The why as every link card reads it; an inferred one is a guess. */
 export function whyLine(why: Link["why"]): string {

@@ -146,12 +146,14 @@ describe("the Handy postcards", () => {
     expect(Number(/padding:(\d+)px/.exec(rule(".handy-caption"))?.[1])).toBeLessThanOrEqual(20);
     const initials = rule(".handy-initials");
     expect(Number(/font-size:(\d+)px/.exec(initials)?.[1])).toBeLessThanOrEqual(40);
-    expect(Number(/inset:0 0 (\d+)px/.exec(initials)?.[1])).toBeGreaterThanOrEqual(84);
+    expect(Number(/inset:0 0 (\d+)px/.exec(initials)?.[1])).toBeGreaterThanOrEqual(108);
+    expect(initials).toContain("line-height:1;");
   });
 
   it("sets the title at 14.5px and the host at 13px on one line with an ellipsis", () => {
     expect(rule(".handy-tile h3")).toContain("font-size:14.5px");
     expect(rule(".handy-tile h3")).toContain("line-height:1.25");
+    expect(rule(".handy-tile h3")).toContain("-webkit-line-clamp:3");
     const site = rule(".handy-caption .card-site");
     expect(site).toContain("font-size:13px");
     expect(site).toContain("min-width:0");

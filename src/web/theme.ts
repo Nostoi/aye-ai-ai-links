@@ -165,9 +165,9 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .worth-small h3,.handy-tile h3{font-size:16px;line-height:1.3;margin:0 0 6px}
 .handy-tile{position:relative;isolation:isolate;aspect-ratio:1;align-self:start;display:flex;flex-direction:column;justify-content:flex-end;padding:0;overflow:visible;overflow-wrap:anywhere;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
 .handy-image{position:absolute;inset:0;z-index:-1;width:100%;height:100%;object-fit:cover;border-radius:inherit}
-.handy-initials{position:absolute;inset:0 0 90px;z-index:-1;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:700;letter-spacing:.04em;color:var(--ink)}
+.handy-initials{position:absolute;inset:0 0 108px;z-index:-1;display:flex;align-items:center;justify-content:center;font-size:40px;line-height:1;font-weight:700;letter-spacing:.04em;color:var(--ink)}
 .handy-caption{min-width:0;padding:18px 12px 10px;border-radius:0 0 18px 18px;background:linear-gradient(to bottom,rgb(0 0 0 / 0),rgb(0 0 0 / .75) 60%);color:#fff}
-.handy-tile h3{margin:0 0 4px;font-size:14.5px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.handy-tile h3{margin:0 0 4px;font-size:14.5px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .handy-tile h3 a{color:#fff}
 .handy-tile h3 a::after{content:"";position:absolute;inset:0;border-radius:18px}
 .handy-tile h3 a:focus-visible{outline:none}

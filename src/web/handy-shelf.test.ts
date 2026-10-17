@@ -187,7 +187,7 @@ describe("the Handy shelf", () => {
   it("gives every kept tile a menu with Not handy anymore, and a suggestion none", () => {
     const html = render([kept({ title: "Attendance" })], [suggested()]);
     const [tool, guess] = tiles(html);
-    const menu = tool?.querySelector("details.tile-menu");
+    const menu = tool?.querySelector("details.card-menu");
     expect(menu?.querySelector("summary .visually-hidden")?.textContent).toBe(
       "More for Attendance",
     );

@@ -2,8 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome, PageExtractor } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome, PageFetcher } from "./fetch.js";
-import { getLinkWithText, recordOpening, SAVE_WAIT_MS, saveLink, updateLink } from "./links.js";
+import {
+  getLinkWithText,
+  normalizeTitle,
+  recordOpening,
+  SAVE_WAIT_MS,
+  saveLink,
+  titleFits,
+  updateLink,
+} from "./links.js";
 import { createSnapshotRunner } from "./snapshot-runner.js";
+import { newLink } from "./snapshot-store-contract.js";
 import { EXCERPT_CHARS, TEXT_CHARS } from "./snapshot-text.js";
 import { describeStoreContract, type StoreHarness } from "./store-contract.js";
 import type { Link } from "./types.js";
@@ -378,5 +387,55 @@ describe("recordOpening", () => {
     const before = structuredClone(store.all("b"));
     await expect(recordOpening(deps, "a", link.id)).rejects.toMatchObject({ code: "not_found" });
     expect(store.all("b")).toEqual(before);
+  });
+});
+
+describe("normalizeTitle", () => {
+  it("trims, reads blank as no title, takes 200 characters and refuses 201", () => {
+    expect(normalizeTitle("  Quokka notes \n")).toBe("Quokka notes");
+    expect(normalizeTitle("   ")).toBeNull();
+    expect(normalizeTitle(null)).toBeNull();
+    expect(normalizeTitle(` ${"a".repeat(200)} `)).toBe("a".repeat(200));
+    expect(() => normalizeTitle("a".repeat(201))).toThrow(
+      expect.objectContaining({
+        code: "invalid_input",
+        message: "A title can be at most 200 characters.",
+      }),
+    );
+  });
+
+  it("titleFits agrees with it: trimmed, counted in characters, 200 fits and 201 does not", () => {
+    expect(titleFits(` ${"😀".repeat(200)} `)).toBe(true);
+    expect(titleFits("😀".repeat(201))).toBe(false);
+  });
+
+  it("counts characters, not UTF-16 units: 200 emoji pass", () => {
+    expect(normalizeTitle("🦘".repeat(200))).toBe("🦘".repeat(200));
+  });
+});
+
+describe("titles through saveLink and updateLink", () => {
+  const deps = () => ({ store: new FakeStore(), now: () => T0 });
+
+  it("saveLink stores the trimmed title, and refuses 201 characters saving nothing", async () => {
+    const d = deps();
+    expect((await saveLink(d, "a", { ...URL_A, title: "  Trip  " })).link.title).toBe("Trip");
+    await expect(
+      saveLink(d, "a", { url: "https://ex.com/b", savedBy: "agent", title: "a".repeat(201) }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(d.store.all("a").map((l) => l.url)).toEqual(["https://ex.com/a"]);
+  });
+
+  it("updateLink trims, clears a blank title, refuses 201 leaving the title, and never checks a title it is not writing", async () => {
+    const d = deps();
+    const long = "b".repeat(201);
+    const { link } = await d.store.insertIfAbsent("a", { ...newLink(1, T0), title: long });
+    expect((await updateLink(d, "a", link.id, { summary: "kept" })).title).toBe(long);
+    await expect(updateLink(d, "a", link.id, { title: "c".repeat(201) })).rejects.toMatchObject({
+      code: "invalid_input",
+    });
+    expect((await d.store.get("a", link.id))?.title).toBe(long);
+    expect((await updateLink(d, "a", link.id, { title: "  New " })).title).toBe("New");
+    expect((await updateLink(d, "a", link.id, { title: " " })).title).toBeNull();
   });
 });

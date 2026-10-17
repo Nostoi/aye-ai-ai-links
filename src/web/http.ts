@@ -9,8 +9,11 @@ import { returnAfterLogin } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
+import { MAX_IMAGE_BYTES } from "../core/image-type.js";
+import { editLink, undoEdit } from "../core/link-edit.js";
+import type { LinkEditStore } from "../core/link-edit-store.js";
 import { checkedOrder, linkPage } from "../core/link-pages.js";
-import { recordOpening } from "../core/links.js";
+import { getLink, recordOpening } from "../core/links.js";
 import {
   addOwnerNote,
   editOwnerNote,
@@ -61,6 +64,7 @@ import { ALL_RESTART, allPage } from "./all-page.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
+import { initialsText } from "./initials.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
@@ -142,6 +146,49 @@ const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
     c.set("body", value as Shaped<S>);
     await next();
   });
+
+/** The edit form's cap: the largest picture core keeps, plus the auth cap for the other fields. */
+const EDIT_BODY_LIMIT = MAX_IMAGE_BYTES + AUTH_BODY_LIMIT;
+
+/** The edit form as the door read it: only the fields the page sent. */
+type EditForm = { id: string; title?: string; picture?: Uint8Array | "page" };
+
+/**
+ * Takes the edit form, a `multipart/form-data` body under `EDIT_BODY_LIMIT`, and sets `edit`
+ * when `id` is a link id, `title` (if sent) is text and `picture` (if sent) is a file or
+ * `page`. This checks shapes only; the title rule and the image check are core's.
+ */
+const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, next) => {
+  let raw: Uint8Array | null;
+  try {
+    raw = await readCapped(c.req.raw, EDIT_BODY_LIMIT);
+  } catch (error) {
+    if (!(error instanceof BodyTooLarge)) throw error;
+    return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
+  }
+  const bad = () =>
+    c.json({ code: "BAD_REQUEST", message: "Send a form with id, and title or picture." }, 400);
+  const type = c.req.header("content-type") ?? "";
+  if (!/^multipart\/form-data/i.test(type)) return bad();
+  let form: FormData;
+  try {
+    const body = new Uint8Array(raw ?? []);
+    form = await new Response(body, { headers: { "content-type": type } }).formData();
+  } catch {
+    return bad();
+  }
+  const id = form.get("id");
+  const title = form.get("title");
+  const picture = form.get("picture");
+  if (!isLinkId(id) || (title !== null && typeof title !== "string")) return bad();
+  if (picture !== null && picture !== "page" && !(picture instanceof Blob)) return bad();
+  const edit: EditForm = { id };
+  if (title !== null) edit.title = title;
+  if (picture instanceof Blob) edit.picture = new Uint8Array(await picture.arrayBuffer());
+  else if (picture === "page") edit.picture = "page";
+  c.set("edit", edit);
+  await next();
+});
 
 /** The page's words for a link that is gone; core's are written for an agent. */
 const LINK_GONE = "That link is gone. Reload the page.";
@@ -299,7 +346,8 @@ export function webApp({
   connections,
   keys,
 }: {
-  deps: SearchLinksDeps & WorthDeps & { images: LinkImageReader; profile: ProfileStore };
+  deps: SearchLinksDeps &
+    WorthDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -319,6 +367,20 @@ export function webApp({
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
+
+  /** What a card shows after an edit or its Undo, read after the write. */
+  const cardState = async (owner: OwnerId, id: string) => {
+    const link = await getLink(deps, owner, id);
+    const version = (await deps.images.imageVersions(owner, [id])).get(id) ?? null;
+    const info = (await deps.images.pictureInfo(owner, [id])).get(id);
+    return {
+      title: link.title,
+      url: link.url,
+      initials: initialsText(link),
+      version,
+      picture: { own: info?.own ?? false, pageVersion: info?.pageVersion ?? null },
+    };
+  };
 
   app.get("/login", (c) =>
     c.html(loginPage({ next: returnAfterLogin(c.req.query("next") ?? null) }), 200, NO_STORE),
@@ -361,10 +423,15 @@ export function webApp({
       caller.owner,
       links.map((l) => l.id),
     );
+    const pictures = await deps.images.pictureInfo(
+      caller.owner,
+      links.map((l) => l.id),
+    );
     const catalog = await deps.store.listTags(caller.owner);
     const handy = await handyOfLinks(deps, caller.owner, links);
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now, images, catalog, handy, keep }), 200, NO_STORE);
+    const html = searchPage({ query, links, now, images, catalog, handy, keep, pictures });
+    return c.html(html, 200, NO_STORE);
   });
 
   // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does
@@ -374,6 +441,7 @@ export function webApp({
     if (name.trim() === "") return c.redirect("/", 303);
     const { owner } = c.get("caller");
     const before = c.req.query("before");
+    const done = state === "archived";
     try {
       const { tag, catalog, page } = await openSpace(deps, owner, {
         name,
@@ -386,7 +454,12 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const handy = await handyOfLinks(deps, owner, page.links);
-      const done = state === "archived";
+      const pictures = done
+        ? new Map()
+        : await deps.images.pictureInfo(
+            owner,
+            page.links.map((l) => l.id),
+          );
       const later = before !== undefined;
       const html = spacePage({
         tag,
@@ -394,6 +467,7 @@ export function webApp({
         ...page,
         images,
         handy,
+        pictures,
         now: deps.now(),
         done,
         later,
@@ -413,6 +487,7 @@ export function webApp({
   const all = (state: LinkState) => async (c: Context<SessionEnv>) => {
     const { owner } = c.get("caller");
     const before = c.req.query("before");
+    const done = state === "archived";
     try {
       const order = checkedOrder(c.req.query("order"));
       const page = await linkPage(deps, owner, {
@@ -427,7 +502,12 @@ export function webApp({
       );
       const catalog = await deps.store.listTags(owner);
       const handy = await handyOfLinks(deps, owner, page.links);
-      const done = state === "archived";
+      const pictures = done
+        ? new Map()
+        : await deps.images.pictureInfo(
+            owner,
+            page.links.map((l) => l.id),
+          );
       const later = before !== undefined;
       const html = allPage({
         order,
@@ -435,6 +515,7 @@ export function webApp({
         catalog,
         images,
         handy,
+        pictures,
         now: deps.now(),
         done,
         later,
@@ -449,8 +530,10 @@ export function webApp({
   app.get("/all/done", session, all("archived"));
 
   // Another owner's link, a link without an image and an id never issued all get this same 404.
+  // `?page=1` serves the page's fetched picture, for the edit dialog's "Use the page's picture".
   app.get(IMAGE_ROUTE, session, async (c) => {
-    const image = await deps.images.image(c.get("caller").owner, c.req.param("id"));
+    const which = c.req.query("page") === "1" ? "page" : undefined;
+    const image = await deps.images.image(c.get("caller").owner, c.req.param("id"), which);
     if (!image) return c.text("Not found.", 404, NO_STORE);
     const cached = c.req.query("v") === image.version;
     return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
@@ -466,8 +549,6 @@ export function webApp({
     });
     return c.html(page, 200, NO_STORE);
   });
-
-  // Each POST's body is read, capped, before the session read takes the lock.
 
   // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
   // writes could be set off from another site.
@@ -486,6 +567,30 @@ export function webApp({
     homeAction(c, async () => {
       await recordOpening(deps, c.get("caller").owner, c.get("body").id);
       return done(c);
+    }),
+  );
+
+  // The owner's edit of a link's title and picture (#145). It answers the card's new state and
+  // the edit's id for its Undo (null when nothing changed).
+  app.post("/links/edit", session, editForm, (c) =>
+    homeAction(c, async () => {
+      const { owner } = c.get("caller");
+      const { id, title, picture } = c.get("edit");
+      const editId = await editLink(deps, owner, id, {
+        ...(title !== undefined && { title }),
+        ...(picture !== undefined && { picture }),
+      });
+      return c.json({ ...(await cardState(owner, id)), editId }, 200, NO_STORE);
+    }),
+  );
+
+  // Its Undo: core puts the edit back only while nothing changed since; otherwise a 409.
+  app.post("/links/edit/undo", jsonBody({ ...linkId, editId: isString }), session, (c) =>
+    homeAction(c, async () => {
+      const { owner } = c.get("caller");
+      const { id, editId } = c.get("body");
+      await undoEdit(deps, owner, id, editId);
+      return c.json(await cardState(owner, id), 200, NO_STORE);
     }),
   );
 

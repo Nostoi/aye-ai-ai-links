@@ -16,8 +16,9 @@ export type Answer = {
 /**
  * A page in linkedom with all its scripts but the menu's run in one scope, as a browser shares
  * one global scope across a page's scripts, so two scripts that declare the same name fail.
- * `fetch` records each request (a GET has no body) and replies with `answer`; timers never fire,
- * so an Undo bar stays up until the test clicks it.
+ * `fetch` records each request (a GET has no body; a JSON body is parsed; any other body (a
+ * `FormData`) is kept as sent) and replies with `answer`; timers never fire, so an Undo bar stays
+ * up until the test clicks it.
  */
 export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ status: 204 })) {
   const { document, DOMParser } = parseHTML(html);
@@ -34,11 +35,11 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
   const sent: Post[] = [];
   const fetch = async (
     url: string,
-    init?: { body?: string; redirect?: string; keepalive?: boolean },
+    init?: { body?: string | FormData; redirect?: string; keepalive?: boolean },
   ) => {
     const request = {
       url,
-      body: init?.body === undefined ? undefined : JSON.parse(init.body),
+      body: typeof init?.body === "string" ? JSON.parse(init.body) : init?.body,
       redirect: init?.redirect,
       keepalive: init?.keepalive,
     };

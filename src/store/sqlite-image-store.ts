@@ -8,12 +8,13 @@ import {
   imageVersion,
   type LinkImageReader,
   type PendingImage,
+  type PictureInfo,
   type StoredImage,
 } from "../core/image-store.js";
 import type { OwnerId } from "../core/types.js";
 import { parseId } from "./sqlite-store.js";
 
-/** Preview images in `link_images`, and their pending state in `snapshots.image_status`. */
+/** Fetched preview images (`link_images`, pending in `snapshots.image_status`), and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
 export class SqliteImageStore implements ImageStore, LinkImageReader {
   constructor(private readonly db: Database) {}
 
@@ -63,31 +64,60 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     return n !== null && this.settle(owner, n, imageUrl, end);
   }
 
+  /** Link ids as the JSON array `json_each` reads; ids never issued are dropped. */
+  private static ids(linkIds: string[]): string {
+    return JSON.stringify(linkIds.map(parseId).filter((n): n is number => n !== null));
+  }
+
   async imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, string>> {
-    const ids = linkIds.map(parseId).filter((n): n is number => n !== null);
     const rows = this.db
       .prepare(
-        `SELECT link_id, sha256 FROM link_images
-         WHERE owner_id = ? AND link_id IN (SELECT value FROM json_each(?))`,
+        `SELECT j.value AS link_id, coalesce(o.sha256, f.sha256) AS sha256 FROM json_each(?) j
+         LEFT JOIN owner_images o ON o.owner_id = ? AND o.link_id = j.value
+         LEFT JOIN link_images f ON f.owner_id = ? AND f.link_id = j.value
+         WHERE coalesce(o.sha256, f.sha256) IS NOT NULL`,
       )
-      .all(owner, JSON.stringify(ids)) as { link_id: number; sha256: string }[];
+      .all(SqliteImageStore.ids(linkIds), owner, owner) as { link_id: number; sha256: string }[];
     return new Map(rows.map((r) => [String(r.link_id), imageVersion(r.sha256)]));
   }
 
-  async image(owner: OwnerId, linkId: string): Promise<StoredImage | null> {
+  async image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null> {
     const n = parseId(linkId);
     if (n === null) return null;
-    const row = this.db
-      .prepare(
-        "SELECT content_type, bytes, sha256 FROM link_images WHERE owner_id = ? AND link_id = ?",
-      )
-      .get(owner, n) as { content_type: ImageType; bytes: Buffer; sha256: string } | undefined;
+    const read = (table: "owner_images" | "link_images") =>
+      this.db
+        .prepare(
+          `SELECT content_type, bytes, sha256 FROM ${table} WHERE owner_id = ? AND link_id = ?`,
+        )
+        .get(owner, n) as { content_type: ImageType; bytes: Buffer; sha256: string } | undefined;
+    const row = (which === "page" ? undefined : read("owner_images")) ?? read("link_images");
     if (!row) return null;
     return {
       contentType: row.content_type,
       bytes: new Uint8Array(row.bytes),
       version: imageVersion(row.sha256),
     };
+  }
+
+  async pictureInfo(owner: OwnerId, linkIds: string[]): Promise<Map<string, PictureInfo>> {
+    const rows = this.db
+      .prepare(
+        `SELECT j.value AS link_id, o.link_id IS NOT NULL AS own, f.sha256 AS page FROM json_each(?) j
+         LEFT JOIN owner_images o ON o.owner_id = ? AND o.link_id = j.value
+         LEFT JOIN link_images f ON f.owner_id = ? AND f.link_id = j.value
+         WHERE o.link_id IS NOT NULL OR f.link_id IS NOT NULL`,
+      )
+      .all(SqliteImageStore.ids(linkIds), owner, owner) as {
+      link_id: number;
+      own: number;
+      page: string | null;
+    }[];
+    return new Map(
+      rows.map((r) => [
+        String(r.link_id),
+        { own: r.own === 1, pageVersion: r.page === null ? null : imageVersion(r.page) },
+      ]),
+    );
   }
 
   /** Moves a still-pending image for `imageUrl` to `status`; false when it was not pending. */

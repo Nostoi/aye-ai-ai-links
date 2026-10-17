@@ -197,6 +197,49 @@ export const MIGRATIONS: string[] = [
     FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE
   );
   `,
+  // Editing a link's title and picture (#145). `owner_images` is the picture the owner set;
+  // `link_images` stays the fetched one only, so a fetch can never overwrite the owner's. Same type
+  // and 2 MiB checks as `link_images`. `link_edits` is what the last edit replaced and wrote, one
+  // row per link, so its Undo acts only while nothing changed since. Both go with their link by
+  // the composite foreign key. Additive; rebuilds nothing.
+  `
+  CREATE TABLE owner_images (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    content_type TEXT NOT NULL
+      CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    bytes BLOB NOT NULL,
+    sha256 TEXT NOT NULL,
+    set_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (typeof(bytes) = 'blob' AND length(bytes) <= 2097152)
+  );
+
+  CREATE TABLE link_edits (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    edit_id TEXT NOT NULL,
+    title_changed INTEGER NOT NULL CHECK (title_changed IN (0, 1)),
+    picture_changed INTEGER NOT NULL CHECK (picture_changed IN (0, 1)),
+    prior_title TEXT,
+    written_title TEXT,
+    prior_content_type TEXT
+      CHECK (prior_content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    prior_bytes BLOB
+      CHECK (prior_bytes IS NULL OR (typeof(prior_bytes) = 'blob' AND length(prior_bytes) <= 2097152)),
+    prior_sha256 TEXT,
+    prior_set_at INTEGER,
+    written_sha256 TEXT,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (title_changed = 1 OR picture_changed = 1),
+    CHECK ((prior_bytes IS NULL) = (prior_sha256 IS NULL)
+      AND (prior_bytes IS NULL) = (prior_content_type IS NULL)
+      AND (prior_bytes IS NULL) = (prior_set_at IS NULL))
+  );
+  `,
 ];
 
 /**

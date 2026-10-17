@@ -2,10 +2,10 @@ import type Database from "better-sqlite3";
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
+import { png } from "../core/image-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
-import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
@@ -66,6 +66,25 @@ describe("the image route", () => {
       "content-disposition": "inline",
       "cache-control": "private, max-age=31536000, immutable",
     });
+  });
+
+  it("?page=1 serves the fetched picture while the owner's shows; B gets the same 404 for A's either way", async () => {
+    const { w, owner } = await world();
+    const id = await linkWithImage(w.links, "owner", "https://a.example/one", { bytes: PNG });
+    const mine = png(80, 60, Buffer.from("the owner's own"));
+    const deps = createDeps(w.links, new FakeEmbedder(DIMS));
+    const set = { set: { contentType: "image/png" as const, bytes: mine } };
+    await deps.edits.applyEdit("owner", id, { picture: set }, new Date());
+    expect((await owner.send(`/images/${id}`)).bytes.equals(mine)).toBe(true);
+    expect((await owner.send(`/images/${id}?page=1`)).bytes.equals(PNG)).toBe(true);
+    const browser = await addSecondUser(w);
+    const missing = await browser.send("/images/99999?page=1");
+    for (const path of [`/images/${id}`, `/images/${id}?page=1`]) {
+      const res = await browser.send(path);
+      expect(res.status).toBe(404);
+      expect(res.bytes.equals(missing.bytes)).toBe(true);
+      expect(res.bytes.includes(PNG) || res.bytes.includes(mine)).toBe(false);
+    }
   });
 
   it.each([

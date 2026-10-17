@@ -1,10 +1,13 @@
+import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { hostOf } from "./host.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { hostOf, spaceClass, tile, whyLine } from "./pages.js";
+import { spaceClass, tile, whyLine } from "./pages.js";
 import { olderScript } from "./show-older.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
@@ -53,13 +56,18 @@ type Input = {
   done: boolean;
   /** A page after the first. */
   later?: boolean;
+  /** Each card's picture info, for the edit dialog; read on the active pages only. */
+  pictures?: Map<string, PictureInfo>;
 };
 
 /**
  * One card. An active link with no why asks Tell me why, in amber, "needs you"; a done one never
  * does, and its picture is faded while its text stays at full contrast.
  */
-function card(link: Link, { tag, catalog, images, handy, now, done }: Input): string {
+function card(
+  link: Link,
+  { tag, catalog, images, handy, now, done, pictures = new Map() }: Input,
+): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
   const why =
@@ -67,9 +75,10 @@ function card(link: Link, { tag, catalog, images, handy, now, done }: Input): st
       ? `<p class="card-why">${whyLine(link.why)}</p>`
       : `${whyAnswer("p", "Why: ", "card-why")}\n${askWhy(link)}`;
   const space = linkSpace(link, catalog, { within: tag.key });
-  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}">
-${tile(link, images.get(link.id), "card-image")}
-<div class="card-body">
+  const version = images.get(link.id);
+  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
+${tile(link, version, "card-image")}
+${done ? "" : `${editMenu(link)}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
@@ -77,11 +86,15 @@ ${done ? "" : handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
 
-/** Tell me why and Keep handy on the active cards, including those Show older links appends. */
+/**
+ * Tell me why, Keep handy and the edit dialog on the active cards, including those Show older
+ * links appends.
+ */
 const CARDS_SCRIPT = `<script>
 ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
+${editLinkScript("space-links", "space-error")}
 </script>
 `;
 
@@ -119,7 +132,7 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+${done ? "" : `${editDialog()}\n${CARDS_SCRIPT}`}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

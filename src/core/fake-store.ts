@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   type ImageBytes,
   type ImageEnd,
@@ -6,8 +6,10 @@ import {
   imageVersion,
   type LinkImageReader,
   type PendingImage,
+  type PictureInfo,
   type StoredImage,
 } from "./image-store.js";
+import type { LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js";
 import {
   hasConsistentSchedule,
   type SnapshotLease,
@@ -30,8 +32,27 @@ import type {
 type ImageStatus = "pending" | "ok" | ImageEnd;
 const imageKey = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
 
+type OwnRecord = ImageBytes & { sha256: string; setAt: Date };
+type EditRecord = {
+  editId: string;
+  titleChanged: boolean;
+  pictureChanged: boolean;
+  priorTitle: string | null;
+  writtenTitle: string | null;
+  prior: OwnRecord | null;
+  writtenSha: string | null;
+};
+const sha256Hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const stored = (own: OwnRecord): StoredImage => ({
+  contentType: own.contentType,
+  bytes: new Uint8Array(own.bytes),
+  version: imageVersion(own.sha256),
+});
+
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
-export class FakeStore implements LinkStore, SnapshotStore, ToolStore, ImageStore, LinkImageReader {
+export class FakeStore
+  implements LinkStore, SnapshotStore, ToolStore, ImageStore, LinkImageReader, LinkEditStore
+{
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
   private tokens = new Map<OwnerId, Map<string, number>>();
@@ -40,6 +61,9 @@ export class FakeStore implements LinkStore, SnapshotStore, ToolStore, ImageStor
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
   private storedImages = new Map<string, StoredImage>();
+  /** The owner's pictures and each link's last edit record, by `imageKey`. */
+  private ownerImages = new Map<string, OwnRecord>();
+  private editRecords = new Map<string, EditRecord>();
   private toolRows = new Map<OwnerId, Map<string, ToolRecord>>();
   private nextId = 1;
 
@@ -378,15 +402,88 @@ export class FakeStore implements LinkStore, SnapshotStore, ToolStore, ImageStor
   async imageVersions(owner: OwnerId, linkIds: string[]) {
     const versions = new Map<string, string>();
     for (const id of linkIds) {
-      const stored = this.storedImages.get(imageKey(owner, id));
-      if (stored) versions.set(id, stored.version);
+      const own = this.ownerImages.get(imageKey(owner, id));
+      const version = own
+        ? imageVersion(own.sha256)
+        : this.storedImages.get(imageKey(owner, id))?.version;
+      if (version !== undefined) versions.set(id, version);
     }
     return versions;
   }
 
-  async image(owner: OwnerId, linkId: string): Promise<StoredImage | null> {
-    const stored = this.storedImages.get(imageKey(owner, linkId));
-    return stored ? structuredClone(stored) : null;
+  async image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null> {
+    const key = imageKey(owner, linkId);
+    const own = which === "page" ? undefined : this.ownerImages.get(key);
+    if (own) return stored(own);
+    const fetched = this.storedImages.get(key);
+    return fetched ? structuredClone(fetched) : null;
+  }
+
+  async pictureInfo(owner: OwnerId, linkIds: string[]) {
+    const info = new Map<string, PictureInfo>();
+    for (const id of linkIds) {
+      const own = this.ownerImages.has(imageKey(owner, id));
+      const page = this.storedImages.get(imageKey(owner, id))?.version ?? null;
+      if (own || page !== null) info.set(id, { own, pageVersion: page });
+    }
+    return info;
+  }
+
+  async applyEdit(owner: OwnerId, linkId: string, edit: LinkEdit, at: Date) {
+    const link = this.owned(owner).get(linkId);
+    if (!link) return null;
+    const key = imageKey(owner, linkId);
+    const own = this.ownerImages.get(key);
+    const set = edit.picture !== undefined && edit.picture !== "page" ? edit.picture.set : null;
+    const setSha = set ? sha256Hex(set.bytes) : null;
+    const titleChanged = edit.title !== undefined && edit.title !== link.title;
+    const pictureChanged =
+      edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
+    if (!titleChanged && !pictureChanged) return { editId: null };
+    const editId = randomUUID();
+    this.editRecords.set(key, {
+      editId,
+      titleChanged,
+      pictureChanged,
+      priorTitle: titleChanged ? link.title : null,
+      writtenTitle: titleChanged ? (edit.title ?? null) : null,
+      prior: pictureChanged && own ? structuredClone(own) : null,
+      writtenSha: pictureChanged ? setSha : null,
+    });
+    if (titleChanged) link.title = edit.title ?? null;
+    if (pictureChanged) {
+      if (set && setSha) {
+        this.ownerImages.set(key, {
+          contentType: set.contentType,
+          bytes: new Uint8Array(set.bytes),
+          sha256: setSha,
+          setAt: new Date(at),
+        });
+      } else this.ownerImages.delete(key);
+    }
+    return { editId };
+  }
+
+  async undoEdit(owner: OwnerId, linkId: string, editId: string): Promise<UndoOutcome | null> {
+    const link = this.owned(owner).get(linkId);
+    if (!link) return null;
+    const key = imageKey(owner, linkId);
+    const row = this.editRecords.get(key);
+    if (!row || row.editId !== editId) return "conflict";
+    const ownSha = this.ownerImages.get(key)?.sha256 ?? null;
+    if (
+      (row.titleChanged && link.title !== row.writtenTitle) ||
+      (row.pictureChanged && ownSha !== row.writtenSha)
+    ) {
+      return "conflict";
+    }
+    if (row.titleChanged) link.title = row.priorTitle;
+    if (row.pictureChanged) {
+      if (row.prior) this.ownerImages.set(key, row.prior);
+      else this.ownerImages.delete(key);
+    }
+    this.editRecords.delete(key);
+    return "undone";
   }
 
   private settle(owner: OwnerId, linkId: string, imageUrl: string, status: ImageStatus): boolean {

@@ -1,6 +1,9 @@
+import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { hostOf } from "./host.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -114,14 +117,6 @@ export const oauthErrorPage = (message: string) =>
 </main>`,
   );
 
-export const hostOf = (url: string) => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return "";
-  }
-};
-
 /** The why as every link card reads it; an inferred one is a guess. */
 export function whyLine(why: Link["why"]): string {
   if (!why) return "No why yet";
@@ -161,12 +156,14 @@ function resultItem(
   version: string | undefined,
   space: Space | null,
   view: HandyView | null | undefined,
+  info: PictureInfo | undefined,
 ): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
-  return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}">
+  return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, version, info)}>
 ${tile(link, version)}
 <div class="result-body">
+${editMenu(link)}
 <h2>${linkTitle(link)}</h2>
 <p class="small">${saved}</p>
 ${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${spaceName(space)}${whyLine(link.why)}</p>
@@ -178,7 +175,8 @@ ${handyControl(link, view)}</div>
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
  * `images` holds the image version of each link that has a stored image; `catalog`, the owner's
  * tags, gives each card its space (`linkSpace`). `keep` is the mode the Handy shelf's Add opens: it
- * asks for a link to keep handy and carries itself through a search typed here.
+ * asks for a link to keep handy and carries itself through a search typed here. `pictures` holds
+ * each card's picture info for the edit dialog.
  */
 export const searchPage = ({
   query,
@@ -188,6 +186,7 @@ export const searchPage = ({
   catalog = [],
   handy = new Map(),
   keep = false,
+  pictures = new Map(),
 }: {
   query: string;
   links: Link[];
@@ -196,6 +195,7 @@ export const searchPage = ({
   catalog?: Tag[];
   handy?: Map<string, HandyView | null>;
   keep?: boolean;
+  pictures?: Map<string, PictureInfo>;
 }) =>
   page(
     "Search · Aye-AI-AI Links",
@@ -210,15 +210,17 @@ ${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}</form>
 <h1>${query.trim() !== "" ? "Best matches first" : keep ? "Find the link to keep handy" : "Your newest links"}</h1>
 ${keep ? `<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>\n` : ""}
 <p id="results-error" role="alert"></p>
-${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "No active links to keep handy." : "No links saved yet."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id))).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "No active links to keep handy." : "No links saved yet."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id), pictures.get(l.id))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=${keep ? "&keep=1" : ""}">your newest links</a>.</p>
 </div>
 </main>
+${editDialog()}
 <script>
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}
+${editLinkScript("results", "results-error")}
 </script>
 ${openedScript("results", "/links/opened")}`,
     { menu: true, undo: true },

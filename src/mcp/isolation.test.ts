@@ -19,12 +19,12 @@ import {
   saveLinkWith,
   type World,
 } from "../auth/oauth-test-kit.js";
+import { png } from "../core/image-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { setTagPinned } from "../core/tag-space.js";
 import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
-import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
@@ -705,6 +705,9 @@ describe("owner isolation coverage", () => {
     "POST /home/unarchive": "the two-owner test of POST /home/unarchive in web/home-routes.test.ts",
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
+    "POST /links/edit": "the two-owner test of POST /links/edit in web/edit-routes.test.ts",
+    "POST /links/edit/undo":
+      "the two-owner test of POST /links/edit/undo in web/edit-routes.test.ts",
     "POST /tools/keep": "the two-owner test of POST /tools/keep in web/tools-routes.test.ts",
     "POST /tools/not-handy":
       "the two-owner test of POST /tools/not-handy in web/tools-routes.test.ts",

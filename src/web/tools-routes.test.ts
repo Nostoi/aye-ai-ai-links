@@ -1,7 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
-import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
+import { addSecondUser, allRows, oauthWorld, type World } from "../auth/oauth-test-kit.js";
 import { recordOpening, saveLink, updateLink } from "../core/links.js";
 import type { ToolRecord } from "../core/tool-store.js";
 import { keepHandy, notHandy, stillUsing } from "../core/tools.js";
@@ -16,15 +16,6 @@ const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS
 const at = (world: World, when: Date) => ({ ...linkDeps(world), now: () => when });
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
 
-/** Every row of every table, so a request can be shown to have changed nothing at all. */
-const allRows = (world: World) => {
-  const tables = world.links
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-    .all() as { name: string }[];
-  return Object.fromEntries(
-    tables.map(({ name }) => [name, world.links.prepare(`SELECT * FROM "${name}"`).all()]),
-  );
-};
 /** A's links and Keep handy rows: what another owner's request must leave alone. */
 const ownedRows = (world: World, owner: string) => ({
   links: world.links.prepare("SELECT * FROM links WHERE owner_id = ? ORDER BY id").all(owner),

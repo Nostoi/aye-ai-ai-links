@@ -9,7 +9,7 @@ import type { Caller } from "../auth/caller.js";
 import { getDigest } from "../core/digest.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
-import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
+import { getLinkWithText, normalizeTitle, saveLink, updateLink } from "../core/links.js";
 import { listLinks } from "../core/list-links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
@@ -284,9 +284,11 @@ export function buildMcpServer(
       const now = deps.now();
       const at = { ...deps, now: () => now };
       // handy first, so a refused handy writes nothing. Past the schema, updateLink refuses only a
-      // blank tag name (normalizeTags) or a missing link, so check the tags before handy too.
+      // blank tag name (normalizeTags), a title over the limit (normalizeTitle) or a missing link,
+      // so check the tags and the title before handy too.
       if (handy) {
         if (rest.tags) normalizeTags(rest.tags);
+        if (rest.title !== undefined) normalizeTitle(rest.title);
         await applyHandy(at, owner, id, handy);
       }
       const link = await updateLink(at, owner, id, {

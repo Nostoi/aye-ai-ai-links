@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
-import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
+import { addSecondUser, allRows, oauthWorld, type World } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import type { Labelled, LinkPatch } from "../core/types.js";
 import { SNOOZE_MS } from "../core/worth-a-look.js";
@@ -11,15 +11,6 @@ import { DIMS } from "../search/model.js";
 const A = "owner";
 const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS));
 
-/** Every row of every table, so a request can be shown to have changed nothing at all. */
-const allRows = (world: World) => {
-  const tables = world.links
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-    .all() as { name: string }[];
-  return Object.fromEntries(
-    tables.map(({ name }) => [name, world.links.prepare(`SELECT * FROM "${name}"`).all()]),
-  );
-};
 const ownedRows = (world: World, owner: string) =>
   world.links.prepare("SELECT * FROM links WHERE owner_id = ? ORDER BY id").all(owner);
 const row = (world: World, id: string) =>

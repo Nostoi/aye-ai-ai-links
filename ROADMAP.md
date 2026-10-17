@@ -25,6 +25,12 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 - **2026-10-17:** Editing a link's title and picture (#145). Owner rulings, 2026-10-17 (#145 comments 6235920412 and 6236065873).
   - **The design** is `docs/specs/2026-10-17-edit-title-picture-design.md`, following the approved "Edit title & picture" mockup. It lands in two PRs: the Handy header first, then title and picture.
   - **Handy's Add and Show all sit in the shelf's header,** beside "Handy". Show all reads "Show all N" with the kept count. The line of buttons under the tiles is gone. An empty shelf keeps its line with Add beside it.
+  - **Title and picture (PR 2).** Owner rulings, 2026-10-17 (#145 comment 6236065873):
+    - The owner's picture is stored apart from the fetched one (`owner_images`), so a fetch never replaces it. The store's reads alone decide which shows: the owner's, else the fetched one.
+    - One title rule for agents and the page: trimmed, blank is none, at most 200 characters. `save_link` and `update_link` now refuse a longer title instead of storing it; stored titles are not rewritten. `update_link` checks it before its handy write.
+    - An edit's Undo acts only while the edit is the link's latest and the link still holds what it wrote (`restoreTool`'s rule). Otherwise it is refused, and the page's alert says so; the Undo bar is unchanged.
+    - Undoing a picture edit restores the earlier owner picture with its original set time (`link_edits.prior_set_at`).
+    - The ⋯ menu and the dialog are on search results (archived links included), All links and space pages, not on the done pages or the Handy shelf. The Handy tiles and the cards share one menu.
 
 - **2026-10-16:** Phase 3 is done; the current phase is Later. Owner rulings, in session.
   - **Phase 3's last checks.** ChatGPT kept its connection by refreshing for about 11 hours, across two deploys (#102 comment 6184365831). #105 is fixed by `offline-access.ts` and closed with no upstream report to better-auth (owner ruling, 2026-10-14). #77 B2's F1 moved to Later as #119.

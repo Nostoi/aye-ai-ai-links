@@ -11,7 +11,7 @@ import {
   webpLossless,
   webpLossy,
 } from "./image-test-kit.js";
-import { readImageHeader } from "./image-type.js";
+import { checkImage, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS, readImageHeader } from "./image-type.js";
 
 describe("readImageHeader", () => {
   it.each([
@@ -147,5 +147,43 @@ describe("readImageHeader", () => {
     ["an empty body", Buffer.alloc(0)],
   ])("refuses %s", (_, bytes) => {
     expect(readImageHeader(bytes)).toBeNull();
+  });
+});
+
+describe("checkImage, the one image check for fetched and uploaded pictures", () => {
+  it("accepts each kept type, naming the type its own header reads", () => {
+    expect(checkImage(png(640, 480))).toEqual({ ok: true, type: "image/png" });
+    expect(checkImage(jpeg(640, 480))).toEqual({ ok: true, type: "image/jpeg" });
+    expect(checkImage(gif(640, 480))).toEqual({ ok: true, type: "image/gif" });
+    expect(checkImage(webpLossy(640, 480))).toEqual({ ok: true, type: "image/webp" });
+  });
+
+  it("refuses SVG, AVIF and a header cut short as not_image", () => {
+    for (const bytes of [svg, avif, png(640, 480).subarray(0, 20)]) {
+      expect(checkImage(bytes)).toEqual({ ok: false, reason: "not_image" });
+    }
+  });
+
+  it("takes exactly 2 MiB and refuses 2 MiB + 1 byte as too_large", () => {
+    const head = png(10, 10);
+    const sized = (n: number) => Buffer.concat([head, Buffer.alloc(n - head.length)]);
+    expect(checkImage(sized(MAX_IMAGE_BYTES))).toEqual({ ok: true, type: "image/png" });
+    expect(checkImage(sized(MAX_IMAGE_BYTES + 1))).toEqual({ ok: false, reason: "too_large" });
+  });
+
+  it("accepts a JPEG under 2 MiB whose frame header sits past 256 KiB of metadata", () => {
+    const metadata = Array.from({ length: 6 }, () => jpegSegment(0xe1, Buffer.alloc(65_000)));
+    const bytes = jpeg(640, 480, metadata);
+    expect(bytes.indexOf(Buffer.from([0xff, 0xc0]))).toBeGreaterThan(256 * 1024);
+    expect(bytes.length).toBeLessThan(MAX_IMAGE_BYTES);
+    expect(checkImage(bytes)).toEqual({ ok: true, type: "image/jpeg" });
+  });
+
+  it("takes exactly MAX_IMAGE_PIXELS and refuses one column more as too_large", () => {
+    expect(checkImage(png(MAX_IMAGE_PIXELS / 4000, 4000))).toEqual({ ok: true, type: "image/png" });
+    expect(checkImage(png(MAX_IMAGE_PIXELS / 4000 + 1, 4000))).toEqual({
+      ok: false,
+      reason: "too_large",
+    });
   });
 });

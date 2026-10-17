@@ -47,11 +47,21 @@ export interface ImageStore {
   endImage(owner: OwnerId, linkId: string, imageUrl: string, end: ImageEnd): Promise<boolean>;
 }
 
-/** The web door's reads of stored images. Owner-scoped: another owner's link reads as no image. */
+/** For the edit dialog: whether the owner set a picture, and the fetched picture's version. */
+export type PictureInfo = { own: boolean; pageVersion: string | null };
+
+/**
+ * The web door's reads of stored pictures. The picture that shows is the owner's when there is
+ * one, else the fetched one, else none; these reads are the one place that decides it.
+ * Owner-scoped: another owner's link reads as no picture.
+ */
 export interface LinkImageReader {
-  /** The version of each of these links that has a stored image; links without one are absent. */
+  /** The version of the picture that shows, for each of these links; links with none are absent. */
   imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, string>>;
 
-  /** The link's stored image, or null when it has none. */
-  image(owner: OwnerId, linkId: string): Promise<StoredImage | null>;
+  /** The picture that shows, or with `which` "page" the fetched one; null when there is none. */
+  image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null>;
+
+  /** For each of these links with an owner or fetched picture, what the dialog needs; others are absent. */
+  pictureInfo(owner: OwnerId, linkIds: string[]): Promise<Map<string, PictureInfo>>;
 }

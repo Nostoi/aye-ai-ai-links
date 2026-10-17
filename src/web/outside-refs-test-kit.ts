@@ -13,7 +13,8 @@ export function outsideRefs(html: string): string[] {
       if (outside.test(value)) found.push(`<${name} ${key}=${value}>`);
     }
   }
-  for (const [, ref = ""] of html.matchAll(/url\(\s*['"]?([^)'"]*)/gi)) {
+  // CSS's url(), not a script call whose name ends in "url" (imageUrl, URL.createObjectURL).
+  for (const [, ref = ""] of html.matchAll(/(?<![\w$])url\(\s*['"]?([^)'"]*)/gi)) {
     if (!/^data:/.test(ref)) found.push(`url(${ref})`);
   }
   if (/@import\b/i.test(html)) found.push("@import");

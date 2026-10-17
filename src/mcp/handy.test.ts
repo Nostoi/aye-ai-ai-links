@@ -209,6 +209,21 @@ describe("update_link's handy, every action and source", () => {
     expect(row("1")).toBeUndefined();
   });
 
+  it("a 201-character title refuses the whole call before handy writes anything", async () => {
+    await call("save_link", { url: "https://example.com/t", title: "Before" });
+
+    const res = await call("update_link", {
+      id: "1",
+      title: "a".repeat(201),
+      handy: { action: "keep", source: "stated" },
+    });
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/at most 200 characters/);
+    expect(row("1")).toBeUndefined();
+    expect(db.prepare("SELECT title FROM links WHERE id = 1").get()).toEqual({ title: "Before" });
+  });
+
   it("an inferred keep leaves a link the owner declined or kept as it is", async () => {
     await call("save_link", { url: "https://example.com/declined" });
     await call("save_link", { url: "https://example.com/kept" });

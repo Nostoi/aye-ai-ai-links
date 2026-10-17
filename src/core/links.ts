@@ -85,6 +85,22 @@ function cleanWhy(why: Labelled | null | undefined): Labelled | null {
   return why && text ? { text, source: why.source } : null;
 }
 
+/** The longest title kept, in characters (code points). */
+export const TITLE_MAX = 200;
+
+/**
+ * The one title rule, for agents and the web edit: trimmed, and blank means no title (the card
+ * shows the URL). Longer than TITLE_MAX is refused. Only a title being written is checked.
+ */
+export function normalizeTitle(title: string | null): string | null {
+  if (title === null) return null;
+  const trimmed = title.trim();
+  if ([...trimmed].length > TITLE_MAX) {
+    throw invalid(`A title can be at most ${TITLE_MAX} characters.`);
+  }
+  return trimmed === "" ? null : trimmed;
+}
+
 /** Waits for `job`, or `ms`, whichever ends first, and leaves no timer behind. */
 async function settledWithin(job: Promise<void>, ms: number): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -111,11 +127,12 @@ export async function saveLink(
   const key = urlKey(input.url);
   checkSources(input.why, input.tags);
   const tags = normalizeTags(input.tags ?? []);
+  const title = normalizeTitle(input.title ?? null);
   const why = cleanWhy(input.why);
   const result = await store.insertIfAbsent(owner, {
     url: input.url.trim(),
     urlKey: key,
-    title: input.title ?? null,
+    title,
     summary: input.summary ?? null,
     why,
     tags,
@@ -183,7 +200,7 @@ export async function updateLink(
   }
   checkSources(why, tags);
   const patch: LinkPatch = {};
-  if (title !== undefined) patch.title = title;
+  if (title !== undefined) patch.title = normalizeTitle(title);
   if (summary !== undefined) patch.summary = summary;
   if (state !== undefined) patch.state = state;
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;

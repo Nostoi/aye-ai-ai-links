@@ -2,7 +2,7 @@ import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { editData, editDialog, editMenu } from "./edit-link.js";
+import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -85,11 +85,15 @@ ${done ? "" : handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
 
-/** Tell me why and Keep handy on the active cards, including those Show older links appends. */
+/**
+ * Tell me why, Keep handy and the edit dialog on the active cards, including those Show older
+ * links appends.
+ */
 const CARDS_SCRIPT = `<script>
 ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
+${editLinkScript("space-links", "space-error")}
 </script>
 `;
 

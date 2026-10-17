@@ -3,7 +3,7 @@ import { linkSpace } from "../core/link-space.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { editData, editDialog, editMenu } from "./edit-link.js";
+import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -145,7 +145,7 @@ ${done ? "" : '<p id="all-error" role="alert"></p>'}
 ${list}
 <div class="all-foot">${more}${other}</div>
 </main>
-${done ? "" : `${editDialog()}\n`}${done ? "" : `<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+${done ? "" : `${editDialog()}\n`}${done ? "" : `<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

@@ -2,7 +2,7 @@ import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { editData, editDialog, editMenu } from "./edit-link.js";
+import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -227,6 +227,7 @@ ${editDialog()}
 <script>
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}
+${editLinkScript("results", "results-error")}
 </script>
 ${openedScript("results", "/links/opened")}`,
     { menu: true, undo: true },

@@ -133,7 +133,8 @@ let saveTurn = 0;
 let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
-  for (const c of [titleField, chooseButton, removeButton, useTitle]) c.disabled = saving;
+  titleField.toggleAttribute("readonly", saving);
+  for (const c of [chooseButton, removeButton, useTitle]) c.disabled = saving;
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
@@ -319,7 +320,7 @@ dialog.addEventListener("paste", (event) => {
 });
 const hasFiles = (event) => !!event.dataTransfer && [...event.dataTransfer.types].includes("Files");
 dialog.addEventListener("dragenter", (event) => {
-  if (!hasFiles(event)) return;
+  if (saving || !hasFiles(event)) return;
   event.preventDefault();
   dragDepth += 1;
   preview.classList.add("dropping");

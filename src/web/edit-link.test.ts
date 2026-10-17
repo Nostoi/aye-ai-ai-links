@@ -848,16 +848,21 @@ describe("the edit dialog's script", () => {
       new Map([["1", { own: true, pageVersion: PAGE }]]),
       new Map([["1", OWN]]),
     );
-    const fields = () =>
-      ["#edit-title", "[data-edit=choose]", "[data-edit=remove]", "[data-edit=use-title]"].map(
+    const fields = () => [
+      p.title.hasAttribute("readonly"),
+      ...["[data-edit=choose]", "[data-edit=remove]", "[data-edit=use-title]"].map(
         (s) => (p.$(s) as HTMLButtonElement).disabled,
-      );
+      ),
+    ];
     p.open();
     expect(fields()).toEqual([false, false, false, false]);
     p.title.value = "Edited";
     p.submit();
     await p.settle();
     expect(fields()).toEqual([true, true, true, true]);
+    expect(p.title.disabled).toBe(false);
+    p.dispatch(p.dialog, "dragenter", { dataTransfer: { types: ["Files"], files: [SHOT] } });
+    expect(p.$(".edit-preview").classList.contains("dropping")).toBe(false);
     p.dispatch(p.dialog, "paste", { clipboardData: { types: ["Files"], files: [SHOT] } });
     const drop = p.dispatch(p.dialog, "drop", {
       dataTransfer: { types: ["Files"], files: [SHOT] },

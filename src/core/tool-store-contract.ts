@@ -135,5 +135,28 @@ export function describeToolStoreContract(
         expect(await store.updateToolIf(A, id, kept(), null)).toBeNull();
       }
     });
+
+    it("claimSurfaced with exceptKeptTools skips a kept tool, writing nothing, and claims the rest", async () => {
+      const keptId = await save(A);
+      const suggested = await save(A);
+      const plain = await save(A);
+      await store.updateToolIf(A, keptId, null, kept());
+      await store.updateToolIf(
+        A,
+        suggested,
+        null,
+        kept({ status: "suggested", source: "inferred" }),
+      );
+      const when = { at: at(100), notSurfacedAfter: at(100), now: at(100) };
+      const claimed = await store.claimSurfaced(A, [keptId, suggested, plain], {
+        ...when,
+        exceptKeptTools: true,
+      });
+      expect(claimed.map((c) => c.link.id)).toEqual([suggested, plain]);
+      expect((await store.get(A, keptId))?.lastSurfacedAt).toBeNull();
+      expect((await store.claimSurfaced(A, [keptId], when)).map((c) => c.link.id)).toEqual([
+        keptId,
+      ]);
+    });
   });
 }

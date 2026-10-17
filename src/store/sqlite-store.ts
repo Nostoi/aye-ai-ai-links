@@ -197,7 +197,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   async claimSurfaced(
     owner: OwnerId,
     ids: string[],
-    when: { at: Date; notSurfacedAfter: Date; now: Date },
+    when: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
     return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
@@ -471,22 +471,33 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   private claimSync(
     owner: OwnerId,
     ids: number[],
-    { at, notSurfacedAfter, now }: { at: Date; notSurfacedAfter: Date; now: Date },
+    {
+      at,
+      notSurfacedAfter,
+      now,
+      exceptKeptTools,
+    }: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
   ): SurfacedClaim[] {
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
        WHERE id = ? AND owner_id = ? AND state = 'active'
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
-         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)`,
+         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
+         AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
+           WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))`,
     );
     const mark = this.db.prepare(
       "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ?",
     );
     const claimed: SurfacedClaim[] = [];
     for (const id of ids) {
-      const row = previous.get(id, owner, toMs(now), toMs(notSurfacedAfter)) as
-        | { last_surfaced_at: number | null }
-        | undefined;
+      const row = previous.get(
+        id,
+        owner,
+        toMs(now),
+        toMs(notSurfacedAfter),
+        exceptKeptTools ? 1 : 0,
+      ) as { last_surfaced_at: number | null } | undefined;
       if (!row) continue;
       mark.run(toMs(at), id, owner);
       claimed.push({

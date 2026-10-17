@@ -151,12 +151,13 @@ export async function claimSurfaced(
   deps: Pick<DigestDeps, "store" | "now">,
   owner: OwnerId,
   ids: string[],
+  { exceptKeptTools = false }: { exceptKeptTools?: boolean } = {},
 ): Promise<SurfacedClaim[]> {
   const now = deps.now();
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   return ids.length === 0
     ? []
-    : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now });
+    : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now, exceptKeptTools });
 }
 
 export async function unclaimSurfaced(
@@ -195,7 +196,8 @@ export async function previewDigest(
  * with every reason that applies.
  *
  * The claim re-checks eligibility in the store; a link it skips is left out, and the other reasons
- * are judged again from the link as claimed. A claimed link left with no reason is left out but
+ * are judged again from the link as claimed. The claim also skips a link kept handy since
+ * selection. A claimed link left with no reason is left out but
  * stays marked. A response lost after the claim still uses up its links.
  */
 export async function getDigest(
@@ -208,6 +210,7 @@ export async function getDigest(
     { store: deps.store, now: () => now },
     owner,
     picked.map((l) => l.id),
+    { exceptKeptTools: true },
   );
   const links = claimed
     .map(({ link, previousSurfacedAt }) => ({

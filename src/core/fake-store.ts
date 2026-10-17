@@ -314,7 +314,12 @@ export class FakeStore implements LinkStore, SnapshotStore, ToolStore, ImageStor
   async claimSurfaced(
     owner: OwnerId,
     ids: string[],
-    { at, notSurfacedAfter, now }: { at: Date; notSurfacedAfter: Date; now: Date },
+    {
+      at,
+      notSurfacedAfter,
+      now,
+      exceptKeptTools,
+    }: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
   ): Promise<SurfacedClaim[]> {
     const claimed: SurfacedClaim[] = [];
     for (const id of new Set(ids)) {
@@ -322,6 +327,7 @@ export class FakeStore implements LinkStore, SnapshotStore, ToolStore, ImageStor
       if (
         found?.state !== "active" ||
         (found.snoozedUntil !== null && found.snoozedUntil > now) ||
+        (exceptKeptTools === true && this.toolRows.get(owner)?.get(id)?.status === "kept") ||
         (found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
       ) {
         continue;

@@ -406,6 +406,17 @@ describe("getDigest claim", () => {
     expect((await store.get(OWNER, snoozed.id))?.lastSurfacedAt).toEqual(CUTOFF);
   });
 
+  it("leaves out a link kept handy between selection and the claim, without marking it", async () => {
+    const tool = await link({ why: null, savedAt: at(-100 * DAY), lastSurfacedAt: null });
+    const other = await link({ why: null });
+    const digest = await getDigest(
+      deps({ store: racing(() => keepHandy(deps(), OWNER, tool.id, "stated")) }),
+      OWNER,
+    );
+    expect(digest.links.map((l) => l.link.id)).toEqual([other.id]);
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toBeNull();
+  });
+
   it("returns an empty digest for an empty library without searching", async () => {
     await focus("topic", at(-DAY));
     expect(await getDigest(deps(), OWNER)).toEqual({ links: [] });

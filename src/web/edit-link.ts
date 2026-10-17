@@ -320,9 +320,10 @@ dialog.addEventListener("paste", (event) => {
 });
 const hasFiles = (event) => !!event.dataTransfer && [...event.dataTransfer.types].includes("Files");
 dialog.addEventListener("dragenter", (event) => {
-  if (saving || !hasFiles(event)) return;
+  if (!hasFiles(event)) return;
   event.preventDefault();
   dragDepth += 1;
+  if (saving) return;
   preview.classList.add("dropping");
   render(${JSON.stringify("Drop to use this picture")});
 });

@@ -832,6 +832,27 @@ describe("the edit dialog's script", () => {
     expect(p.dialog.open).toBe(false);
   });
 
+  it("a drag that entered while a Save was pending still shows the drop hint once it is answered", async () => {
+    let release = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const refused = { code: "invalid_input", message: "A title can be at most 200 characters." };
+    const p = opened(() => ({ status: 400, wait, body: refused }));
+    const files = { dataTransfer: { types: ["Files"], files: [SHOT] } };
+    p.open();
+    p.title.value = "Edited";
+    p.submit();
+    await p.settle();
+    p.dispatch(p.dialog, "dragenter", files);
+    expect(p.$(".edit-preview").classList.contains("dropping")).toBe(false);
+    release();
+    await p.settle();
+    p.dispatch(p.dialog, "dragenter", files);
+    p.dispatch(p.dialog, "dragleave", files);
+    expect(p.$(".edit-preview").classList.contains("dropping")).toBe(true);
+  });
+
   it("while a Save is pending, the fields are off and a paste or drop is ignored, until it is answered or closed", async () => {
     fakeImages([
       { width: 64, height: 48 },

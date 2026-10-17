@@ -43,6 +43,48 @@ describe("the Save page as served", () => {
     }
   });
 
+  it("has each id Task 5's script relies on exactly once, filled or empty", () => {
+    const ids = [
+      "save-heading",
+      "save-form",
+      "save-url",
+      "save-host",
+      "url-error",
+      "save-title",
+      "title-error",
+      "save-why",
+      "save-error",
+      "result",
+      "saved-link",
+      "saved-why",
+      "why-kept",
+      "bring-back",
+      "close",
+      "close-note",
+      "result-error",
+    ];
+    for (const o of [
+      { url: NEWS, title: "A story" },
+      { url: "", title: "" },
+    ]) {
+      const d = doc(saveForm({ ...o, long: false }));
+      for (const id of ids) {
+        expect(d.querySelectorAll(`[id="${id}"]`), id).toHaveLength(1);
+      }
+    }
+  });
+
+  it("round-trips ampersands, quotes, a closing textarea and a javascript: address as values", () => {
+    const url = "javascript:alert(1)&a=1";
+    const title = `Tom & Jerry's </textarea><b>x</b> "q"`;
+    const html = saveForm({ url, title, long: false });
+    const d = doc(html);
+    expect(value(html, "save-url")).toBe(url);
+    expect(value(html, "save-title")).toBe(title);
+    expect(d.querySelectorAll("b")).toHaveLength(0);
+    expect(d.querySelectorAll("textarea")).toHaveLength(1);
+  });
+
   it("hides the host line for an address that does not parse", () => {
     const d = doc(saveForm({ url: "not an address", title: "", long: false }));
     expect(d.getElementById("save-host")?.hasAttribute("hidden")).toBe(true);

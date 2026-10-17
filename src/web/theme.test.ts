@@ -42,6 +42,10 @@ it("outlines every textarea with the field token", () => {
   expect(themeCss).toMatch(/(^|\n)textarea\{[^}]*border:1\.5px solid var\(--field\)/);
 });
 
+it("keeps the Save page's result buttons at least 44px tall", () => {
+  expect(themeCss).toMatch(/(^|\n)\.save-result button\{[^}]*min-height:44px/);
+});
+
 it("sizes a desktop image tile like the plain tile, whatever the image's shape, and caps it on a phone", () => {
   const desktop = /^img\.tile\{([^}]*)\}/m.exec(themeCss)?.[1] ?? "";
   expect(desktop).toContain("width:168px");

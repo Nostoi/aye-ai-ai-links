@@ -61,6 +61,7 @@ const CHECKED_PAGES = [
   "/home/unarchive",
   "/home/why",
   "/links/opened",
+  "/tools/keep",
   "/tags",
   "/tags/pin",
   "/tags/color",

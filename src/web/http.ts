@@ -24,7 +24,9 @@ import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
-import type { LinkState, OwnerId, Tag, TagKind } from "../core/types.js";
+import type { ToolRecord, WaitDays } from "../core/tool-store.js";
+import { keepHandy, type ToolChange } from "../core/tools.js";
+import type { LinkState, OwnerId, Source, Tag, TagKind, ToolStatus } from "../core/types.js";
 import {
   archiveLink,
   markOpened,
@@ -134,6 +136,50 @@ async function homeAction(c: Context, act: () => Promise<Response>): Promise<Res
     const code = error.code as keyof typeof HOME_REFUSALS;
     const message = code === "not_found" ? LINK_GONE : error.message;
     return c.json({ code, message }, HOME_REFUSALS[code], NO_STORE);
+  }
+}
+
+/** A Keep handy row as the page holds it between an action and its Undo: dates as ISO strings. */
+type ToolJson = {
+  status: ToolStatus;
+  source: Source;
+  since: string;
+  answeredAt: string | null;
+  waitDays: WaitDays;
+};
+
+const toolJson = (t: ToolRecord): ToolJson => ({
+  status: t.status,
+  source: t.source,
+  since: t.since.toISOString(),
+  answeredAt: t.answeredAt?.toISOString() ?? null,
+  waitDays: t.waitDays,
+});
+
+/** A tool action's answer: the row it wrote and the row it replaced, which its Undo sends back. */
+const toolMoved = (c: Context, change: ToolChange) =>
+  c.json(
+    { tool: toolJson(change.tool), previous: change.previous && toolJson(change.previous) },
+    200,
+    NO_STORE,
+  );
+
+/** What the owner is told when a Keep handy action is refused; core's words are written for an agent. */
+const TOOL_REFUSALS = {
+  not_found: { status: 404, message: LINK_GONE },
+  conflict: { status: 409, message: "That link's Keep handy state changed. Reload the page." },
+  invalid_input: { status: 400, message: "That can't be undone. Reload the page." },
+} as const;
+
+/** A refused tool action answers with the owner's words; anything else is thrown on. */
+async function toolAction(c: Context, act: () => Promise<Response>): Promise<Response> {
+  try {
+    return await act();
+  } catch (error) {
+    if (!(error instanceof CoreError) || !(error.code in TOOL_REFUSALS)) throw error;
+    const code = error.code as keyof typeof TOOL_REFUSALS;
+    const { status, message } = TOOL_REFUSALS[code];
+    return c.json({ code, message }, status, NO_STORE);
   }
 }
 
@@ -411,6 +457,15 @@ export function webApp({
       await tellWhy(deps, c.get("caller").owner, id, text);
       return done(c);
     }),
+  );
+
+  // Keep handy. A choice the owner makes on the page sends "stated"; answering the page's
+  // "Still using?" sends "asked", and core keeps the row's own source. Each answers the row it
+  // wrote and the one it replaced.
+  app.post("/tools/keep", jsonBody(linkId), session, (c) =>
+    toolAction(c, async () =>
+      toolMoved(c, await keepHandy(deps, c.get("caller").owner, c.get("body").id, "stated")),
+    ),
   );
 
   // 204 whether or not the app was connected; the page reloads either way.

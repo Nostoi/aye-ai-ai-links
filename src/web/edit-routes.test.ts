@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseHTML } from "linkedom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import {
   type Agent,
@@ -145,6 +145,7 @@ describe("POST /links/edit", () => {
       BAD,
     ],
     ["a header over the pixel cap", () => ({ picture: file(png(10_001, 4000)) }), BAD],
+    ["an empty picture file", () => ({ picture: file(Buffer.alloc(0)) }), BAD],
   ])("refuses %s with 400 in core's words, and every row stays", async (_, fields, message) => {
     const { world, browser, id } = await edited();
     const before = allRows(world);
@@ -222,6 +223,27 @@ describe("owner isolation and refusals", () => {
     expect(allRows(world)).toEqual(before);
   });
 
+  it.each([
+    ["without an Origin", { origin: false }],
+    ["with a foreign Origin", { headers: { origin: "https://evil.example" } }],
+  ])(
+    "POST /links/edit/undo refuses a request %s with 403, and every row stays",
+    async (_, extra) => {
+      const { world, browser, id } = await edited();
+      const done = (await edit(browser, { id, title: "New" })).body as Answer;
+      const before = allRows(world);
+      const res = await browser.send("/links/edit/undo", {
+        method: "POST",
+        json: { id, editId: done.editId },
+        ...extra,
+      });
+      expect(res.status).toBe(403);
+      expect(allRows(world)).toEqual(before);
+      // The same request with the right Origin is accepted, so the 403 is down to the Origin.
+      expect((await undo(browser, { id, editId: done.editId })).status).toBe(200);
+    },
+  );
+
   it("POST /links/edit refuses a body over 2 MiB + 16 KiB with 413 before reading any session", async () => {
     const { world, id } = await edited();
     const before = allRows(world);
@@ -238,6 +260,9 @@ describe("owner isolation and refusals", () => {
       "a picture that is neither a file nor page",
       (id: string) => ({ multipart: form({ id, picture: "elsewhere" }) }),
     ],
+    ["a title sent as a file", (id: string) => ({ multipart: form({ id, title: file(MINE) }) })],
+    ["an id that is not a number", () => ({ multipart: form({ id: "abc", title: "x" }) })],
+    ["an id sent as a file", () => ({ multipart: form({ id: file(MINE), title: "x" }) })],
     [
       "a multipart type with a broken body",
       () => ({
@@ -277,4 +302,29 @@ describe("the owner's picture on every page", () => {
     }
     expect(String((await browser.send("/")).body)).toContain(`/images/${id}?v=${v(MINE)}`);
   });
+});
+
+describe("the done pages", () => {
+  it.each(["/all/done", "/spaces/done?tag=Kitchen"])(
+    "%s reads no picture info and has no edit dialog, even for a link with an owner picture",
+    async (path) => {
+      const { world, browser, id } = await edited();
+      const deps = linkDeps(world);
+      await updateLink(deps, A, id, { tags: [{ name: "Kitchen", source: "stated" }] });
+      await edit(browser, { id, picture: file(MINE) });
+      await deps.store.update(A, id, { state: "archived" });
+      const info = vi.spyOn(SqliteImageStore.prototype, "pictureInfo");
+      try {
+        const { document } = parseHTML(String((await browser.send(path)).body));
+        expect(document.querySelector(`li[data-id="${id}"]`)).not.toBeNull();
+        expect(document.querySelector("#edit-link")).toBeNull();
+        expect(info).not.toHaveBeenCalled();
+        // The spy sees calls: an active page reads the info.
+        await browser.send("/all");
+        expect(info).toHaveBeenCalled();
+      } finally {
+        info.mockRestore();
+      }
+    },
+  );
 });

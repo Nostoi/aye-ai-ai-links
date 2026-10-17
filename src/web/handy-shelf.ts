@@ -118,7 +118,7 @@ const refreshShelf = async (from) => {
   if (!shelf) return;
   const turn = ++shelfTurn;
   const res = await fetch("/", { headers: { accept: "text/html" }, redirect: "manual" }).catch(() => null);
-  const text = res && res.ok ? await res.text() : null;
+  const text = res && res.ok ? await res.text().catch(() => null) : null;
   if (turn !== shelfTurn) return;
   const next = text === null ? null : new DOMParser().parseFromString(text, "text/html").getElementById("handy-shelf");
   if (!next) {

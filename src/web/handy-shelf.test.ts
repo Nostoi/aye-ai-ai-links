@@ -323,6 +323,18 @@ describe("the shelf's script", () => {
     expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
   });
 
+  it("a refresh whose body cannot be read leaves the shelf, says to reload and still offers Undo", async () => {
+    const item = kept();
+    const p = runPage(home([item]), (s) =>
+      s.body === undefined ? { status: 200, textFails: true } : { status: 200, body: MOVED },
+    );
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(shelfIds(p)).toEqual([item.link.id]);
+    expect(p.$("#handy-error").textContent).toBe(SHELF_STALE);
+    expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
+  });
+
   it("Show all reveals the hidden tiles in place, with no request, and they stay shown after a refresh", async () => {
     const items = Array.from({ length: 10 }, () => kept());
     const p = shelfPage(home(items), () => ({ status: 200, body: MOVED }), [home(items)]);

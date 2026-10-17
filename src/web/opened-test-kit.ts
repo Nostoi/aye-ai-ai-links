@@ -10,6 +10,7 @@ export type Answer = {
   body?: unknown;
   text?: string;
   wait?: Promise<unknown>;
+  textFails?: boolean;
 };
 
 /**
@@ -53,7 +54,10 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
         if (a.body === undefined) throw new SyntaxError("no body");
         return a.body;
       },
-      text: async () => a.text ?? "",
+      text: async () => {
+        if (a.textFails) throw new TypeError("body read failed");
+        return a.text ?? "";
+      },
     };
   };
   const location = { href: "https://links.example/", reload: () => {} };

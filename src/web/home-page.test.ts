@@ -2,8 +2,10 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
+import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
+import { spacesSection } from "./spaces-section.js";
 import { themeCss } from "./theme.js";
 
 const NOW = new Date("2026-10-14T10:00:00Z");
@@ -39,7 +41,7 @@ const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => 
   reasons,
 });
 const render = (links: DigestLink[], images = new Map<string, string>(), catalog: Tag[] = []) =>
-  homePage({ worth: { links, images, now: NOW, catalog }, spaces: "" });
+  homePage({ worth: { links, images, now: NOW, catalog }, shelf: "", spaces: "" });
 const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
@@ -499,4 +501,22 @@ describe("the home page's script", () => {
     page.fire("pageshow", { persisted: true });
     expect(page.location.reloads).toBe(1);
   });
+});
+
+it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
+  const html = homePage({
+    worth: { links: [card([])], images: new Map(), now: NOW, catalog: [] },
+    shelf: handyShelf({ items: [], suggestions: [], catalog: [] }),
+    spaces: spacesSection([]),
+  });
+  const main = dom(html).querySelector("main.home") as HTMLElement;
+  expect([...main.children].map((c) => c.className)).toEqual([
+    "home-search",
+    "handy",
+    "worth",
+    "spaces",
+  ]);
+  expect(html.indexOf("<script>")).toBe(
+    html.indexOf(`<script>\ndocument.addEventListener("keydown"`),
+  );
 });

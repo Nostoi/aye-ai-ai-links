@@ -2,7 +2,9 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { handyShelf, SHELF_SIZE, SUGGESTION_SIZE } from "./handy-shelf.js";
+import { handyShelf, SHELF_SIZE, SHELF_STALE, SUGGESTION_SIZE } from "./handy-shelf.js";
+import { homePage, type WorthCards } from "./home-page.js";
+import { type Answer, itRecordsOpenings, type Post, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 
 let n = 0;
@@ -190,5 +192,203 @@ describe("the Handy shelf", () => {
     );
     expect(tiles(html)[1]?.querySelector("h3 a")).toBeNull();
     expect(tiles(html)[1]?.querySelector("h3")?.textContent).toBe("Odd");
+  });
+});
+
+const NO_WORTH: WorthCards = {
+  links: [],
+  images: new Map(),
+  now: new Date("2026-10-16T00:00:00Z"),
+  catalog: [],
+};
+const home = (items: ShelfItem[], suggestions: ToolItem[] = []) =>
+  homePage({ worth: NO_WORTH, shelf: render(items, suggestions), spaces: "" });
+const ROW = {
+  status: "kept",
+  source: "stated",
+  since: "2026-10-01T00:00:00.000Z",
+  answeredAt: null,
+  waitDays: 30,
+};
+const MOVED = { tool: { ...ROW, status: "declined" }, previous: ROW };
+
+/** The shelf page with `answer` for posts and `next` (a later home page) for each refresh. */
+function shelfPage(html: string, answer: (s: Post) => Answer, next: string[] = []) {
+  const pages = [...next];
+  return runPage(html, (s) =>
+    s.body === undefined ? { status: 200, text: pages.shift() ?? html } : answer(s),
+  );
+}
+const urls = (p: ReturnType<typeof runPage>) => p.sent.map((s) => s.url);
+const shelfIds = (p: ReturnType<typeof runPage>) =>
+  [...p.document.querySelectorAll("#handy-shelf .handy-tile")].map(
+    (t) => (t as HTMLElement).dataset.id,
+  );
+
+describe("the shelf's openings", () => {
+  const items = [kept(), kept()];
+  itRecordsOpenings(
+    () => home(items),
+    items.map((i) => i.link),
+    "/links/opened",
+  );
+});
+
+describe("the shelf's script", () => {
+  it("Yes to Still using? posts /tools/still-using, refreshes the shelf from home, and offers no Undo", async () => {
+    const due = kept({}, true);
+    const after = home([{ ...due, due: false }]);
+    const p = shelfPage(home([due]), () => ({ status: 200, body: MOVED }), [after]);
+    p.dispatch(p.$("button[data-act=still-using]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/tools/still-using", body: { id: due.link.id } });
+    expect(urls(p)).toEqual(["/tools/still-using", "/"]);
+    expect(p.$(".handy-tile").classList.contains("needs-you")).toBe(false);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+  });
+
+  it("Not handy anymore posts, refreshes, and offers Undo, which sends back the rows it got and refreshes again", async () => {
+    const [a, b] = [kept(), kept()];
+    const p = shelfPage(
+      home([a, b]),
+      (s) => (s.url === "/tools/undo" ? { status: 204 } : { status: 200, body: MOVED }),
+      [home([b]), home([a, b])],
+    );
+    p.dispatch(p.$(`[data-id="${a.link.id}"] button[data-act=not-handy]`), "click");
+    await p.settle();
+    expect(shelfIds(p)).toEqual([b.link.id]);
+    expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[2]).toMatchObject({ url: "/tools/undo", body: { id: a.link.id, ...MOVED } });
+    expect(urls(p)).toEqual(["/tools/not-handy", "/", "/tools/undo", "/"]);
+    expect(shelfIds(p)).toEqual([a.link.id, b.link.id]);
+  });
+
+  it("Done archives through /home/archive and offers Undo through /home/unarchive", async () => {
+    const due = kept({}, true);
+    const p = shelfPage(home([due]), () => ({ status: 204 }), [home([]), home([due])]);
+    p.dispatch(p.$("button[data-act=done]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: due.link.id } });
+    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    expect(shelfIds(p)).toEqual([]);
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/archive", "/", "/home/unarchive", "/"]);
+    expect(shelfIds(p)).toEqual([due.link.id]);
+  });
+
+  it("Yes to a suggestion posts keep: true with no Undo; No posts keep: false with Undo", async () => {
+    const offer = suggested();
+    const yes = shelfPage(home([], [offer]), () => ({ status: 200, body: MOVED }));
+    yes.dispatch(yes.$("button[data-act=suggest-yes]"), "click");
+    await yes.settle();
+    expect(yes.sent[0]).toMatchObject({
+      url: "/tools/suggestion",
+      body: { id: offer.link.id, keep: true },
+    });
+    expect(yes.$("#undo-bar").hidden).toBe(true);
+    const no = shelfPage(home([], [offer]), () => ({ status: 200, body: MOVED }));
+    no.dispatch(no.$("button[data-act=suggest-no]"), "click");
+    await no.settle();
+    expect(no.sent[0]).toMatchObject({
+      url: "/tools/suggestion",
+      body: { id: offer.link.id, keep: false },
+    });
+    expect(no.$("#undo-bar span").textContent).toBe("Not kept handy.");
+  });
+
+  it("a refused action says why, refreshes nothing and offers no Undo", async () => {
+    const item = kept();
+    const message = "That link's Keep handy state changed. Reload the page.";
+    const p = shelfPage(home([item]), () => ({ status: 409, body: { code: "conflict", message } }));
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/tools/not-handy"]);
+    expect(p.$("#handy-error").textContent).toBe(message);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect(shelfIds(p)).toEqual([item.link.id]);
+  });
+
+  it("a refresh that is redirected (the session ended) leaves the shelf as it was and says to reload", async () => {
+    const item = kept();
+    const p = runPage(home([item]), (s) =>
+      s.body === undefined ? { status: 0, type: "opaqueredirect" } : { status: 200, body: MOVED },
+    );
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(shelfIds(p)).toEqual([item.link.id]);
+    expect(p.$("#handy-error").textContent).toBe(SHELF_STALE);
+    expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
+  });
+
+  it("Show all reveals the hidden tiles in place, with no request, and they stay shown after a refresh", async () => {
+    const items = Array.from({ length: 10 }, () => kept());
+    const p = shelfPage(home(items), () => ({ status: 200, body: MOVED }), [home(items)]);
+    p.dispatch(p.$("button[data-act=show-all]"), "click");
+    await p.settle();
+    expect(p.sent).toEqual([]);
+    const hidden = () =>
+      [...p.document.querySelectorAll("#handy-shelf .handy-tile")].filter(
+        (t) => (t as HTMLElement).hidden,
+      );
+    expect(hidden()).toHaveLength(0);
+    expect(p.document.querySelector("button[data-act=show-all]")).toBeNull();
+    p.dispatch(p.$(`[data-id="${items[0]?.link.id}"] button[data-act=not-handy]`), "click");
+    await p.settle();
+    expect(hidden()).toHaveLength(0);
+  });
+
+  it("after a refresh, puts focus back on the same tile, or else the next tile, or else the heading", async () => {
+    // Still using: the same tile stays, but its Yes is gone, so focus goes to its title link.
+    const due = kept({}, true);
+    const yes = shelfPage(home([due]), () => ({ status: 200, body: MOVED }), [
+      home([{ ...due, due: false }]),
+    ]);
+    yes.dispatch(yes.$("button[data-act=still-using]"), "click");
+    await yes.settle();
+    expect(yes.focused().at(-1)).toBe(yes.$(`[data-id="${due.link.id}"] h3 a`));
+    // Not handy anymore: the tile is gone, so focus goes to the next tile and then to Undo.
+    const [a, b] = [kept(), kept()];
+    const gone = shelfPage(home([a, b]), () => ({ status: 200, body: MOVED }), [home([b])]);
+    gone.dispatch(gone.$(`[data-id="${a.link.id}"] button[data-act=not-handy]`), "click");
+    await gone.settle();
+    expect(gone.focused().slice(-2)).toEqual([
+      gone.$(`[data-id="${b.link.id}"] h3 a`),
+      gone.$("#undo-bar button"),
+    ]);
+    // Done on the only tile: nothing is left, so focus goes to the heading and then to Undo.
+    const done = shelfPage(home([due]), () => ({ status: 204 }), [home([])]);
+    done.dispatch(done.$("button[data-act=done]"), "click");
+    await done.settle();
+    expect(done.focused().slice(-2)).toEqual([done.$("#handy-title"), done.$("#undo-bar button")]);
+  });
+
+  it("drops a refresh that answers after a newer one began, keeping the newer shelf", async () => {
+    const [a, b] = [kept({}, true), kept({}, true)];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stale = home([{ ...a, due: false }, b]);
+    const fresh = home([
+      { ...a, due: false },
+      { ...b, due: false },
+    ]);
+    const answers: Answer[] = [
+      { status: 200, text: stale, wait: gate },
+      { status: 200, text: fresh },
+    ];
+    const p = runPage(home([a, b]), (s) =>
+      s.body === undefined ? (answers.shift() as Answer) : { status: 200, body: MOVED },
+    );
+    p.dispatch(p.$(`[data-id="${a.link.id}"] button[data-act=still-using]`), "click");
+    await p.settle();
+    p.dispatch(p.$(`[data-id="${b.link.id}"] button[data-act=still-using]`), "click");
+    await p.settle();
+    release();
+    await p.settle();
+    expect(p.document.querySelectorAll("#handy-shelf .needs-you")).toHaveLength(0);
   });
 });

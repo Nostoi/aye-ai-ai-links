@@ -82,3 +82,111 @@ ${body}
 </div>
 </section>`;
 }
+
+/** What the owner is told when the shelf could not be read again after an action that worked. */
+export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page.";
+
+/**
+ * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure` and
+ * `showUndo`).
+ * - `refreshShelf(from)` reads home again and swaps in its `#handy-shelf`, so the server decides the
+ *   order, the cut and the due marker after every action. Tiles that were shown stay shown.
+ * - A page that is not home (a sign-in redirect) is not swapped in, and the owner is told to reload.
+ * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`).
+ * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
+ *   on the same button, else the same tile's first control, else the next tile's, else the heading.
+ * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
+ */
+export const SHELF_SCRIPT = `const showAll = (shelf) => {
+  for (const tile of shelf.querySelectorAll("[data-more]")) tile.hidden = false;
+  const button = shelf.querySelector("button[data-act=show-all]");
+  if (button) button.remove();
+};
+const focusAfter = (shelf, from) => {
+  const tile = (id) => (id ? shelf.querySelector('[data-id="' + id + '"]') : null);
+  const same = tile(from.id);
+  const next = tile(from.next);
+  const target =
+    (same && (same.querySelector('button[data-act="' + from.act + '"]') || same.querySelector("a, button, summary"))) ||
+    (next && next.querySelector("a, button, summary")) ||
+    document.getElementById("handy-title");
+  target.focus();
+};
+let shelfTurn = 0;
+const refreshShelf = async (from) => {
+  const shelf = document.getElementById("handy-shelf");
+  if (!shelf) return;
+  const turn = ++shelfTurn;
+  const res = await fetch("/", { headers: { accept: "text/html" }, redirect: "manual" }).catch(() => null);
+  const text = res && res.ok ? await res.text() : null;
+  if (turn !== shelfTurn) return;
+  const next = text === null ? null : new DOMParser().parseFromString(text, "text/html").getElementById("handy-shelf");
+  if (!next) {
+    document.getElementById("handy-error").textContent = ${JSON.stringify(SHELF_STALE)};
+    return;
+  }
+  const shown = [...shelf.querySelectorAll("[data-more]")].some((tile) => !tile.hidden);
+  shelf.innerHTML = next.innerHTML;
+  if (shown) showAll(shelf);
+  if (from) focusAfter(shelf, from);
+};
+{
+const handy = document.getElementById("handy");
+const handyError = document.getElementById("handy-error");
+// Each tile button: its route and body, and the Undo bar's words when it removes the tile.
+const SHELF_ACTS = {
+  "still-using": (id) => ["/tools/still-using", { id }, null],
+  "not-handy": (id) => ["/tools/not-handy", { id }, "Not handy anymore."],
+  "suggest-yes": (id) => ["/tools/suggestion", { id, keep: true }, null],
+  "suggest-no": (id) => ["/tools/suggestion", { id, keep: false }, "Not kept handy."],
+};
+const offerUndo = (message, route, body, from) =>
+  showUndo(message, async () => {
+    const back = await post(route, body);
+    if (back && back.status === 204) await refreshShelf(from);
+    else handyError.textContent = await failure(back);
+  });
+if (handy) {
+  handy.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-act]");
+    if (!button || button.disabled) return;
+    const act = button.dataset.act;
+    if (act === "show-all") {
+      const shelf = document.getElementById("handy-shelf");
+      const first = shelf.querySelector("[data-more]");
+      showAll(shelf);
+      if (first) first.querySelector("a, button, summary").focus();
+      return;
+    }
+    const make = SHELF_ACTS[act];
+    if (!make && act !== "done") return;
+    const tile = button.closest("[data-id]");
+    const id = tile.dataset.id;
+    const after = tile.nextElementSibling;
+    const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
+    handyError.textContent = "";
+    button.disabled = true;
+    if (act === "done") {
+      const res = await post("/home/archive", { id });
+      button.disabled = false;
+      if (!res || res.status !== 204) {
+        handyError.textContent = await failure(res);
+        return;
+      }
+      await refreshShelf(from);
+      offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
+      return;
+    }
+    const [route, body, undo] = make(id);
+    const res = await post(route, body);
+    button.disabled = false;
+    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (!moved || !moved.tool) {
+      handyError.textContent = await failure(res);
+      return;
+    }
+    await refreshShelf(from);
+    if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
+  });
+}
+}`;

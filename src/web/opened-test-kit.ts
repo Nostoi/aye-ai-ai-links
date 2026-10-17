@@ -4,7 +4,13 @@ import type { Link } from "../core/types.js";
 
 export type Post = { url: string; body: unknown; redirect: unknown; keepalive: unknown };
 
-export type Answer = { status: number; type?: string; body?: unknown; text?: string };
+export type Answer = {
+  status: number;
+  type?: string;
+  body?: unknown;
+  text?: string;
+  wait?: Promise<unknown>;
+};
 
 /**
  * A page in linkedom with all its scripts but the menu's run in one scope, as a browser shares
@@ -14,6 +20,12 @@ export type Answer = { status: number; type?: string; body?: unknown; text?: str
  */
 export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ status: 204 })) {
   const { document, DOMParser } = parseHTML(html);
+  const focusLog: Element[] = [];
+  (
+    document.defaultView as unknown as { HTMLElement: { prototype: { focus: () => void } } }
+  ).HTMLElement.prototype.focus = function (this: Element) {
+    focusLog.push(this);
+  };
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
     .filter((s) => !s.includes("sign-out"))
@@ -31,6 +43,7 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     };
     sent.push(request);
     const a = answer(request);
+    if (a.wait) await a.wait;
     return {
       status: a.status,
       ok: a.status >= 200 && a.status < 300,
@@ -73,7 +86,7 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  return { document, sent, dispatch, settle, $ };
+  return { document, sent, dispatch, settle, $, focused: () => focusLog };
 }
 
 /**

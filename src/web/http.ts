@@ -29,6 +29,8 @@ import {
   answerSuggestion,
   handyOfLinks,
   keepHandy,
+  listShelf,
+  listSuggestions,
   notHandy,
   restoreTool,
   stillUsing,
@@ -57,6 +59,7 @@ import {
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allPage } from "./all-page.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
+import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
@@ -335,7 +338,12 @@ export function webApp({
     );
     const { spaces, catalog } = await homeSpaces(deps, owner);
     const worth = { links, images, now: deps.now(), catalog };
-    const page = homePage({ worth, spaces: spacesSection(spaces) });
+    const shelf = handyShelf({
+      items: await listShelf(deps, owner),
+      suggestions: await listSuggestions(deps, owner),
+      catalog,
+    });
+    const page = homePage({ worth, shelf, spaces: spacesSection(spaces) });
     return c.html(page, 200, NO_STORE);
   });
 

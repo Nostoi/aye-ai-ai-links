@@ -1,6 +1,7 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import { linkSpace } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
+import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { isWebUrl, linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -115,10 +116,11 @@ document.addEventListener("keydown", (event) => {
  * The cards' buttons. Opening a link is recorded by `openedScript` with `/home/opened`, which also
  * marks the link surfaced. Not now and I'm done hide the card at once and put it back if the server
  * refuses; Undo asks the server to reverse, and the card stays gone if it cannot. Tell me why is
- * `tellWhyScript`.
+ * `tellWhyScript`. The Handy shelf's buttons are `SHELF_SCRIPT`'s.
  */
 const CARDS_SCRIPT = `<script>
 ${CARD_FETCH}
+${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}
 const homeError = document.getElementById("home-error");
 const cards = document.getElementById("worth-cards");
@@ -162,10 +164,19 @@ addEventListener("pageshow", (event) => {
 </script>`;
 
 /**
- * Home: the big question and one search field, then "Worth a look today" when there is anything
- * to show, then `spaces`, the "Your spaces" section (#96), as HTML.
+ * Home: the big question and one search field, then `shelf`, the Handy shelf (#125), then "Worth a
+ * look today" when there is anything to show, then `spaces`, the "Your spaces" section (#96).
+ * Openings from the shelf are recorded without marking the link shown.
  */
-export const homePage = ({ worth, spaces }: { worth: WorthCards; spaces: string }) =>
+export const homePage = ({
+  worth,
+  shelf,
+  spaces,
+}: {
+  worth: WorthCards;
+  shelf: string;
+  spaces: string;
+}) =>
   page(
     "Aye-AI-AI Links",
     `<main class="home">
@@ -178,11 +189,13 @@ export const homePage = ({ worth, spaces }: { worth: WorthCards; spaces: string 
 </div>
 <p class="small hint">Describe it however you remember it: when, why, what it looked like.</p>
 </form>
+${shelf}
 ${worthSection(worth)}
 ${spaces}
 </main>
 ${SLASH_SCRIPT}
 ${CARDS_SCRIPT}
-${openedScript("worth-cards", "/home/opened")}`,
+${openedScript("worth-cards", "/home/opened")}
+${openedScript("handy", "/links/opened")}`,
     { menu: true, undo: true },
   );

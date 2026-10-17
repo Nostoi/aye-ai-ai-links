@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
-import { saveLink, updateLink } from "../core/links.js";
+import { recordOpening, saveLink, updateLink } from "../core/links.js";
 import type { ToolRecord } from "../core/tool-store.js";
 import { keepHandy, notHandy, stillUsing } from "../core/tools.js";
 import { createDeps } from "../deps.js";
@@ -407,5 +407,79 @@ describe("Keep handy on the pages that list links", () => {
       expect(visible(html, id), path).toBe("kept");
       expect(visible(html, other.id), path).toBe("keep");
     }
+  });
+});
+
+describe("GET / and the Handy shelf", () => {
+  const shelf = (html: string) =>
+    [...parseHTML(html).document.querySelectorAll("#handy-shelf .handy-tile")] as HTMLElement[];
+
+  it("shows a due tool first, then kept tools most recently opened first, then never opened newest kept first, 8 before Show all", async () => {
+    const world = await oauthWorld();
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const { link } = await saveLink(linkDeps(world), A, {
+        url: `https://a.example/t${i}`,
+        savedBy: "seed",
+        title: `Tool ${i}`,
+      });
+      await keepHandy(at(world, daysAgo(20 - i)), A, link.id, "stated");
+      ids.push(link.id);
+    }
+    await recordOpening(at(world, daysAgo(2)), A, ids[3] as string);
+    await recordOpening(at(world, daysAgo(1)), A, ids[7] as string);
+    const { link: stale } = await saveLink(linkDeps(world), A, {
+      url: "https://a.example/stale",
+      savedBy: "seed",
+      title: "Old tool",
+    });
+    await keepHandy(at(world, daysAgo(40)), A, stale.id, "stated");
+    const html = String((await (await signedIn(world)).send("/")).body);
+    const tiles = shelf(html);
+    expect(tiles.map((t) => t.dataset.id)).toEqual([
+      stale.id,
+      ...[7, 3, 9, 8, 6, 5, 4, 2, 1, 0].map((i) => ids[i]),
+    ]);
+    expect(tiles.map((t) => t.hidden)).toEqual([...Array(8).fill(false), true, true, true]);
+    expect(tiles[0]?.classList.contains("needs-you")).toBe(true);
+    const main = parseHTML(html).document.querySelector("main.home") as HTMLElement;
+    expect([...main.children].map((c) => c.className)).toEqual(["home-search", "handy", "spaces"]);
+  });
+
+  it("marks a tool kept 31 days ago and never opened as due, and puts a suggestion at the end", async () => {
+    const { world, browser, id } = await tools();
+    await keepHandy(at(world, daysAgo(31)), A, id, "stated");
+    const { link: offer } = await saveLink(linkDeps(world), A, {
+      url: "https://a.example/form",
+      savedBy: "seed",
+      title: "Lunch form",
+    });
+    await keepHandy(at(world, daysAgo(1)), A, offer.id, "inferred");
+    const tiles = shelf(String((await browser.send("/")).body));
+    expect(tiles.map((t) => t.dataset.id)).toEqual([id, offer.id]);
+    expect(tiles[0]?.classList.contains("needs-you")).toBe(true);
+    expect(tiles[0]?.textContent).toContain("Still using?");
+    expect(tiles[1]?.classList.contains("guess")).toBe(true);
+  });
+
+  it("Done archives: the tool leaves the shelf and Undo brings it back, its Keep handy row untouched", async () => {
+    const { world, browser, id } = await tools();
+    await keepHandy(at(world, daysAgo(31)), A, id, "stated");
+    const row = toolRow(world, id);
+    expect((await browser.send("/home/archive", post({ id }))).status).toBe(204);
+    expect(shelf(String((await browser.send("/")).body))).toHaveLength(0);
+    expect(toolRow(world, id)).toEqual(row);
+    expect((await browser.send("/home/unarchive", post({ id }))).status).toBe(204);
+    expect(shelf(String((await browser.send("/")).body)).map((t) => t.dataset.id)).toEqual([id]);
+    expect(toolRow(world, id)).toEqual(row);
+  });
+
+  it("an empty shelf shows its one line, and looking at home with a shelf leaves every row byte-identical", async () => {
+    const { world, browser, id } = await tools();
+    expect(String((await browser.send("/")).body)).toContain("Keep links you use often here");
+    await keepHandy(at(world, daysAgo(31)), A, id, "stated");
+    const before = allRows(world);
+    expect((await browser.send("/")).status).toBe(200);
+    expect(allRows(world)).toEqual(before);
   });
 });

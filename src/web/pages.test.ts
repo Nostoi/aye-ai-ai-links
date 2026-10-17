@@ -2,6 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
 import { connectionsPage } from "./connections-page.js";
+import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { itRecordsOpenings, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
@@ -14,6 +15,7 @@ import { tagsPage } from "./tags-page.js";
 const ORIGIN = "https://links.example";
 const EMPTY_HOME = {
   worth: { links: [], images: new Map(), now: new Date(0), catalog: [] },
+  shelf: "",
   spaces: "",
 };
 const KITCHEN = {
@@ -168,6 +170,10 @@ const PAGES: [string, string][] = [
   ],
   ["error", oauthErrorPage("It failed.")],
   ["home", homePage(EMPTY_HOME)],
+  [
+    "home with a shelf",
+    homePage({ ...EMPTY_HOME, shelf: handyShelf({ items: [], suggestions: [], catalog: [] }) }),
+  ],
   [
     "home with spaces",
     homePage({

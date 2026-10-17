@@ -22,6 +22,7 @@ import {
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { setTagPinned } from "../core/tag-space.js";
+import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -40,6 +41,7 @@ const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
+const A_TOOL_TITLE = "Quokka keeper login";
 const A_DONE_URL = "https://a.example/remote-image";
 const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 
@@ -491,8 +493,11 @@ describe("owner isolation coverage", () => {
   type Marker = string | Buffer | string[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
-    // A's titled link has no why, so it is one of A's picks on home; A's pinned space shows too.
-    "GET /": { request: "/", marker: () => ["Quokka habitat notes", A_TAG_NAME] },
+    // A's titled link has no why, so it is one of A's picks on home; A's pinned space and kept tool show too.
+    "GET /": {
+      request: "/",
+      marker: () => ["Quokka habitat notes", A_TAG_NAME, A_TOOL_TITLE],
+    },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
     "GET /spaces": {
       request: `/spaces?tag=${encodeURIComponent(A_TAG_NAME)}`,
@@ -592,6 +597,13 @@ describe("owner isolation coverage", () => {
       savedBy: "seed",
     });
     await updateLink(seedDeps, A, untagged.id, { state: "archived" });
+    // A kept tool is on A's Handy shelf, and only there: kept tools are not Worth a look picks.
+    const { link: handy } = await saveLink(seedDeps, A, {
+      url: "https://a.example/keeper-login",
+      savedBy: "seed",
+      title: A_TOOL_TITLE,
+    });
+    await keepHandy(seedDeps, A, handy.id, "stated");
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,

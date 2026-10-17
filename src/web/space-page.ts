@@ -132,7 +132,7 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : `${editDialog()}\n`}${done ? "" : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+${done ? "" : `${editDialog()}\n${CARDS_SCRIPT}`}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

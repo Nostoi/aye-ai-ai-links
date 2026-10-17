@@ -145,7 +145,7 @@ ${done ? "" : '<p id="all-error" role="alert"></p>'}
 ${list}
 <div class="all-foot">${more}${other}</div>
 </main>
-${done ? "" : `${editDialog()}\n`}${done ? "" : `<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+${done ? "" : `${editDialog()}\n<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

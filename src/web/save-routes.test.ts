@@ -1,8 +1,16 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { TEST_BASE_URL } from "../auth/memory-auth.js";
-import { allRows, oauthWorld, type World } from "../auth/oauth-test-kit.js";
-import { saveLink } from "../core/links.js";
+import {
+  type Agent,
+  addSecondUser,
+  allRows,
+  oauthWorld,
+  SECOND_USER,
+  type World,
+} from "../auth/oauth-test-kit.js";
+import { saveLink, updateLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -131,5 +139,196 @@ describe("GET /save", () => {
       expect(res.status, path).toBe(302);
       expect(res.headers.get("location"), path).toBe("/login");
     }
+  });
+});
+
+const save = (browser: Agent, json: unknown, extra = {}) =>
+  browser.send("/save", { method: "POST", json, ...extra });
+const linkRow = (world: World, owner: string) =>
+  world.links.prepare("SELECT * FROM links WHERE owner_id = ? ORDER BY id").all(owner) as Record<
+    string,
+    unknown
+  >[];
+const SAVED_2025 = new Date("2025-03-03T12:00:00Z");
+
+describe("POST /save", () => {
+  it("saves a new link for the signed-in owner, by web, with the why as asked: 200, uncached", async () => {
+    const { world, browser } = await signedIn();
+    const res = await save(browser, { url: NEW, title: "A story", why: "for the trip" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const [row] = linkRow(world, A);
+    expect(row).toMatchObject({
+      url: NEW,
+      title: "A story",
+      why_text: "for the trip",
+      why_source: "asked",
+      saved_by: "web",
+      state: "active",
+    });
+    expect(res.body).toEqual({
+      id: String(row?.id),
+      created: true,
+      whyKept: true,
+      state: "active",
+      savedAt: new Date(row?.saved_at as number).toISOString(),
+      savedOn: expect.any(String),
+      title: "A story",
+      url: NEW,
+      why: "for the trip",
+    });
+  });
+
+  it("a repeat save answers the link already saved, with its date, state and title, and keeps them", async () => {
+    const { world, browser } = await signedIn();
+    const deps = { ...linkDeps(world), now: () => SAVED_2025 };
+    const { link } = await saveLink(deps, A, {
+      url: NEW,
+      savedBy: "claude",
+      title: "Saved before",
+    });
+    await updateLink(linkDeps(world), A, link.id, { state: "archived" });
+    const res = await save(browser, { url: NEW, title: "Ignored", why: null });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      id: link.id,
+      created: false,
+      whyKept: true,
+      state: "archived",
+      savedAt: "2025-03-03T12:00:00.000Z",
+      savedOn: "March 3, 2025",
+      title: "Saved before",
+      url: NEW,
+      why: null,
+    });
+    expect(linkRow(world, A)).toMatchObject([
+      { title: "Saved before", saved_by: "claude", state: "archived" },
+    ]);
+  });
+
+  it("over a stated why, keeps it and answers whyKept false with the stored why", async () => {
+    const { world, browser } = await signedIn();
+    await saveLink(linkDeps(world), A, {
+      url: NEW,
+      savedBy: "claude",
+      why: { text: "theirs", source: "stated" },
+    });
+    const res = await save(browser, { url: NEW, title: null, why: "mine" });
+    expect(res.body).toMatchObject({ created: false, whyKept: false, why: "theirs" });
+    expect(linkRow(world, A)).toMatchObject([{ why_text: "theirs", why_source: "stated" }]);
+  });
+
+  it("over an agent's guess, replaces it with the owner's why", async () => {
+    const { world, browser } = await signedIn();
+    await saveLink(linkDeps(world), A, {
+      url: NEW,
+      savedBy: "claude",
+      why: { text: "guess", source: "inferred" },
+    });
+    const res = await save(browser, { url: NEW, title: null, why: "mine" });
+    expect(res.body).toMatchObject({ created: false, whyKept: true, why: "mine" });
+    expect(linkRow(world, A)).toMatchObject([{ why_text: "mine", why_source: "asked" }]);
+  });
+
+  it("acts for the signed-in owner only: B saving A's address gets its own new link, and A's link is unchanged", async () => {
+    const { world, browser } = await signedIn();
+    await saveLink(linkDeps(world), A, {
+      url: NEW,
+      savedBy: "claude",
+      title: "A's story",
+      why: { text: "A's reason", source: "stated" },
+    });
+    const bBrowser = await addSecondUser(world);
+    const before = linkRow(world, A);
+    const res = await save(bBrowser, { url: NEW, title: "B title", why: "B reason" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      created: true,
+      whyKept: true,
+      title: "B title",
+      why: "B reason",
+    });
+    expect(JSON.stringify(res.body)).not.toContain("A's");
+    expect(linkRow(world, A)).toEqual(before);
+    expect(linkRow(world, SECOND_USER.id)).toMatchObject([
+      { url: NEW, saved_by: "web", why_source: "asked" },
+    ]);
+    // The same request from A is a repeat save, so B's new link is down to whose session it is.
+    expect(
+      ((await save(browser, { url: NEW, title: null, why: null })).body as { created: boolean })
+        .created,
+    ).toBe(false);
+  });
+
+  it.each([
+    [
+      "an ftp address",
+      "ftp://ex.com/a",
+      "Only http and https links can be saved, not ftp:. Use the page's web address.",
+    ],
+    [
+      "an address with a password",
+      "https://u:pw@ex.com/a",
+      "The URL contains a username or password. Remove the credentials and save the plain address.",
+    ],
+  ])("refuses %s with 400 in core's words, and writes nothing", async (_, url, message) => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    const res = await save(browser, { url, title: null, why: null });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ code: "invalid_url", message });
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it("refuses a title of 201 characters with 400 in core's words, and writes nothing", async () => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    const res = await save(browser, { url: NEW, title: "a".repeat(201), why: null });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      code: "invalid_input",
+      message: "A title can be at most 200 characters.",
+    });
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it.each([
+    ["no title member", { url: NEW, why: null }],
+    ["a why that is a number", { url: NEW, title: null, why: 3 }],
+    ["a url that is null", { url: null, title: null, why: null }],
+  ])("refuses a body with %s with 400, and writes nothing", async (_, json) => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    expect((await save(browser, json)).status).toBe(400);
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it("refuses a body over 16 KiB with 413, and writes nothing", async () => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    const res = await save(browser, { url: NEW, title: null, why: "x".repeat(AUTH_BODY_LIMIT) });
+    expect(res.status).toBe(413);
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it.each([
+    ["without an Origin", { origin: false }],
+    ["with a foreign Origin", { headers: { origin: "https://evil.example" } }],
+  ])("refuses a request %s with 403, and writes nothing", async (_, extra) => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    expect((await save(browser, { url: NEW, title: null, why: null }, extra)).status).toBe(403);
+    expect(allRows(world)).toEqual(before);
+    // The same request with the site's Origin saves, so the 403 is down to the Origin.
+    expect((await save(browser, { url: NEW, title: null, why: null })).status).toBe(200);
+  });
+
+  it("without a session sends the browser to a bare /login, and writes nothing", async () => {
+    const world = await oauthWorld();
+    const before = allRows(world);
+    const res = await save(world.agent(), { url: NEW, title: null, why: null });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/login");
+    expect(allRows(world)).toEqual(before);
   });
 });

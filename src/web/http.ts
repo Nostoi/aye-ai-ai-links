@@ -25,7 +25,13 @@ import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
-import { keepHandy, type ToolChange } from "../core/tools.js";
+import {
+  answerSuggestion,
+  keepHandy,
+  notHandy,
+  stillUsing,
+  type ToolChange,
+} from "../core/tools.js";
 import type { LinkState, OwnerId, Source, Tag, TagKind, ToolStatus } from "../core/types.js";
 import {
   archiveLink,
@@ -466,6 +472,25 @@ export function webApp({
     toolAction(c, async () =>
       toolMoved(c, await keepHandy(deps, c.get("caller").owner, c.get("body").id, "stated")),
     ),
+  );
+
+  app.post("/tools/not-handy", jsonBody(linkId), session, (c) =>
+    toolAction(c, async () =>
+      toolMoved(c, await notHandy(deps, c.get("caller").owner, c.get("body").id, "stated")),
+    ),
+  );
+
+  app.post("/tools/still-using", jsonBody(linkId), session, (c) =>
+    toolAction(c, async () =>
+      toolMoved(c, await stillUsing(deps, c.get("caller").owner, c.get("body").id, "asked")),
+    ),
+  );
+
+  app.post("/tools/suggestion", jsonBody({ ...linkId, keep: isBoolean }), session, (c) =>
+    toolAction(c, async () => {
+      const { id, keep } = c.get("body");
+      return toolMoved(c, await answerSuggestion(deps, c.get("caller").owner, id, keep));
+    }),
   );
 
   // 204 whether or not the app was connected; the page reloads either way.

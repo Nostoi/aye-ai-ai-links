@@ -111,9 +111,106 @@ describe("POST /tools/keep", () => {
   });
 });
 
+describe("POST /tools/not-handy", () => {
+  it("declines a kept tool as stated, answering the kept row it replaced", async () => {
+    const { world, browser, id } = await tools();
+    const kept = await keepHandy(at(world, daysAgo(3)), A, id, "stated");
+    const res = await browser.send("/tools/not-handy", post({ id }));
+    expect(res.status).toBe(200);
+    const body = res.body as Moved;
+    expect(body.previous).toEqual(wire(kept.tool));
+    expect(body.tool).toMatchObject({ status: "declined", source: "stated", waitDays: 30 });
+    expect(toolRow(world, id)).toMatchObject({ status: "declined", source: "stated" });
+  });
+});
+
+describe("POST /tools/still-using", () => {
+  it("answered while due with no opening, doubles the wait, records the answer and keeps the row's source", async () => {
+    const { world, browser, id } = await tools();
+    const kept = await keepHandy(at(world, daysAgo(31)), A, id, "stated");
+    const res = await browser.send("/tools/still-using", post({ id }));
+    expect(res.status).toBe(200);
+    const body = res.body as Moved;
+    expect(body.previous).toEqual(wire(kept.tool));
+    expect(body.tool).toMatchObject({ status: "kept", source: "stated", waitDays: 60 });
+    expect(toolRow(world, id)).toMatchObject({
+      wait_days: 60,
+      answered_at: Date.parse(body.tool.answeredAt as string),
+    });
+  });
+
+  it("on a link that is not kept is a 409 in the page's words, writing no row", async () => {
+    const { world, browser, id } = await tools();
+    const res = await browser.send("/tools/still-using", post({ id }));
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      code: "conflict",
+      message: "That link's Keep handy state changed. Reload the page.",
+    });
+    expect(toolRow(world, id)).toBeNull();
+  });
+});
+
+describe("POST /tools/suggestion", () => {
+  it("Yes keeps a suggested link as asked, No declines it as asked", async () => {
+    for (const [keep, status] of [
+      [true, "kept"],
+      [false, "declined"],
+    ] as const) {
+      const { world, browser, id } = await tools();
+      const suggested = await keepHandy(at(world, daysAgo(2)), A, id, "inferred");
+      const res = await browser.send("/tools/suggestion", post({ id, keep }));
+      expect(res.status).toBe(200);
+      expect((res.body as Moved).previous).toEqual(wire(suggested.tool));
+      expect(toolRow(world, id)).toMatchObject({ status, source: "asked", wait_days: 30 });
+    }
+  });
+
+  it("on a link with no suggestion is a 409, leaving its row", async () => {
+    const { world, browser, id } = await tools();
+    await keepHandy(at(world, daysAgo(2)), A, id, "stated");
+    const before = toolRow(world, id);
+    const res = await browser.send("/tools/suggestion", post({ id, keep: false }));
+    expect(res.status).toBe(409);
+    expect(toolRow(world, id)).toEqual(before);
+  });
+
+  it("refuses a keep that is not a boolean, and every row stays", async () => {
+    const { world, browser, id } = await tools();
+    await keepHandy(at(world, daysAgo(2)), A, id, "inferred");
+    const before = allRows(world);
+    for (const keep of ["yes", 1, null, undefined]) {
+      const res = await browser.send("/tools/suggestion", post({ id, keep }));
+      expect(res.status, String(keep)).toBe(400);
+    }
+    expect(allRows(world)).toEqual(before);
+  });
+});
+
 /** Each POST, with the seed of A's link it acts on; the seed returns the request's body. */
 const ROUTES: [string, (world: World, id: string) => Promise<Record<string, unknown>>][] = [
   ["/tools/keep", async (_, id) => ({ id })],
+  [
+    "/tools/not-handy",
+    async (world, id) => {
+      await keepHandy(at(world, daysAgo(3)), A, id, "stated");
+      return { id };
+    },
+  ],
+  [
+    "/tools/still-using",
+    async (world, id) => {
+      await keepHandy(at(world, daysAgo(31)), A, id, "stated");
+      return { id };
+    },
+  ],
+  [
+    "/tools/suggestion",
+    async (world, id) => {
+      await keepHandy(at(world, daysAgo(2)), A, id, "inferred");
+      return { id, keep: true };
+    },
+  ],
 ];
 
 describe.each(ROUTES)("POST %s", (path, seed) => {

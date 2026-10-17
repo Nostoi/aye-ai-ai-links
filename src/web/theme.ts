@@ -166,6 +166,7 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .worth-small h3,.handy-tile h3{font-size:16px;line-height:1.3;margin:0 0 6px}
 .handy-tile{position:relative;isolation:isolate;aspect-ratio:1;align-self:start;display:flex;flex-direction:column;justify-content:flex-end;padding:0;overflow:visible;overflow-wrap:anywhere;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
 .handy-image{position:absolute;inset:0;z-index:-1;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+img.handy-image{background:#fff}
 .handy-initials{position:absolute;inset:0 0 auto;height:50%;z-index:-1;display:flex;align-items:center;justify-content:center;font-size:34px;line-height:1;font-weight:800;letter-spacing:.02em;color:color-mix(in srgb,var(--space,var(--field)) 55%,var(--ink))}
 .handy-caption{min-width:0;padding:0 12px 10px;border-radius:0 0 18px 18px;color:var(--ink)}
 .handy-tile.photo .handy-caption{padding-top:28px;color:#fff;background:linear-gradient(to bottom,rgb(0 0 0 / 0),rgb(0 0 0 / .42) 45%,rgb(0 0 0 / .62));text-shadow:0 1px 2px rgb(0 0 0 / .6),0 0 10px rgb(0 0 0 / .5)}

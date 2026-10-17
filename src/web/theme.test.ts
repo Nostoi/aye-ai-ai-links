@@ -118,6 +118,12 @@ describe("the Handy postcards", () => {
     )?.[1] ?? "";
   const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
 
+  it("puts a photo on white, so a transparent logo sits on white, and leaves a picture-less tile its space color", () => {
+    expect(rule("img.handy-image")).toBe("background:#fff");
+    expect(rule(".handy-image")).not.toContain("background");
+    expect(rule(".handy-tile.photo .handy-caption")).toContain("text-shadow:");
+  });
+
   it("makes square 176px cards in a wrapping grid, and 156px ones in a sideways row on a phone", () => {
     expect(rule(".handy-row")).toContain("grid-template-columns:repeat(auto-fill,176px)");
     expect(rule(".handy-tile")).toContain("aspect-ratio:1");

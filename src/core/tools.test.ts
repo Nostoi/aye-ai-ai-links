@@ -8,6 +8,8 @@ import {
   answerSuggestion,
   clockStart,
   currentWaitDays,
+  handyOf,
+  handyOfLinks,
   isDue,
   keepHandy,
   notHandy,
@@ -439,5 +441,62 @@ describe("restoreTool", () => {
     const kept = await keepHandy(deps(), A, id, "stated");
     expect(await code(restoreTool(deps(), B, id, kept.previous, kept.tool))).toBe("not_found");
     expect(await store.getTool(A, id)).toEqual(kept.tool);
+  });
+});
+
+describe("handy views", () => {
+  /** The store, recording which reads reach it. */
+  const counted = () => {
+    const calls: string[] = [];
+    const tools: ToolStore = Object.assign(Object.create(store) as FakeStore, {
+      getTool: async (...a: Parameters<ToolStore["getTool"]>) => {
+        calls.push("getTool");
+        return store.getTool(...a);
+      },
+      listTools: async (...a: Parameters<ToolStore["listTools"]>) => {
+        calls.push("listTools");
+        return store.listTools(...a);
+      },
+    });
+    return { tools, calls };
+  };
+  const linkOf = async (id: string) => (await store.get(A, id)) as Link;
+
+  it("gives each link its status, source and due flag in one read, and null without a row", async () => {
+    const due = await saved();
+    const fresh = await saved();
+    const suggested = await saved();
+    const declined = await saved();
+    const archived = await saved();
+    const none = await saved();
+    await keepHandy(deps(), A, due, "stated");
+    await keepHandy(deps(), A, archived, "asked");
+    await store.update(A, archived, { state: "archived" });
+    clock = day(30);
+    await keepHandy(deps(), A, fresh, "asked");
+    await keepHandy(deps(), A, suggested, "inferred");
+    await notHandy(deps(), A, declined, "stated");
+    const links = await Promise.all([due, fresh, suggested, declined, archived, none].map(linkOf));
+    const { tools, calls } = counted();
+    expect(await handyOfLinks({ tools, now: () => clock }, A, links)).toEqual(
+      new Map([
+        [due, { status: "kept", source: "stated", due: true }],
+        [fresh, { status: "kept", source: "asked", due: false }],
+        [suggested, { status: "suggested", source: "inferred", due: false }],
+        [declined, { status: "declined", source: "stated", due: false }],
+        [archived, { status: "kept", source: "asked", due: false }],
+        [none, null],
+      ]),
+    );
+    expect(calls).toEqual(["listTools"]);
+  });
+
+  it("gives one link's view, and null for another owner's link", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(30);
+    const link = await linkOf(id);
+    expect(await handyOf(deps(), A, link)).toEqual({ status: "kept", source: "stated", due: true });
+    expect(await handyOf(deps(), B, link)).toBeNull();
   });
 });

@@ -194,3 +194,30 @@ export async function restoreTool(
     );
   }
 }
+
+/** A link's Keep handy state as the doors show it; null for an ordinary link. */
+export type HandyView = { status: ToolStatus; source: Source; due: boolean };
+
+export function handyView(link: Link, tool: ToolRecord | null, now: Date): HandyView | null {
+  return tool && { status: tool.status, source: tool.source, due: isDue(link, tool, now) };
+}
+
+/** One link's view. Another owner's link has no row for `owner`, so it gets null. */
+export async function handyOf(
+  deps: Pick<ToolsDeps, "tools" | "now">,
+  owner: OwnerId,
+  link: Link,
+): Promise<HandyView | null> {
+  return handyView(link, await deps.tools.getTool(owner, link.id), deps.now());
+}
+
+/** Each link's view by id, from one read of the owner's rows. */
+export async function handyOfLinks(
+  deps: Pick<ToolsDeps, "tools" | "now">,
+  owner: OwnerId,
+  links: Link[],
+): Promise<Map<string, HandyView | null>> {
+  const tools = await deps.tools.listTools(owner);
+  const now = deps.now();
+  return new Map(links.map((l) => [l.id, handyView(l, tools.get(l.id) ?? null, now)]));
+}

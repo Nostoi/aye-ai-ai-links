@@ -178,6 +178,7 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .handy-caption .host{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .handy-tile .ask{position:absolute;top:4px;left:4px;right:4px;z-index:2;margin:0;padding:3px 10px 0;border-radius:13px;background:color-mix(in srgb,var(--surface) 94%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 4px 14px rgb(0 0 0 / .12)}
 .handy-tile.needs-you .ask{padding-right:40px}
+.handy-tile.needs-you .small-actions{gap:0 8px}
 .handy-tile .ask p{margin:0;font-size:13px;line-height:15px;font-weight:700;color:var(--ink)}
 .handy-tile .small-actions{flex-wrap:nowrap;gap:0 14px}
 .handy-tile .small-actions button{min-height:44px;min-width:44px;padding:0 2px;color:var(--ink);font-weight:600;text-decoration-color:color-mix(in srgb,var(--ink) 35%,transparent)}

@@ -187,6 +187,8 @@ describe("the Handy postcards", () => {
 
   it("keeps a due panel's text and buttons clear of the menu circle, and a suggestion's unpadded", () => {
     expect(rule(".handy-tile.needs-you .ask")).toBe("padding-right:40px");
+    const gap = /gap:0 (\d+)px/.exec(rule(".handy-tile.needs-you .small-actions"))?.[1];
+    expect(Number(gap)).toBeLessThanOrEqual(10);
     expect(rule(".handy-tile .ask")).toContain("padding:3px 10px 0");
   });
 });

@@ -95,9 +95,9 @@ Every rule lives here. The web door and the MCP door only translate requests int
 
 ## Landing
 
-1. **Store and rules:** migration 12, `ToolStore`, `core/tools.ts` and the digest's exclusion of kept tools. Owner-invisible on its own. Carries this spec and the ROADMAP entry.
-2. **MCP:** `handy` input and output, `still_using_check`, guidance. Tools can be marked through an AI from here on.
-3. **Web:** the shelf, the controls, and README. Closes #125.
+1. **Store and rules:** migration 12, `ToolStore`, `core/tools.ts` and the digest's exclusion of kept tools. It also carries every core read and action PR 2 and PR 3 need (the shelf list, the suggestions, the due tool for the digest, the `handy` view of links, and conditional Undo), so those two PRs can be built in parallel without editing core (owner, 2026-10-16). Owner-invisible on its own. Carries this spec and the ROADMAP entry.
+2. **MCP:** `handy` input and output, `still_using_check`, guidance, and README. Tools can be marked through an AI from here on.
+3. **Web:** the shelf, the controls, and README. Closes #125. PR 2 and PR 3 are built in parallel after PR 1 merges; whichever merges second brings `main` in before its final review.
 
 ## Not in scope
 

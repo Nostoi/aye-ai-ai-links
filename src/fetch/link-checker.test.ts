@@ -54,6 +54,9 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       res.writeHead(200, { "content-type": "text/html" });
       res.write("<p>still going");
       return;
+    case "hang":
+      // Never answers.
+      return;
     case "gone":
       res.writeHead(410);
       return res.end();
@@ -67,9 +70,13 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return redirect(302, `http://127.0.0.1:${targetPort}/`);
     case "r-name":
       return redirect(302, `http://evil.test:${targetPort}/`);
-    default:
+    default: {
+      // /hop-N redirects N times, then lands on /ok.
+      const hops = /^hop-(\d+)$/.exec(kind);
+      if (hops) return redirect(302, Number(hops[1]) === 1 ? "/ok" : `/hop-${Number(hops[1]) - 1}`);
       res.writeHead(404);
       return res.end();
+    }
   }
 }
 
@@ -157,6 +164,22 @@ describe("a page that is gone", () => {
       code: "ENOTFOUND",
     });
     expect(await check("/r-nowhere")).toEqual({ kind: "network_error", code: "ENOTFOUND" });
+  });
+});
+
+describe("a check that cannot finish", () => {
+  it("follows five redirects, and refuses a sixth as too_many_redirects", async () => {
+    expect(await check("/hop-5")).toEqual({ kind: "ok", finalUrl: siteUrl("/ok") });
+    expect(await check("/hop-6")).toEqual({ kind: "refused", reason: "too_many_redirects" });
+  });
+
+  it("returns aborted promptly when the caller's signal aborts a server that never answers", async () => {
+    const caller = new AbortController();
+    const started = Date.now();
+    const pending = checker().check(siteUrl("/hang"), caller.signal);
+    setTimeout(() => caller.abort(), 50);
+    expect(await pending).toEqual({ kind: "aborted" });
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 });
 

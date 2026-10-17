@@ -255,6 +255,7 @@ export async function handyOf(
   link: Link,
 ): Promise<HandyView | null> {
   const tool = await deps.tools.getTool(owner, link.id);
+  if (!tool) return null;
   return handyView(link, tool, await deps.checks.getCheck(owner, link.id), deps.now());
 }
 

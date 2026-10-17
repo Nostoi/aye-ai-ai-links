@@ -565,6 +565,19 @@ describe("dueTool", () => {
     expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
   });
 
+  it("claimDueTool drops a tool flagged gone after its claim succeeded, leaving it marked (#128)", async () => {
+    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
+    const flaggedAfterClaim = Object.assign(Object.create(store) as FakeStore, {
+      claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
+        const claimed = await store.claimSurfaced(...args);
+        await flag(tool.id);
+        return claimed;
+      },
+    });
+    expect(await claimDueTool(deps({ store: flaggedAfterClaim }), OWNER)).toBeNull();
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
   it("returns one due tool, first in the digest's rotation, with whole days since its opening", async () => {
     await dueLink({ lastSurfacedAt: null });
     const first = await dueLink({ lastOpenedAt: at(-45 * DAY - HOUR) });

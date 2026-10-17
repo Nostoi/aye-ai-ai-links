@@ -965,6 +965,31 @@ describe("startServer", () => {
       ]);
     });
 
+    it("closes the checker, and checks and records nothing, when startup fails after the runner is built", async () => {
+      await seedWeekOld("https://example.com/old");
+      const taken = net.createServer();
+      await new Promise<void>((r) => taken.listen(0, "127.0.0.1", r));
+      const port = (taken.address() as net.AddressInfo).port;
+      const calls = { check: 0, close: 0 };
+      const linkChecker: LinkChecker = {
+        check: async (url) => {
+          calls.check++;
+          return { kind: "ok", finalUrl: url };
+        },
+        close: async () => void calls.close++,
+      };
+      try {
+        await expect(
+          startServer(cfg(dbPath, port), { ...fakePipeline(), linkChecker, checkPollMs: 20 }),
+        ).rejects.toThrow(/EADDRINUSE/);
+      } finally {
+        await new Promise((r) => taken.close(r));
+      }
+      await sleep(100);
+      expect(calls).toEqual({ check: 0, close: 1 });
+      expect(checkRows()).toEqual([]);
+    });
+
     it("on stop, aborts a check in flight and waits for it before closing the checker, writing nothing", async () => {
       await seedWeekOld("https://example.com/old");
       const events: string[] = [];

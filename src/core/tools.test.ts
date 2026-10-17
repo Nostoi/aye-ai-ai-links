@@ -563,6 +563,24 @@ describe("handy views", () => {
     expect(calls).toEqual(["listTools"]);
   });
 
+  it("reads the check for a link with a tool row, and not for one without", async () => {
+    const withTool = await saved();
+    const ordinary = await saved();
+    await keepHandy(deps(), A, withTool, "stated");
+    const reads: string[] = [];
+    const checks = Object.assign(Object.create(store) as FakeStore, {
+      getCheck: async (...a: Parameters<FakeStore["getCheck"]>) => {
+        reads.push(a[1]);
+        return store.getCheck(...a);
+      },
+    });
+    const spied = { ...deps(), checks };
+    expect(await handyOf(spied, A, await linkOf(ordinary))).toBeNull();
+    expect(reads).toEqual([]);
+    expect(await handyOf(spied, A, await linkOf(withTool))).not.toBeNull();
+    expect(reads).toEqual([withTool]);
+  });
+
   it("gives one link's view, and null for another owner's link", async () => {
     const id = await saved();
     await keepHandy(deps(), A, id, "stated");

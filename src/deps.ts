@@ -7,11 +7,12 @@ import { loadVectorFunctions, VectorSearch } from "./search/vector-search.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
 import { SqliteSearchLog } from "./store/search-log.js";
 import { SqliteImageStore } from "./store/sqlite-image-store.js";
+import { SqliteLinkEditStore } from "./store/sqlite-link-edits.js";
 import { SqliteStore } from "./store/sqlite-store.js";
 import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
 
 /**
- * Builds the store, search, search log, vector index, image store, profile and page-text reader from ONE database handle.
+ * Builds the store, search, search log, vector index, image store, edit store, profile and page-text reader from ONE database handle.
  * They must share it: ids ranked or saved in one database and read through another come back as the
  * wrong links, or with another link's page text.
  */
@@ -30,6 +31,8 @@ export function createDeps(db: Database, embedder: Embedder) {
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     /** Preview images: the image pass writes them, the web door reads them. */
     images: new SqliteImageStore(db),
+    /** The owner's title and picture edits and their Undo (#145). */
+    edits: new SqliteLinkEditStore(db),
     profile: new SqliteProfileStore(db),
     pages: store,
     /** Keep handy rows: the digest and the tools rules read them. */

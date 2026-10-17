@@ -13,6 +13,9 @@ import { isWebUrl } from "./url-key.js";
 /** Due links read per sweep. */
 export const SWEEP_SIZE = 20;
 
+/** How long the timer waits after a sweep that hit a store error, so a bad row isn't retried every poll. */
+export const ERROR_BACKOFF_MS = 60 * 60 * 1000;
+
 export type LinkCheckRunnerOptions = {
   checks: LinkCheckStore;
   checker: LinkChecker;
@@ -20,6 +23,8 @@ export type LinkCheckRunnerOptions = {
   log?: (message: string, error?: unknown) => void;
   /** Time between sweeps. Default 60 s. */
   pollMs?: number;
+  /** Time before the next timed sweep after one that hit a store error. Default ERROR_BACKOFF_MS. */
+  errorBackoffMs?: number;
   /** Least wall-clock time from one request's end to the next one's start. Default 10 s. */
   gapMs?: number;
   /** Least time, by `now`, before the same host is requested again. Default 60 s. */
@@ -81,6 +86,7 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
     ((message, error) =>
       error === undefined ? console.error(message) : console.error(message, error));
   const pollMs = o.pollMs ?? 60_000;
+  const errorBackoffMs = o.errorBackoffMs ?? ERROR_BACKOFF_MS;
   const gapMs = o.gapMs ?? 10_000;
   const hostGapMs = o.hostGapMs ?? 60_000;
 
@@ -91,6 +97,8 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
   /** When the last request ended, on the timer clock. */
   let lastEnded: number | null = null;
   const abort = new AbortController();
+  /** Fires on quiesce, to end a wait in the request gap. */
+  const wake = new AbortController();
   let started = false;
   let quiet = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -106,7 +114,7 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
   /** Waits out `gapMs` since the last request; false when stopped or quiesced meanwhile. */
   async function waitForGap(): Promise<boolean> {
     const wait = lastEnded === null ? 0 : lastEnded + gapMs - performance.now();
-    if (wait > 0) await pause(wait, abort.signal);
+    if (wait > 0) await pause(wait, wake.signal);
     return !quiet && !abort.signal.aborted;
   }
 
@@ -167,28 +175,33 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
     }
   }
 
-  async function sweepOnce(): Promise<void> {
-    if (quiet) return;
+  /** Resolves true when the sweep ended on a store error. */
+  async function sweepOnce(): Promise<boolean> {
+    if (quiet) return false;
     try {
       await scan();
+      return false;
     } catch (error) {
       log("link check sweep failed", error);
+      return true;
     }
   }
 
   /** Runs `work` as the one thing in flight, so `stop` can wait for it and sweeps never overlap. */
-  function exclusive(work: () => Promise<void>): Promise<void> {
+  function exclusive<T>(work: () => Promise<T>): Promise<T> {
     const prior = running ?? Promise.resolve();
     const mine = prior.then(work);
-    running = mine;
+    const done = mine.then(() => {});
+    running = done;
     return mine.finally(() => {
-      if (running === mine) running = undefined;
+      if (running === done) running = undefined;
     });
   }
 
   function quiesce(): void {
     quiet = true;
     clearTimeout(timer);
+    wake.abort();
   }
 
   return {
@@ -196,8 +209,8 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
       if (started || quiet) return;
       started = true;
       const tick = async () => {
-        await exclusive(sweepOnce);
-        if (!quiet) timer = setTimeout(tick, pollMs);
+        const failed = await exclusive(sweepOnce);
+        if (!quiet) timer = setTimeout(tick, failed ? errorBackoffMs : pollMs);
       };
       void tick();
     },
@@ -210,6 +223,8 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
       await running;
     },
 
-    sweep: () => exclusive(sweepOnce),
+    sweep: async () => {
+      await exclusive(sweepOnce);
+    },
   };
 }

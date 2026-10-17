@@ -34,6 +34,7 @@ function setup(
     gapMs?: number;
     hostGapMs?: number;
     pollMs?: number;
+    errorBackoffMs?: number;
     wrap?: (store: FakeStore) => LinkCheckStore;
   } = {},
 ) {
@@ -64,6 +65,7 @@ function setup(
     gapMs: o.gapMs ?? 0,
     hostGapMs: o.hostGapMs ?? 0,
     ...(o.pollMs !== undefined && { pollMs: o.pollMs }),
+    ...(o.errorBackoffMs !== undefined && { errorBackoffMs: o.errorBackoffMs }),
   });
   running.push(runner);
   return {
@@ -348,14 +350,64 @@ describe("the check runner", () => {
     expect(await t.store.getCheck(OWNER, id)).toMatchObject({ result: "alive" });
   });
 
-  it("logs a store error, ends that sweep, and still runs the next", async () => {
-    const t = setup(async (url) => okFor(url));
+  it("logs a store error and ends that sweep; the timer then waits errorBackoffMs, a clean sweep returns it to pollMs, and an explicit sweep is never throttled", async () => {
+    const t = setup(async (url) => okFor(url), { pollMs: 10, errorBackoffMs: 300 });
     const id = await save(t.store, "https://a.test/");
+    const due = vi.spyOn(t.store, "dueChecks");
     const write = vi.spyOn(t.store, "updateCheckIf").mockRejectedValueOnce(new Error("disk full"));
-    await t.runner.sweep();
+    t.runner.start();
+    await waitFor(() => t.logged.length > 0);
     expect(t.logged.some((m) => /link check sweep failed/.test(m))).toBe(true);
+    expect(due).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(due).toHaveBeenCalledTimes(1);
     await t.runner.sweep();
-    expect(write).toHaveBeenCalledTimes(2);
+    expect(due).toHaveBeenCalledTimes(2);
     expect(await t.store.getCheck(OWNER, id)).toMatchObject({ result: "alive" });
+    expect(write).toHaveBeenCalledTimes(2);
+    await waitFor(() => due.mock.calls.length >= 3);
+    const afterBackoff = due.mock.calls.length;
+    expect(afterBackoff).toBeGreaterThanOrEqual(3);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(due.mock.calls.length - afterBackoff).toBeGreaterThanOrEqual(3);
+  });
+
+  it("on quiesce, a sweep waiting in the request gap ends at once and makes no further request", async () => {
+    const t = setup(async (url) => okFor(url), { gapMs: 5_000 });
+    await save(t.store, "https://a.test/");
+    await save(t.store, "https://b.test/");
+    const sweeping = t.runner.sweep();
+    await waitFor(() => t.urls().length === 1);
+    await new Promise((r) => setTimeout(r, 20));
+    const quiesced = performance.now();
+    t.runner.quiesce();
+    await sweeping;
+    expect(performance.now() - quiesced).toBeLessThan(200);
+    expect(t.urls()).toEqual(["https://a.test/"]);
+  });
+
+  it("never overlaps two sweeps: the second reads what is due only after the first has ended", async () => {
+    const release = gate();
+    const t = setup(async (url) => {
+      await release.opened;
+      return okFor(url);
+    });
+    await save(t.store, "https://a.test/");
+    await save(t.store, "https://b.test/");
+    const readsSaw: number[] = [];
+    const due = t.store.dueChecks.bind(t.store);
+    vi.spyOn(t.store, "dueChecks").mockImplementation(async (...args) => {
+      readsSaw.push(t.urls().length);
+      return due(...args);
+    });
+    const first = t.runner.sweep();
+    const second = t.runner.sweep();
+    await waitFor(() => t.urls().length === 1);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(readsSaw).toEqual([0]);
+    release.open();
+    await Promise.all([first, second]);
+    expect(readsSaw).toEqual([0, 2]);
+    expect(t.most()).toBe(1);
   });
 });

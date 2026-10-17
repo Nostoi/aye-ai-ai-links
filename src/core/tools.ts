@@ -97,8 +97,8 @@ function ownerOnly(source: Source): void {
 }
 
 /**
- * Keep handy. Stated or asked is the owner's request: it keeps the link from any status, with a
- * first wait. Inferred is a guess: it only suggests the link, and never overrides kept or declined.
+ * Keep handy. Stated or asked is the owner's request: it keeps the link from any status.
+ * Inferred is a guess: it only suggests the link, and never overrides kept or declined.
  */
 export async function keepHandy(
   deps: ToolsDeps,
@@ -107,9 +107,7 @@ export async function keepHandy(
   source: Source,
 ): Promise<ToolChange> {
   return change(deps, owner, id, (current, _link, now) => {
-    if (source !== "inferred") {
-      return { ...moveTo(current, "kept", source, now), waitDays: FIRST_WAIT_DAYS };
-    }
+    if (source !== "inferred") return moveTo(current, "kept", source, now);
     if (current?.status === "kept" || current?.status === "declined") return current;
     return moveTo(current, "suggested", "inferred", now);
   });

@@ -184,13 +184,15 @@ describe("keepHandy", () => {
     }
   });
 
-  it("re-keeping a kept tool keeps its since and answer and sets the wait back to 30", async () => {
+  it("re-keeping a kept tool changes only its source, so it is not due at once", async () => {
     const id = await saved();
-    await put(id, tool({ answeredAt: day(90), waitDays: 120 }));
-    clock = day(100);
-    expect((await keepHandy(deps(), A, id, "asked")).tool).toEqual(
-      tool({ source: "asked", answeredAt: day(90), waitDays: 30 }),
-    );
+    await put(id, tool({ answeredAt: day(30), waitDays: 60 }));
+    clock = day(70);
+    const kept = tool({ source: "asked", answeredAt: day(30), waitDays: 60 });
+    expect((await keepHandy(deps(), A, id, "asked")).tool).toEqual(kept);
+    expect(await store.getTool(A, id)).toEqual(kept);
+    const link = (await store.get(A, id)) as Link;
+    expect(isDue(link, await store.getTool(A, id), day(70))).toBe(false);
   });
 
   it("an inferred keep suggests a link with no row, and never overrides kept or declined", async () => {

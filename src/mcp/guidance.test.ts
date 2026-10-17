@@ -83,7 +83,7 @@ describe("Keep handy guidance", () => {
     expect(SAVE_LINK).toMatch(/says they use a link regularly.*"keep", source: "stated"/s);
     expect(SAVE_LINK).toContain("a login page, form or dashboard");
     expect(SAVE_LINK).toContain(
-      '"Is this something you\'ll use regularly?" once, and only for such pages not saved before:',
+      '"Is this something you\'ll use regularly?" at most once, only after a save returns created: true: send "keep" or "not_handy" with "asked" through update_link.',
     );
     // The guess is tied to tool-like pages, so an agent never suggests every link it saves.
     expect(SAVE_LINK).toContain(

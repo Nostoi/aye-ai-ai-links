@@ -32,8 +32,8 @@ export function checkCutoffs(now: Date): CheckCutoffs {
 }
 
 /**
- * Whether a host other than `host` gave an HTTP answer (any status) at or after
- * `at` − ANSWER_WINDOW_MS. `answers` holds each host's last answer time. It is the offline guard's
+ * Whether a host other than `host` gave an HTTP answer (any status) from
+ * `at` − ANSWER_WINDOW_MS up to `at`. `answers` holds each host's last answer time. It is the offline guard's
  * question (A2): with no network, every name can fail as ENOTFOUND.
  */
 export function answeredElsewhere(
@@ -42,7 +42,9 @@ export function answeredElsewhere(
   at: Date,
 ): boolean {
   const since = at.getTime() - ANSWER_WINDOW_MS;
-  for (const [h, when] of answers) if (h !== host && when.getTime() >= since) return true;
+  for (const [h, when] of answers) {
+    if (h !== host && when.getTime() >= since && when.getTime() <= at.getTime()) return true;
+  }
   return false;
 }
 
@@ -138,13 +140,20 @@ export async function stillWorks(
   return { check: next, previous: current };
 }
 
-/** Whether some sequence of checks could have left `previous` by `now`. */
+/** A real time no later than `now`; null passes (the column is empty). */
+const isPast = (when: Date | null, now: Date): boolean =>
+  when === null || (Number.isFinite(when.getTime()) && when <= now);
+
+/**
+ * Whether It still works could have replaced `previous` by `now`: only a flagged row, whose dates are
+ * real and not in the future, flagged at least FLAG_AFTER_MS after its first dead check.
+ */
 function isRestorable(previous: LinkCheck, now: Date): boolean {
-  const { flaggedAt, firstDeadAt } = previous;
-  if (flaggedAt === null) return true;
+  const { checkedAt, firstDeadAt, flaggedAt, stillWorksAt } = previous;
   return (
-    flaggedAt <= now &&
+    flaggedAt !== null &&
     firstDeadAt !== null &&
+    [checkedAt, firstDeadAt, flaggedAt, stillWorksAt].every((d) => isPast(d, now)) &&
     flaggedAt.getTime() - firstDeadAt.getTime() >= FLAG_AFTER_MS
   );
 }

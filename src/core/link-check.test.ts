@@ -136,6 +136,14 @@ describe("answeredElsewhere", () => {
   });
 });
 
+describe("answeredElsewhere, time order", () => {
+  it("counts only answers from ANSWER_WINDOW_MS before up to at, never one stamped after", () => {
+    const at = t(10 * DAY);
+    expect(answeredElsewhere(new Map([["up.test", t(15 * DAY)]]), "gone.test", at)).toBe(false);
+    expect(answeredElsewhere(new Map([["up.test", at]]), "gone.test", at)).toBe(true);
+  });
+});
+
 describe("checkCutoffs", () => {
   it("is now − 7 days for active links and now − 30 days for archived ones", () => {
     expect(checkCutoffs(t(100 * DAY))).toEqual({ active: t(93 * DAY), archived: t(70 * DAY) });
@@ -219,6 +227,11 @@ describe("applyCheck", () => {
       result: "unknown",
       detail: "http:503",
     });
+  });
+
+  it("does not flag a dead check stamped before the streak's first one (clock skew)", () => {
+    const started: LinkCheck = { ...goneRow, flaggedAt: null, firstDeadAt: t(WEEK) };
+    expect(applyCheck(started, DEAD, T)).toMatchObject({ firstDeadAt: t(WEEK), flaggedAt: null });
   });
 
   it("keeps the first flag time through later dead checks", () => {
@@ -358,6 +371,12 @@ describe("It still works and its Undo", () => {
     ["flagged after now", { flaggedAt: t(8 * DAY + 1) }],
     ["flagged with no first dead check", { firstDeadAt: null }],
     ["flagged less than 7 days after the first dead check", { flaggedAt: t(WEEK - 1) }],
+    ["with a stillWorksAt after now", { stillWorksAt: t(8 * DAY + 1) }],
+    ["with a firstDeadAt after now", { firstDeadAt: t(8 * DAY + 1), flaggedAt: t(8 * DAY + 1) }],
+    ["with a checkedAt after now", { checkedAt: t(8 * DAY + 1) }],
+    ["with a firstDeadAt that is not a date", { firstDeadAt: new Date(Number.NaN) }],
+    ["with a stillWorksAt that is not a date", { stillWorksAt: new Date(Number.NaN) }],
+    ["that is not flagged, which It still works never replaces", { flaggedAt: null }],
   ] as [string, Partial<LinkCheck>][])(
     "Undo refuses an earlier row %s, changing nothing",
     async (_, over) => {
@@ -371,6 +390,16 @@ describe("It still works and its Undo", () => {
       expect(await store.getCheck(A, id)).toEqual(change.check);
     },
   );
+
+  it("Undo is not_found for an id never issued", async () => {
+    const id = await saved();
+    await put(id, goneRow);
+    const change = await stillWorks(deps(), A, id);
+    expect(
+      await code(restoreCheck(deps(), A, "no-such-id", change.previous, change.check)),
+    ).toMatch(/^not_found: /);
+    expect(await store.getCheck(A, id)).toEqual(change.check);
+  });
 
   it("Undo is not_found for another owner's link", async () => {
     const id = await saved();

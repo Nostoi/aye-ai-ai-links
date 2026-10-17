@@ -167,6 +167,7 @@ export function createApp(options: AppOptions) {
         deps: { ...web.deps, searchLog: undefined },
         auth: betterAuth,
         withAuthLock,
+        baseUrl,
         consent: consentDetails({ auth: betterAuth, withAuthLock, clients }),
         connections: {
           list: listConnections({ withAuthLock, clients }),

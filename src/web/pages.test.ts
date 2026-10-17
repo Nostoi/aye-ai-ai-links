@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
+import { bookmarkletCode } from "./bookmarklet.js";
 import { connectionsPage } from "./connections-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
@@ -167,6 +168,7 @@ const PAGES: [string, string][] = [
       connections: [{ clientId: "c", name: "Claude", connectedAt: new Date(0) }],
       keys: [{ id: 1, name: "codex", createdAt: new Date(0), revokedAt: null }],
       now: new Date(0),
+      bookmarklet: bookmarkletCode("https://links.example"),
     }),
   ],
   ["error", oauthErrorPage("It failed.")],
@@ -259,7 +261,14 @@ describe("the header", () => {
     const home = /<a class="brand" href="\/">/;
     expect(homePage(EMPTY_HOME)).toMatch(home);
     expect(searchPage({ query: "", links: [], now: new Date(0) })).toMatch(home);
-    expect(connectionsPage({ connections: [], keys: [], now: new Date(0) })).toMatch(home);
+    expect(
+      connectionsPage({
+        connections: [],
+        keys: [],
+        now: new Date(0),
+        bookmarklet: bookmarkletCode("https://links.example"),
+      }),
+    ).toMatch(home);
     expect(consentPage({ clientName: "C", redirectHost: "h" })).toMatch(home);
     expect(loginPage({ next: "/" })).not.toMatch(home);
     expect(oauthErrorPage("x")).not.toMatch(home);
@@ -277,7 +286,12 @@ describe("the menu", () => {
       homePage(EMPTY_HOME),
       searchPage({ query: "", links: [], now: new Date(0) }),
       tagsPage({ tags: [] }),
-      connectionsPage({ connections: [], keys: [], now: new Date(0) }),
+      connectionsPage({
+        connections: [],
+        keys: [],
+        now: new Date(0),
+        bookmarklet: bookmarkletCode("https://links.example"),
+      }),
       profilePage({ notes: [], focus: [], now: new Date(0) }),
       spacePage(SPACE),
     ];

@@ -62,6 +62,7 @@ import {
 } from "../core/worth-a-look.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allPage } from "./all-page.js";
+import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
@@ -372,6 +373,7 @@ export function webApp({
   consent,
   connections,
   keys,
+  baseUrl,
 }: {
   deps: SearchLinksDeps &
     WorthDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
@@ -391,11 +393,14 @@ export function webApp({
     turnOff: (owner: OwnerId, id: number) => void;
     turnOn: (owner: OwnerId, id: number) => void;
   };
+  /** The server's public origin (`AYE_BASE_URL`), which the bookmarklet opens. */
+  baseUrl: string;
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
   // The Save page alone sends a signed-out owner to sign in and straight back to it (#129).
   const saveSession = requireSession(auth, withAuthLock, loginRedirect);
+  const bookmarklet = bookmarkletCode(baseUrl);
 
   /** What a card shows after an edit or its Undo, read after the write. */
   const cardState = async (owner: OwnerId, id: string) => {
@@ -579,6 +584,7 @@ export function webApp({
       connections: await connections.list(owner),
       keys: keys.list(owner),
       now,
+      bookmarklet,
     });
     return c.html(page, 200, NO_STORE);
   });

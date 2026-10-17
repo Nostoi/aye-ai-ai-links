@@ -14,6 +14,7 @@ import { saveLink, updateLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { bookmarkletCode } from "./bookmarklet.js";
 
 const A = "owner";
 const NEW = "https://news.example/story?id=1";
@@ -330,5 +331,19 @@ describe("POST /save", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/login");
     expect(allRows(world)).toEqual(before);
+  });
+});
+
+describe("the install section on Apps and keys", () => {
+  it("builds the bookmarklet from the configured origin, not the request's", async () => {
+    const { browser } = await signedIn();
+    // An http request to the same host: a page built from the request would name http://.
+    const res = await browser.send("http://links.example/connections");
+    expect(res.status).toBe(200);
+    const href = parseHTML(String(res.body))
+      .document.getElementById("bookmarklet")
+      ?.getAttribute("href");
+    expect(href).toBe(bookmarkletCode(TEST_BASE_URL));
+    expect(href).toContain('"https://links.example"');
   });
 });

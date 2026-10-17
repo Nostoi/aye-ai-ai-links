@@ -25,15 +25,21 @@ function keyItem(k: KeyInfo, now: Date): string {
  * - Turn off posts `{id}` at once and removes the row; Undo posts the same id to turn it back on
  *   and puts the row back. A refused turn-off removes the row (the key is off); a refused undo
  *   leaves it out.
+ *
+ * Save from your browser offers the bookmarklet to drag, and its code to copy for a phone (#129).
+ * The code is element text, never an attribute but the link's href.
  */
 export const connectionsPage = ({
   connections,
   keys,
   now,
+  bookmarklet,
 }: {
   connections: ConnectionRow[];
   keys: KeyInfo[];
   now: Date;
+  /** The bookmarklet's code (`bookmarkletCode`), for the Save from your browser section. */
+  bookmarklet: string;
 }) =>
   page(
     "Apps and keys · Aye-AI-AI Links",
@@ -64,6 +70,21 @@ ${keys
 <button class="primary" type="submit">Make a key</button>
 </form>
 <p id="keys-error" role="alert"></p>
+</section>
+<section class="save-from-browser" aria-labelledby="bookmarklet-heading">
+<h2 id="bookmarklet-heading">Save from your browser</h2>
+<p class="lead">Save the page you're reading without opening an AI. It opens a Save page with the page's address and title filled in.</p>
+<h3>On a computer</h3>
+<p><a class="button primary" id="bookmarklet" href="${escapeHtml(bookmarklet)}">Save to Aye-AI-AI Links</a></p>
+<p class="small">Drag this to your bookmarks bar. On any page, click it to save that page.</p>
+<h3>On a phone</h3>
+<label for="bookmarklet-code">The bookmark's code</label>
+<textarea class="bookmarklet-code" id="bookmarklet-code" readonly rows="4">${escapeHtml(bookmarklet)}</textarea>
+<p><button type="button" id="copy-bookmarklet">Copy code</button></p>
+<ul class="phone-steps">
+<li><strong>iPhone and iPad (Safari):</strong> bookmark any page; open Bookmarks, tap Edit, edit that bookmark, rename it, and replace its address with the copied code. To save a page, open Bookmarks and tap it.</li>
+<li><strong>Android (Chrome):</strong> bookmark any page; edit the bookmark, rename it, and replace its URL with the copied code. To save a page, type the bookmark's name in the address bar and tap the bookmark in the suggestions.</li>
+</ul>
 </section>
 </main>
 <script>
@@ -182,6 +203,20 @@ document.getElementById("copied-key").addEventListener("click", () => {
   newKey.textContent = "";
   newName.textContent = "";
 });
+
+{
+  const codeField = document.getElementById("bookmarklet-code");
+  const copyCode = document.getElementById("copy-bookmarklet");
+  copyCode.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(codeField.textContent);
+      copyCode.textContent = "Copied";
+    } catch {
+      codeField.focus();
+      codeField.select();
+    }
+  });
+}
 
 addEventListener("pageshow", (event) => {
   if (event.persisted) location.reload();

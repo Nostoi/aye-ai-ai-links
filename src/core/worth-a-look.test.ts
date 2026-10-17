@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DIGEST_SIZE, getDigest, SURFACE_COOLDOWN_MS } from "./digest.js";
+import { DIGEST_SIZE, getDigest, previewDigest, SURFACE_COOLDOWN_MS } from "./digest.js";
 import type { CoreError } from "./errors.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkSearch } from "./search.js";
 import type { SearchLog } from "./search-log.js";
-import { keepHandy } from "./tools.js";
+import { answerSuggestion, keepHandy } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
 import {
   archiveLink,
@@ -125,6 +125,40 @@ describe("worthALook", () => {
     clock = NOW;
     expect(await ids()).toEqual([other.id]);
     expect((await get(tool.id)).lastSurfacedAt).toBeNull();
+  });
+
+  it("leaves out a suggested tool, and another link takes its place", async () => {
+    const suggested = await link();
+    const others = [await link(), await link(), await link()];
+    await keepHandy(deps(), A, suggested.id, "inferred");
+    const picks = await ids();
+    expect(picks).not.toContain(suggested.id);
+    expect(picks).toHaveLength(WORTH_SIZE);
+    expect(others.map((o) => o.id)).toEqual(expect.arrayContaining(picks));
+  });
+
+  it("leaves out a suggested tool even when it matches the focus", async () => {
+    const suggested = await link();
+    const other = await link();
+    await focus("lunch", at(-DAY), [suggested.id]);
+    await keepHandy(deps(), A, suggested.id, "inferred");
+    expect(await ids()).toEqual([other.id]);
+  });
+
+  it("brings a suggested tool back once it is declined", async () => {
+    const suggested = await link();
+    await link();
+    await keepHandy(deps(), A, suggested.id, "inferred");
+    expect(await ids()).not.toContain(suggested.id);
+    await answerSuggestion(deps(), A, suggested.id, false);
+    expect(await ids()).toContain(suggested.id);
+  });
+
+  it("leaves a suggested tool in the digest preview", async () => {
+    const suggested = await link();
+    await keepHandy(deps(), A, suggested.id, "inferred");
+    const { links } = await previewDigest(deps(), A, Number.POSITIVE_INFINITY);
+    expect(links.map((d) => d.link.id)).toContain(suggested.id);
   });
 
   it("shows the same three picks all day, writing nothing", async () => {

@@ -2,7 +2,7 @@ import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { editData, editMenu } from "./edit-link.js";
+import { editData, editDialog, editMenu } from "./edit-link.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -223,6 +223,7 @@ ${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=${keep ? "&keep=1" : ""}">your newest links</a>.</p>
 </div>
 </main>
+${editDialog()}
 <script>
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}

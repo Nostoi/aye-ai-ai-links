@@ -4,8 +4,9 @@ import type { PictureInfo } from "../core/image-store.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { cardMenu } from "./card-menu.js";
-import { EDIT_ITEM, editMenu } from "./edit-link.js";
+import { EDIT_ITEM, editDialog, editMenu } from "./edit-link.js";
 import { handyShelf, NOT_HANDY } from "./handy-shelf.js";
+import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage } from "./pages.js";
 import { spacePage } from "./space-page.js";
 
@@ -192,5 +193,57 @@ describe("the card menu and the card data", () => {
         ?.outerHTML,
     );
     expect(editMenu(link("1"))).toBe(cardMenu("More for Link 1", [EDIT_ITEM]));
+  });
+});
+
+describe("the edit dialog", () => {
+  const dialogs = (html: string) => parseHTML(html).document.querySelectorAll("dialog#edit-link");
+
+  it("is on each page with the menu once, and on no done page", () => {
+    for (const html of Object.values(pages({ links: [link("1")] })))
+      expect(dialogs(html)).toHaveLength(1);
+    const done = {
+      links: [link("1")],
+      older: null,
+      images: new Map(),
+      handy: new Map(),
+      now: NOW,
+      done: true,
+    };
+    expect(dialogs(allPage({ ...done, order: "newest", catalog: [KITCHEN] }))).toHaveLength(0);
+    expect(dialogs(spacePage({ ...done, tag: KITCHEN, catalog: [KITCHEN] }))).toHaveLength(0);
+  });
+
+  it("has the canvas's heading, fields, picture controls and buttons", () => {
+    const d = parseHTML(editDialog()).document.querySelector("dialog") as Element;
+    const $ = (s: string) => d.querySelector(s);
+    const words = (s: string) => [...d.querySelectorAll(s)].map((b) => b.textContent?.trim());
+    expect(d.getAttribute("aria-labelledby")).toBe("edit-link-title");
+    expect($("#edit-link-title")?.textContent).toBe("Edit link");
+    expect($("label[for=edit-title]")?.textContent).toBe("Title");
+    expect($("input#edit-title")).not.toBeNull();
+    expect($(".edit-page-title")?.hasAttribute("hidden")).toBe(true);
+    expect($("[data-edit=use-title]")?.textContent).toBe("Use it");
+    expect($(".edit-picture legend")?.textContent).toBe("Picture");
+    expect($("[data-edit=choose]")?.textContent).toBe("Choose a picture…");
+    expect($("input[type=file]")?.getAttribute("accept")).toBe(
+      "image/png,image/jpeg,image/gif,image/webp",
+    );
+    expect($("[data-edit=remove]")?.hasAttribute("hidden")).toBe(true);
+    expect($(".edit-hint")?.textContent).toBe(
+      "Or paste a screenshot (⌘V), or drop a picture here.",
+    );
+    expect($(".edit-hint-phone")?.textContent).toBe("Opens Photos, Files or the camera.");
+    expect($(".edit-types")?.textContent).toBe(
+      "PNG, JPEG, GIF or WebP. Big pictures are shrunk to fit.",
+    );
+    expect($("#edit-error")?.getAttribute("role")).toBe("alert");
+    expect(words(".edit-head button")).toEqual(["Cancel", "Save", "Close"]);
+    expect(words(".edit-foot button")).toEqual(["Cancel", "Save"]);
+    expect(d.querySelectorAll("button[data-edit=save][type=submit]")).toHaveLength(2);
+  });
+
+  it("makes no outside request", () => {
+    expect(outsideRefs(pages({ links: [link("1")] }).search)).toEqual([]);
   });
 });

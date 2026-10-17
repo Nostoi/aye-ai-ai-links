@@ -2,7 +2,7 @@ import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { editData, editMenu } from "./edit-link.js";
+import { editData, editDialog, editMenu } from "./edit-link.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -127,7 +127,7 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+${done ? "" : `${editDialog()}\n`}${done ? "" : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

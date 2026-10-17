@@ -271,3 +271,52 @@ describe("the card menu on every card", () => {
     expect(phone).not.toMatch(/(^|\})\.card-menu-list\{/);
   });
 });
+
+describe("the edit dialog's look", () => {
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\})${selector.replace(/[.[\]*>]/g, "\\$&")}\\{([^}]*)\\}`, "m").exec(
+      themeCss,
+    )?.[1] ?? "";
+  const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
+
+  it("on a wide screen: 520px, 22px corners, the canvas's padding, shadow and backdrop", () => {
+    for (const part of [
+      "width:min(520px,calc(100% - 32px))",
+      "padding:8px 24px 20px",
+      "border-radius:22px",
+      "box-shadow:0 24px 64px rgb(0 0 0 / .28)",
+    ]) {
+      expect(rule(".edit-link")).toContain(part);
+    }
+    expect(rule(".edit-link::backdrop")).toBe("background:rgb(20 20 24 / .38)");
+    expect(rule(".edit-head h2")).toContain("font-size:20px;font-weight:700");
+    expect(rule(".edit-close")).toContain("width:44px;height:44px");
+    expect(rule(".edit-title")).toBe("height:46px;padding:0 14px;border-radius:12px");
+    expect(rule(".edit-preview")).toContain("width:200px;height:140px;border-radius:14px");
+    expect(rule(".edit-chip")).toContain(
+      "font-size:12px;font-weight:600;color:#fff;background:rgb(20 20 24 / .62)",
+    );
+  });
+
+  it("keeps every dialog control at least 44px tall", () => {
+    for (const sel of [".edit-use", ".edit-choose", ".edit-remove", ".edit-foot button"]) {
+      expect(rule(sel), sel).toContain("min-height:44px");
+    }
+  });
+
+  it("on a phone: a sheet from 96px with a grabber, Cancel and Save at the top, no close button or paste hint", () => {
+    expect(phone).toContain(
+      ".edit-link{inset:96px 0 0;width:100%;max-width:100%;max-height:none;height:auto;margin:0;padding:0 16px 24px;border-radius:22px 22px 0 0}",
+    );
+    expect(phone).toContain(".edit-grabber{display:block;width:40px;height:5px;");
+    expect(phone).toContain(".edit-head{display:grid;grid-template-columns:1fr auto 1fr;");
+    expect(phone).toContain(".edit-head h2{font-size:17px;text-align:center}");
+    expect(phone).toMatch(/\.edit-top\{display:inline-flex;[^}]*min-height:44px/);
+    expect(phone).toContain(".edit-top-save{justify-self:end;font-weight:700}");
+    expect(phone).toContain(".edit-close,.edit-hint,.edit-foot{display:none}");
+    expect(phone).toContain(".edit-hint-phone{display:block;");
+    expect(phone).toContain(".edit-title{height:48px}");
+    expect(phone).toContain(".edit-preview{width:100%;height:196px}");
+    expect(phone).toContain(".edit-choose{min-height:48px;width:100%}");
+  });
+});

@@ -150,6 +150,7 @@ export class Agent {
       json,
       form,
       rawForm,
+      multipart,
       origin = method === "POST",
     }: {
       method?: string;
@@ -158,11 +159,13 @@ export class Agent {
       form?: Record<string, string>;
       /** A form body sent as written, for names a record cannot repeat; a `content-type` header is kept. */
       rawForm?: string;
+      /** A multipart form; its boundary header comes from the body. */
+      multipart?: FormData;
       origin?: boolean;
     } = {},
   ): Promise<Sent> {
     const h = new Headers(headers);
-    let body: string | undefined;
+    let body: string | FormData | undefined;
     if (json !== undefined) {
       h.set("content-type", "application/json");
       body = JSON.stringify(json);
@@ -175,6 +178,7 @@ export class Agent {
       if (!h.has("content-type")) h.set("content-type", "application/x-www-form-urlencoded");
       body = rawForm;
     }
+    if (multipart) body = multipart;
     if (origin && !h.has("origin")) h.set("origin", TEST_BASE_URL);
     if (this.cookies.size > 0 && !h.has("cookie")) {
       h.set("cookie", [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; "));
@@ -438,3 +442,13 @@ export async function connectClaude(world: World) {
   if (tokens.status !== 200) throw new Error(`token gave ${tokens.status}`);
   return { access: field(tokens, "access_token"), refresh: field(tokens, "refresh_token") };
 }
+
+/** Every row of every table in the links database, so a request can be shown to have changed nothing. */
+export const allRows = (world: World) => {
+  const tables = world.links
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+    .all() as { name: string }[];
+  return Object.fromEntries(
+    tables.map(({ name }) => [name, world.links.prepare(`SELECT * FROM "${name}"`).all()]),
+  );
+};

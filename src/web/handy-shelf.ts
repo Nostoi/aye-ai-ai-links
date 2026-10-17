@@ -1,6 +1,7 @@
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { initialsText } from "./initials.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { hostOf, spaceClass, tile } from "./pages.js";
@@ -45,20 +46,9 @@ const menu = (link: Link) => `<details class="tile-menu">
 <div class="tile-menu-list"><button type="button" data-act="not-handy">${MINUS}Not handy anymore</button></div>
 </details>`;
 
-/** The first letter or digit of each of the first two words that have one, uppercased. */
-const initialsOf = (text: string) =>
-  text
-    .split(/\s+/)
-    .map((word) => word.match(/[\p{L}\p{N}]/u)?.[0])
-    .filter((c): c is string => c !== undefined)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
 /** What a tile with no picture shows over its space color: the title's initials, else the host's. */
 function initials(link: Link): string {
-  const host = hostOf(link.url).replace(/^www\./, "");
-  const text = initialsOf(link.title ?? "") || initialsOf(host.replaceAll(".", " "));
+  const text = initialsText(link);
   return text ? `<span class="handy-initials" aria-hidden="true">${escapeHtml(text)}</span>\n` : "";
 }
 

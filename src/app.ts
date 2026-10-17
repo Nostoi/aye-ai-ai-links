@@ -19,6 +19,7 @@ import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { LinkImageReader } from "./core/image-store.js";
+import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
@@ -61,6 +62,8 @@ const CHECKED_PAGES = [
   "/home/unarchive",
   "/home/why",
   "/links/opened",
+  "/links/edit",
+  "/links/edit/undo",
   "/tools/keep",
   "/tools/not-handy",
   "/tools/still-using",
@@ -100,8 +103,8 @@ export type AppOptions = {
   log?: ((line: string) => void) | undefined;
 } & (
   | { deps: McpDeps; auth?: undefined }
-  /** The web door also reads stored images. */
-  | { deps: McpDeps & { images: LinkImageReader }; auth: AuthDeps }
+  /** The web door also reads stored pictures and writes the owner's edits. */
+  | { deps: McpDeps & { images: LinkImageReader; edits: LinkEditStore }; auth: AuthDeps }
 );
 
 /**

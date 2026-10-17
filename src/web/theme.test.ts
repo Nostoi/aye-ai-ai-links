@@ -262,6 +262,8 @@ describe("the card menu on every card", () => {
     expect(rule(".result-body")).toContain("overflow-wrap:anywhere");
     expect(rule(".result h2")).toContain("padding-right:28px");
     expect(rule(".card-body h3")).toContain("overflow-wrap:anywhere");
+    // The rest of a card's text too, such as a space card's long "host, saved <date>" line.
+    expect(rule(".card-body")).toContain("overflow-wrap:anywhere");
   });
 
   it("on a phone, opens only the shelf's menu leftwards; a card's menu opens from its own right edge", () => {

@@ -272,7 +272,7 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .link-card{position:relative;max-width:none;margin:0;min-width:0;background:var(--surface);border-radius:18px;box-shadow:0 2px 10px #0000000b}
 .card-image{display:block;width:100%;height:150px;object-fit:cover;border-radius:18px 18px 0 0;background:color-mix(in srgb,var(--space,var(--line)) 22%,var(--surface))}
 .faded .card-image{opacity:.4}
-.card-body{padding:14px 18px 18px}
+.card-body{padding:14px 18px 18px;overflow-wrap:anywhere}
 .card-body h3{font-size:17px;line-height:1.3;margin:0 0 4px;overflow-wrap:anywhere}
 .card-body h3 a{text-decoration:none}
 .card-body p{margin:0 0 8px}

@@ -8,6 +8,7 @@ import { itRecordsOpenings, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
+import { saveForm } from "./save-form.js";
 import { spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
@@ -189,6 +190,8 @@ const PAGES: [string, string][] = [
   ["space", spacePage(SPACE)],
   ["space done", spacePage({ ...SPACE, done: true })],
   ["search", searchPage({ query: "q", links: [], now: new Date(0) })],
+  ["save", saveForm({ url: "", title: "", long: false })],
+  ["save, address too long", saveForm({ url: "", title: "", long: true })],
   [
     "tags",
     tagsPage({

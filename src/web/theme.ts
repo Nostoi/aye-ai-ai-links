@@ -73,6 +73,7 @@ ul{padding-left:22px;margin:0 0 24px}
 li{margin-bottom:10px}
 label{display:block;font-size:15.5px;font-weight:600}
 input{display:block;width:100%;margin-top:6px;padding:14px 20px;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--field);border-radius:999px}
+textarea{display:block;width:100%;margin-top:6px;padding:12px 20px;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--field);border-radius:18px;resize:vertical}
 button{font:inherit;font-size:15.5px;font-weight:600;padding:10px 20px;border-radius:999px;cursor:pointer;color:var(--ink);background:var(--surface);border:1.5px solid var(--line)}
 button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 button:disabled{opacity:.6;cursor:default}
@@ -321,5 +322,13 @@ img.handy-image{background:#fff}
 .edit-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .edit-foot button{min-height:44px}
 ${spaceClasses}
+.save{max-width:620px}
+.save p{overflow-wrap:anywhere}
+.save-form label{margin-top:18px}
+.save-form label:first-child{margin-top:0}
+.save-form .small{margin:6px 0 0}
+.save-form button[type=submit]{margin-top:22px;min-height:48px;min-width:120px}
+.save-result .actions{margin-top:22px}
+.save-link-title{font-size:19px;font-weight:600;margin:0 0 6px}
 @media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}.result>.tile{border-radius:18px 18px 0 0}.handy-row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;margin:16px -16px 0;padding:4px 16px 8px;scroll-padding-inline:16px}.handy-row>.handy-tile{flex:0 0 156px;scroll-snap-align:start}.handy-tile .card-menu-list{right:auto;left:-106px;transform-origin:top left}.edit-link{inset:96px 0 0;width:100%;max-width:100%;max-height:none;height:auto;margin:0;padding:0 16px 24px;border-radius:22px 22px 0 0}.edit-grabber{display:block;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}.edit-head{display:grid;grid-template-columns:1fr auto 1fr;margin:0 0 8px}.edit-head h2{font-size:17px;text-align:center}.edit-top{display:inline-flex;align-items:center;justify-self:start;min-height:44px;padding:0;border:0;background:none}.edit-top-save{justify-self:end;font-weight:700}.edit-close,.edit-hint,.edit-foot{display:none}.edit-hint-phone{display:block;margin:0;font-size:13px;color:var(--soft);text-align:center}.edit-title{height:48px}.edit-picture-row{flex-direction:column;align-items:stretch}.edit-preview{width:100%;height:196px}.edit-choose{min-height:48px;width:100%}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;

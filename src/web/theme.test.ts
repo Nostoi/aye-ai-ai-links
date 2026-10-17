@@ -38,6 +38,10 @@ it("outlines inputs with the field token", () => {
   expect(themeCss).toMatch(/input\{[^}]*border:1\.5px solid var\(--field\)/);
 });
 
+it("outlines every textarea with the field token", () => {
+  expect(themeCss).toMatch(/(^|\n)textarea\{[^}]*border:1\.5px solid var\(--field\)/);
+});
+
 it("sizes a desktop image tile like the plain tile, whatever the image's shape, and caps it on a phone", () => {
   const desktop = /^img\.tile\{([^}]*)\}/m.exec(themeCss)?.[1] ?? "";
   expect(desktop).toContain("width:168px");

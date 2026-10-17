@@ -1,4 +1,6 @@
 import { CoreError } from "./errors.js";
+import { isGone } from "./link-check.js";
+import type { LinkCheckStore } from "./link-check-store.js";
 import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { LinkSearch } from "./search.js";
@@ -40,6 +42,8 @@ export type DigestDeps = {
   store: LinkStore;
   /** Keep handy rows: a kept tool is not reading, so it gets no reason. */
   tools: ToolStore;
+  /** Dead-link checks: a gone link is not reading, so it gets no reason (#128). */
+  checks: LinkCheckStore;
   profile: ProfileStore;
   /** Keyword matching only: with no similarity floor yet (#68), any link can come back as a meaning match. */
   keywordSearch: LinkSearch;
@@ -114,7 +118,7 @@ async function focusReasons(
 
 /**
  * Up to `limit` eligible links that have a reason, in digest order, with each one's focus reasons.
- * Reads only. Eligible: active, not a kept tool, not snoozed at now, and surfaced at or before now -
+ * Reads only. Eligible: active, not a kept tool, not gone (#128), not snoozed at now, and surfaced at or before now -
  * SURFACE_COOLDOWN_MS.
  */
 async function select(
@@ -127,11 +131,13 @@ async function select(
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   const all = await deps.store.listLinks(owner);
   const tools = await deps.tools.listTools(owner);
+  const checks = await deps.checks.listChecks(owner);
   const candidates = new Map(
     all
       .filter(
         (l) =>
           tools.get(l.id)?.status !== "kept" &&
+          !isGone(checks.get(l.id) ?? null) &&
           !exclude.has(l.id) &&
           eligible(l, now, notSurfacedAfter),
       )
@@ -160,13 +166,22 @@ export async function claimSurfaced(
   deps: Pick<DigestDeps, "store" | "now">,
   owner: OwnerId,
   ids: string[],
-  { exceptKeptTools = false }: { exceptKeptTools?: boolean } = {},
+  {
+    exceptKeptTools = false,
+    exceptGone = false,
+  }: { exceptKeptTools?: boolean; exceptGone?: boolean } = {},
 ): Promise<SurfacedClaim[]> {
   const now = deps.now();
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   return ids.length === 0
     ? []
-    : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now, exceptKeptTools });
+    : deps.store.claimSurfaced(owner, ids, {
+        at: now,
+        notSurfacedAfter,
+        now,
+        exceptKeptTools,
+        exceptGone,
+      });
 }
 
 export async function unclaimSurfaced(
@@ -210,7 +225,7 @@ export async function previewDigest(
  * its claim frees its slot.
  *
  * The claim re-checks eligibility in the store; a link it skips is left out, and the other reasons
- * are judged again from the link as claimed. The claim also skips a link kept handy since
+ * are judged again from the link as claimed. The claim also skips a link kept handy, or flagged as gone, since
  * selection. A claimed link left with no reason is left out but
  * stays marked. A response lost after the claim still uses up its links.
  */
@@ -225,7 +240,7 @@ export async function getDigest(
     { store: deps.store, now: () => now },
     owner,
     picked.map((l) => l.id),
-    { exceptKeptTools: true },
+    { exceptKeptTools: true, exceptGone: true },
   );
   const links: DigestLink[] = claimed
     .map(({ link, previousSurfacedAt }) => ({

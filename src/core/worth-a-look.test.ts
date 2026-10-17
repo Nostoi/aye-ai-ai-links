@@ -47,6 +47,7 @@ let searchLog: SpySearchLog;
 const deps = () => ({
   store,
   tools: store,
+  checks: store,
   profile,
   keywordSearch: keyword,
   searchLog,
@@ -108,6 +109,20 @@ async function code(p: Promise<unknown>): Promise<string> {
 }
 
 describe("worthALook", () => {
+  it("leaves a gone link out of its reading picks (#128)", async () => {
+    const gone = await link();
+    const other = await link();
+    await store.updateCheckIf(A, gone.id, null, {
+      checkedAt: at(-DAY),
+      result: "dead",
+      detail: "http:404",
+      firstDeadAt: at(-8 * DAY),
+      flaggedAt: at(-DAY),
+      stillWorksAt: null,
+    });
+    expect(await ids()).toEqual([other.id]);
+  });
+
   it("leaves out a kept tool, even one that matches the focus", async () => {
     const tool = await link();
     const other = await link();

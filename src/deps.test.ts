@@ -224,6 +224,26 @@ describe("the vector indexer on createDeps' index store", () => {
 });
 
 describe("the digest on createDeps", () => {
+  it("skips a link the check store flagged, because the store's claim reads the same database", async () => {
+    const db = openDatabase(":memory:");
+    const now = new Date("2026-06-01T00:00:00Z");
+    const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => now };
+    deps.store.ensureUser(OWNER, OWNER);
+    const { link } = await saveLink(deps, OWNER, { url: "https://ex.com/gone", savedBy: "t" });
+    await deps.checks.updateCheckIf(OWNER, link.id, null, {
+      checkedAt: now,
+      result: "dead",
+      detail: "http:404",
+      firstDeadAt: new Date(now.getTime() - 8 * 86_400_000),
+      flaggedAt: now,
+      stillWorksAt: null,
+    });
+    const when = { at: now, notSurfacedAfter: now, now, exceptGone: true };
+    expect(await deps.store.claimSurfaced(OWNER, [link.id], when)).toEqual([]);
+    expect(await getDigest(deps, OWNER)).toEqual({ links: [] });
+    db.close();
+  });
+
   it("matches focus words in page text through the keyword engine, logs nothing, and claims in SQLite", async () => {
     const db = openDatabase(":memory:");
     const now = new Date("2026-06-01T00:00:00Z");

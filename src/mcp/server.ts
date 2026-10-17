@@ -9,6 +9,7 @@ import type { Caller } from "../auth/caller.js";
 import { getDigest } from "../core/digest.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
+import type { LinkCheckStore } from "../core/link-check-store.js";
 import { getLinkWithText, normalizeTitle, saveLink, updateLink } from "../core/links.js";
 import { listLinks } from "../core/list-links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
@@ -48,6 +49,8 @@ import {
 export type McpDeps = {
   store: LinkStore;
   tools: ToolStore;
+  /** Dead-link checks: core leaves gone links out of the digest (#128). */
+  checks: LinkCheckStore;
   search: LinkSearch;
   keywordSearch: LinkSearch;
   count: LinkCount;

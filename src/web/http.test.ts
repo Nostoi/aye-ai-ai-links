@@ -192,6 +192,26 @@ describe("web door", () => {
     expect(await page("/search?q=&keep=1")).toContain("Own &lt;b&gt;link&lt;/b&gt;");
   });
 
+  it("keep mode with every link archived says none can be kept, not that none are saved", async () => {
+    const t = await setup();
+    const [own] = await t.deps.store.listLinks("owner");
+    await t.deps.store.update("owner", own?.id ?? "", { state: "archived" });
+    const cookie = await t.signIn();
+    const keep = await (await t.get("/search?q=&keep=1", cookie)).text();
+    expect(keep).toContain("No active links to keep handy.");
+    expect(keep).not.toContain("No links saved yet.");
+    expect(await (await t.get("/search?q=", cookie)).text()).not.toContain("No links saved yet.");
+  });
+
+  it("keep mode's 'Not it?' link to the newest links stays in keep mode", async () => {
+    const t = await setup();
+    const cookie = await t.signIn();
+    const keep = await (await t.get("/search?q=&keep=1", cookie)).text();
+    expect(keep).toContain('see <a href="/search?q=&keep=1">your newest links</a>');
+    const plain = await (await t.get("/search?q=", cookie)).text();
+    expect(plain).toContain('see <a href="/search?q=">your newest links</a>');
+  });
+
   it("keep mode is on only for keep=1; ordinary search has none of its markup", async () => {
     const t = await setup();
     const cookie = await t.signIn();

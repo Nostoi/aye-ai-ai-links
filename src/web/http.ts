@@ -29,10 +29,20 @@ import {
   answerSuggestion,
   keepHandy,
   notHandy,
+  restoreTool,
   stillUsing,
   type ToolChange,
 } from "../core/tools.js";
-import type { LinkState, OwnerId, Source, Tag, TagKind, ToolStatus } from "../core/types.js";
+import {
+  type LinkState,
+  type OwnerId,
+  SOURCES,
+  type Source,
+  type Tag,
+  type TagKind,
+  TOOL_STATUSES,
+  type ToolStatus,
+} from "../core/types.js";
 import {
   archiveLink,
   markOpened,
@@ -159,6 +169,34 @@ const toolJson = (t: ToolRecord): ToolJson => ({
   source: t.source,
   since: t.since.toISOString(),
   answeredAt: t.answeredAt?.toISOString() ?? null,
+  waitDays: t.waitDays,
+});
+
+/** Each wait core can store. A Record, so the compiler holds it to exactly `WaitDays`. */
+const WAITS: Record<WaitDays, true> = { 30: true, 60: true, 120: true };
+
+/** A row the page sends back: status, source and wait among core's values, and dates that parse. */
+const isToolJson = (value: unknown): value is ToolJson => {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    (TOOL_STATUSES as readonly unknown[]).includes(row.status) &&
+    (SOURCES as readonly unknown[]).includes(row.source) &&
+    isDate(row.since) &&
+    isDateOrNull(row.answeredAt) &&
+    typeof row.waitDays === "number" &&
+    row.waitDays in WAITS
+  );
+};
+/** An absent row is null; a missing member is refused, never read as null. */
+const isToolJsonOrNull = (value: unknown): value is ToolJson | null =>
+  value === null || isToolJson(value);
+
+const toolRecord = (t: ToolJson): ToolRecord => ({
+  status: t.status,
+  source: t.source,
+  since: new Date(t.since),
+  answeredAt: t.answeredAt === null ? null : new Date(t.answeredAt),
   waitDays: t.waitDays,
 });
 
@@ -490,6 +528,18 @@ export function webApp({
     toolAction(c, async () => {
       const { id, keep } = c.get("body");
       return toolMoved(c, await answerSuggestion(deps, c.get("caller").owner, id, keep));
+    }),
+  );
+
+  // The Undo of a tool action: puts `previous` back (null: no row) while the row still holds
+  // `tool`, the row the action answered. Core refuses a row no action could write.
+  const undoTool = { tool: isToolJson, previous: isToolJsonOrNull };
+  app.post("/tools/undo", jsonBody({ ...linkId, ...undoTool }), session, (c) =>
+    toolAction(c, async () => {
+      const { id, tool, previous } = c.get("body");
+      const restored = previous && toolRecord(previous);
+      await restoreTool(deps, c.get("caller").owner, id, restored, toolRecord(tool));
+      return done(c);
     }),
   );
 

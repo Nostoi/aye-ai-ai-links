@@ -692,6 +692,7 @@ describe("owner isolation coverage", () => {
       "the two-owner test of POST /tools/still-using in web/tools-routes.test.ts",
     "POST /tools/suggestion":
       "the two-owner test of POST /tools/suggestion in web/tools-routes.test.ts",
+    "POST /tools/undo": "the two-owner test of POST /tools/undo in web/tools-routes.test.ts",
     "POST /tags/pin": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/color": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/kind": "the two-owner tag actions test in web/tags-routes.test.ts",

@@ -65,6 +65,7 @@ const CHECKED_PAGES = [
   "/tools/not-handy",
   "/tools/still-using",
   "/tools/suggestion",
+  "/tools/undo",
   "/tags",
   "/tags/pin",
   "/tags/color",

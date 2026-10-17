@@ -423,10 +423,15 @@ export function webApp({
       caller.owner,
       links.map((l) => l.id),
     );
+    const pictures = await deps.images.pictureInfo(
+      caller.owner,
+      links.map((l) => l.id),
+    );
     const catalog = await deps.store.listTags(caller.owner);
     const handy = await handyOfLinks(deps, caller.owner, links);
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now, images, catalog, handy, keep }), 200, NO_STORE);
+    const html = searchPage({ query, links, now, images, catalog, handy, keep, pictures });
+    return c.html(html, 200, NO_STORE);
   });
 
   // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does
@@ -436,6 +441,7 @@ export function webApp({
     if (name.trim() === "") return c.redirect("/", 303);
     const { owner } = c.get("caller");
     const before = c.req.query("before");
+    const done = state === "archived";
     try {
       const { tag, catalog, page } = await openSpace(deps, owner, {
         name,
@@ -448,7 +454,12 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const handy = await handyOfLinks(deps, owner, page.links);
-      const done = state === "archived";
+      const pictures = done
+        ? new Map()
+        : await deps.images.pictureInfo(
+            owner,
+            page.links.map((l) => l.id),
+          );
       const later = before !== undefined;
       const html = spacePage({
         tag,
@@ -456,6 +467,7 @@ export function webApp({
         ...page,
         images,
         handy,
+        pictures,
         now: deps.now(),
         done,
         later,
@@ -475,6 +487,7 @@ export function webApp({
   const all = (state: LinkState) => async (c: Context<SessionEnv>) => {
     const { owner } = c.get("caller");
     const before = c.req.query("before");
+    const done = state === "archived";
     try {
       const order = checkedOrder(c.req.query("order"));
       const page = await linkPage(deps, owner, {
@@ -489,7 +502,12 @@ export function webApp({
       );
       const catalog = await deps.store.listTags(owner);
       const handy = await handyOfLinks(deps, owner, page.links);
-      const done = state === "archived";
+      const pictures = done
+        ? new Map()
+        : await deps.images.pictureInfo(
+            owner,
+            page.links.map((l) => l.id),
+          );
       const later = before !== undefined;
       const html = allPage({
         order,
@@ -497,6 +515,7 @@ export function webApp({
         catalog,
         images,
         handy,
+        pictures,
         now: deps.now(),
         done,
         later,

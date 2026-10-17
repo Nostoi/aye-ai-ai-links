@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import {
@@ -254,5 +255,26 @@ describe("owner isolation and refusals", () => {
   it("POST /links/edit/undo refuses a body without an editId with 400", async () => {
     const { browser, id } = await edited();
     expect((await undo(browser, { id })).status).toBe(400);
+  });
+});
+
+describe("the owner's picture on every page", () => {
+  it("search, All links, the space page and home show the owner's picture, and the cards carry its info", async () => {
+    const { world, browser, id } = await edited();
+    const deps = linkDeps(world);
+    await updateLink(deps, A, id, { tags: [{ name: "Kitchen", source: "stated" }] });
+    await deps.store.pinTag(A, "kitchen", { pinned: true, color: "clay" });
+    await edit(browser, { id, picture: file(MINE) });
+    for (const path of ["/search?q=", "/all", "/spaces?tag=Kitchen"]) {
+      const { document } = parseHTML(String((await browser.send(path)).body));
+      const card = document.querySelector(`li[data-id="${id}"]`);
+      expect(card?.querySelector("img")?.getAttribute("src"), path).toBe(
+        `/images/${id}?v=${v(MINE)}`,
+      );
+      expect(card?.getAttribute("data-own"), path).toBe("1");
+      expect(card?.getAttribute("data-page-version"), path).toBe(v(PAGE));
+      expect(card?.getAttribute("data-page-title"), path).toBe("Quokkas: a field guide");
+    }
+    expect(String((await browser.send("/")).body)).toContain(`/images/${id}?v=${v(MINE)}`);
   });
 });

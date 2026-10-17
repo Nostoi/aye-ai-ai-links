@@ -97,12 +97,12 @@ describe("the theme css", () => {
   });
 
   it("puts the tile menu in the top-right corner of every tile, on a translucent circle", () => {
-    expect(themeCss).toMatch(/\.tile-menu\{[^}]*top:\d+px;right:\d+px/);
+    expect(themeCss).toMatch(/\.card-menu\{[^}]*top:\d+px;right:\d+px/);
     expect(themeCss).toMatch(
-      /\.tile-menu-dot\{[^}]*border-radius:50%;[^}]*background:color-mix\(in srgb,var\(--surface\) \d+%,transparent\)/,
+      /\.card-menu-dot\{[^}]*border-radius:50%;[^}]*background:color-mix\(in srgb,var\(--surface\) \d+%,transparent\)/,
     );
     expect(themeCss).toMatch(
-      /\.handy-tile\.photo \.tile-menu-dot\{[^}]*background:rgb\(\d+ \d+ \d+ \/ \.\d+\)/,
+      /\.handy-tile\.photo \.card-menu-dot\{[^}]*background:rgb\(\d+ \d+ \d+ \/ \.\d+\)/,
     );
   });
 
@@ -127,7 +127,7 @@ describe("the Handy postcards", () => {
 
   it("stretches the title's link over the card, with the menu and panels above it", () => {
     expect(rule(".handy-tile h3 a::after")).toMatch(/position:absolute;[^}]*inset:0/);
-    for (const sel of [".tile-menu", ".handy-tile .ask"]) {
+    for (const sel of [".card-menu", ".handy-tile .ask"]) {
       expect(rule(sel), sel).toMatch(/position:absolute/);
       expect(rule(sel), sel).toMatch(/z-index:[2-9]/);
     }
@@ -135,19 +135,21 @@ describe("the Handy postcards", () => {
 
   it("keeps every panel and menu button at least 44px tall, and the card clip-free for the open menu", () => {
     expect(rule(".handy-tile .small-actions button")).toContain("min-height:44px");
-    expect(rule(".tile-menu summary")).toContain("min-height:44px");
+    expect(rule(".card-menu summary")).toContain("min-height:44px");
     expect(rule(".handy-tile")).toContain("overflow:visible");
   });
 
   it("on a phone, opens the menu from the card's left edge, above the next card, inside a row that bleeds to the screen edge", () => {
-    expect(phone).toMatch(/\.tile-menu-list\{right:auto;left:-106px/);
+    expect(phone).toMatch(/\.handy-tile \.card-menu-list\{right:auto;left:-106px/);
     expect(phone).toMatch(/\.handy-row\{[^}]*margin:16px -16px 0;padding:4px 16px/);
-    expect(themeCss).toContain(".handy-tile:has(.tile-menu[open]){z-index:5}");
+    expect(themeCss).toContain(
+      ".handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-card:has(.card-menu[open]){z-index:5}",
+    );
   });
 
   it("styles the menu as a card of full-width 44px rows, not a link", () => {
-    expect(rule(".tile-menu-list")).toMatch(/border-radius:14px;[^}]*box-shadow:/);
-    const item = rule(".tile-menu-list button");
+    expect(rule(".card-menu-list")).toMatch(/border-radius:14px;[^}]*box-shadow:/);
+    const item = rule(".card-menu-list button");
     for (const part of ["min-height:44px", "width:100%", "background:none", "white-space:nowrap"]) {
       expect(item).toContain(part);
     }
@@ -221,5 +223,49 @@ describe("the Handy postcards", () => {
     const gap = /gap:0 (\d+)px/.exec(rule(".handy-tile.needs-you .small-actions"))?.[1];
     expect(Number(gap)).toBeLessThanOrEqual(10);
     expect(rule(".handy-tile .ask")).toContain("padding:3px 10px 0");
+  });
+});
+
+describe("the card menu on every card", () => {
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\})${selector.replace(/[.[\]*>]/g, "\\$&")}\\{([^}]*)\\}`, "m").exec(
+      themeCss,
+    )?.[1] ?? "";
+  const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
+
+  it("is one 44px button holding a 32px dot, 8px in from the card's top-right corner, and the shelf-only styles are gone", () => {
+    expect(rule(".card-menu")).toBe("position:absolute;top:2px;right:2px;z-index:3");
+    expect(rule(".card-menu-dot")).toContain("width:32px;height:32px");
+    expect(rule(".card-menu summary")).toContain("min-height:44px;min-width:44px");
+    expect(themeCss).not.toContain("tile-menu");
+  });
+
+  it("sets a search card's dot on a light ink tint, since it sits on the card and not on a picture", () => {
+    expect(rule(".result .card-menu-dot")).toContain(
+      "background:color-mix(in srgb,var(--ink) 7%,transparent)",
+    );
+    expect(rule(".result .card-menu-dot")).toContain("backdrop-filter:none");
+  });
+
+  it("leaves result and link cards unclipped, so the open menu shows, and rounds their pictures instead", () => {
+    for (const card of [".result", ".link-card"]) {
+      expect(rule(card), card).not.toContain("overflow:hidden");
+      expect(rule(card), card).toContain("position:relative");
+    }
+    expect(rule(".result>.tile")).toBe("border-radius:18px 0 0 18px");
+    expect(phone).toContain(".result>.tile{border-radius:18px 18px 0 0}");
+    expect(rule(".card-image")).toContain("border-radius:18px 18px 0 0");
+  });
+
+  it("wraps a long unbroken title inside its card, clear of the menu button", () => {
+    expect(rule(".result-body")).toContain("position:relative");
+    expect(rule(".result-body")).toContain("overflow-wrap:anywhere");
+    expect(rule(".result h2")).toContain("padding-right:28px");
+    expect(rule(".card-body h3")).toContain("overflow-wrap:anywhere");
+  });
+
+  it("on a phone, opens only the shelf's menu leftwards; a card's menu opens from its own right edge", () => {
+    expect(phone).toMatch(/\.handy-tile \.card-menu-list\{right:auto;left:-106px/);
+    expect(phone).not.toMatch(/(^|\})\.card-menu-list\{/);
   });
 });

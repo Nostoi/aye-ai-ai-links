@@ -1,6 +1,7 @@
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { cardMenu, type MenuItem } from "./card-menu.js";
 import { initialsText } from "./initials.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
@@ -38,13 +39,12 @@ const KEEP_HANDY = `<div class="ask">
 </div>
 </div>`;
 
-const DOTS = `<svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>`;
 const MINUS = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>`;
 
-const menu = (link: Link) => `<details class="tile-menu">
-<summary><span class="tile-menu-dot" aria-hidden="true">${DOTS}</span><span class="visually-hidden">More for ${escapeHtml(link.title ?? link.url)}</span></summary>
-<div class="tile-menu-list"><button type="button" data-act="not-handy">${MINUS}Not handy anymore</button></div>
-</details>`;
+/** The Handy tile's one menu row. */
+export const NOT_HANDY: MenuItem = { act: "not-handy", icon: MINUS, text: "Not handy anymore" };
+
+const menu = (link: Link) => cardMenu(`More for ${link.title ?? link.url}`, [NOT_HANDY]);
 
 /** What a tile with no picture shows over its space color: the title's initials, else the host's. */
 function initials(link: Link): string {

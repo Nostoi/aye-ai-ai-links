@@ -1,7 +1,9 @@
+import type { PictureInfo } from "../core/image-store.js";
 import { linkSpace } from "../core/link-space.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { editData, editMenu } from "./edit-link.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -45,6 +47,8 @@ type Input = {
   done: boolean;
   /** A page after the first. */
   later?: boolean;
+  /** Each card's picture info, for the edit dialog; read on the active pages only. */
+  pictures?: Map<string, PictureInfo>;
 };
 
 /** The time a card is grouped by: when it was opened in opened order, else when it was saved. */
@@ -63,11 +67,12 @@ const monthName = (d: Date, now: Date) =>
   });
 
 /** One card: the picture or a tint, the title, the space and site, and Keep handy. No why. */
-function card(link: Link, { catalog, images, handy, done }: Input): string {
+function card(link: Link, { catalog, images, handy, done, pictures = new Map() }: Input): string {
   const space = linkSpace(link, catalog);
-  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}">
-${tile(link, images.get(link.id), "card-image")}
-<div class="card-body">
+  const version = images.get(link.id);
+  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
+${tile(link, version, "card-image")}
+${done ? "" : `${editMenu(link)}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 ${siteLine(link, space)}${handyControl(link, handy.get(link.id))}</div>
 </li>`;

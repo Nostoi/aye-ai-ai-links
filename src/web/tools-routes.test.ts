@@ -1,7 +1,8 @@
+import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
-import { saveLink } from "../core/links.js";
+import { saveLink, updateLink } from "../core/links.js";
 import type { ToolRecord } from "../core/tool-store.js";
 import { keepHandy, notHandy, stillUsing } from "../core/tools.js";
 import { createDeps } from "../deps.js";
@@ -379,5 +380,32 @@ describe("POST /tools/undo", () => {
       });
     }
     expect(allRows(world)).toEqual(before);
+  });
+});
+
+describe("Keep handy on the pages that list links", () => {
+  const visible = (html: string, id: string) => {
+    const c = parseHTML(html).document.querySelector(`[data-id="${id}"] [data-handy]`);
+    const keep = c?.querySelector("button[data-act=keep]") as HTMLElement | undefined;
+    return keep ? (keep.hidden ? "kept" : "keep") : null;
+  };
+
+  it("search, All links and the space page show a kept link as kept, and another as Keep handy", async () => {
+    const { world, browser, id } = await tools();
+    const deps = linkDeps(world);
+    const { link: other } = await saveLink(deps, A, {
+      url: "https://a.example/lunch",
+      savedBy: "seed",
+      title: "Lunch order",
+    });
+    for (const linkId of [id, other.id]) {
+      await updateLink(deps, A, linkId, { tags: [{ name: "School", source: "stated" }] });
+    }
+    expect((await browser.send("/tools/keep", post({ id }))).status).toBe(200);
+    for (const path of ["/search?q=", "/all", "/spaces?tag=School"]) {
+      const html = String((await browser.send(path)).body);
+      expect(visible(html, id), path).toBe("kept");
+      expect(visible(html, other.id), path).toBe("keep");
+    }
   });
 });

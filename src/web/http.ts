@@ -27,6 +27,7 @@ import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
+  handyOfLinks,
   keepHandy,
   notHandy,
   restoreTool,
@@ -347,8 +348,9 @@ export function webApp({
       links.map((l) => l.id),
     );
     const catalog = await deps.store.listTags(caller.owner);
+    const handy = await handyOfLinks(deps, caller.owner, links);
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now, images, catalog }), 200, NO_STORE);
+    return c.html(searchPage({ query, links, now, images, catalog, handy }), 200, NO_STORE);
   });
 
   // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does
@@ -369,9 +371,19 @@ export function webApp({
         owner,
         page.links.map((l) => l.id),
       );
+      const handy = await handyOfLinks(deps, owner, page.links);
       const done = state === "archived";
       const later = before !== undefined;
-      const html = spacePage({ tag, catalog, ...page, images, now: deps.now(), done, later });
+      const html = spacePage({
+        tag,
+        catalog,
+        ...page,
+        images,
+        handy,
+        now: deps.now(),
+        done,
+        later,
+      });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
@@ -400,9 +412,19 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const catalog = await deps.store.listTags(owner);
+      const handy = await handyOfLinks(deps, owner, page.links);
       const done = state === "archived";
       const later = before !== undefined;
-      const html = allPage({ order, ...page, catalog, images, now: deps.now(), done, later });
+      const html = allPage({
+        order,
+        ...page,
+        catalog,
+        images,
+        handy,
+        now: deps.now(),
+        done,
+        later,
+      });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;

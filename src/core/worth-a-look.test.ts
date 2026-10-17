@@ -127,7 +127,7 @@ describe("worthALook", () => {
     expect((await get(tool.id)).lastSurfacedAt).toBeNull();
   });
 
-  it("leaves out a suggested tool, and another link takes its place", async () => {
+  it("leaves out a shown suggestion, and another link takes its place", async () => {
     const suggested = await link();
     const others = [await link(), await link(), await link()];
     await keepHandy(deps(), A, suggested.id, "inferred");
@@ -137,12 +137,42 @@ describe("worthALook", () => {
     expect(others.map((o) => o.id)).toEqual(expect.arrayContaining(picks));
   });
 
-  it("leaves out a suggested tool even when it matches the focus", async () => {
+  it("leaves out a shown suggestion even when it matches the focus", async () => {
     const suggested = await link();
     const other = await link();
     await focus("lunch", at(-DAY), [suggested.id]);
     await keepHandy(deps(), A, suggested.id, "inferred");
     expect(await ids()).toEqual([other.id]);
+  });
+
+  it("gives focus matches to the links that are shown, not to the suggestions the shelf shows", async () => {
+    const suggested = [await link(), await link(), await link()];
+    const ordinary = await link(A, {
+      why: { text: "x", source: "stated" },
+      lastOpenedAt: at(-DAY),
+      lastSurfacedAt: at(-20 * DAY),
+      savedAt: at(-2 * DAY),
+    });
+    const [oldest, middle, newest] = suggested as [Link, Link, Link];
+    await focus("lunch", at(-DAY), [newest.id, middle.id, oldest.id, ordinary.id]);
+    for (const [i, s] of [oldest, middle, newest].entries()) {
+      clock = at(-(3 - i) * DAY);
+      await keepHandy(deps(), A, s.id, "inferred");
+    }
+    clock = NOW;
+    const picks = await worthALook(deps(), A);
+    expect(picks.map((d) => d.link.id).sort()).toEqual([oldest.id, ordinary.id].sort());
+    for (const d of picks) expect(d.reasons.map((r) => r.kind)).toContain("focus_words");
+  });
+
+  it("shows a suggestion past the shelf's two in Worth a look, and not the two shown", async () => {
+    const [oldest, middle, newest] = [await link(), await link(), await link()];
+    for (const [i, s] of [oldest, middle, newest].entries()) {
+      clock = at(-(3 - i) * DAY);
+      await keepHandy(deps(), A, s.id, "inferred");
+    }
+    clock = NOW;
+    expect(await ids()).toEqual([oldest.id]);
   });
 
   it("brings a suggested tool back once it is declined", async () => {

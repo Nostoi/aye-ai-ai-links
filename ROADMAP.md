@@ -48,7 +48,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - The shelf refreshes by re-reading `GET /`.
     - Undo comes with removals and with Done.
     - The tile menu is a native `<details>`.
-  - **Keep handy follow-ups (#140).** Owner rulings, 2026-10-16: a suggested tool leaves Worth a look and shows only as a shelf suggestion, until it is declined; `get_digest` still includes it. The ⋯ menu is lined up in the bottom-right of every shelf tile.
+  - **Keep handy follow-ups (#140).** Owner rulings, 2026-10-16 and 2026-10-17 (#140 comments): Worth a look leaves out the suggestions the shelf shows (up to two, newest first, a cap that lives in core), before it picks, so they use up no focus match; any other suggestion is an ordinary link there, and `get_digest` still includes every suggestion. The ⋯ menu is lined up in the bottom-right of every shelf tile.
   - **Openings are recorded from every web page (#124),** storing only the last one. This replaces the 2026-10-14 `list_links` entry's "clicks on All links and search results are not recorded". Search, All links and space pages post `/links/opened`, which sets only `lastOpenedAt`: a click the app didn't suggest doesn't mark the link surfaced, so only home's cards claim it (#124 comment 6225313667). Clicks the app can't see, such as browser bookmarks, stay unrecorded; an AI-chat click through a redirect link is #133, and pairing web searches with the search log is #134.
 
 - **2026-10-14:** Phase 4 is done, and the repo is public.

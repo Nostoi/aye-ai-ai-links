@@ -7,8 +7,6 @@ import { siteLine, spaceClass } from "./pages.js";
 
 /** Tiles the shelf shows before Show all (#125). */
 export const SHELF_SIZE = 8;
-/** Suggestion tiles shown at most, newest first, after the kept tools (owner ruling 2026-10-16). */
-export const SUGGESTION_SIZE = 2;
 
 /** The shelf's kept tools in shelf order, its suggestions, and the owner's tags for each tile's space. */
 export type Shelf = { items: ShelfItem[]; suggestions: ToolItem[]; catalog: Tag[] };
@@ -70,7 +68,7 @@ export function handyShelf({ items, suggestions, catalog }: Shelf): string {
     : `<div class="handy-row">
 ${[
   ...items.map((item, i) => tile(item, catalog, i >= SHELF_SIZE)),
-  ...suggestions.slice(0, SUGGESTION_SIZE).map((s) => suggestion(s, catalog)),
+  ...suggestions.map((s) => suggestion(s, catalog)),
 ].join("\n")}
 </div>
 <div class="actions handy-foot">${items.length > SHELF_SIZE ? '<button type="button" data-act="show-all">Show all</button>' : ""}${ADD}</div>`;

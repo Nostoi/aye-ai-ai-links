@@ -9,6 +9,7 @@ import {
 import { CoreError } from "./errors.js";
 import { recordOpening } from "./links.js";
 import type { LinkExpectation } from "./store.js";
+import { listSuggestions } from "./tools.js";
 import type { Link, LinkPatch, OwnerId } from "./types.js";
 
 /** The home page's "Worth a look today": the use cases behind its cards and buttons. */
@@ -26,9 +27,8 @@ const dayRank = (day: number, id: string) =>
   createHash("sha256").update(`${day}:${id}`).digest("hex");
 
 export async function worthALook(deps: WorthDeps, owner: OwnerId): Promise<DigestLink[]> {
-  const preview = await previewDigest(deps, owner, Number.POSITIVE_INFINITY);
-  const tools = await deps.tools.listTools(owner);
-  const links = preview.links.filter((d) => tools.get(d.link.id)?.status !== "suggested");
+  const shown = new Set((await listSuggestions(deps, owner)).map((s) => s.link.id));
+  const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY, shown);
   const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
   const day = Math.floor(deps.now().getTime() / DAY_MS);
   const ranked = links.filter((d) => d !== lead).map((d) => ({ d, rank: dayRank(day, d.link.id) }));

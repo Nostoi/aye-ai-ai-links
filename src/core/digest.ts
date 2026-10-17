@@ -122,13 +122,19 @@ async function select(
   owner: OwnerId,
   now: Date,
   limit: number,
+  exclude: ReadonlySet<string> = new Set(),
 ): Promise<{ picked: Link[]; focus: Map<string, DigestReason[]> }> {
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   const all = await deps.store.listLinks(owner);
   const tools = await deps.tools.listTools(owner);
   const candidates = new Map(
     all
-      .filter((l) => tools.get(l.id)?.status !== "kept" && eligible(l, now, notSurfacedAfter))
+      .filter(
+        (l) =>
+          tools.get(l.id)?.status !== "kept" &&
+          !exclude.has(l.id) &&
+          eligible(l, now, notSurfacedAfter),
+      )
       .map((l) => [l.id, l]),
   );
   if (candidates.size === 0) return { picked: [], focus: new Map() };
@@ -186,9 +192,10 @@ export async function previewDigest(
   deps: DigestDeps,
   owner: OwnerId,
   limit = DIGEST_SIZE,
+  exclude: ReadonlySet<string> = new Set(),
 ): Promise<{ links: DigestLink[] }> {
   const now = deps.now();
-  const { picked, focus } = await select(deps, owner, now, limit);
+  const { picked, focus } = await select(deps, owner, now, limit, exclude);
   const links = picked.map((link) => ({
     link,
     reasons: [...(focus.get(link.id) ?? []), ...ownReasons(link, link.lastSurfacedAt, now)],

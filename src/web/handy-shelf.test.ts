@@ -377,6 +377,52 @@ describe("the shelf's script", () => {
     expect(done.focused().slice(-2)).toEqual([done.$("#handy-title"), done.$("#undo-bar button")]);
   });
 
+  it("when the acted-on tile comes back past the 8 cut, reveals the hidden tiles and focuses it", async () => {
+    const items = Array.from({ length: 9 }, (_, i) => kept({}, i === 0));
+    const first = items[0] as ShelfItem;
+    const after = home([...items.slice(1), { ...first, due: false }]);
+    const p = shelfPage(home(items), () => ({ status: 200, body: MOVED }), [after]);
+    p.dispatch(p.$("button[data-act=still-using]"), "click");
+    await p.settle();
+    const target = p.focused().at(-1) as HTMLElement;
+    expect(target).toBe(p.$(`[data-id="${first.link.id}"] h3 a`));
+    expect(target.closest("[hidden]")).toBeNull();
+  });
+
+  it("ignores a second click on a tile's button until the shelf refresh settles", async () => {
+    const item = kept();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = runPage(home([item]), (s) =>
+      s.body === undefined
+        ? { status: 200, text: home([]), wait: gate }
+        : { status: 200, body: MOVED },
+    );
+    const button = p.$("button[data-act=not-handy]");
+    p.dispatch(button, "click");
+    await p.settle();
+    p.dispatch(button, "click");
+    await p.settle();
+    expect(p.sent.filter((s) => s.url === "/tools/not-handy")).toHaveLength(1);
+    release();
+    await p.settle();
+  });
+
+  it("lets the button work again when the action is refused or the refresh is redirected", async () => {
+    const refused = shelfPage(home([kept()]), () => ({ status: 409, body: { message: "no" } }));
+    refused.dispatch(refused.$("button[data-act=not-handy]"), "click");
+    await refused.settle();
+    expect((refused.$("button[data-act=not-handy]") as HTMLButtonElement).disabled).toBe(false);
+    const stale = runPage(home([kept()]), (s) =>
+      s.body === undefined ? { status: 0, type: "opaqueredirect" } : { status: 200, body: MOVED },
+    );
+    stale.dispatch(stale.$("button[data-act=not-handy]"), "click");
+    await stale.settle();
+    expect((stale.$("button[data-act=not-handy]") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("drops a refresh that answers after a newer one began, keeping the newer shelf", async () => {
     const [a, b] = [kept({}, true), kept({}, true)];
     let release = () => {};

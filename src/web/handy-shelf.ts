@@ -94,8 +94,7 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  * - A page that is not home (a sign-in redirect) is not swapped in, and the owner is told to reload.
  * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`).
  * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
- *   on the same button, else the same tile's first control, else the next tile's, else the heading.
- * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
+ *   on the same button, else the same tile's first control, else the next tile's, else the heading. * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
  */
 export const SHELF_SCRIPT = `const showAll = (shelf) => {
   for (const tile of shelf.querySelectorAll("[data-more]")) tile.hidden = false;
@@ -110,6 +109,7 @@ const focusAfter = (shelf, from) => {
     (same && (same.querySelector('button[data-act="' + from.act + '"]') || same.querySelector("a, button, summary"))) ||
     (next && next.querySelector("a, button, summary")) ||
     document.getElementById("handy-title");
+  if (target.closest("[hidden]")) showAll(shelf);
   target.focus();
 };
 let shelfTurn = 0;
@@ -166,27 +166,29 @@ if (handy) {
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
     button.disabled = true;
-    if (act === "done") {
-      const res = await post("/home/archive", { id });
-      button.disabled = false;
-      if (!res || res.status !== 204) {
+    try {
+      if (act === "done") {
+        const res = await post("/home/archive", { id });
+        if (!res || res.status !== 204) {
+          handyError.textContent = await failure(res);
+          return;
+        }
+        await refreshShelf(from);
+        offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
+        return;
+      }
+      const [route, body, undo] = make(id);
+      const res = await post(route, body);
+      const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (!moved || !moved.tool) {
         handyError.textContent = await failure(res);
         return;
       }
       await refreshShelf(from);
-      offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
-      return;
+      if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
+    } finally {
+      button.disabled = false;
     }
-    const [route, body, undo] = make(id);
-    const res = await post(route, body);
-    button.disabled = false;
-    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (!moved || !moved.tool) {
-      handyError.textContent = await failure(res);
-      return;
-    }
-    await refreshShelf(from);
-    if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
   });
 }
 }`;

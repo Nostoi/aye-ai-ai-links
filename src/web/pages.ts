@@ -177,7 +177,8 @@ ${handyControl(link, view)}</div>
 /**
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
  * `images` holds the image version of each link that has a stored image; `catalog`, the owner's
- * tags, gives each card its space (`linkSpace`).
+ * tags, gives each card its space (`linkSpace`). `keep` is the mode the Handy shelf's Add opens: it
+ * asks for a link to keep handy and carries itself through a search typed here.
  */
 export const searchPage = ({
   query,
@@ -186,6 +187,7 @@ export const searchPage = ({
   images = new Map(),
   catalog = [],
   handy = new Map(),
+  keep = false,
 }: {
   query: string;
   links: Link[];
@@ -193,6 +195,7 @@ export const searchPage = ({
   images?: Map<string, string>;
   catalog?: Tag[];
   handy?: Map<string, HandyView | null>;
+  keep?: boolean;
 }) =>
   page(
     "Search · Aye-AI-AI Links",
@@ -200,16 +203,17 @@ export const searchPage = ({
 <form class="search-page" action="/search" method="get" role="search">
 <label class="visually-hidden" for="q">Search your links</label>
 <div class="search-box">
-<input id="q" name="q" type="search" value="${escapeHtml(query)}">
+<input id="q" name="q" type="search" value="${escapeHtml(query)}"${keep ? " autofocus" : ""}>
 <button class="primary" type="submit">Find it</button>
 </div>
-</form>
-<h1>${query.trim() === "" ? "Your newest links" : "Best matches first"}</h1>
+${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}</form>
+<h1>${query.trim() !== "" ? "Best matches first" : keep ? "Find the link to keep handy" : "Your newest links"}</h1>
+${keep ? `<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>\n` : ""}
 <p id="results-error" role="alert"></p>
-${links.length === 0 ? `<p>${query.trim() === "" ? "No links saved yet." : "Nothing matched."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id))).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "No active links to keep handy." : "No links saved yet."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
-<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=">your newest links</a>.</p>
+<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=${keep ? "&keep=1" : ""}">your newest links</a>.</p>
 </div>
 </main>
 <script>

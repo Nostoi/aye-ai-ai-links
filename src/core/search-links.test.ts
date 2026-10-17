@@ -55,6 +55,12 @@ describe("searchLinks", () => {
     ]);
   });
 
+  it("passes a state filter on", async () => {
+    const { deps, search } = await setup();
+    await searchLinks(deps, "a", { query: "", state: "active" }, "t");
+    expect(search.calls[0]?.filters).toEqual({ state: "active" });
+  });
+
   it("keeps the search order and drops ids the store does not return", async () => {
     const { deps, saved } = await setup(["link-3", "link-99", "link-1"]);
     const links = await searchLinks(deps, "a", { query: "x" }, "t");

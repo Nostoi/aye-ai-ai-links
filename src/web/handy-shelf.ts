@@ -12,7 +12,7 @@ export const SHELF_SIZE = 8;
 export type Shelf = { items: ShelfItem[]; suggestions: ToolItem[]; catalog: Tag[] };
 
 /** Add: search results each carry Keep handy, so picking one there keeps it. */
-const ADD = `<a class="button" href="/search?q=">Add</a>`;
+const ADD = `<a class="button" href="/search?q=&keep=1">Add</a>`;
 
 const STILL_USING = `<div class="ask">
 <p class="small">Still using?</p>

@@ -154,6 +154,76 @@ describe("web door", () => {
     expect(html).not.toContain(OTHER);
   });
 
+  it("keep mode: a blank search is headed to keep, with the hint, autofocus and a hidden keep field", async () => {
+    const t = await setup();
+    const html = await (await t.get("/search?q=&keep=1", await t.signIn())).text();
+    expect(html).toContain("Find the link to keep handy");
+    expect(html).not.toContain("Your newest links");
+    expect(html).toContain(
+      '<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>',
+    );
+    expect(html).toContain('<input id="q" name="q" type="search" value="" autofocus>');
+    expect(html).toContain('<input type="hidden" name="keep" value="1">');
+  });
+
+  it("keep mode: a word search stays 'Best matches first' with the hint and the hidden keep field", async () => {
+    const t = await setup();
+    const html = await (await t.get("/search?q=lunch&keep=1", await t.signIn())).text();
+    expect(html).toContain("Best matches first");
+    expect(html).not.toContain("Find the link to keep handy");
+    expect(html).toContain("Find the link you use regularly");
+    expect(html).toContain('<input type="hidden" name="keep" value="1">');
+  });
+
+  it("keep mode lists only active links, for a blank and a word search; ordinary search lists archived ones too", async () => {
+    const t = await setup();
+    const { link } = await saveLink(t.deps, "owner", {
+      url: "https://example.com/done",
+      savedBy: "codex",
+      title: "Finished lunch notes",
+    });
+    await t.deps.store.update("owner", link.id, { state: "archived" });
+    const cookie = await t.signIn();
+    const page = async (path: string) => (await t.get(path, cookie)).text();
+    for (const q of ["", "lunch"]) {
+      expect(await page(`/search?q=${q}&keep=1`), q).not.toContain("Finished lunch notes");
+      expect(await page(`/search?q=${q}`), q).toContain("Finished lunch notes");
+    }
+    expect(await page("/search?q=&keep=1")).toContain("Own &lt;b&gt;link&lt;/b&gt;");
+  });
+
+  it("keep mode with every link archived says none can be kept, not that none are saved", async () => {
+    const t = await setup();
+    const [own] = await t.deps.store.listLinks("owner");
+    await t.deps.store.update("owner", own?.id ?? "", { state: "archived" });
+    const cookie = await t.signIn();
+    const keep = await (await t.get("/search?q=&keep=1", cookie)).text();
+    expect(keep).toContain("No active links to keep handy.");
+    expect(keep).not.toContain("No links saved yet.");
+    expect(await (await t.get("/search?q=", cookie)).text()).not.toContain("No links saved yet.");
+  });
+
+  it("keep mode's 'Not it?' link to the newest links stays in keep mode", async () => {
+    const t = await setup();
+    const cookie = await t.signIn();
+    const keep = await (await t.get("/search?q=&keep=1", cookie)).text();
+    expect(keep).toContain('see <a href="/search?q=&keep=1">your newest links</a>');
+    const plain = await (await t.get("/search?q=", cookie)).text();
+    expect(plain).toContain('see <a href="/search?q=">your newest links</a>');
+  });
+
+  it("keep mode is on only for keep=1; ordinary search has none of its markup", async () => {
+    const t = await setup();
+    const cookie = await t.signIn();
+    for (const path of ["/search?q=", "/search?q=&keep=0", "/search?q=&keep=true"]) {
+      const html = await (await t.get(path, cookie)).text();
+      expect(html, path).toContain("Your newest links");
+      expect(html, path).not.toContain("Find the link you use regularly");
+      expect(html, path).not.toContain("autofocus");
+      expect(html, path).not.toContain('name="keep"');
+    }
+  });
+
   it("titles a word search 'Best matches first' and shows an inferred why as a guess", async () => {
     const t = await setup();
     await saveLink(t.deps, "owner", {

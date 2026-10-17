@@ -780,6 +780,51 @@ describe("the edit dialog's script", () => {
     expect(p.dialog.open).toBe(false);
   });
 
+  it("while a Save is pending, the fields are off and a paste or drop is ignored, until it is answered or closed", async () => {
+    fakeImages([
+      { width: 64, height: 48 },
+      { width: 64, height: 48 },
+    ]);
+    let release = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const waits = [wait, new Promise<void>(() => {})];
+    const refused = { code: "invalid_input", message: "A title can be at most 200 characters." };
+    const p = opened(
+      () => ({ status: 400, wait: waits.shift(), body: refused }),
+      new Map([["1", { own: true, pageVersion: PAGE }]]),
+      new Map([["1", OWN]]),
+    );
+    const fields = () =>
+      ["#edit-title", "[data-edit=choose]", "[data-edit=remove]", "[data-edit=use-title]"].map(
+        (s) => (p.$(s) as HTMLButtonElement).disabled,
+      );
+    p.open();
+    expect(fields()).toEqual([false, false, false, false]);
+    p.title.value = "Edited";
+    p.submit();
+    await p.settle();
+    expect(fields()).toEqual([true, true, true, true]);
+    p.dispatch(p.dialog, "paste", { clipboardData: { types: ["Files"], files: [SHOT] } });
+    const drop = p.dispatch(p.dialog, "drop", {
+      dataTransfer: { types: ["Files"], files: [SHOT] },
+    });
+    await p.settle();
+    expect(drop.defaultPrevented).toBe(true);
+    expect(p.$(".edit-chip").hidden).toBe(true);
+    expect(p.$("[data-edit=remove]").textContent).toBe("Use the page's picture");
+    release();
+    await p.settle();
+    expect(p.$("#edit-error").textContent).toBe(refused.message);
+    expect(fields()).toEqual([false, false, false, false]);
+    p.submit();
+    await p.settle();
+    expect(fields()).toEqual([true, true, true, true]);
+    p.dispatch(p.$(".edit-foot [data-edit=cancel]"), "click");
+    expect(fields()).toEqual([false, false, false, false]);
+  });
+
   it("shows a refusal inside the dialog and keeps it open", async () => {
     const p = opened(() => ({
       status: 400,

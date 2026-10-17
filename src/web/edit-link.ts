@@ -115,6 +115,7 @@ const chip = preview.querySelector(".edit-chip");
 const chooseButton = dialog.querySelector("[data-edit=choose]");
 const fileField = dialog.querySelector("[data-edit=file]");
 const removeButton = dialog.querySelector("[data-edit=remove]");
+const useTitle = dialog.querySelector("[data-edit=use-title]");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 let card = null;
@@ -131,6 +132,7 @@ let saving = false;
 let saveTurn = 0;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
+  for (const c of [titleField, chooseButton, removeButton, useTitle]) c.disabled = saving;
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
@@ -278,11 +280,12 @@ dialog.addEventListener("close", () => {
   saveTurn++;
   saving = false;
   dropPick();
+  syncBusy();
   const now = document.activeElement;
   if (!now || now === document.body || dialog.contains(now)) giveFocusBack();
 });
 for (const b of dialog.querySelectorAll("[data-edit=cancel]")) b.addEventListener("click", finish);
-dialog.querySelector("[data-edit=use-title]").addEventListener("click", () => {
+useTitle.addEventListener("click", () => {
   titleField.value = pageTitle.textContent;
   titleField.focus();
 });
@@ -302,6 +305,7 @@ removeButton.addEventListener("click", () => {
   chooseButton.focus();
 });
 dialog.addEventListener("paste", (event) => {
+  if (saving) return;
   if (event.target === titleField && [...(event.clipboardData?.types || [])].includes("text/plain")) return;
   const files = event.clipboardData ? [...event.clipboardData.files] : [];
   const file = files.find((f) => f.type.startsWith("image/"));
@@ -333,7 +337,7 @@ dialog.addEventListener("drop", (event) => {
   dragDepth = 0;
   preview.classList.remove("dropping");
   render();
-  pick(event.dataTransfer.files[0]);
+  if (!saving) pick(event.dataTransfer.files[0]);
 });
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

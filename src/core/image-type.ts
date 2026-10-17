@@ -2,9 +2,6 @@ import type { ImageType } from "./fetch.js";
 
 export type ImageHeader = { type: ImageType; width: number; height: number };
 
-/** How far into a JPEG the frame header is looked for; metadata segments before it can be large. */
-const JPEG_SCAN_BYTES = 256 * 1024;
-
 const startsWith = (b: Uint8Array, magic: number[], at = 0) =>
   b.length >= at + magic.length && magic.every((v, i) => b[at + i] === v);
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
@@ -49,7 +46,7 @@ function skippedBeforeFrame(marker: number): boolean {
 
 /** Walks the marker segments to the first frame header (SOF0-SOF15, except DHT, JPG and DAC). */
 function jpeg(b: Buffer): ImageHeader | null {
-  const end = Math.min(b.length, JPEG_SCAN_BYTES);
+  const end = b.length;
   let at = 2;
   while (at + 4 <= end) {
     if (b[at] !== 0xff) return null;

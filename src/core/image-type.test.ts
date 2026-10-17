@@ -171,6 +171,14 @@ describe("checkImage, the one image check for fetched and uploaded pictures", ()
     expect(checkImage(sized(MAX_IMAGE_BYTES + 1))).toEqual({ ok: false, reason: "too_large" });
   });
 
+  it("accepts a JPEG under 2 MiB whose frame header sits past 256 KiB of metadata", () => {
+    const metadata = Array.from({ length: 6 }, () => jpegSegment(0xe1, Buffer.alloc(65_000)));
+    const bytes = jpeg(640, 480, metadata);
+    expect(bytes.indexOf(Buffer.from([0xff, 0xc0]))).toBeGreaterThan(256 * 1024);
+    expect(bytes.length).toBeLessThan(MAX_IMAGE_BYTES);
+    expect(checkImage(bytes)).toEqual({ ok: true, type: "image/jpeg" });
+  });
+
   it("takes exactly MAX_IMAGE_PIXELS and refuses one column more as too_large", () => {
     expect(checkImage(png(MAX_IMAGE_PIXELS / 4000, 4000))).toEqual({ ok: true, type: "image/png" });
     expect(checkImage(png(MAX_IMAGE_PIXELS / 4000 + 1, 4000))).toEqual({

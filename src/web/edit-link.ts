@@ -130,6 +130,7 @@ let dragDepth = 0;
 let preparing = false;
 let saving = false;
 let saveTurn = 0;
+let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   for (const c of [titleField, chooseButton, removeButton, useTitle]) c.disabled = saving;
@@ -283,6 +284,9 @@ dialog.addEventListener("close", () => {
   syncBusy();
   const now = document.activeElement;
   if (!now || now === document.body || dialog.contains(now)) giveFocusBack();
+  const held = heldUndo;
+  heldUndo = null;
+  if (held) held();
 });
 for (const b of dialog.querySelectorAll("[data-edit=cancel]")) b.addEventListener("click", finish);
 useTitle.addEventListener("click", () => {
@@ -378,12 +382,14 @@ form.addEventListener("submit", async (event) => {
   showCard(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  showUndo(${JSON.stringify("Link updated")}, async () => {
+  const offer = () => showUndo(${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
     if (undone) showCard(target, undone);
     else editAlert.textContent = await failure(back);
   });
+  heldUndo = dialog.open ? offer : null;
+  if (!dialog.open) offer();
 });
 }
 }`;

@@ -735,12 +735,64 @@ describe("the edit dialog's script", () => {
     expect(p.dialog.open).toBe(true);
     expect(p.title.value).toBe("Link 2");
     expect(p.$("#results-error").textContent).toBe("");
+  });
+
+  it("holds a late answer's Undo while the dialog is open, and offers it for its own card once it closes", async () => {
+    const p = await reopenedDuringSave({
+      status: 200,
+      body: answer({ title: "Edited", editId: "e1" }),
+    });
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    p.dispatch(p.$(".edit-foot [data-edit=cancel]"), "click");
+    expect(p.$("#undo-bar").hidden).toBe(false);
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
-    expect(p.sent[1]).toMatchObject({
-      url: "/links/edit/undo",
-      body: { id: "1", editId: "e1" },
+    expect(p.sent[1]).toMatchObject({ url: "/links/edit/undo", body: { id: "1", editId: "e1" } });
+    p.open();
+    p.dispatch(p.$(".edit-foot [data-edit=cancel]"), "click");
+    expect(p.$("#undo-bar").hidden).toBe(true);
+  });
+
+  it("drops a held Undo when a newer Save offers its own first", async () => {
+    let release = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
     });
+    const p = opened(
+      (sent) => {
+        const id = sent.body instanceof FormData ? sent.body.get("id") : null;
+        if (id === "1") return { status: 200, wait, body: answer({ editId: "e1" }) };
+        if (id === "2") return { status: 200, body: answer({ title: "Link 2", editId: "e2" }) };
+        return { status: 200, body: answer() };
+      },
+      undefined,
+      undefined,
+      [link("1"), link("2")],
+    );
+    p.open();
+    p.title.value = "Edited";
+    p.submit();
+    await p.settle();
+    p.dispatch(p.$(".edit-foot [data-edit=cancel]"), "click");
+    p.dispatch(p.$('[data-id="2"] button[data-act=edit]'), "click");
+    release();
+    await p.settle();
+    let fireClose = () => {};
+    p.dialog.close = () => {
+      p.dialog.open = false;
+      fireClose = () => p.dispatch(p.dialog, "close");
+    };
+    p.title.value = "Edited 2";
+    p.submit();
+    await p.settle();
+    fireClose();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[2]).toMatchObject({ url: "/links/edit/undo", body: { id: "2", editId: "e2" } });
+    p.open();
+    p.dispatch(p.$(".edit-foot [data-edit=cancel]"), "click");
+    fireClose();
+    expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
   it("a refusal answered after the dialog was reopened shows in the page's alert, not in the dialog", async () => {

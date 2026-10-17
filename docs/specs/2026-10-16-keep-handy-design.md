@@ -44,7 +44,7 @@ Every rule lives here. The web door and the MCP door only translate requests int
 - A `kept` tool gets no reading reason: no `no_why`, `not_opened_recently`, `never_surfaced` or `focus_words`. The surfaced claim enforces this too, so a link kept between selection and claim is neither returned nor marked surfaced.
 - PR 2 keeps a due tool out of home's ordinary Worth a look cards (`worthALook` reads `previewDigest`); it shows on the shelf instead.
 - A due tool is a separate item with reason `still_using_check` and its days since `lastOpenedAt` (null when never opened). At most one appears per digest, and it takes one of the 5 slots.
-- It uses the same surfaced claim and 14-day cooldown as other picks.
+- It uses the same surfaced claim and 14-day cooldown as other picks. Like them, it is judged again from the link as claimed: a tool opened, declined or answered since selection is left out but stays marked.
 - Suggested and declined links are ordinary links in the digest.
 
 ## MCP
@@ -82,7 +82,7 @@ Every rule lives here. The web door and the MCP door only translate requests int
 - Worth a look today gets a fourth button, Keep handy, on large and small cards.
 
 **Routes:**
-- `POST /tools/keep`, `/tools/not-handy`, `/tools/still-using`, `/tools/suggestion` and `/tools/undo`. Undo restores the row as it was, only while the row is still what the action wrote. It has no time limit in core, like home's conditional Undo (2026-10-14 #95, and the 2026-10-16 ruling on Undo of I'm done). The Undo bar itself closes within 45 s.
+- `POST /tools/keep`, `/tools/not-handy`, `/tools/still-using`, `/tools/suggestion` and `/tools/undo`. Undo restores the row as it was, only while the row still holds the values the action wrote. Every tool write is conditional the same way, compared by value rather than by an operation token. It has no time limit in core, like home's conditional Undo (2026-10-14 #95, and the 2026-10-16 ruling on Undo of I'm done). The Undo bar itself closes within 45 s.
 - Each is in `CHECKED_PAGES` and the isolation route guard, and each calls `core/tools.ts`.
 
 ## Testing

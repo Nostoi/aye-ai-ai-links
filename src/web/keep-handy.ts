@@ -45,6 +45,7 @@ if (keepRoot) {
     button.disabled = false;
     const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!moved || !moved.tool) {
+      button.focus();
       keepError.textContent = await failure(res);
       return;
     }

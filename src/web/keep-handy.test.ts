@@ -1,5 +1,5 @@
 import { parseHTML } from "linkedom";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HandyView } from "../core/tools.js";
 import type { Link } from "../core/types.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
@@ -90,6 +90,17 @@ ${keepHandyScript("list", "list-error")}
   );
   return runPage(html, answer);
 }
+/** linkedom doesn't track focus, so record each element `focus()` is called on. */
+function watchFocus(p: ReturnType<typeof runPage>) {
+  let owner: object = p.$("button");
+  while (!Object.hasOwn(owner, "focus")) owner = Object.getPrototypeOf(owner);
+  const focused: Element[] = [];
+  vi.spyOn(owner as { focus(): void }, "focus").mockImplementation(function (this: Element) {
+    focused.push(this);
+  });
+  return () => focused.at(-1);
+}
+afterEach(() => vi.restoreAllMocks());
 const state = (p: ReturnType<typeof runPage>) =>
   p.$("button[data-act=keep]").hidden ? "kept" : "not kept";
 
@@ -99,8 +110,10 @@ describe("the Keep handy script", () => {
       status: 200,
       body: { ...MOVED, tool: MOVED.previous, previous: null },
     }));
+    const lastFocused = watchFocus(p);
     p.dispatch(p.$("button[data-act=keep]"), "click");
     await p.settle();
+    expect(lastFocused()).toBe(p.$("button[data-act=not-handy]"));
     expect(p.sent).toEqual([
       { url: "/tools/keep", body: { id: "7" }, redirect: "manual", keepalive: undefined },
     ]);
@@ -112,10 +125,12 @@ describe("the Keep handy script", () => {
     const p = load(true, (s) =>
       s.url === "/tools/undo" ? { status: 204 } : { status: 200, body: MOVED },
     );
+    const lastFocused = watchFocus(p);
     p.dispatch(p.$("button[data-act=not-handy]"), "click");
     await p.settle();
     expect(state(p)).toBe("not kept");
     expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
+    expect(lastFocused()).toBe(p.$("#undo-bar button"));
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toEqual({
@@ -125,6 +140,7 @@ describe("the Keep handy script", () => {
       keepalive: undefined,
     });
     expect(state(p)).toBe("kept");
+    expect(lastFocused()).toBe(p.$("button[data-act=not-handy]"));
   });
 
   it.each([
@@ -153,11 +169,13 @@ describe("the Keep handy script", () => {
     "leaves the control as it was, offers no Undo and says why on %s",
     async (_, answer, message) => {
       const p = load(true, () => answer as Answer);
+      const lastFocused = watchFocus(p);
       p.dispatch(p.$("button[data-act=not-handy]"), "click");
       await p.settle();
       expect(state(p)).toBe("kept");
       expect(p.$("#undo-bar").hidden).toBe(true);
       expect(p.$("#list-error").textContent).toBe(message);
+      expect(lastFocused()).toBe(p.$("button[data-act=not-handy]"));
     },
   );
 

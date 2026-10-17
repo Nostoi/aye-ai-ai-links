@@ -1,5 +1,8 @@
-import type { ToolRecord, WaitDays } from "./tool-store.js";
-import type { Link } from "./types.js";
+import { CoreError } from "./errors.js";
+import { notFound } from "./links.js";
+import type { LinkStore } from "./store.js";
+import type { ToolRecord, ToolStore, WaitDays } from "./tool-store.js";
+import type { Link, OwnerId, Source, ToolStatus } from "./types.js";
 
 /**
  * Keep handy: every rule about tools. The doors only translate requests into these calls.
@@ -38,4 +41,102 @@ export function currentWaitDays(link: Link, tool: ToolRecord): WaitDays {
 export function isDue(link: Link, tool: ToolRecord | null, now: Date): boolean {
   if (tool?.status !== "kept" || link.state !== "active") return false;
   return now.getTime() - clockStart(link, tool).getTime() >= currentWaitDays(link, tool) * DAY_MS;
+}
+
+export type ToolsDeps = { store: LinkStore; tools: ToolStore; now: () => Date };
+
+/** What a tool action did: the row it wrote, and the row it replaced (null: there was none). */
+export type ToolChange = { tool: ToolRecord; previous: ToolRecord | null };
+
+const CHANGED =
+  "That link's Keep handy state changed at the same moment. Read the link again and retry.";
+
+/**
+ * The row with `status` and `source`. Keeping its status keeps its dates and wait; a new status
+ * starts now with a first wait, so a link that becomes a tool starts its clock then.
+ */
+function moveTo(
+  current: ToolRecord | null,
+  status: ToolStatus,
+  source: Source,
+  now: Date,
+): ToolRecord {
+  if (current?.status === status) return { ...current, source };
+  return { status, source, since: now, answeredAt: null, waitDays: FIRST_WAIT_DAYS };
+}
+
+/**
+ * Reads the link and its row, lets `decide` work out the next row (returning `current` itself
+ * for no change), and writes it only while the row is unchanged since the read.
+ */
+async function change(
+  deps: ToolsDeps,
+  owner: OwnerId,
+  id: string,
+  decide: (current: ToolRecord | null, link: Link, now: Date) => ToolRecord,
+): Promise<ToolChange> {
+  const now = deps.now();
+  const link = await deps.store.get(owner, id);
+  if (!link) throw notFound(id);
+  const current = await deps.tools.getTool(owner, id);
+  const next = decide(current, link, now);
+  if (next === current) return { tool: next, previous: current };
+  const result = await deps.tools.updateToolIf(owner, id, current, next);
+  if (!result) throw notFound(id);
+  if (!result.applied) throw new CoreError("conflict", CHANGED);
+  return { tool: next, previous: current };
+}
+
+function ownerOnly(source: Source): void {
+  if (source === "inferred") {
+    throw new CoreError(
+      "invalid_input",
+      "Only the owner can say this. Send stated or asked, not inferred.",
+    );
+  }
+}
+
+/**
+ * Keep handy. Stated or asked is the owner's request: it keeps the link from any status, with a
+ * first wait. Inferred is a guess: it only suggests the link, and never overrides kept or declined.
+ */
+export async function keepHandy(
+  deps: ToolsDeps,
+  owner: OwnerId,
+  id: string,
+  source: Source,
+): Promise<ToolChange> {
+  return change(deps, owner, id, (current, _link, now) => {
+    if (source !== "inferred") {
+      return { ...moveTo(current, "kept", source, now), waitDays: FIRST_WAIT_DAYS };
+    }
+    if (current?.status === "kept" || current?.status === "declined") return current;
+    return moveTo(current, "suggested", "inferred", now);
+  });
+}
+
+/** The owner's answer to a suggestion: yes keeps the link, no declines it; both as asked. */
+export async function answerSuggestion(
+  deps: ToolsDeps,
+  owner: OwnerId,
+  id: string,
+  keep: boolean,
+): Promise<ToolChange> {
+  return change(deps, owner, id, (current, _link, now) => {
+    if (current?.status !== "suggested") {
+      throw new CoreError("conflict", "That link has no Keep handy suggestion to answer.");
+    }
+    return moveTo(current, keep ? "kept" : "declined", "asked", now);
+  });
+}
+
+/** Not handy anymore: declines the link from any status, so no agent suggests it again. */
+export async function notHandy(
+  deps: ToolsDeps,
+  owner: OwnerId,
+  id: string,
+  source: Source,
+): Promise<ToolChange> {
+  ownerOnly(source);
+  return change(deps, owner, id, (current, _link, now) => moveTo(current, "declined", source, now));
 }

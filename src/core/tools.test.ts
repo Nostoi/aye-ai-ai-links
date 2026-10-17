@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest";
-import type { ToolRecord } from "./tool-store.js";
-import { clockStart, currentWaitDays, isDue } from "./tools.js";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { CoreError } from "./errors.js";
+import { FakeStore } from "./fake-store.js";
+import { A, B, newLink } from "./snapshot-store-contract.js";
+import type { ToolRecord, ToolStore } from "./tool-store.js";
+import {
+  answerSuggestion,
+  clockStart,
+  currentWaitDays,
+  isDue,
+  keepHandy,
+  notHandy,
+} from "./tools.js";
 import type { Link } from "./types.js";
 
 const DAY = 86_400_000;
@@ -97,5 +107,161 @@ describe("isDue", () => {
     expect(isDue(linkWith(), tool({ status: "suggested", source: "inferred" }), late)).toBe(false);
     expect(isDue(linkWith(), tool({ status: "declined" }), late)).toBe(false);
     expect(isDue(linkWith(), null, late)).toBe(false);
+  });
+});
+
+let store: FakeStore;
+let clock: Date;
+let n = 0;
+const deps = () => ({ store, tools: store, now: () => clock });
+
+beforeEach(() => {
+  store = new FakeStore();
+  clock = day(0);
+});
+
+const saved = async (owner = A): Promise<string> =>
+  (await store.insertIfAbsent(owner, newLink(++n, day(-100)))).link.id;
+/** Puts a row in place directly, for a starting state the rules would take days to reach. */
+const put = async (id: string, row: ToolRecord) => {
+  await store.updateToolIf(A, id, await store.getTool(A, id), row);
+};
+
+async function code(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+  } catch (e) {
+    return (e as CoreError).code;
+  }
+  return "no error";
+}
+
+describe("keepHandy", () => {
+  it("keeps a link with no row: the given source, since now, a first wait", async () => {
+    const id = await saved();
+    const row = tool({ source: "asked", since: day(0) });
+    expect((await keepHandy(deps(), A, id, "asked")).tool).toEqual(row);
+    expect(await store.getTool(A, id)).toEqual(row);
+  });
+
+  it("returns the row it wrote with the row it replaced", async () => {
+    const id = await saved();
+    expect(await keepHandy(deps(), A, id, "stated")).toEqual({ tool: tool(), previous: null });
+    clock = day(2);
+    expect(await notHandy(deps(), A, id, "asked")).toEqual({
+      tool: tool({ status: "declined", source: "asked", since: day(2) }),
+      previous: tool(),
+    });
+    const suggested = await saved();
+    await keepHandy(deps(), A, suggested, "inferred");
+    const suggestion = tool({ status: "suggested", source: "inferred", since: day(2) });
+    expect(await answerSuggestion(deps(), A, suggested, true)).toEqual({
+      tool: tool({ source: "asked", since: day(2) }),
+      previous: suggestion,
+    });
+  });
+
+  it("keeps a suggested or declined link with its clock starting now", async () => {
+    const suggested = await saved();
+    const declined = await saved();
+    await keepHandy(deps(), A, suggested, "inferred");
+    await notHandy(deps(), A, declined, "stated");
+    clock = day(40);
+    expect((await answerSuggestion(deps(), A, suggested, true)).tool).toEqual(
+      tool({ source: "asked", since: day(40) }),
+    );
+    expect((await keepHandy(deps(), A, declined, "stated")).tool).toEqual(tool({ since: day(40) }));
+    for (const id of [suggested, declined]) {
+      const link = (await store.get(A, id)) as Link;
+      expect(isDue(link, await store.getTool(A, id), day(40))).toBe(false);
+    }
+  });
+
+  it("re-keeping a kept tool keeps its since and answer and sets the wait back to 30", async () => {
+    const id = await saved();
+    await put(id, tool({ answeredAt: day(90), waitDays: 120 }));
+    clock = day(100);
+    expect((await keepHandy(deps(), A, id, "asked")).tool).toEqual(
+      tool({ source: "asked", answeredAt: day(90), waitDays: 30 }),
+    );
+  });
+
+  it("an inferred keep suggests a link with no row, and never overrides kept or declined", async () => {
+    const fresh = await saved();
+    const kept = await saved();
+    const declined = await saved();
+    await keepHandy(deps(), A, kept, "asked");
+    await notHandy(deps(), A, declined, "stated");
+    const before = [await store.getTool(A, kept), await store.getTool(A, declined)];
+    clock = day(5);
+    expect((await keepHandy(deps(), A, fresh, "inferred")).tool).toEqual(
+      tool({ status: "suggested", source: "inferred", since: day(5) }),
+    );
+    expect((await keepHandy(deps(), A, kept, "inferred")).tool).toEqual(before[0]);
+    expect((await keepHandy(deps(), A, declined, "inferred")).tool).toEqual(before[1]);
+    expect([await store.getTool(A, kept), await store.getTool(A, declined)]).toEqual(before);
+  });
+
+  it("an inferred keep that loses a race to the owner's keep leaves the link kept", async () => {
+    const id = await saved();
+    const racing: ToolStore = Object.assign(Object.create(store) as FakeStore, {
+      updateToolIf: async (...args: Parameters<ToolStore["updateToolIf"]>) => {
+        await keepHandy(deps(), A, id, "stated");
+        return store.updateToolIf(...args);
+      },
+    });
+    expect(await code(keepHandy({ ...deps(), tools: racing }, A, id, "inferred"))).toBe("conflict");
+    expect(await store.getTool(A, id)).toEqual(tool());
+  });
+
+  it("refuses another owner's link and an unknown id as not found, writing nothing", async () => {
+    const id = await saved(A);
+    expect(await code(keepHandy(deps(), B, id, "stated"))).toBe("not_found");
+    expect(await code(keepHandy(deps(), A, "no-such-id", "stated"))).toBe("not_found");
+    expect(await store.getTool(A, id)).toBeNull();
+  });
+});
+
+describe("answerSuggestion", () => {
+  it("yes keeps the link as asked; no declines it as asked", async () => {
+    const yes = await saved();
+    const no = await saved();
+    for (const id of [yes, no]) await keepHandy(deps(), A, id, "inferred");
+    clock = day(3);
+    expect((await answerSuggestion(deps(), A, yes, true)).tool).toEqual(
+      tool({ source: "asked", since: day(3) }),
+    );
+    expect((await answerSuggestion(deps(), A, no, false)).tool).toEqual(
+      tool({ status: "declined", source: "asked", since: day(3) }),
+    );
+  });
+
+  it("refuses a link with no suggestion, changing nothing", async () => {
+    const none = await saved();
+    const kept = await saved();
+    await keepHandy(deps(), A, kept, "stated");
+    expect(await code(answerSuggestion(deps(), A, none, true))).toBe("conflict");
+    expect(await code(answerSuggestion(deps(), A, kept, false))).toBe("conflict");
+    expect(await store.getTool(A, none)).toBeNull();
+    expect(await store.getTool(A, kept)).toEqual(tool());
+  });
+});
+
+describe("notHandy", () => {
+  it("declines a link from no row and from kept, with the given source", async () => {
+    const none = await saved();
+    const kept = await saved();
+    await keepHandy(deps(), A, kept, "stated");
+    clock = day(7);
+    const declined = tool({ status: "declined", source: "asked", since: day(7) });
+    expect((await notHandy(deps(), A, none, "asked")).tool).toEqual(declined);
+    expect((await notHandy(deps(), A, kept, "asked")).tool).toEqual(declined);
+  });
+
+  it("refuses an inferred source: only the owner says a link is not handy", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    expect(await code(notHandy(deps(), A, id, "inferred"))).toBe("invalid_input");
+    expect(await store.getTool(A, id)).toEqual(tool());
   });
 });

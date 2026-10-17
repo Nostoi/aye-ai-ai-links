@@ -165,15 +165,17 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .worth-small h3,.handy-tile h3{font-size:16px;line-height:1.3;margin:0 0 6px}
 .handy-tile{position:relative;isolation:isolate;aspect-ratio:1;align-self:start;display:flex;flex-direction:column;justify-content:flex-end;padding:0;overflow:visible;overflow-wrap:anywhere;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
 .handy-image{position:absolute;inset:0;z-index:-1;width:100%;height:100%;object-fit:cover;border-radius:inherit}
-.handy-initials{position:absolute;inset:0 0 28px;z-index:-1;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;letter-spacing:.04em;color:var(--ink)}
-.handy-caption{padding:36px 12px 10px;border-radius:0 0 18px 18px;background:linear-gradient(to bottom,rgb(0 0 0 / 0),rgb(0 0 0 / .8) 55%);color:#fff}
-.handy-tile h3{margin:0 0 4px;font-size:15px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.handy-initials{position:absolute;inset:0 0 90px;z-index:-1;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:700;letter-spacing:.04em;color:var(--ink)}
+.handy-caption{min-width:0;padding:18px 12px 10px;border-radius:0 0 18px 18px;background:linear-gradient(to bottom,rgb(0 0 0 / 0),rgb(0 0 0 / .75) 60%);color:#fff}
+.handy-tile h3{margin:0 0 4px;font-size:14.5px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .handy-tile h3 a{color:#fff}
 .handy-tile h3 a::after{content:"";position:absolute;inset:0;border-radius:18px}
 .handy-tile h3 a:focus-visible{outline:none}
 .handy-tile h3 a:focus-visible::after{outline:3px solid var(--blue);outline-offset:-3px;box-shadow:inset 0 0 0 6px #fff}
-.handy-caption .card-site{margin:0;color:#ffffffe6}
-.handy-tile .ask{position:absolute;top:0;left:0;right:0;z-index:2;margin:0;padding:6px 48px 4px 10px;background:var(--surface);border-radius:18px 18px 12px 12px;box-shadow:0 2px 8px #0000001f}
+.handy-caption .card-site{min-width:0;margin:0;font-size:13px;color:#ffffffe6}
+.handy-caption .host{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.handy-tile.needs-you .ask{padding:6px 52px 4px 10px}
+.handy-tile .ask{position:absolute;top:0;left:0;right:0;z-index:2;margin:0;padding:6px 10px 4px;background:var(--surface);border-radius:18px 18px 12px 12px;box-shadow:0 2px 8px #0000001f}
 .handy-tile .ask p{margin:0;font-size:14px;font-weight:600;color:var(--ink)}
 .handy-tile .small-actions{flex-wrap:nowrap;gap:0 6px}
 .handy-tile .small-actions button{min-height:44px;min-width:44px;padding:0 4px}

@@ -140,4 +140,29 @@ describe("the Handy postcards", () => {
     expect(rule(".handy-caption")).toMatch(/linear-gradient\([^)]*rgb\(0 0 0/);
     expect(rule(".handy-caption")).toContain("color:#fff");
   });
+
+  it("keeps the fade to the caption and the initials above it, small enough never to meet it", () => {
+    expect(rule(".handy-caption")).toMatch(/padding:(\d+)px 12px/);
+    expect(Number(/padding:(\d+)px/.exec(rule(".handy-caption"))?.[1])).toBeLessThanOrEqual(20);
+    const initials = rule(".handy-initials");
+    expect(Number(/font-size:(\d+)px/.exec(initials)?.[1])).toBeLessThanOrEqual(40);
+    expect(Number(/inset:0 0 (\d+)px/.exec(initials)?.[1])).toBeGreaterThanOrEqual(84);
+  });
+
+  it("sets the title at 14.5px and the host at 13px on one line with an ellipsis", () => {
+    expect(rule(".handy-tile h3")).toContain("font-size:14.5px");
+    expect(rule(".handy-tile h3")).toContain("line-height:1.25");
+    const site = rule(".handy-caption .card-site");
+    expect(site).toContain("font-size:13px");
+    expect(site).toContain("min-width:0");
+    const host = rule(".handy-caption .host");
+    for (const part of ["white-space:nowrap", "overflow:hidden", "text-overflow:ellipsis"]) {
+      expect(host).toContain(part);
+    }
+  });
+
+  it("keeps a due panel's text and buttons clear of the menu circle, and a suggestion's unpadded", () => {
+    expect(Number(/padding:\d+px (\d+)px/.exec(rule(".handy-tile.needs-you .ask"))?.[1])).toBe(52);
+    expect(rule(".handy-tile .ask")).not.toMatch(/padding:\d+px 5\d/);
+  });
 });

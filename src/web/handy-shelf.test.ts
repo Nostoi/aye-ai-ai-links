@@ -158,7 +158,7 @@ describe("the Handy shelf", () => {
     expect(a?.querySelector(".card-site")?.textContent).toBe("school.example");
     expect(a?.querySelector(".card-site .dot")).not.toBeNull();
     expect(a?.textContent).not.toContain("School");
-    expect(b?.querySelector(".card-site")?.textContent).toBe("plain.example");
+    expect(b?.querySelector(".card-site .host")?.textContent).toBe("plain.example");
     expect(b?.querySelector(".card-site .dot")).toBeNull();
   });
 

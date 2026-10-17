@@ -62,7 +62,7 @@ function hostLine(link: Link, space: Space | null): string {
   const host = hostOf(link.url);
   if (!host) return "";
   const dot = space ? `<span class="dot" aria-hidden="true"></span>` : "";
-  return `<p class="card-site">${dot}${escapeHtml(host)}</p>\n`;
+  return `<p class="card-site">${dot}<span class="host">${escapeHtml(host)}</span></p>\n`;
 }
 
 /**

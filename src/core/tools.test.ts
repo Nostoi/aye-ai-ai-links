@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
 import { FakeStore } from "./fake-store.js";
+import { recordOpening, updateLink } from "./links.js";
 import { A, B, newLink } from "./snapshot-store-contract.js";
 import type { ToolRecord, ToolStore } from "./tool-store.js";
 import {
@@ -10,6 +11,7 @@ import {
   isDue,
   keepHandy,
   notHandy,
+  stillUsing,
 } from "./tools.js";
 import type { Link } from "./types.js";
 
@@ -263,5 +265,129 @@ describe("notHandy", () => {
     await keepHandy(deps(), A, id, "stated");
     expect(await code(notHandy(deps(), A, id, "inferred"))).toBe("invalid_input");
     expect(await store.getTool(A, id)).toEqual(tool());
+  });
+});
+
+describe("stillUsing", () => {
+  const answer = async (id: string, d: number) => {
+    clock = day(d);
+    return (await stillUsing(deps(), A, id, "stated")).tool;
+  };
+  const due = async (id: string, d: number) =>
+    isDue((await store.get(A, id)) as Link, await store.getTool(A, id), day(d));
+
+  it("doubles the wait 30, 60, 120 and caps it, when nothing was opened", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    expect(await answer(id, 30)).toEqual(tool({ answeredAt: day(30), waitDays: 60 }));
+    expect(await due(id, 89)).toBe(false);
+    expect(await due(id, 90)).toBe(true);
+    expect(await answer(id, 90)).toEqual(tool({ answeredAt: day(90), waitDays: 120 }));
+    expect(await answer(id, 210)).toEqual(tool({ answeredAt: day(210), waitDays: 120 }));
+  });
+
+  it("returns the answered row with the row before the answer", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(30);
+    expect(await stillUsing(deps(), A, id, "stated")).toEqual({
+      tool: tool({ answeredAt: day(30), waitDays: 60 }),
+      previous: tool(),
+    });
+  });
+
+  it("sets the wait back to 30 after an opening since the tool was kept", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(20);
+    await recordOpening({ store, now: () => clock }, A, id);
+    expect(await answer(id, 50)).toEqual(tool({ answeredAt: day(50), waitDays: 30 }));
+  });
+
+  const openers = [
+    ["from the web page", (id: string) => recordOpening({ store, now: () => clock }, A, id)],
+    [
+      "by an AI's update_link",
+      (id: string) => updateLink({ store, now: () => clock }, A, id, { opened: true }),
+    ],
+  ] as const;
+
+  it.each(openers)(
+    "an opening recorded %s brings a doubled wait back to 30 days from that opening",
+    async (_how, open) => {
+      const id = await saved();
+      const row = tool({ answeredAt: day(90), waitDays: 120 });
+      await put(id, row);
+      clock = day(100);
+      await open(id);
+      expect(await store.getTool(A, id)).toEqual(row);
+      expect(await due(id, 129)).toBe(false);
+      expect(await due(id, 130)).toBe(true);
+      expect(await answer(id, 130)).toEqual({ ...row, answeredAt: day(130), waitDays: 30 });
+    },
+  );
+
+  it.each(openers)(
+    "an opening recorded %s in the same millisecond as the answer counts as since",
+    async (_how, open) => {
+      const id = await saved();
+      await keepHandy(deps(), A, id, "stated");
+      expect(await answer(id, 30)).toEqual(tool({ answeredAt: day(30), waitDays: 60 }));
+      await open(id);
+      expect((await store.get(A, id))?.lastOpenedAt).toEqual(day(30));
+      expect(await due(id, 59)).toBe(false);
+      expect(await due(id, 60)).toBe(true);
+      expect(await answer(id, 60)).toEqual(tool({ answeredAt: day(60), waitDays: 30 }));
+    },
+  );
+
+  it("two answers from the same reading double the wait once", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(30);
+    const racing: ToolStore = Object.assign(Object.create(store) as FakeStore, {
+      updateToolIf: async (...args: Parameters<ToolStore["updateToolIf"]>) => {
+        await stillUsing(deps(), A, id, "stated");
+        return store.updateToolIf(...args);
+      },
+    });
+    expect(await code(stillUsing({ ...deps(), tools: racing }, A, id, "stated"))).toBe("conflict");
+    expect(await store.getTool(A, id)).toEqual(tool({ answeredAt: day(30), waitDays: 60 }));
+  });
+
+  it("an answer while not due restarts the clock but never doubles the wait", async () => {
+    const fresh = await saved();
+    await keepHandy(deps(), A, fresh, "stated");
+    expect(await answer(fresh, 10)).toEqual(tool({ answeredAt: day(10), waitDays: 30 }));
+    const doubled = await saved();
+    await put(doubled, tool({ answeredAt: day(30), waitDays: 60 }));
+    expect(await answer(doubled, 50)).toEqual(tool({ answeredAt: day(50), waitDays: 60 }));
+  });
+
+  it("two answers in a row: the first, while due, doubles; the second, no longer due, does not", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    expect(await answer(id, 30)).toEqual(tool({ answeredAt: day(30), waitDays: 60 }));
+    expect(await answer(id, 30)).toEqual(tool({ answeredAt: day(30), waitDays: 60 }));
+    expect(await answer(id, 31)).toEqual(tool({ answeredAt: day(31), waitDays: 60 }));
+  });
+
+  it("an answer while not due, after an opening since the last check, sets the wait to 30", async () => {
+    const id = await saved();
+    await put(id, tool({ answeredAt: day(90), waitDays: 120 }));
+    clock = day(100);
+    await recordOpening({ store, now: () => clock }, A, id);
+    expect(await due(id, 110)).toBe(false);
+    expect(await answer(id, 110)).toEqual(tool({ answeredAt: day(110), waitDays: 30 }));
+  });
+
+  it("refuses a link that is not kept, and an inferred source, changing nothing", async () => {
+    const suggested = await saved();
+    const kept = await saved();
+    await keepHandy(deps(), A, suggested, "inferred");
+    await keepHandy(deps(), A, kept, "stated");
+    expect(await code(stillUsing(deps(), A, suggested, "stated"))).toBe("conflict");
+    expect(await code(stillUsing(deps(), A, kept, "inferred"))).toBe("invalid_input");
+    expect(await store.getTool(A, kept)).toEqual(tool());
   });
 });

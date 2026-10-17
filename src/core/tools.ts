@@ -140,3 +140,34 @@ export async function notHandy(
   ownerOnly(source);
   return change(deps, owner, id, (current, _link, now) => moveTo(current, "declined", source, now));
 }
+
+const DOUBLED: Record<WaitDays, WaitDays> = { 30: 60, 60: 120, 120: 120 };
+
+/**
+ * Still using it: restarts the clock. After an opening recorded since the last check the wait goes
+ * back to FIRST_WAIT_DAYS. Otherwise it doubles, up to 120 days, only when the tool is due; an
+ * answer while not due keeps the wait, so a repeated or unprompted answer can't jump it.
+ * Only a kept tool is answered.
+ */
+export async function stillUsing(
+  deps: ToolsDeps,
+  owner: OwnerId,
+  id: string,
+  source: Source,
+): Promise<ToolChange> {
+  ownerOnly(source);
+  return change(deps, owner, id, (current, link, now) => {
+    if (current?.status !== "kept") {
+      throw new CoreError(
+        "conflict",
+        "That link is not kept handy, so there is no Still using it to answer.",
+      );
+    }
+    const waitDays = openedSinceCheck(link, current)
+      ? FIRST_WAIT_DAYS
+      : isDue(link, current, now)
+        ? DOUBLED[current.waitDays]
+        : current.waitDays;
+    return { ...current, answeredAt: now, waitDays };
+  });
+}

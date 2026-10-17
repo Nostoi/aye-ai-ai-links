@@ -182,6 +182,21 @@ export const MIGRATIONS: string[] = [
   // When a profile note was removed (#98): removal is soft, so Undo can bring the note back
   // until it is purged. NULL is a live note. Additive; rebuilds nothing.
   "ALTER TABLE profile_notes ADD COLUMN removed_at INTEGER",
+  // Keep handy (#125): a link's tool row. A link with no row is an ordinary link. The composite
+  // foreign key deletes the row with its link, as link_tags rows are. Additive; rebuilds nothing.
+  `
+  CREATE TABLE link_tools (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('kept', 'suggested', 'declined')),
+    source TEXT NOT NULL CHECK (source IN ('stated', 'asked', 'inferred')),
+    since INTEGER NOT NULL,
+    answered_at INTEGER,
+    wait_days INTEGER NOT NULL CHECK (wait_days IN (30, 60, 120)),
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE
+  );
+  `,
 ];
 
 /**

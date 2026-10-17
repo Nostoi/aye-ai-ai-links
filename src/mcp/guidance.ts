@@ -32,11 +32,15 @@ ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess,
 
 A repeat save (created: false) discards the tags you sent, including a requested project. To file it, call update_link with the full tag set.
 
-Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it. A repeat save does not fetch the page again.`;
+Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it. A repeat save does not fetch the page again.
+
+Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" at most once, only after a save returns created: true: send "keep" or "not_handy" with "asked" through update_link. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.`;
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
 title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
+
+handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
 Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
 
@@ -77,6 +81,7 @@ Reasons:
 - no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or when the owner opens it from the web page; any other opening, such as from a browser bookmark, is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.
+- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is the whole days since its last recorded opening, or null when none is recorded. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to archive it or send handy {action: "not_handy", source: "asked"}.
 
 Offer to snooze a link (update_link with snoozedUntil) or archive it (state "archived"). Send opened: true if the owner opens one.
 

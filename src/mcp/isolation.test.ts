@@ -237,6 +237,10 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
 
   it("T3: B's update_link of A's link is refused, whatever it asks to change", async () => {
     const { world, door, aId, bId, snapA } = await open();
+    await tool(world, door.a, "update_link", {
+      id: aId,
+      handy: { action: "keep", source: "stated" },
+    });
     const before = snapA();
     const everything = {
       title: "hijack",
@@ -246,6 +250,7 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
       state: "archived",
       snoozedUntil: "2099-01-01T00:00:00Z",
       opened: true,
+      handy: { action: "not_handy", source: "stated" },
       owner: A,
     };
 
@@ -253,11 +258,14 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
 
     expect(snapA()).toEqual(before);
     // The same arguments are valid on B's own link, so the refusal above was about ownership.
-    const own = await tool<{ link: { title: string } }>(world, door.b, "update_link", {
-      id: bId,
-      ...everything,
-    });
+    const own = await tool<{ link: { title: string; handy: unknown } }>(
+      world,
+      door.b,
+      "update_link",
+      { id: bId, ...everything },
+    );
     expect(own.link.title).toBe("hijack");
+    expect(own.link.handy).toEqual({ status: "declined", source: "stated", due: false });
   });
 
   it("T4: B's update_tag changes B's tag and leaves A's tag of the same name alone", async () => {

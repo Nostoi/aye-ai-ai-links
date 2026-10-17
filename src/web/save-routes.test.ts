@@ -99,10 +99,29 @@ describe("GET /save", () => {
       "";
     expect(next.startsWith("/save?")).toBe(true);
     await browser.signIn();
+    const before = allRows(world);
     const back = await browser.send(next);
     expect(back.status).toBe(200);
+    expect(allRows(world)).toEqual(before);
     expect(field(String(back.body), "save-url")).toBe(url);
     expect(field(String(back.body), "save-title")).toBe(title);
+  });
+
+  it("a HEAD request keeps the framing and caching headers and writes nothing", async () => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    const res = await browser.send(saveAddress(NEW, "A story"), { method: "HEAD" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it("the login page sends no Referer onward, so the return request stays small", async () => {
+    const world = await oauthWorld();
+    const res = await world.agent().send("/login?next=%2Fsave%3Furl%3Dhttps%253A%252F%252Fex.com");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
   });
 
   it("leaves every other page's sign-in redirect bare", async () => {

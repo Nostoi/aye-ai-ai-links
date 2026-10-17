@@ -6,7 +6,7 @@ import { TITLE_MAX } from "../core/links.js";
  * encodes the Save address again inside `/login?next=`, so this keeps that request under Node's
  * 16 KiB header limit; past it, the bookmarklet opens `/save?long=1`.
  */
-export const LONG_ADDRESS = 4_000;
+export const LONG_ADDRESS = 3_000;
 
 /**
  * The bookmarklet: one `javascript:` URL that opens this site's Save page in a new tab, with

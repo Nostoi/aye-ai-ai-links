@@ -388,7 +388,11 @@ export function webApp({
   };
 
   app.get("/login", (c) =>
-    c.html(loginPage({ next: returnAfterLogin(c.req.query("next") ?? null) }), 200, NO_STORE),
+    // No Referer, so the return to a long Save address does not carry this whole URL as a header (#129).
+    c.html(loginPage({ next: returnAfterLogin(c.req.query("next") ?? null) }), 200, {
+      ...NO_STORE,
+      "Referrer-Policy": "no-referrer",
+    }),
   );
 
   app.get(OAUTH_ERROR_PATH, (c) =>

@@ -110,12 +110,13 @@ export interface LinkStore {
    * `notSurfacedAfter`, set lastSurfacedAt to `at` and return the link as read inside that step,
    * with the value it replaced. Core supplies the cutoffs, as with updateTag's `expectedKind`.
    * Foreign, unknown, malformed and no-longer-eligible ids are skipped, never an error; an id
-   * given twice is claimed once. On an error nothing is written.
+   * given twice is claimed once. With `exceptKeptTools`, a link whose Keep handy row is `kept` is
+   * skipped too, judged in the same step; core says when (the digest's reading picks). On an error nothing is written.
    */
   claimSurfaced(
     owner: OwnerId,
     ids: string[],
-    when: { at: Date; notSurfacedAfter: Date; now: Date },
+    when: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
   ): Promise<SurfacedClaim[]>;
 
   unclaimSurfaced(

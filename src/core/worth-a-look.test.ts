@@ -6,6 +6,7 @@ import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkSearch } from "./search.js";
 import type { SearchLog } from "./search-log.js";
+import { keepHandy } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
 import {
   archiveLink,
@@ -45,6 +46,7 @@ let clock: Date;
 let searchLog: SpySearchLog;
 const deps = () => ({
   store,
+  tools: store,
   profile,
   keywordSearch: keyword,
   searchLog,
@@ -106,6 +108,14 @@ async function code(p: Promise<unknown>): Promise<string> {
 }
 
 describe("worthALook", () => {
+  it("leaves out a kept tool, even one that matches the focus", async () => {
+    const tool = await link();
+    const other = await link();
+    await focus("lunch", at(-DAY), [tool.id]);
+    await keepHandy(deps(), A, tool.id, "stated");
+    expect(await ids()).toEqual([other.id]);
+  });
+
   it("shows the same three picks all day, writing nothing", async () => {
     for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
     const before = structuredClone(store.all(A));

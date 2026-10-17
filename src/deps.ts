@@ -32,6 +32,8 @@ export function createDeps(db: Database, embedder: Embedder) {
     images: new SqliteImageStore(db),
     profile: new SqliteProfileStore(db),
     pages: store,
+    /** Keep handy rows: the digest and the tools rules read them. */
+    tools: store,
     now: () => new Date(),
   };
 }

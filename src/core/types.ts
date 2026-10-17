@@ -19,6 +19,9 @@ export const SNAPSHOT_STATUSES = [
 ] as const;
 export type SnapshotStatus = (typeof SNAPSHOT_STATUSES)[number];
 
+export const TOOL_STATUSES = ["kept", "suggested", "declined"] as const;
+export type ToolStatus = (typeof TOOL_STATUSES)[number];
+
 /** What a fetch of the page produced, without its text (see SnapshotStore.getSnapshotText). */
 export type SnapshotSummary = {
   status: SnapshotStatus;

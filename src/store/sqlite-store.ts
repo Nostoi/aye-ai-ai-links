@@ -6,6 +6,13 @@ import {
   type SnapshotStore,
 } from "../core/snapshot-store.js";
 import type { LinkExpectation, LinkStore, SurfacedClaim } from "../core/store.js";
+import {
+  sameTool,
+  type ToolRecord,
+  type ToolStore,
+  type ToolWrite,
+  type WaitDays,
+} from "../core/tool-store.js";
 import type {
   Labelled,
   Link,
@@ -14,9 +21,11 @@ import type {
   NewLink,
   OwnerId,
   SnapshotStatus,
+  Source,
   Tag,
   TagKind,
   TagPatch,
+  ToolStatus,
 } from "../core/types.js";
 
 export class StoreError extends Error {
@@ -74,7 +83,7 @@ type SnapshotRow = {
   image_url: string | null;
 };
 
-export class SqliteStore implements LinkStore, SnapshotStore {
+export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   constructor(private readonly db: Database) {}
 
   /** Idempotent. Owners are created here, outside LinkStore. */
@@ -188,7 +197,7 @@ export class SqliteStore implements LinkStore, SnapshotStore {
   async claimSurfaced(
     owner: OwnerId,
     ids: string[],
-    when: { at: Date; notSurfacedAfter: Date; now: Date },
+    when: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
     return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
@@ -292,6 +301,62 @@ export class SqliteStore implements LinkStore, SnapshotStore {
       .prepare("SELECT text FROM snapshots WHERE link_id = ? AND owner_id = ?")
       .get(n, owner) as { text: string | null } | undefined;
     return row?.text ?? null;
+  }
+
+  async getTool(owner: OwnerId, linkId: string) {
+    const n = parseId(linkId);
+    return n === null ? null : this.readTool(owner, n);
+  }
+
+  async listTools(owner: OwnerId) {
+    const rows = this.db
+      .prepare(`${TOOL_SELECT} WHERE owner_id = ? ORDER BY link_id`)
+      .all(owner) as ToolRow[];
+    return new Map<string, ToolRecord>(rows.map((r) => [String(r.link_id), toTool(r)]));
+  }
+
+  async updateToolIf(
+    owner: OwnerId,
+    linkId: string,
+    expected: ToolRecord | null,
+    next: ToolRecord | null,
+  ): Promise<ToolWrite | null> {
+    const n = parseId(linkId);
+    if (n === null) return null;
+    return this.db
+      .transaction((): ToolWrite | null => {
+        const link = this.db
+          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?")
+          .get(n, owner);
+        if (!link) return null;
+        const current = this.readTool(owner, n);
+        if (!sameTool(current, expected)) return { tool: current, applied: false };
+        if (next === null) {
+          this.db
+            .prepare("DELETE FROM link_tools WHERE owner_id = ? AND link_id = ?")
+            .run(owner, n);
+          return { tool: null, applied: true };
+        }
+        this.db
+          .prepare(
+            `INSERT INTO link_tools (owner_id, link_id, status, source, since, answered_at, wait_days)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (owner_id, link_id) DO UPDATE SET status = excluded.status,
+               source = excluded.source, since = excluded.since,
+               answered_at = excluded.answered_at, wait_days = excluded.wait_days`,
+          )
+          .run(
+            owner,
+            n,
+            next.status,
+            next.source,
+            toMs(next.since),
+            toMs(next.answeredAt),
+            next.waitDays,
+          );
+        return { tool: this.readTool(owner, n), applied: true };
+      })
+      .immediate();
   }
 
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {
@@ -406,22 +471,33 @@ export class SqliteStore implements LinkStore, SnapshotStore {
   private claimSync(
     owner: OwnerId,
     ids: number[],
-    { at, notSurfacedAfter, now }: { at: Date; notSurfacedAfter: Date; now: Date },
+    {
+      at,
+      notSurfacedAfter,
+      now,
+      exceptKeptTools,
+    }: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
   ): SurfacedClaim[] {
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
        WHERE id = ? AND owner_id = ? AND state = 'active'
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
-         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)`,
+         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
+         AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
+           WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))`,
     );
     const mark = this.db.prepare(
       "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ?",
     );
     const claimed: SurfacedClaim[] = [];
     for (const id of ids) {
-      const row = previous.get(id, owner, toMs(now), toMs(notSurfacedAfter)) as
-        | { last_surfaced_at: number | null }
-        | undefined;
+      const row = previous.get(
+        id,
+        owner,
+        toMs(now),
+        toMs(notSurfacedAfter),
+        exceptKeptTools ? 1 : 0,
+      ) as { last_surfaced_at: number | null } | undefined;
       if (!row) continue;
       mark.run(toMs(at), id, owner);
       claimed.push({
@@ -451,6 +527,13 @@ export class SqliteStore implements LinkStore, SnapshotStore {
     const link = this.read(owner, id);
     if (!link) throw new Error(`Link ${id} vanished inside its own transaction.`);
     return link;
+  }
+
+  private readTool(owner: OwnerId, id: number): ToolRecord | null {
+    const row = this.db
+      .prepare(`${TOOL_SELECT} WHERE owner_id = ? AND link_id = ?`)
+      .get(owner, id) as ToolRow | undefined;
+    return row ? toTool(row) : null;
   }
 
   private read(owner: OwnerId, id: number): Link | null {
@@ -498,6 +581,27 @@ const TAG_SELECT = `SELECT lt.link_id AS linkId, t.key AS key, t.name AS name, l
 
 const SNAPSHOT_SELECT = `SELECT link_id, fetch_status, fetched_at, title, description, image_url
   FROM snapshots`;
+
+type ToolRow = {
+  link_id: number;
+  status: ToolStatus;
+  source: Source;
+  since: number;
+  answered_at: number | null;
+  wait_days: WaitDays;
+};
+
+const TOOL_SELECT = "SELECT link_id, status, source, since, answered_at, wait_days FROM link_tools";
+
+function toTool(r: ToolRow): ToolRecord {
+  return {
+    status: r.status,
+    source: r.source,
+    since: new Date(r.since),
+    answeredAt: fromMs(r.answered_at),
+    waitDays: r.wait_days,
+  };
+}
 
 /** Only the LinkTag fields of `tagRows` are kept; TAG_SELECT also reads the link id. */
 function toLink(row: LinkRow, tagRows: LinkTag[], snap: SnapshotRow | undefined): Link {

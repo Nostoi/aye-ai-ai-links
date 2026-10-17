@@ -203,7 +203,7 @@ export async function recordOpening(deps: Deps, owner: OwnerId, id: string): Pro
   return updateLink(deps, owner, id, { opened: true });
 }
 
-function notFound(id: string): CoreError {
+export function notFound(id: string): CoreError {
   return new CoreError(
     "not_found",
     `No link with id "${id}" was found. Use search_links to find the right id.`,

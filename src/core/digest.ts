@@ -3,6 +3,8 @@ import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { LinkSearch } from "./search.js";
 import type { LinkStore, SurfacedClaim } from "./store.js";
+import type { ToolStore } from "./tool-store.js";
+import { isDue } from "./tools.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
 
 // Uncalibrated defaults (ROADMAP #34); the owner may change them.
@@ -34,6 +36,8 @@ export type DigestLink = { link: Link; reasons: DigestReason[] };
 
 export type DigestDeps = {
   store: LinkStore;
+  /** Keep handy rows: a kept tool is not reading, so it gets no reason. */
+  tools: ToolStore;
   profile: ProfileStore;
   /** Keyword matching only: with no similarity floor yet (#68), any link can come back as a meaning match. */
   keywordSearch: LinkSearch;
@@ -108,7 +112,7 @@ async function focusReasons(
 
 /**
  * Up to `limit` eligible links that have a reason, in digest order, with each one's focus reasons.
- * Reads only. Eligible: active, not snoozed at now, and surfaced at or before now -
+ * Reads only. Eligible: active, not a kept tool, not snoozed at now, and surfaced at or before now -
  * SURFACE_COOLDOWN_MS.
  */
 async function select(
@@ -119,8 +123,11 @@ async function select(
 ): Promise<{ picked: Link[]; focus: Map<string, DigestReason[]> }> {
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   const all = await deps.store.listLinks(owner);
+  const tools = await deps.tools.listTools(owner);
   const candidates = new Map(
-    all.filter((l) => eligible(l, now, notSurfacedAfter)).map((l) => [l.id, l]),
+    all
+      .filter((l) => tools.get(l.id)?.status !== "kept" && eligible(l, now, notSurfacedAfter))
+      .map((l) => [l.id, l]),
   );
   if (candidates.size === 0) return { picked: [], focus: new Map() };
 
@@ -145,12 +152,13 @@ export async function claimSurfaced(
   deps: Pick<DigestDeps, "store" | "now">,
   owner: OwnerId,
   ids: string[],
+  { exceptKeptTools = false }: { exceptKeptTools?: boolean } = {},
 ): Promise<SurfacedClaim[]> {
   const now = deps.now();
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   return ids.length === 0
     ? []
-    : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now });
+    : deps.store.claimSurfaced(owner, ids, { at: now, notSurfacedAfter, now, exceptKeptTools });
 }
 
 export async function unclaimSurfaced(
@@ -189,7 +197,8 @@ export async function previewDigest(
  * with every reason that applies.
  *
  * The claim re-checks eligibility in the store; a link it skips is left out, and the other reasons
- * are judged again from the link as claimed. A claimed link left with no reason is left out but
+ * are judged again from the link as claimed. The claim also skips a link kept handy since
+ * selection. A claimed link left with no reason is left out but
  * stays marked. A response lost after the claim still uses up its links.
  */
 export async function getDigest(
@@ -202,6 +211,7 @@ export async function getDigest(
     { store: deps.store, now: () => now },
     owner,
     picked.map((l) => l.id),
+    { exceptKeptTools: true },
   );
   const links = claimed
     .map(({ link, previousSurfacedAt }) => ({
@@ -210,4 +220,54 @@ export async function getDigest(
     }))
     .filter((d) => d.reasons.length > 0);
   return { links };
+}
+
+/** A due kept tool for the digest's still-using check, with whole days since its last recorded opening (null: never opened). */
+export type DueTool = { link: Link; daysSinceOpened: number | null };
+
+/**
+ * At most one kept tool that is due and eligible as digest links are (active, not snoozed at now,
+ * surfaced at or before now - SURFACE_COOLDOWN_MS), the first in the digest's rotation. Reads
+ * only; the caller claims it as it claims other picks.
+ */
+export async function dueTool(
+  deps: Pick<DigestDeps, "store" | "tools" | "now">,
+  owner: OwnerId,
+): Promise<DueTool | null> {
+  const now = deps.now();
+  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
+  const tools = await deps.tools.listTools(owner);
+  const [link] = (await deps.store.listLinks(owner))
+    .filter((l) => eligible(l, now, notSurfacedAfter) && isDue(l, tools.get(l.id) ?? null, now))
+    .sort(rotation);
+  return link ? dueToolOf(link, now) : null;
+}
+
+/**
+ * Claims `dueTool`'s pick as the digest claims its other picks, then judges it again from the link
+ * as claimed and its Keep handy row read after the claim. One no longer due is left out but stays
+ * marked, as a digest pick left with no reason is.
+ */
+export async function claimDueTool(
+  deps: Pick<DigestDeps, "store" | "tools" | "now">,
+  owner: OwnerId,
+): Promise<DueTool | null> {
+  const now = deps.now();
+  const picked = await dueTool({ ...deps, now: () => now }, owner);
+  if (!picked) return null;
+  const [claim] = await claimSurfaced({ store: deps.store, now: () => now }, owner, [
+    picked.link.id,
+  ]);
+  if (!claim) return null;
+  const tool = await deps.tools.getTool(owner, claim.link.id);
+  return isDue(claim.link, tool, now) ? dueToolOf(claim.link, now) : null;
+}
+
+function dueToolOf(link: Link, now: Date): DueTool {
+  const opened = link.lastOpenedAt;
+  return {
+    link,
+    daysSinceOpened:
+      opened === null ? null : Math.floor((now.getTime() - opened.getTime()) / DAY_MS),
+  };
 }

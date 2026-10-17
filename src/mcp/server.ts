@@ -19,6 +19,7 @@ import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { PageTextReader } from "../core/snapshot-text.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
+import type { ToolStore } from "../core/tool-store.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
 import {
@@ -37,6 +38,7 @@ import {
 
 export type McpDeps = {
   store: LinkStore;
+  tools: ToolStore;
   search: LinkSearch;
   keywordSearch: LinkSearch;
   count: LinkCount;

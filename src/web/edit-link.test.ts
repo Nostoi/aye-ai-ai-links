@@ -151,6 +151,17 @@ describe("the card menu and the card data", () => {
     );
   });
 
+  it("leaves out a page title longer than a title can be, counted in code points after trimming", () => {
+    const pageTitle = (n: number) => {
+      const html = pages({
+        links: [link("1", { snapshot: { ...SNAPSHOT, title: ` ${"🍳".repeat(n)} ` } })],
+      }).search;
+      return cards(html)[0]?.getAttribute("data-page-title");
+    };
+    expect(pageTitle(200)).toBe(` ${"🍳".repeat(200)} `);
+    expect(pageTitle(201)).toBe("");
+  });
+
   it("gives an archived link in search results the menu too, since search lists every state", () => {
     const [card] = cards(pages({ links: [link("1", { state: "archived" })] }).search);
     expect(card?.querySelector("button[data-act=edit]")).not.toBeNull();

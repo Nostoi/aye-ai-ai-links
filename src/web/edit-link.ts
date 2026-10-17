@@ -1,5 +1,6 @@
 import type { PictureInfo } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
+import { TITLE_MAX } from "../core/links.js";
 import type { Link } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
 import { initialsText } from "./initials.js";
@@ -24,9 +25,10 @@ export function editData(
   version: string | undefined,
   info: PictureInfo | undefined,
 ): string {
+  const page = link.snapshot?.title ?? "";
   const data: [string, string][] = [
     ["title", link.title ?? ""],
-    ["page-title", link.snapshot?.title ?? ""],
+    ["page-title", [...page.trim()].length > TITLE_MAX ? "" : page],
     ["version", version ?? ""],
     ["own", info?.own ? "1" : "0"],
     ["page-version", info?.pageVersion ?? ""],

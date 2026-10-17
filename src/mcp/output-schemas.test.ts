@@ -18,6 +18,7 @@ import type { listLinks } from "../core/list-links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { searchLinks } from "../core/search-links.js";
 import type { changeTagKind } from "../core/tag-kind.js";
+import { type HandyView, keepHandy, notHandy } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -41,6 +42,7 @@ import { buildMcpServer } from "./server.js";
 
 const A: Caller = { owner: "owner-a", savedBy: "claude-code" };
 const NOW = new Date("2026-10-11T12:00:00.000Z");
+const DAY = 86_400_000;
 
 // biome-ignore lint/suspicious/noExplicitAny: the tests read untyped JSON-RPC bodies
 type Json = any;
@@ -126,9 +128,10 @@ const LOWER = "0000-01-01T00:00:00+01:00"; // serializes as "-000001-12-31T23:00
 
 describe.each(ERAS)("output schemas, %s era", (era) => {
   let db: ReturnType<typeof openDatabase>;
+  let deps: ReturnType<typeof freshApp>["deps"];
   let app: Hono;
   beforeEach(() => {
-    ({ db, app } = freshApp());
+    ({ db, deps, app } = freshApp());
   });
 
   it("every listed tool declares an object-rooted outputSchema", async () => {
@@ -248,7 +251,24 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     );
     await run(addToProfile({ addFocus: [{ text: "quokka", source: "inferred" }] }));
     db.prepare("UPDATE links SET saved_at = ? WHERE id = 3").run(NOW.getTime() - 60 * 86_400_000);
-    const digest = await run(digestStep);
+    // Keep handy rows: 6 kept and due (never opened), 7 suggested, 8 declined, 9 kept and due (opened
+    // 45 days ago). 7 and 8 are ordinary links, so they are shown recently enough to stay out.
+    const w = { text: "w", source: "stated" };
+    for (const path of ["f", "g", "h", "i"]) {
+      await run(save({ url: `https://example.com/${path}`, why: w }));
+    }
+    await keepHandy(deps, A.owner, "6", "stated");
+    await keepHandy(deps, A.owner, "7", "inferred");
+    await notHandy(deps, A.owner, "8", "asked");
+    await keepHandy(deps, A.owner, "9", "asked");
+    db.prepare("UPDATE link_tools SET since = ? WHERE link_id IN (6, 9)").run(
+      NOW.getTime() - 40 * DAY,
+    );
+    db.prepare("UPDATE links SET last_opened_at = ? WHERE id = 9").run(NOW.getTime() - 45 * DAY);
+    db.prepare("UPDATE links SET last_surfaced_at = ? WHERE id IN (7, 8)").run(NOW.getTime());
+    await run(list({ limit: 50 }));
+    const digest = await run(digestStep); // the reading picks, then one check
+    const secondDigest = await run(digestStep); // only the other due tool's check
     const emptyDigest = await run(digestStep); // everything due was just surfaced
 
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
@@ -258,6 +278,14 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       ["5", ["focus_words", "never_surfaced"]],
       ["3", ["no_why", "not_opened_recently", "never_surfaced"]],
       ["4", ["no_why", "never_surfaced"]],
+      ["6", ["still_using_check"]],
+    ]);
+    expect(digest.links[3].reasons[0]).toEqual({
+      kind: "still_using_check",
+      daysSinceOpened: null,
+    });
+    expect(secondDigest.links.map((d: Json) => [d.link.id, d.reasons])).toEqual([
+      ["9", [{ kind: "still_using_check", daysSinceOpened: 45 }]],
     ]);
     expect(digest.links[0].reasons[0].focus).toMatchObject({ text: "quokka", source: "inferred" });
 
@@ -292,6 +320,11 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
         (t) => t.truncated,
       ),
     ).toEqual(new Set([true, false]));
+    expect(values(links, (l) => l.handy === null)).toEqual(new Set([true, false]));
+    const views = links.map((l) => l.handy).filter(Boolean);
+    expect(values(views, (h) => h.status)).toEqual(new Set(["kept", "suggested", "declined"]));
+    expect(values(views, (h) => h.source)).toEqual(new Set(["stated", "asked", "inferred"]));
+    expect(values(views, (h) => h.due)).toEqual(new Set([true, false]));
     expect(values(links, (l) => l.snapshot === null)).toEqual(new Set([true, false]));
     const snapshots = links.map((l) => l.snapshot).filter(Boolean);
     expect(values(snapshots, (x) => x.status)).toEqual(
@@ -591,18 +624,30 @@ type Wire<T> = T extends Date
     : T extends object
       ? { [K in keyof T]: Wire<T[K]> }
       : T;
+/** What the door adds to each link it returns: its Keep handy view. */
+type Handied<T> = T extends Date
+  ? T
+  : T extends Link
+    ? T & { handy: HandyView | null }
+    : T extends (infer U)[]
+      ? Handied<U>[]
+      : T extends object
+        ? { [K in keyof T]: Handied<T[K]> }
+        : T;
 type Returned<F extends (...args: never[]) => Promise<unknown>> = Awaited<ReturnType<F>>;
 
 describe("output schemas against core's types (checked by tsc)", () => {
   it("each schema's output type is the wire form of what its tool returns", () => {
-    expectTypeOf<z.output<typeof linkOutput>>().toEqualTypeOf<Wire<Link>>();
+    expectTypeOf<z.output<typeof linkOutput>>().toEqualTypeOf<Wire<Handied<Link>>>();
     expectTypeOf<z.output<typeof tagOutput>>().toEqualTypeOf<Wire<Tag>>();
     expectTypeOf<z.output<typeof saveLinkOutput>>().toEqualTypeOf<
       Wire<
-        Returned<typeof saveLink> & {
-          filingContext: Returned<typeof filingContext>;
-          profile: Returned<typeof profileContext>;
-        }
+        Handied<
+          Returned<typeof saveLink> & {
+            filingContext: Returned<typeof filingContext>;
+            profile: Returned<typeof profileContext>;
+          }
+        >
       >
     >();
     expectTypeOf<z.output<typeof profileOutput>>().toEqualTypeOf<
@@ -615,26 +660,28 @@ describe("output schemas against core's types (checked by tsc)", () => {
       Wire<Returned<typeof addProfile>>
     >();
     expectTypeOf<z.output<typeof linkResultOutput>>().toEqualTypeOf<
-      Wire<{ link: Returned<typeof updateLink> }>
+      Wire<Handied<{ link: Returned<typeof updateLink> }>>
     >();
     expectTypeOf<z.output<typeof getLinkOutput>>().toEqualTypeOf<
-      Wire<Returned<typeof getLinkWithText>>
+      Wire<Handied<Returned<typeof getLinkWithText>>>
     >();
     expectTypeOf<z.output<typeof searchLinksOutput>>().toEqualTypeOf<
-      Wire<{ links: Returned<typeof searchLinks> }>
+      Wire<Handied<{ links: Returned<typeof searchLinks> }>>
     >();
     expectTypeOf<z.output<typeof listLinksOutput>>().toEqualTypeOf<
       Wire<
-        Omit<Returned<typeof listLinks>, "older"> & {
-          nextCursor: Returned<typeof listLinks>["older"];
-        }
+        Handied<
+          Omit<Returned<typeof listLinks>, "older"> & {
+            nextCursor: Returned<typeof listLinks>["older"];
+          }
+        >
       >
     >();
     expectTypeOf<z.output<typeof updateTagOutput>>().toEqualTypeOf<
       Wire<{ tag: Returned<typeof changeTagKind> }>
     >();
     expectTypeOf<z.output<typeof getDigestOutput>>().toEqualTypeOf<
-      Wire<Returned<typeof getDigest>>
+      Wire<Handied<Returned<typeof getDigest>>>
     >();
   });
 });

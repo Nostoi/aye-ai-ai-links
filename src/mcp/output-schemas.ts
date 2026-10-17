@@ -1,6 +1,6 @@
 import type { StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { SNAPSHOT_STATUSES, SOURCES, STATES, TAG_KINDS } from "../core/types.js";
+import { SNAPSHOT_STATUSES, SOURCES, STATES, TAG_KINDS, TOOL_STATUSES } from "../core/types.js";
 
 // The JSON form of core's results: `ok()` in server.ts turns each Date into a string.
 // Timestamps are plain strings because `Date#toJSON` is not always a four-digit ISO year.
@@ -61,6 +61,13 @@ const snapshotOutput = z.strictObject({
   imageUrl: z.string().nullable(),
 });
 
+// A link's Keep handy state. Adding a status is a breaking change (ROADMAP #39).
+const handyOutput = z.strictObject({
+  status: z.enum(TOOL_STATUSES),
+  source,
+  due: z.boolean(),
+});
+
 export const linkOutput = z.strictObject({
   id: z.string(),
   url: z.string(),
@@ -76,6 +83,7 @@ export const linkOutput = z.strictObject({
   snoozedUntil: timestamp.nullable(),
   state: z.enum(STATES),
   snapshot: snapshotOutput.nullable(),
+  handy: handyOutput.nullable(),
 });
 
 export const tagOutput = z.strictObject({

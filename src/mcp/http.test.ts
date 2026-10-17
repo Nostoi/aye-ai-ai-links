@@ -8,6 +8,7 @@ import { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import { searchLinks } from "../core/search-links.js";
 import { changeTagKind } from "../core/tag-kind.js";
+import type { Link } from "../core/types.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -321,6 +322,7 @@ describe("MCP door over HTTP", () => {
           description: null,
           imageUrl: null,
         },
+        handy: null,
       },
       created: true,
       // No runner here, so the page is not fetched and there is no text.
@@ -333,6 +335,7 @@ describe("MCP door over HTTP", () => {
   });
 
   it("every tool equals the direct core call with the same clock", async () => {
+    const plain = (link: Link) => ({ ...link, handy: null });
     const input = {
       url: "https://example.com/p",
       title: "Parity",
@@ -344,6 +347,7 @@ describe("MCP door over HTTP", () => {
     expect(viaDoor.body.result.structuredContent).toEqual(
       wire({
         ...saved,
+        link: plain(saved.link),
         filingContext: await filingContext(direct, A.owner),
         profile: await profileContext(direct, A.owner),
       }),
@@ -356,7 +360,7 @@ describe("MCP door over HTTP", () => {
     };
     const upd = await call(app, "key-a", "update_link", { id: "1", ...patch });
     const updDirect = await updateLink(direct, A.owner, "1", patch);
-    expect(upd.body.result.structuredContent).toEqual(wire({ link: updDirect }));
+    expect(upd.body.result.structuredContent).toEqual(wire({ link: plain(updDirect) }));
 
     const retagged = await call(app, "key-a", "update_tag", { name: "ALPHA", kind: "topic" });
     expect(retagged.body.result.structuredContent).toEqual(
@@ -365,8 +369,9 @@ describe("MCP door over HTTP", () => {
     expect(retagged.body.result.structuredContent.tag.kind).toBe("topic");
 
     const got = await call(app, "key-a", "get_link", { id: "1" });
+    const gotDirect = await getLinkWithText(direct, A.owner, "1", A.savedBy);
     expect(got.body.result.structuredContent).toEqual(
-      wire(await getLinkWithText(direct, A.owner, "1", A.savedBy)),
+      wire({ ...gotDirect, link: plain(gotDirect.link) }),
     );
 
     const found = await call(app, "key-a", "search_links", {
@@ -380,12 +385,14 @@ describe("MCP door over HTTP", () => {
       A.savedBy,
     );
     expect(foundDirect).toHaveLength(1);
-    expect(found.body.result.structuredContent).toEqual(wire({ links: foundDirect }));
+    expect(found.body.result.structuredContent).toEqual(wire({ links: foundDirect.map(plain) }));
 
     const digest = await call(app, "key-a", "get_digest", {});
     const digestDirect = await getDigest(direct, A.owner);
     expect(digestDirect.links).toHaveLength(1);
-    expect(digest.body.result.structuredContent).toEqual(wire(digestDirect));
+    expect(digest.body.result.structuredContent).toEqual(
+      wire({ links: digestDirect.links.map((d) => ({ ...d, link: plain(d.link) })) }),
+    );
   });
 
   it("get_digest neither returns nor marks another owner's links", async () => {

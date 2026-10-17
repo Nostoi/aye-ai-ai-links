@@ -20,8 +20,10 @@ import type { PageTextReader } from "../core/snapshot-text.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import type { ToolStore } from "../core/tool-store.js";
+import { handyOfLinks } from "../core/tools.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
+import { linksWithHandy, linkWithHandy } from "./handy.js";
 import {
   addProfileOutput,
   advertisedOpen,
@@ -236,6 +238,7 @@ export function buildMcpServer(
       const saved = await saveLink(deps, owner, { ...args, savedBy });
       return {
         ...saved,
+        link: await linkWithHandy(deps, owner, saved.link),
         filingContext: await filingContext(deps, owner),
         profile: await profileContext(deps, owner),
       };
@@ -255,14 +258,15 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ id, snoozedUntil, ...rest }) => ({
-      link: await updateLink(deps, owner, id, {
+    async ({ id, snoozedUntil, ...rest }) => {
+      const link = await updateLink(deps, owner, id, {
         ...rest,
         ...(snoozedUntil !== undefined && {
           snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
         }),
-      }),
-    }),
+      });
+      return { link: await linkWithHandy(deps, owner, link) };
+    },
   );
 
   register(
@@ -294,14 +298,15 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ savedFrom, savedTo, ...rest }) => ({
-      links: await searchLinks(
+    async ({ savedFrom, savedTo, ...rest }) => {
+      const links = await searchLinks(
         deps,
         owner,
         { ...rest, savedFrom: toDate(savedFrom), savedTo: toDate(savedTo) },
         savedBy,
-      ),
-    }),
+      );
+      return { links: await linksWithHandy(deps, owner, links) };
+    },
   );
 
   register(
@@ -323,7 +328,7 @@ export function buildMcpServer(
         savedFrom: toDate(savedFrom),
         savedTo: toDate(savedTo),
       });
-      return { links, total, nextCursor: older };
+      return { links: await linksWithHandy(deps, owner, links), total, nextCursor: older };
     },
   );
 
@@ -340,7 +345,10 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    ({ id }) => getLinkWithText(deps, owner, id, savedBy),
+    async ({ id }) => {
+      const got = await getLinkWithText(deps, owner, id, savedBy);
+      return { ...got, link: await linkWithHandy(deps, owner, got.link) };
+    },
   );
 
   register(
@@ -405,7 +413,23 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    () => getDigest(deps, owner),
+    async () => {
+      // One instant: getDigest reads now once and claims at it, so each item's handy uses that now too.
+      const now = deps.now();
+      const at = { ...deps, now: () => now };
+      const { links } = await getDigest(at, owner);
+      const views = await handyOfLinks(
+        at,
+        owner,
+        links.map((d) => d.link),
+      );
+      return {
+        links: links.map((d) => ({
+          ...d,
+          link: { ...d.link, handy: views.get(d.link.id) ?? null },
+        })),
+      };
+    },
   );
 
   return server;

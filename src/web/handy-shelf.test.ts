@@ -440,6 +440,23 @@ describe("the shelf's script", () => {
     p.dispatch(p.$(`[data-id="${items[0]?.link.id}"] button[data-act=not-handy]`), "click");
     await p.settle();
     expect(hidden()).toHaveLength(0);
+    expect(p.document.querySelector("button[data-act=show-all]")).toBeNull();
+  });
+
+  it("a refresh re-renders Show all's count, and drops it when the shelf falls to 8", async () => {
+    const items = Array.from({ length: 10 }, () => kept());
+    const p = shelfPage(home(items), () => ({ status: 200, body: MOVED }), [
+      home(items.slice(1)),
+      home(items.slice(2)),
+    ]);
+    const showAll = () => p.document.querySelector("#handy-shelf button[data-act=show-all]");
+    expect(showAll()?.textContent).toBe("Show all 10");
+    p.dispatch(p.$(`[data-id="${items[0]?.link.id}"] button[data-act=not-handy]`), "click");
+    await p.settle();
+    expect(showAll()?.textContent).toBe("Show all 9");
+    p.dispatch(p.$(`[data-id="${items[1]?.link.id}"] button[data-act=not-handy]`), "click");
+    await p.settle();
+    expect(showAll()).toBeNull();
   });
 
   it("after a refresh, puts focus back on the same tile, or else the next tile, or else the heading", async () => {

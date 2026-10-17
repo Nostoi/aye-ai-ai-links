@@ -509,7 +509,7 @@ describe("the home page's script", () => {
 it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
   const html = homePage({
     worth: { links: [card([])], images: new Map(), now: NOW, catalog: [] },
-    shelf: handyShelf({ items: [], suggestions: [], catalog: [] }),
+    shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
     spaces: spacesSection([]),
   });
   const main = dom(html).querySelector("main.home") as HTMLElement;
@@ -528,7 +528,7 @@ describe("Keep handy on a Worth a look card", () => {
   const withShelf = (links: DigestLink[]) =>
     homePage({
       worth: { links, images: new Map(), now: NOW, catalog: [] },
-      shelf: handyShelf({ items: [], suggestions: [], catalog: [] }),
+      shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
       spaces: "",
     });
   const ROW = {
@@ -560,6 +560,7 @@ describe("Keep handy on a Worth a look card", () => {
         ],
         suggestions: [],
         catalog: [],
+        images: new Map(),
       }),
       spaces: "",
     });

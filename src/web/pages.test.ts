@@ -172,7 +172,10 @@ const PAGES: [string, string][] = [
   ["home", homePage(EMPTY_HOME)],
   [
     "home with a shelf",
-    homePage({ ...EMPTY_HOME, shelf: handyShelf({ items: [], suggestions: [], catalog: [] }) }),
+    homePage({
+      ...EMPTY_HOME,
+      shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
+    }),
   ],
   [
     "home with spaces",

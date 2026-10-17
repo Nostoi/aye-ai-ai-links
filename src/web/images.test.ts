@@ -1,7 +1,9 @@
 import type Database from "better-sqlite3";
+import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
+import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -124,5 +126,28 @@ describe("the search page's images", () => {
     expect(html).toContain(`src="/images/${stored}?v=${await versionOf(w, stored)}"`);
     expect(html.match(/<div class="tile" aria-hidden="true"><\/div>/g)).toHaveLength(1);
     expect(html).not.toContain("cdn.example");
+  });
+});
+
+describe("the Handy shelf's images", () => {
+  it("fills a kept tool's and a suggestion's tile with their stored images, and a bare one with none", async () => {
+    const { w, owner } = await world();
+    const deps = createDeps(w.links, new FakeEmbedder(DIMS));
+    const keptId = await linkWithImage(w.links, "owner", "https://a.example/kept", { bytes: PNG });
+    const guessId = await linkWithImage(w.links, "owner", "https://a.example/guess", {
+      bytes: PNG,
+    });
+    const bareId = await linkWithImage(w.links, "owner", "https://a.example/bare");
+    await keepHandy(deps, "owner", keptId, "stated");
+    await keepHandy(deps, "owner", guessId, "inferred");
+    await keepHandy(deps, "owner", bareId, "stated");
+    const html = String((await owner.send("/")).body);
+    const shelf = parseHTML(html).document.getElementById("handy-shelf") as HTMLElement;
+    const src = (id: string) =>
+      shelf.querySelector(`[data-id="${id}"] img.handy-image`)?.getAttribute("src");
+    expect(src(keptId)).toBe(`/images/${keptId}?v=${await versionOf(w, keptId)}`);
+    expect(src(guessId)).toBe(`/images/${guessId}?v=${await versionOf(w, guessId)}`);
+    expect(shelf.querySelector(`[data-id="${bareId}"] img`)).toBeNull();
+    expect(shelf.querySelector(`[data-id="${bareId}"] .handy-initials`)).not.toBeNull();
   });
 });

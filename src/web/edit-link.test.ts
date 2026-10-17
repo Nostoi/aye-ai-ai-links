@@ -689,6 +689,7 @@ describe("the edit dialog's script", () => {
     expect(p.$('[data-id="2"]').getAttribute("data-title")).toBe("Link 2");
     expect(p.dialog.open).toBe(true);
     expect(p.title.value).toBe("Link 2");
+    expect(p.$("#results-error").textContent).toBe("");
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toMatchObject({

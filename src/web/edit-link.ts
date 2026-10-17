@@ -334,6 +334,7 @@ form.addEventListener("submit", async (event) => {
   }
   if (!changed) return finish();
   editError.textContent = "";
+  editAlert.textContent = "";
   busy(true);
   const res = await fetch("/links/edit", { method: "POST", body, redirect: "manual" }).catch(() => null);
   const answer = res && res.status === 200 ? await res.json().catch(() => null) : null;

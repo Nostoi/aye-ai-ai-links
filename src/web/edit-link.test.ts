@@ -627,6 +627,33 @@ describe("the edit dialog's script", () => {
     expect(p.sent.map((s) => s.url)).toEqual(["/links/edit", "/links/edit/undo"]);
   });
 
+  it("clears the page's alert when a later Save goes ahead, as Keep handy does", async () => {
+    const conflict = {
+      code: "conflict",
+      message: "This link changed since, so nothing was undone.",
+    };
+    const p = opened((sent) =>
+      sent.url === "/links/edit"
+        ? { status: 200, body: answer({ title: "Edited", editId: "e1" }) }
+        : { status: 409, body: conflict },
+    );
+    p.open();
+    p.title.value = "Edited";
+    p.submit();
+    await p.settle();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    p.open();
+    p.submit();
+    await p.settle();
+    expect(p.$("#results-error").textContent).toBe(conflict.message);
+    p.open();
+    p.title.value = "Again";
+    p.submit();
+    await p.settle();
+    expect(p.$("#results-error").textContent).toBe("");
+  });
+
   it("shows a refusal inside the dialog and keeps it open", async () => {
     const p = opened(() => ({
       status: 400,

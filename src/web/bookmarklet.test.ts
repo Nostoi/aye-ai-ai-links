@@ -73,6 +73,15 @@ describe("bookmarkletCode", () => {
     expect(run(bookmarkletCode(BASE), over, "T").opened[0]?.[0]).toBe(`${BASE}/save?long=1`);
   });
 
+  it("counts each apostrophe as the three characters a browser sends it as", () => {
+    const prefix = "https://ex.com/";
+    const room = LONG_ADDRESS - encodeURIComponent(prefix).length;
+    const fits = prefix + "'".repeat(Math.floor(room / 3));
+    const over = `${fits}'`;
+    expect(run(bookmarkletCode(BASE), fits, "T").opened[0]?.[0]).toBe(saveUrl(fits, "T"));
+    expect(run(bookmarkletCode(BASE), over, "T").opened[0]?.[0]).toBe(`${BASE}/save?long=1`);
+  });
+
   it("holds no % character, which a browser would decode in a bookmark's address", () => {
     expect(bookmarkletCode(BASE)).not.toContain("%");
   });

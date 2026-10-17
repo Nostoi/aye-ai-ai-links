@@ -18,5 +18,5 @@ export const LONG_ADDRESS = 3_000;
  */
 export function bookmarkletCode(base: string): string {
   const origin = JSON.stringify(new URL(base).origin);
-  return `javascript:(()=>{const u=encodeURIComponent(location.href);const t=encodeURIComponent(Array.from(document.title.trim()).slice(0,${TITLE_MAX}).join(""));window.open(${origin}+(u.length>${LONG_ADDRESS}?"${SAVE_PATH}?long=1":"${SAVE_PATH}?url="+u+"&title="+t),"_blank","noopener");})()`;
+  return `javascript:(()=>{const u=encodeURIComponent(location.href);const t=encodeURIComponent(Array.from(document.title.trim()).slice(0,${TITLE_MAX}).join(""));window.open(${origin}+(u.length+2*(u.split("'").length-1)>${LONG_ADDRESS}?"${SAVE_PATH}?long=1":"${SAVE_PATH}?url="+u+"&title="+t),"_blank","noopener");})()`;
 }

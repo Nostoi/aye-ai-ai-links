@@ -69,6 +69,7 @@ Every rule lives here. The web door and the MCP door only translate requests int
 - **Tiles:** one row of up to 8 kept tools on active links (an archived link leaves the shelf, and its Undo brings it back), most recently opened first, with never-opened tools ordered by `since`. A tile shows the title and site, styled like home's small cards.
 - **Clicks** open the link in a new tab and post `/links/opened` through #124's `openedScript`; they do not mark the link surfaced.
 - **Show all** expands the rest in place.
+- **On a phone** (below the site's 600 px breakpoint), the row keeps all 8 tiles and scrolls sideways, owner ruling 2026-10-16. The next tile shows partly at the edge, so it's visible that the row scrolls. Show all still follows.
 - **A due tile** shows "Still using?" with **Yes** (still using it) and **Done** (archives the link, with an Undo bar).
 - **Suggestions** are faded tiles at the end with "Keep handy?" and Yes or No.
 - **Add** opens a search over the owner's links; picking one keeps it handy.

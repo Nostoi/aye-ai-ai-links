@@ -16,6 +16,7 @@ import {
   listSuggestions,
   notHandy,
   restoreTool,
+  SUGGESTION_SIZE,
   stillUsing,
 } from "./tools.js";
 import type { Link } from "./types.js";
@@ -609,5 +610,17 @@ describe("listSuggestions", () => {
       [newer, "suggested"],
       [older, "suggested"],
     ]);
+  });
+
+  it("returns at most SUGGESTION_SIZE (2), the newest", async () => {
+    const made: string[] = [];
+    for (let d = 1; d <= 3; d++) {
+      const id = await saved();
+      clock = day(d);
+      await keepHandy(deps(), A, id, "inferred");
+      made.push(id);
+    }
+    expect(SUGGESTION_SIZE).toBe(2);
+    expect((await listSuggestions(deps(), A)).map((s) => s.link.id)).toEqual([made[2], made[1]]);
   });
 });

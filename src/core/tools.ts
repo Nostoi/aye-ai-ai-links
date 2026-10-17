@@ -282,9 +282,11 @@ export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfI
   return items.sort((a, b) => Number(b.due) - Number(a.due) || shelfOrder(a, b));
 }
 
-/** The shelf's suggestions: suggested tools on active links, newest suggestion first. */
+export const SUGGESTION_SIZE = 2;
+
+/** The shelf's suggestions: the newest SUGGESTION_SIZE suggested tools on active links, newest first. */
 export async function listSuggestions(deps: ToolsDeps, owner: OwnerId): Promise<ToolItem[]> {
-  return (await toolItems(deps, owner, "suggested")).sort((a, b) =>
-    newestFirst(a.tool.since, b.tool.since),
-  );
+  return (await toolItems(deps, owner, "suggested"))
+    .sort((a, b) => newestFirst(a.tool.since, b.tool.since))
+    .slice(0, SUGGESTION_SIZE);
 }

@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { handyShelf, SHELF_SIZE, SHELF_STALE, SUGGESTION_SIZE } from "./handy-shelf.js";
+import { handyShelf, SHELF_SIZE, SHELF_STALE } from "./handy-shelf.js";
 import { homePage, type WorthCards } from "./home-page.js";
 import { type Answer, itRecordsOpenings, type Post, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
@@ -130,13 +130,11 @@ describe("the Handy shelf", () => {
     expect(guess?.querySelector("details")).toBeNull();
   });
 
-  it("puts at most 2 suggestions at the end, in the order given (newest first), as faded guesses asking Keep handy?, outside the 8", () => {
+  it("puts the suggestions given at the end, in that order, as faded guesses asking Keep handy?, outside the 8", () => {
     const items = Array.from({ length: 9 }, () => kept());
-    const offers = [suggested(), suggested(), suggested()];
+    const offers = [suggested(), suggested()];
     const html = render(items, offers);
-    expect(SUGGESTION_SIZE).toBe(2);
-    expect(ids(tiles(html))).toEqual([...items, ...offers.slice(0, 2)].map((i) => i.link.id));
-    expect(dom(html).querySelector(`[data-id="${offers[2]?.link.id}"]`)).toBeNull();
+    expect(ids(tiles(html))).toEqual([...items, ...offers].map((i) => i.link.id));
     const guesses = tiles(html).slice(9);
     for (const g of guesses) {
       expect(g.classList.contains("guess")).toBe(true);

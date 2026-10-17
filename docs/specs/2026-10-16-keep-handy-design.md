@@ -82,7 +82,7 @@ Every rule lives here. The web door and the MCP door only translate requests int
 - Worth a look today gets a fourth button, Keep handy, on large and small cards.
 
 **Routes:**
-- `POST /tools/keep`, `/tools/not-handy`, `/tools/still-using`, `/tools/suggestion` and `/tools/undo`. Undo restores the row as it was, within the 60-second window.
+- `POST /tools/keep`, `/tools/not-handy`, `/tools/still-using`, `/tools/suggestion` and `/tools/undo`. Undo restores the row as it was, only while the row is still what the action wrote. It has no time limit in core, like home's conditional Undo (2026-10-14 #95, and the 2026-10-16 ruling on Undo of I'm done). The Undo bar itself closes within 45 s.
 - Each is in `CHECKED_PAGES` and the isolation route guard, and each calls `core/tools.ts`.
 
 ## Testing

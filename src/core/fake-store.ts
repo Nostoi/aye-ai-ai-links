@@ -15,6 +15,7 @@ import {
   type SnapshotStore,
 } from "./snapshot-store.js";
 import type { LinkExpectation, LinkStore, SurfacedClaim } from "./store.js";
+import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
   Link,
@@ -30,7 +31,7 @@ type ImageStatus = "pending" | "ok" | ImageEnd;
 const imageKey = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
 
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
-export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImageReader {
+export class FakeStore implements LinkStore, SnapshotStore, ToolStore, ImageStore, LinkImageReader {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
   private tokens = new Map<OwnerId, Map<string, number>>();
@@ -39,6 +40,7 @@ export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImag
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
   private storedImages = new Map<string, StoredImage>();
+  private toolRows = new Map<OwnerId, Map<string, ToolRecord>>();
   private nextId = 1;
 
   private owned(owner: OwnerId): Map<string, Link> {
@@ -200,6 +202,40 @@ export class FakeStore implements LinkStore, SnapshotStore, ImageStore, LinkImag
 
   async getSnapshotText(owner: OwnerId, linkId: string) {
     return this.snapshots.get(owner)?.get(linkId)?.text ?? null;
+  }
+
+  async getTool(owner: OwnerId, linkId: string) {
+    const tool = this.toolRows.get(owner)?.get(linkId);
+    return tool ? structuredClone(tool) : null;
+  }
+
+  async listTools(owner: OwnerId) {
+    const mine = this.toolRows.get(owner) ?? new Map<string, ToolRecord>();
+    return new Map<string, ToolRecord>([...mine].map(([id, t]) => [id, structuredClone(t)]));
+  }
+
+  async updateToolIf(
+    owner: OwnerId,
+    linkId: string,
+    expected: ToolRecord | null,
+    next: ToolRecord | null,
+  ): Promise<ToolWrite | null> {
+    if (!this.owned(owner).has(linkId)) return null;
+    let mine = this.toolRows.get(owner);
+    if (!mine) {
+      mine = new Map();
+      this.toolRows.set(owner, mine);
+    }
+    const current = mine.get(linkId) ?? null;
+    if (!sameTool(current, expected)) {
+      return { tool: current && structuredClone(current), applied: false };
+    }
+    if (next === null) {
+      mine.delete(linkId);
+      return { tool: null, applied: true };
+    }
+    mine.set(linkId, structuredClone(next));
+    return { tool: structuredClone(next), applied: true };
   }
 
   async get(owner: OwnerId, id: string) {

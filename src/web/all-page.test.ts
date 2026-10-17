@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LinkOrder } from "../core/search.js";
 import type { Link, Tag } from "../core/types.js";
 import { allHref, allPage } from "./all-page.js";
-import { itRecordsOpenings, openAppended } from "./opened-test-kit.js";
+import { itRecordsOpenings, openAppended, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 
 const ORIGIN = "https://links.example";
@@ -56,6 +56,7 @@ const all = (over: Partial<Input> = {}) =>
     older: null,
     catalog: [KITCHEN],
     images: new Map(),
+    handy: new Map(),
     now: NOW,
     done: false,
     ...over,
@@ -277,6 +278,38 @@ describe("openings on All links (#124)", () => {
     const next = all({ links: [link("1")], older: null, later: true });
     expect(await openAppended(first, next, "1")).toEqual([
       { url: "/links/opened", body: { id: "1" }, redirect: "manual", keepalive: true },
+    ]);
+  });
+});
+
+describe("Keep handy on All links", () => {
+  const kept = { status: "kept", source: "stated", due: false } as const;
+  it("gives each active card the control and kept ones Handy · Not handy anymore; the done view has none", () => {
+    const html = all({ links: [link("1"), link("2")], handy: new Map([["2", kept]]) });
+    const d = dom(html);
+    expect((d.querySelector('[data-id="1"] button[data-act=keep]') as HTMLElement).hidden).toBe(
+      false,
+    );
+    expect((d.querySelector('[data-id="2"] .handy-on') as HTMLElement).hidden).toBe(false);
+    const done = all({ links: [link("1", { state: "archived" })], done: true });
+    expect(dom(done).querySelector("[data-handy]")).toBeNull();
+    expect(done).not.toContain('id="undo-bar"');
+  });
+
+  it("works the control on a card Show older links appended", async () => {
+    const first = all({ links: [link("2")], older: "r1" });
+    const next = all({ links: [link("1")], later: true });
+    const p = runPage(first, (s) =>
+      s.body === undefined
+        ? { status: 200, text: next }
+        : { status: 200, body: { tool: {}, previous: null } },
+    );
+    p.dispatch(p.$("#older"), "click");
+    await p.settle();
+    p.dispatch(p.$('[data-id="1"] button[data-act=keep]'), "click");
+    await p.settle();
+    expect(p.sent.filter((s) => s.body !== undefined)).toEqual([
+      { url: "/tools/keep", body: { id: "1" }, redirect: "manual", keepalive: undefined },
     ]);
   });
 });

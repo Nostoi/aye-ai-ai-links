@@ -1,5 +1,7 @@
 import { linkSpace, spaceColor } from "../core/link-space.js";
+import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { hostOf, spaceClass, tile, whyLine } from "./pages.js";
@@ -45,6 +47,7 @@ type Input = {
   links: Link[];
   older: string | null;
   images: Map<string, string>;
+  handy: Map<string, HandyView | null>;
   now: Date;
   /** The links you're done with, rather than the active ones. */
   done: boolean;
@@ -56,7 +59,7 @@ type Input = {
  * One card. An active link with no why asks Tell me why, in amber, "needs you"; a done one never
  * does, and its picture is faded while its text stays at full contrast.
  */
-function card(link: Link, { tag, catalog, images, now, done }: Input): string {
+function card(link: Link, { tag, catalog, images, handy, now, done }: Input): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
   const why =
@@ -70,14 +73,15 @@ ${tile(link, images.get(link.id), "card-image")}
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
-</div>
+${done ? "" : handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
 
-/** Tell me why on the active cards, including those Show older links appends. */
-const WHY_SCRIPT = `<script>
+/** Tell me why and Keep handy on the active cards, including those Show older links appends. */
+const CARDS_SCRIPT = `<script>
 ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
+${keepHandyScript("space-links", "space-error")}
 </script>
 `;
 
@@ -115,8 +119,8 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : WHY_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
-    { menu: true },
+${done ? "" : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+    { menu: true, undo: !done },
   );
 }
 

@@ -62,6 +62,7 @@ const space = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
     links: [],
     older: null,
     images: new Map(),
+    handy: new Map(),
     now: NOW,
     done: false,
     ...over,
@@ -526,5 +527,22 @@ describe("openings on a space page (#124)", () => {
     expect(await openAppended(first, next, "1")).toEqual([
       { url: "/links/opened", body: { id: "1" }, redirect: "manual", keepalive: true },
     ]);
+  });
+});
+
+describe("Keep handy on a space page", () => {
+  const kept = { status: "kept", source: "stated", due: false } as const;
+  it("gives each active card the control, and the done view none and no Undo bar", () => {
+    const html = space({ links: [link("1"), link("2")], handy: new Map([["2", kept]]) });
+    const d = dom(html);
+    expect((d.querySelector('[data-id="1"] button[data-act=keep]') as HTMLElement).hidden).toBe(
+      false,
+    );
+    expect((d.querySelector('[data-id="2"] .handy-on') as HTMLElement).hidden).toBe(false);
+    expect(html).toContain('id="undo-bar"');
+    expect(html.match(/const post = /g)).toHaveLength(1);
+    const done = space({ links: [link("1", { state: "archived" })], done: true });
+    expect(dom(done).querySelector("[data-handy]")).toBeNull();
+    expect(done).not.toContain('id="undo-bar"');
   });
 });

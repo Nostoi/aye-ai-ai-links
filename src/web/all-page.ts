@@ -1,10 +1,13 @@
 import { linkSpace } from "../core/link-space.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
+import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
-import { hostOf, spaceClass, tile } from "./pages.js";
+import { siteLine, spaceClass, tile } from "./pages.js";
 import { olderScript } from "./show-older.js";
+import { CARD_FETCH } from "./tell-why.js";
 
 /**
  * The URL of All links in `order`, or with `done` the links you're done with; `before` is a
@@ -36,6 +39,7 @@ type Input = {
   older: string | null;
   catalog: Tag[];
   images: Map<string, string>;
+  handy: Map<string, HandyView | null>;
   now: Date;
   /** The links you're done with, rather than the active ones. */
   done: boolean;
@@ -58,16 +62,14 @@ const monthName = (d: Date, now: Date) =>
     timeZone: "UTC",
   });
 
-/** One card: the picture or a tint, the title, and the space and site. No why and no actions. */
-function card(link: Link, { catalog, images, done }: Input): string {
+/** One card: the picture or a tint, the title, the space and site, and Keep handy. No why. */
+function card(link: Link, { catalog, images, handy, done }: Input): string {
   const space = linkSpace(link, catalog);
-  const site = [space?.name, hostOf(link.url)].filter(Boolean).join(", ");
-  const dot = space ? `<span class="dot" aria-hidden="true"></span>` : "";
   return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}">
 ${tile(link, images.get(link.id), "card-image")}
 <div class="card-body">
 <h3>${linkTitle(link)}</h3>
-${site ? `<p class="card-site">${dot}${escapeHtml(site)}</p>\n` : ""}</div>
+${siteLine(link, space)}${handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
 
@@ -134,10 +136,11 @@ export function allPage(input: Input): string {
 <a class="search-instead" href="/search">Search instead</a>
 </div>
 <nav class="orders" aria-label="Order">${choices}</nav>
+${done ? "" : '<p id="all-error" role="alert"></p>'}
 ${list}
 <div class="all-foot">${more}${other}</div>
 </main>
-${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
-    { menu: true },
+${done ? "" : `<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+    { menu: true, undo: !done },
   );
 }

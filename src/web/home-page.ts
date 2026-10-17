@@ -1,6 +1,7 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import { linkSpace } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
+import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { isWebUrl, linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -48,7 +49,8 @@ function meta(link: Link, now: Date, withDate: boolean): string {
 }
 
 const BUTTONS = `<button type="button" data-act="snooze">Not now</button>
-<button type="button" data-act="archive">I'm done with it</button>`;
+<button type="button" data-act="archive">I'm done with it</button>
+<button type="button" data-act="keep">Keep handy</button>`;
 
 function classes(base: string, link: Link, catalog: Tag[]): string {
   return `${base}${link.why ? "" : " needs-you"}${spaceClass(linkSpace(link, catalog))}`;
@@ -113,26 +115,36 @@ document.addEventListener("keydown", (event) => {
 
 /**
  * The cards' buttons. Opening a link is recorded by `openedScript` with `/home/opened`, which also
- * marks the link surfaced. Not now and I'm done hide the card at once and put it back if the server
- * refuses; Undo asks the server to reverse, and the card stays gone if it cannot. Tell me why is
- * `tellWhyScript`.
+ * marks the link surfaced. Not now, I'm done and Keep handy hide the card at once and put it back if
+ * the server refuses; Keep handy also refreshes the Handy shelf. Undo asks the server to reverse,
+ * and the card stays gone if it cannot. Tell me why is
+ * `tellWhyScript`. The Handy shelf's buttons are `SHELF_SCRIPT`'s.
  */
 const CARDS_SCRIPT = `<script>
 ${CARD_FETCH}
+${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}
 const homeError = document.getElementById("home-error");
 const cards = document.getElementById("worth-cards");
+const CARD_ROUTES = { snooze: "/home/snooze", archive: "/home/archive", keep: "/tools/keep" };
 const hideFor = async (card, act) => {
+  if (!CARD_ROUTES[act]) return;
   const id = card.dataset.id;
   homeError.textContent = "";
   card.hidden = true;
-  const res = await post("/home/" + act, { id });
+  const res = await post(CARD_ROUTES[act], { id });
   let undo = null;
   if (act === "snooze") {
     const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (data && typeof data.until === "string") {
       const { until, claimedAt, previousSurfacedAt } = data;
       undo = ["Hidden for two weeks.", "/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }];
+    }
+  } else if (act === "keep") {
+    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (moved && moved.tool) {
+      undo = ["Kept on your Handy shelf.", "/tools/undo", { id, tool: moved.tool, previous: moved.previous }];
+      await refreshShelf();
     }
   } else if (res && res.status === 204) {
     undo = ["Moved out of your list.", "/home/unarchive", { id }];
@@ -144,8 +156,10 @@ const hideFor = async (card, act) => {
   }
   showUndo(undo[0], async () => {
     const back = await post(undo[1], undo[2]);
-    if (back && back.status === 204) card.hidden = false;
-    else homeError.textContent = await failure(back);
+    if (back && back.status === 204) {
+      card.hidden = false;
+      if (act === "keep") await refreshShelf();
+    } else homeError.textContent = await failure(back);
   });
 };
 if (cards) {
@@ -162,10 +176,19 @@ addEventListener("pageshow", (event) => {
 </script>`;
 
 /**
- * Home: the big question and one search field, then "Worth a look today" when there is anything
- * to show, then `spaces`, the "Your spaces" section (#96), as HTML.
+ * Home: the big question and one search field, then `shelf`, the Handy shelf (#125), then "Worth a
+ * look today" when there is anything to show, then `spaces`, the "Your spaces" section (#96).
+ * Openings from the shelf are recorded without marking the link shown.
  */
-export const homePage = ({ worth, spaces }: { worth: WorthCards; spaces: string }) =>
+export const homePage = ({
+  worth,
+  shelf,
+  spaces,
+}: {
+  worth: WorthCards;
+  shelf: string;
+  spaces: string;
+}) =>
   page(
     "Aye-AI-AI Links",
     `<main class="home">
@@ -178,11 +201,13 @@ export const homePage = ({ worth, spaces }: { worth: WorthCards; spaces: string 
 </div>
 <p class="small hint">Describe it however you remember it: when, why, what it looked like.</p>
 </form>
+${shelf}
 ${worthSection(worth)}
 ${spaces}
 </main>
 ${SLASH_SCRIPT}
 ${CARDS_SCRIPT}
-${openedScript("worth-cards", "/home/opened")}`,
+${openedScript("worth-cards", "/home/opened")}
+${openedScript("handy", "/links/opened")}`,
     { menu: true, undo: true },
   );

@@ -4,13 +4,29 @@ import type { Link } from "../core/types.js";
 
 export type Post = { url: string; body: unknown; redirect: unknown; keepalive: unknown };
 
+export type Answer = {
+  status: number;
+  type?: string;
+  body?: unknown;
+  text?: string;
+  wait?: Promise<unknown>;
+  textFails?: boolean;
+};
+
 /**
- * A page in linkedom with all its scripts but the menu's run in one scope, so two scripts that
- * declare the same name fail. `fetch` records each request and answers `text` (a next page for
- * Show older links).
+ * A page in linkedom with all its scripts but the menu's run in one scope, as a browser shares
+ * one global scope across a page's scripts, so two scripts that declare the same name fail.
+ * `fetch` records each request (a GET has no body) and replies with `answer`; timers never fire,
+ * so an Undo bar stays up until the test clicks it.
  */
-export function runPage(html: string, text = "") {
+export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ status: 204 })) {
   const { document, DOMParser } = parseHTML(html);
+  const focusLog: Element[] = [];
+  (
+    document.defaultView as unknown as { HTMLElement: { prototype: { focus: () => void } } }
+  ).HTMLElement.prototype.focus = function (this: Element) {
+    focusLog.push(this);
+  };
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
     .filter((s) => !s.includes("sign-out"))
@@ -20,21 +36,48 @@ export function runPage(html: string, text = "") {
     url: string,
     init?: { body?: string; redirect?: string; keepalive?: boolean },
   ) => {
-    sent.push({
+    const request = {
       url,
       body: init?.body === undefined ? undefined : JSON.parse(init.body),
       redirect: init?.redirect,
       keepalive: init?.keepalive,
-    });
-    return { status: 204, ok: true, redirected: false, text: async () => text };
+    };
+    sent.push(request);
+    const a = answer(request);
+    if (a.wait) await a.wait;
+    return {
+      status: a.status,
+      ok: a.status >= 200 && a.status < 300,
+      type: a.type ?? "basic",
+      redirected: false,
+      json: async () => {
+        if (a.body === undefined) throw new SyntaxError("no body");
+        return a.body;
+      },
+      text: async () => {
+        if (a.textFails) throw new TypeError("body read failed");
+        return a.text ?? "";
+      },
+    };
   };
-  const location = { href: "https://links.example/" };
-  new Function("document", "fetch", "location", "addEventListener", "DOMParser", code)(
+  const location = { href: "https://links.example/", reload: () => {} };
+  new Function(
+    "document",
+    "fetch",
+    "location",
+    "addEventListener",
+    "DOMParser",
+    "setTimeout",
+    "clearTimeout",
+    code,
+  )(
     document,
     fetch,
     location,
     () => {},
     DOMParser,
+    () => 0,
+    () => {},
   );
   const win = document.defaultView as unknown as typeof globalThis;
   const dispatch = (target: Element, type: string, init: Record<string, unknown> = {}) => {
@@ -44,9 +87,10 @@ export function runPage(html: string, text = "") {
     return event;
   };
   const settle = async () => {
-    for (let i = 0; i < 2; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
-  return { document, sent, dispatch, settle };
+  const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
+  return { document, sent, dispatch, settle, $, focused: () => focusLog };
 }
 
 /**
@@ -95,7 +139,7 @@ export function itRecordsOpenings(html: () => string, links: Link[], route: stri
 
 /** After Show older links appends the next page, a click on an appended link is recorded too. */
 export async function openAppended(first: string, next: string, appendedId: string) {
-  const page = runPage(first, next);
+  const page = runPage(first, () => ({ status: 204, text: next }));
   page.dispatch(page.document.getElementById("older") as Element, "click");
   await page.settle();
   const link = page.document.querySelector(`[data-id="${appendedId}"] a[data-open]`);

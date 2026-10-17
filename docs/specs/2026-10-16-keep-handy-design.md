@@ -67,12 +67,12 @@ Every rule lives here. The web door and the MCP door only translate requests int
 **Home order:** the search box, the Handy shelf, Worth a look today, Your spaces.
 
 **The shelf:**
-- **Tiles:** one row of up to 8 kept tools on active links (an archived link leaves the shelf, and its Undo brings it back), most recently opened first, with never-opened tools ordered by `since`. A tile shows the title and site, styled like home's small cards.
+- **Tiles:** one row of up to 8 kept tools on active links (an archived link leaves the shelf, and its Undo brings it back), due tools first, then the most recently opened, with never-opened tools ordered by `since`, newest first (due first: owner, 2026-10-16). A tile shows the title and site, styled like home's small cards.
 - **Clicks** open the link in a new tab and post `/links/opened` through #124's `openedScript`; they do not mark the link surfaced.
 - **Show all** expands the rest in place.
 - **On a phone** (below the site's 600 px breakpoint), the row keeps all 8 tiles and scrolls sideways, owner ruling 2026-10-16. The next tile shows partly at the edge, so it's visible that the row scrolls. Show all still follows.
 - **A due tile** shows "Still using?" with **Yes** (still using it) and **Done** (archives the link, with an Undo bar).
-- **Suggestions** are faded tiles at the end with "Keep handy?" and Yes or No.
+- **Suggestions** are faded tiles at the end, at most 2, newest first (owner, 2026-10-16), with "Keep handy?" and Yes or No.
 - **Add** opens a search over the owner's links; picking one keeps it handy.
 - **Each tile's menu** has "Not handy anymore", with an Undo bar.
 - **An empty shelf** shows one line, "Keep links you use often here", with Add.
@@ -96,7 +96,7 @@ Every rule lives here. The web door and the MCP door only translate requests int
 
 ## Landing
 
-1. **Store and rules:** migration 12, `ToolStore`, `core/tools.ts` and the digest's exclusion of kept tools. It also carries every core read and action PR 2 and PR 3 need (the shelf list, the suggestions, the due tool for the digest, the `handy` view of links, and conditional Undo), so those two PRs can be built in parallel (owner, 2026-10-16). PR 3 edits no core file; PR 2 adds the `still_using_check` reason and its slot to `core/digest.ts`, which PR 3 doesn't touch. Owner-invisible on its own. Carries this spec and the ROADMAP entry.
+1. **Store and rules:** migration 12, `ToolStore`, `core/tools.ts` and the digest's exclusion of kept tools. It also carries every core read and action PR 2 and PR 3 need (the shelf list, the suggestions, the due tool for the digest, the `handy` view of links, and conditional Undo), so those two PRs can be built in parallel (owner, 2026-10-16). PR 3 edits no core file except `listShelf`'s order in `core/tools.ts` (due tools first, owner, 2026-10-16); PR 2 adds the `still_using_check` reason and its slot to `core/digest.ts`, which PR 3 doesn't touch. Owner-invisible on its own. Carries this spec and the ROADMAP entry.
 2. **MCP:** `handy` input and output, `still_using_check`, guidance, and README. Tools can be marked through an AI from here on.
 3. **Web:** the shelf, the controls, and README. Closes #125. PR 2 and PR 3 are built in parallel after PR 1 merges; whichever merges second brings `main` in before its final review.
 

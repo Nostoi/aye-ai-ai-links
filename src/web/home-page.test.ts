@@ -2,8 +2,11 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
+import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
+import { runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
+import { spacesSection } from "./spaces-section.js";
 import { themeCss } from "./theme.js";
 
 const NOW = new Date("2026-10-14T10:00:00Z");
@@ -39,7 +42,7 @@ const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => 
   reasons,
 });
 const render = (links: DigestLink[], images = new Map<string, string>(), catalog: Tag[] = []) =>
-  homePage({ worth: { links, images, now: NOW, catalog }, spaces: "" });
+  homePage({ worth: { links, images, now: NOW, catalog }, shelf: "", spaces: "" });
 const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
@@ -80,7 +83,7 @@ describe("Worth a look today", () => {
     );
   });
 
-  it("gives the large card Open it, Not now and I'm done with it, and each small card Not now and I'm done", () => {
+  it("gives the large card Open it, and each card Not now, I'm done with it and Keep handy", () => {
     const d = dom(render([card([]), card([])]));
     const lead = d.querySelector(".worth-lead") as HTMLElement;
     const open = lead.querySelector("a.button[data-open]") as HTMLAnchorElement;
@@ -91,9 +94,11 @@ describe("Worth a look today", () => {
         (b as HTMLElement).dataset.act,
         b.textContent,
       ]);
+    // #125 adds Keep handy as Worth a look's fourth choice.
     const both = [
       ["snooze", "Not now"],
       ["archive", "I'm done with it"],
+      ["keep", "Keep handy"],
     ];
     expect(acts(lead)).toEqual(both);
     expect(acts(d.querySelector(".worth-small") as Element)).toEqual(both);
@@ -498,5 +503,104 @@ describe("the home page's script", () => {
     expect(page.location.reloads).toBe(0);
     page.fire("pageshow", { persisted: true });
     expect(page.location.reloads).toBe(1);
+  });
+});
+
+it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
+  const html = homePage({
+    worth: { links: [card([])], images: new Map(), now: NOW, catalog: [] },
+    shelf: handyShelf({ items: [], suggestions: [], catalog: [] }),
+    spaces: spacesSection([]),
+  });
+  const main = dom(html).querySelector("main.home") as HTMLElement;
+  expect([...main.children].map((c) => c.className)).toEqual([
+    "home-search",
+    "handy",
+    "worth",
+    "spaces",
+  ]);
+  expect(html.indexOf("<script>")).toBe(
+    html.indexOf(`<script>\ndocument.addEventListener("keydown"`),
+  );
+});
+
+describe("Keep handy on a Worth a look card", () => {
+  const withShelf = (links: DigestLink[]) =>
+    homePage({
+      worth: { links, images: new Map(), now: NOW, catalog: [] },
+      shelf: handyShelf({ items: [], suggestions: [], catalog: [] }),
+      spaces: "",
+    });
+  const ROW = {
+    status: "kept",
+    source: "stated",
+    since: "2026-10-14T10:00:00.000Z",
+    answeredAt: null,
+    waitDays: 30,
+  };
+
+  it("hides the card, keeps the link, puts it on the shelf, and Undo sends back the rows and shows the card", async () => {
+    const cards = [card([]), card([])];
+    const id = cards[0]?.link.id as string;
+    const onShelf = homePage({
+      worth: { links: [], images: new Map(), now: NOW, catalog: [] },
+      shelf: handyShelf({
+        items: [
+          {
+            link: cards[0]?.link as Link,
+            tool: {
+              status: "kept",
+              source: "stated",
+              since: new Date(ROW.since),
+              answeredAt: null,
+              waitDays: 30,
+            },
+            due: false,
+          },
+        ],
+        suggestions: [],
+        catalog: [],
+      }),
+      spaces: "",
+    });
+    const pages = [onShelf, withShelf(cards)];
+    const p = runPage(withShelf(cards), (s) =>
+      s.body === undefined
+        ? { status: 200, text: pages.shift() ?? "" }
+        : s.url === "/tools/keep"
+          ? { status: 200, body: { tool: ROW, previous: null } }
+          : { status: 204 },
+    );
+    p.dispatch(p.$(".worth-lead button[data-act=keep]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/tools/keep", body: { id }, redirect: "manual" });
+    expect((p.$(".worth-lead") as HTMLElement).hidden).toBe(true);
+    expect(p.document.querySelector(`#handy-shelf [data-id="${id}"]`)).not.toBeNull();
+    expect(p.$("#undo-bar span").textContent).toBe("Kept on your Handy shelf.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent.find((s) => s.url === "/tools/undo")?.body).toEqual({
+      id,
+      tool: ROW,
+      previous: null,
+    });
+    expect((p.$(".worth-lead") as HTMLElement).hidden).toBe(false);
+    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep", "/", "/tools/undo", "/"]);
+    expect(p.sent.some((s) => s.url === "/home/opened")).toBe(false);
+  });
+
+  it("puts the card back with the refusal's words, offers no Undo and refreshes nothing on a 409", async () => {
+    const cards = [card([])];
+    const message = "That link's Keep handy state changed. Reload the page.";
+    const p = runPage(withShelf(cards), () => ({
+      status: 409,
+      body: { code: "conflict", message },
+    }));
+    p.dispatch(p.$(".worth-lead button[data-act=keep]"), "click");
+    await p.settle();
+    expect((p.$(".worth-lead") as HTMLElement).hidden).toBe(false);
+    expect(p.$("#home-error").textContent).toBe(message);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep"]);
   });
 });

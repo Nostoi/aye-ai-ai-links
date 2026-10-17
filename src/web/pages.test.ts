@@ -1,8 +1,10 @@
+import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
 import { connectionsPage } from "./connections-page.js";
+import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
-import { itRecordsOpenings } from "./opened-test-kit.js";
+import { itRecordsOpenings, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
@@ -13,6 +15,7 @@ import { tagsPage } from "./tags-page.js";
 const ORIGIN = "https://links.example";
 const EMPTY_HOME = {
   worth: { links: [], images: new Map(), now: new Date(0), catalog: [] },
+  shelf: "",
   spaces: "",
 };
 const KITCHEN = {
@@ -31,6 +34,7 @@ const SPACE = {
   links: [],
   older: "1.1",
   images: new Map(),
+  handy: new Map(),
   now: new Date(0),
   done: false,
 };
@@ -166,6 +170,10 @@ const PAGES: [string, string][] = [
   ],
   ["error", oauthErrorPage("It failed.")],
   ["home", homePage(EMPTY_HOME)],
+  [
+    "home with a shelf",
+    homePage({ ...EMPTY_HOME, shelf: handyShelf({ items: [], suggestions: [], catalog: [] }) }),
+  ],
   [
     "home with spaces",
     homePage({
@@ -420,4 +428,41 @@ describe("openings from search results (#124)", () => {
   ];
   const shown = [...web, link({ id: "3", url: "notes:kept" })];
   itRecordsOpenings(() => results(shown), web, "/links/opened");
+});
+
+describe("Keep handy on search results", () => {
+  const kept = { status: "kept", source: "stated", due: false } as const;
+  const shownIn = (html: string, id: string) => {
+    const c = parseHTML(html).document.querySelector(`[data-id="${id}"] [data-handy]`);
+    if (!c) return null;
+    const keep = c.querySelector("button[data-act=keep]") as HTMLElement;
+    return (keep.hidden ? c.querySelector(".handy-on")?.textContent : keep.textContent)
+      ?.replace(/\s+/g, " ")
+      .trim();
+  };
+
+  it("gives each active result the control, kept ones reading Handy · Not handy anymore, and an archived result none", () => {
+    const [plain, tool, done] = [
+      link({ id: "1", url: "https://example.com/1" }),
+      link({ id: "2", url: "https://example.com/2" }),
+      link({ id: "3", url: "https://example.com/3", state: "archived" }),
+    ];
+    const html = searchPage({
+      query: "x",
+      links: [plain, tool, done],
+      now: NOW,
+      handy: new Map([["2", kept]]),
+    });
+    expect(shownIn(html, "1")).toBe("Keep handy");
+    expect(shownIn(html, "2")).toBe("Handy · Not handy anymore");
+    expect(shownIn(html, "3")).toBeNull();
+  });
+
+  it("has the Undo bar, one error line and one CARD_FETCH, so its scripts run together", () => {
+    const html = searchPage({ query: "x", links: [link()], now: NOW });
+    expect(html).toContain('id="undo-bar"');
+    expect(parseHTML(html).document.querySelectorAll("#results-error[role=alert]")).toHaveLength(1);
+    expect(html.match(/const post = /g)).toHaveLength(1);
+    expect(() => runPage(html)).not.toThrow();
+  });
 });

@@ -523,7 +523,7 @@ describe("handy views", () => {
 });
 
 describe("listShelf", () => {
-  it("lists kept tools on active links: opened newest first, then never-opened by since, newest first", async () => {
+  it("lists kept tools on active links: due tools first, then opened newest first, then never-opened by since, newest first", async () => {
     const [opened5, opened9, never2, never7, archived, suggested, declined] = [
       await saved(),
       await saved(),
@@ -554,8 +554,29 @@ describe("listShelf", () => {
     await store.update(A, archived, { state: "archived" });
     clock = day(36);
     const shelf = await listShelf(deps(), A);
-    expect(shelf.map((s) => s.link.id)).toEqual([opened9, opened5, never7, never2]);
-    expect(shelf.map((s) => s.due)).toEqual([false, true, false, true]);
+    // Owner ruling 2026-10-16: due tools come first, so none hides past the shelf's cut.
+    expect(shelf.map((s) => s.link.id)).toEqual([opened5, never2, opened9, never7]);
+    expect(shelf.map((s) => s.due)).toEqual([true, true, false, false]);
+  });
+
+  it("puts a due tool first, even one never opened and kept longest ago, so the shelf's cut can't hide it", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const id = await saved();
+      clock = day(i);
+      await keepHandy(deps(), A, id, "stated");
+      ids.push(id);
+    }
+    // Tools 1-9 opened recently (tool 9 most recently); tool 0, kept first, never opened.
+    for (let i = 1; i < 10; i++)
+      await store.update(A, ids[i] as string, { lastOpenedAt: day(20 + i) });
+    clock = day(31);
+    const shelf = await listShelf(deps(), A);
+    expect(shelf[0]).toMatchObject({ link: { id: ids[0] }, due: true });
+    expect(shelf.slice(1).map((s) => s.link.id)).toEqual(
+      [9, 8, 7, 6, 5, 4, 3, 2, 1].map((i) => ids[i]),
+    );
+    expect(shelf.slice(1).every((s) => !s.due)).toBe(true);
   });
 
   it("returns every kept tool with its row, ties in the store's order", async () => {

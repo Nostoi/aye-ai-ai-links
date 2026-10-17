@@ -22,6 +22,7 @@ import {
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { setTagPinned } from "../core/tag-space.js";
+import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -40,6 +41,7 @@ const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
+const A_TOOL_TITLE = "Quokka keeper login";
 const A_DONE_URL = "https://a.example/remote-image";
 const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 
@@ -499,8 +501,11 @@ describe("owner isolation coverage", () => {
   type Marker = string | Buffer | string[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
-    // A's titled link has no why, so it is one of A's picks on home; A's pinned space shows too.
-    "GET /": { request: "/", marker: () => ["Quokka habitat notes", A_TAG_NAME] },
+    // A's titled link has no why, so it is one of A's picks on home; A's pinned space and kept tool show too.
+    "GET /": {
+      request: "/",
+      marker: () => ["Quokka habitat notes", A_TAG_NAME, A_TOOL_TITLE],
+    },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
     "GET /spaces": {
       request: `/spaces?tag=${encodeURIComponent(A_TAG_NAME)}`,
@@ -600,6 +605,13 @@ describe("owner isolation coverage", () => {
       savedBy: "seed",
     });
     await updateLink(seedDeps, A, untagged.id, { state: "archived" });
+    // A kept tool is on A's Handy shelf, and only there: kept tools are not Worth a look picks.
+    const { link: handy } = await saveLink(seedDeps, A, {
+      url: "https://a.example/keeper-login",
+      savedBy: "seed",
+      title: A_TOOL_TITLE,
+    });
+    await keepHandy(seedDeps, A, handy.id, "stated");
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,
@@ -693,6 +705,14 @@ describe("owner isolation coverage", () => {
     "POST /home/unarchive": "the two-owner test of POST /home/unarchive in web/home-routes.test.ts",
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
+    "POST /tools/keep": "the two-owner test of POST /tools/keep in web/tools-routes.test.ts",
+    "POST /tools/not-handy":
+      "the two-owner test of POST /tools/not-handy in web/tools-routes.test.ts",
+    "POST /tools/still-using":
+      "the two-owner test of POST /tools/still-using in web/tools-routes.test.ts",
+    "POST /tools/suggestion":
+      "the two-owner test of POST /tools/suggestion in web/tools-routes.test.ts",
+    "POST /tools/undo": "the two-owner test of POST /tools/undo in web/tools-routes.test.ts",
     "POST /tags/pin": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/color": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/kind": "the two-owner tag actions test in web/tags-routes.test.ts",

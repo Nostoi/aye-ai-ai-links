@@ -24,7 +24,28 @@ import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
-import type { LinkState, OwnerId, Tag, TagKind } from "../core/types.js";
+import type { ToolRecord, WaitDays } from "../core/tool-store.js";
+import {
+  answerSuggestion,
+  handyOfLinks,
+  keepHandy,
+  listShelf,
+  listSuggestions,
+  notHandy,
+  restoreTool,
+  stillUsing,
+  type ToolChange,
+} from "../core/tools.js";
+import {
+  type LinkState,
+  type OwnerId,
+  SOURCES,
+  type Source,
+  type Tag,
+  type TagKind,
+  TOOL_STATUSES,
+  type ToolStatus,
+} from "../core/types.js";
 import {
   archiveLink,
   markOpened,
@@ -38,6 +59,7 @@ import {
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allPage } from "./all-page.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
+import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
@@ -134,6 +156,78 @@ async function homeAction(c: Context, act: () => Promise<Response>): Promise<Res
     const code = error.code as keyof typeof HOME_REFUSALS;
     const message = code === "not_found" ? LINK_GONE : error.message;
     return c.json({ code, message }, HOME_REFUSALS[code], NO_STORE);
+  }
+}
+
+/** A Keep handy row as the page holds it between an action and its Undo: dates as ISO strings. */
+type ToolJson = {
+  status: ToolStatus;
+  source: Source;
+  since: string;
+  answeredAt: string | null;
+  waitDays: WaitDays;
+};
+
+const toolJson = (t: ToolRecord): ToolJson => ({
+  status: t.status,
+  source: t.source,
+  since: t.since.toISOString(),
+  answeredAt: t.answeredAt?.toISOString() ?? null,
+  waitDays: t.waitDays,
+});
+
+/** Each wait core can store. A Record, so the compiler holds it to exactly `WaitDays`. */
+const WAITS: Record<WaitDays, true> = { 30: true, 60: true, 120: true };
+
+/** A row the page sends back: status, source and wait among core's values, and dates that parse. */
+const isToolJson = (value: unknown): value is ToolJson => {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    (TOOL_STATUSES as readonly unknown[]).includes(row.status) &&
+    (SOURCES as readonly unknown[]).includes(row.source) &&
+    isDate(row.since) &&
+    isDateOrNull(row.answeredAt) &&
+    typeof row.waitDays === "number" &&
+    row.waitDays in WAITS
+  );
+};
+/** An absent row is null; a missing member is refused, never read as null. */
+const isToolJsonOrNull = (value: unknown): value is ToolJson | null =>
+  value === null || isToolJson(value);
+
+const toolRecord = (t: ToolJson): ToolRecord => ({
+  status: t.status,
+  source: t.source,
+  since: new Date(t.since),
+  answeredAt: t.answeredAt === null ? null : new Date(t.answeredAt),
+  waitDays: t.waitDays,
+});
+
+/** A tool action's answer: the row it wrote and the row it replaced, which its Undo sends back. */
+const toolMoved = (c: Context, change: ToolChange) =>
+  c.json(
+    { tool: toolJson(change.tool), previous: change.previous && toolJson(change.previous) },
+    200,
+    NO_STORE,
+  );
+
+/** What the owner is told when a Keep handy action is refused; core's words are written for an agent. */
+const TOOL_REFUSALS = {
+  not_found: { status: 404, message: LINK_GONE },
+  conflict: { status: 409, message: "That link's Keep handy state changed. Reload the page." },
+  invalid_input: { status: 400, message: "That can't be undone. Reload the page." },
+} as const;
+
+/** A refused tool action answers with the owner's words; anything else is thrown on. */
+async function toolAction(c: Context, act: () => Promise<Response>): Promise<Response> {
+  try {
+    return await act();
+  } catch (error) {
+    if (!(error instanceof CoreError) || !(error.code in TOOL_REFUSALS)) throw error;
+    const code = error.code as keyof typeof TOOL_REFUSALS;
+    const { status, message } = TOOL_REFUSALS[code];
+    return c.json({ code, message }, status, NO_STORE);
   }
 }
 
@@ -244,7 +338,12 @@ export function webApp({
     );
     const { spaces, catalog } = await homeSpaces(deps, owner);
     const worth = { links, images, now: deps.now(), catalog };
-    const page = homePage({ worth, spaces: spacesSection(spaces) });
+    const shelf = handyShelf({
+      items: await listShelf(deps, owner),
+      suggestions: await listSuggestions(deps, owner),
+      catalog,
+    });
+    const page = homePage({ worth, shelf, spaces: spacesSection(spaces) });
     return c.html(page, 200, NO_STORE);
   });
 
@@ -257,8 +356,9 @@ export function webApp({
       links.map((l) => l.id),
     );
     const catalog = await deps.store.listTags(caller.owner);
+    const handy = await handyOfLinks(deps, caller.owner, links);
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now, images, catalog }), 200, NO_STORE);
+    return c.html(searchPage({ query, links, now, images, catalog, handy }), 200, NO_STORE);
   });
 
   // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does
@@ -279,9 +379,19 @@ export function webApp({
         owner,
         page.links.map((l) => l.id),
       );
+      const handy = await handyOfLinks(deps, owner, page.links);
       const done = state === "archived";
       const later = before !== undefined;
-      const html = spacePage({ tag, catalog, ...page, images, now: deps.now(), done, later });
+      const html = spacePage({
+        tag,
+        catalog,
+        ...page,
+        images,
+        handy,
+        now: deps.now(),
+        done,
+        later,
+      });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
@@ -310,9 +420,19 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const catalog = await deps.store.listTags(owner);
+      const handy = await handyOfLinks(deps, owner, page.links);
       const done = state === "archived";
       const later = before !== undefined;
-      const html = allPage({ order, ...page, catalog, images, now: deps.now(), done, later });
+      const html = allPage({
+        order,
+        ...page,
+        catalog,
+        images,
+        handy,
+        now: deps.now(),
+        done,
+        later,
+      });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
@@ -409,6 +529,46 @@ export function webApp({
     homeAction(c, async () => {
       const { id, text } = c.get("body");
       await tellWhy(deps, c.get("caller").owner, id, text);
+      return done(c);
+    }),
+  );
+
+  // Keep handy. A choice the owner makes on the page sends "stated"; answering the page's
+  // "Still using?" sends "asked", and core keeps the row's own source. Each answers the row it
+  // wrote and the one it replaced.
+  app.post("/tools/keep", jsonBody(linkId), session, (c) =>
+    toolAction(c, async () =>
+      toolMoved(c, await keepHandy(deps, c.get("caller").owner, c.get("body").id, "stated")),
+    ),
+  );
+
+  app.post("/tools/not-handy", jsonBody(linkId), session, (c) =>
+    toolAction(c, async () =>
+      toolMoved(c, await notHandy(deps, c.get("caller").owner, c.get("body").id, "stated")),
+    ),
+  );
+
+  app.post("/tools/still-using", jsonBody(linkId), session, (c) =>
+    toolAction(c, async () =>
+      toolMoved(c, await stillUsing(deps, c.get("caller").owner, c.get("body").id, "asked")),
+    ),
+  );
+
+  app.post("/tools/suggestion", jsonBody({ ...linkId, keep: isBoolean }), session, (c) =>
+    toolAction(c, async () => {
+      const { id, keep } = c.get("body");
+      return toolMoved(c, await answerSuggestion(deps, c.get("caller").owner, id, keep));
+    }),
+  );
+
+  // The Undo of a tool action: puts `previous` back (null: no row) while the row still holds
+  // `tool`, the row the action answered. Core refuses a row no action could write.
+  const undoTool = { tool: isToolJson, previous: isToolJsonOrNull };
+  app.post("/tools/undo", jsonBody({ ...linkId, ...undoTool }), session, (c) =>
+    toolAction(c, async () => {
+      const { id, tool, previous } = c.get("body");
+      const restored = previous && toolRecord(previous);
+      await restoreTool(deps, c.get("caller").owner, id, restored, toolRecord(tool));
       return done(c);
     }),
   );

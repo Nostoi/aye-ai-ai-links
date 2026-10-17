@@ -105,7 +105,8 @@ button:disabled{opacity:.6;cursor:default}
 .profile h2{margin-bottom:14px}
 .notes{list-style:none;padding:0;margin:0 0 18px;display:flex;flex-direction:column;gap:12px}
 .note{max-width:none;margin:0;background:var(--surface);border:1.5px solid transparent;border-radius:18px;padding:16px 20px;box-shadow:0 2px 10px #0000000b}
-.note.guess{border:1.5px dashed var(--field)}
+.note.guess,.handy-tile.guess{border:1.5px dashed var(--field)}
+.handy-tile.guess{background:transparent;box-shadow:none}
 .note-text{margin:0 0 6px;font-size:16.5px;overflow-wrap:anywhere}
 .note-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;font-size:14px;color:var(--soft)}
 .note.guess .note-source{font-style:italic}
@@ -142,8 +143,8 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .not-it p{margin:0 0 4px}
 .worth{margin:64px 0 0}
 .worth-grid{display:flex;flex-wrap:wrap;align-items:flex-start;gap:22px}
-.worth-card{min-width:0;background:var(--surface);overflow:hidden}
-.worth-card h3 a{text-decoration:none}
+.worth-card,.handy-tile{min-width:0;background:var(--surface);overflow:hidden}
+.worth-card h3 a,.handy-tile h3 a{text-decoration:none}
 .worth-lead{flex:2 1 460px;border-radius:20px;box-shadow:0 4px 18px #0000000f;border-top:6px solid var(--space,var(--line))}
 .worth-image{display:block;width:100%;height:220px;object-fit:cover;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
 .worth-body{min-width:0;padding:22px 26px 24px}
@@ -155,14 +156,19 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 a.button{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:999px;font-size:15.5px;font-weight:600;text-decoration:none;border:1.5px solid var(--line)}
 a.button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .worth-side{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:22px}
-.worth-small{display:flex;border-radius:18px;box-shadow:0 2px 10px #0000000b}
+.worth-small{display:flex}
+.worth-small,.handy-tile{border-radius:18px;box-shadow:0 2px 10px #0000000b}
 .worth-tile{flex:0 0 104px;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
 img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cover}
 .worth-small .worth-body{flex:1;padding:16px 18px}
-.worth-small h3{font-size:16px;line-height:1.3;margin:0 0 6px}
+.worth-small h3,.handy-tile h3{font-size:16px;line-height:1.3;margin:0 0 6px}
+.handy-tile{position:relative;padding:16px 18px;overflow-wrap:anywhere}
+.handy-tile p{margin:0 0 4px}
 .worth-small .meta{font-size:14px;margin:0 0 4px}
 .small-actions{gap:0 18px}
 .small-actions button{min-height:44px;padding:0;background:none;border:0;color:var(--soft);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.handy-control{align-items:center;font-size:14px;color:var(--soft)}
+.handy-on{display:inline-flex;align-items:center;gap:6px}
 .needs-you{outline:2px solid var(--amber);outline-offset:-2px}
 .ask{margin:0 0 14px}
 .ask p{margin:0 0 8px}
@@ -191,9 +197,14 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .result[class*=" space-"]>.tile{background:color-mix(in srgb,var(--space) 24%,var(--surface))}
 .in-space{display:inline-flex;align-items:center;gap:6px;margin-right:8px;font-weight:600;color:var(--ink)}
 .in-space .dot{width:10px;height:10px;margin:0}
-.spaces{margin:64px 0 0}
-.spaces h2{margin-bottom:16px}
-.home-spaces{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:22px}
+.spaces,.handy{margin:64px 0 0}
+.spaces h2,.handy h2{margin-bottom:16px}
+.handy-foot{margin-top:16px}
+.handy-empty{align-items:center}
+.handy-empty p{margin:0}
+.tile-menu summary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;color:var(--soft);cursor:pointer;list-style:none}
+.tile-menu summary::-webkit-details-marker{display:none}
+.home-spaces,.handy-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:22px}
 .home-space{display:block;min-width:0;background:var(--surface);color:var(--ink);text-decoration:none;border-radius:18px;overflow:hidden;box-shadow:0 2px 10px #0000000b}
 .mosaic{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;gap:2px;height:120px}
 .mosaic>:first-child{grid-row:span 2}
@@ -238,5 +249,5 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .card-site .dot{flex:none;width:10px;height:10px;margin:0}
 .all-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px}
 ${spaceClasses}
-@media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}}
+@media (max-width:600px){.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}.handy-row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-bottom:6px}.handy-row>.handy-tile{flex:0 0 72%;scroll-snap-align:start}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;

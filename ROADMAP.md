@@ -32,6 +32,22 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Tools you use regularly get Keep handy (#125).** A fourth choice on Worth a look marks a link as a tool. A tool leaves the ordinary nudges and joins a Handy shelf on home. Instead, it is asked about alone ("Still using it?") once it goes unopened for a wait. The wait counts from the later of its last recorded opening or its last answer, starts at 30 days, doubles on each "Still using it" with no opening since, stops at 120 days, and goes back to 30 on any opening.
   - **Keep handy's design** is `docs/specs/2026-10-16-keep-handy-design.md`. It lands in three PRs: first the store and rules, then the MCP door and the web page in parallel. Tools live in their own `link_tools` table, and nothing is written on an opening. A tool's writes and Undo apply only while its row still holds the values they read, compared by value. Shelf tools never opened sort by when they were kept, newest first. The digest's still-using check is judged again once claimed, so a tool opened or answered since selection drops out but stays marked.
   - **Keep handy over MCP (#125).** `save_link` and `update_link` take `handy: {action, source}`, with action `keep`, `still_using` or `not_handy`. `update_link` applies it before the other fields, after checking the tags, so a refused `handy` changes nothing. A new save whose `handy` is refused keeps the link and says so with its id, and a repeat save ignores `handy`. Each of `save_link`, `update_link` and `get_digest` reads the clock once, so an opening sent with an answer lands at the answer's instant, and a digest item's `handy` uses its claim's instant. The composition stays in the door. Every link result carries `handy`. `get_digest`'s still-using check comes last and takes one of the five slots; a check that is no longer due once claimed frees its slot, and claiming it before select is accepted. `previewDigest`, and so Worth a look, holds reading picks only; due tools belong on the Handy shelf, which #125's web PR builds.
+  - **Keep handy on the web page (PR 3).** Owner rulings, 2026-10-16:
+    - The shelf is a grid of about four tiles per line on wide screens, and one sideways row below 600 px.
+    - Due tools come first on the shelf. This is core's `listShelf` order, so a tile asking "Still using?" is behind Show all only when more than 8 are due.
+    - At most 2 suggestion tiles show, newest first, after the kept tools and outside the 8.
+    - The page sends `asked` for Still using, and core keeps the row's existing source. Keep handy and Not handy anymore send `stated`.
+    - After a shelf refresh, focus goes back where it was, or else to the next tile or the heading.
+    - A refresh that answers after a newer one began is dropped.
+
+    Choices accepted with them:
+    - Add goes to the search page, whose results carry Keep handy.
+    - Suggestions come last.
+    - Archived links and done views get no control.
+    - Refusals use the page's own wording.
+    - The shelf refreshes by re-reading `GET /`.
+    - Undo comes with removals and with Done.
+    - The tile menu is a native `<details>`.
   - **Openings are recorded from every web page (#124),** storing only the last one. This replaces the 2026-10-14 `list_links` entry's "clicks on All links and search results are not recorded". Search, All links and space pages post `/links/opened`, which sets only `lastOpenedAt`: a click the app didn't suggest doesn't mark the link surfaced, so only home's cards claim it (#124 comment 6225313667). Clicks the app can't see, such as browser bookmarks, stay unrecorded; an AI-chat click through a redirect link is #133, and pairing web searches with the search log is #134.
 
 - **2026-10-14:** Phase 4 is done, and the repo is public.

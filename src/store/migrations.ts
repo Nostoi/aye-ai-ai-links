@@ -240,6 +240,25 @@ export const MIGRATIONS: string[] = [
       AND (prior_bytes IS NULL) = (prior_set_at IS NULL))
   );
   `,
+  // Dead-link checks (#128): a link's last check and its flag. A link with no row has never been
+  // checked; the due read counts its saved_at as its last check, so nothing is backfilled. The
+  // composite foreign key deletes the row with its link, as link_tools rows are. Additive; rebuilds
+  // nothing, and snapshots and link_images are not touched.
+  `
+  CREATE TABLE link_checks (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    checked_at INTEGER NOT NULL,
+    result TEXT NOT NULL CHECK (result IN ('alive', 'dead', 'unknown')),
+    detail TEXT,
+    first_dead_at INTEGER,
+    flagged_at INTEGER,
+    still_works_at INTEGER,
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK (flagged_at IS NULL OR first_dead_at IS NOT NULL)
+  );
+  `,
 ];
 
 /**

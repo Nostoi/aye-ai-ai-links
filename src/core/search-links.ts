@@ -3,7 +3,7 @@ import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
 import { logSearch, type SearchLog } from "./search-log.js";
 import type { LinkStore } from "./store.js";
 import { tagKey } from "./tags.js";
-import type { Link, OwnerId } from "./types.js";
+import type { Link, LinkState, OwnerId } from "./types.js";
 
 export type SearchLinksInput = {
   query: string;
@@ -11,6 +11,7 @@ export type SearchLinksInput = {
   project?: string;
   savedFrom?: Date;
   savedTo?: Date;
+  state?: LinkState;
   limit?: number;
 };
 
@@ -70,7 +71,8 @@ export async function searchLinks(
   input: SearchLinksInput,
   by: string,
 ): Promise<Link[]> {
-  const filters = checkedFilters(input);
+  const filters: SearchFilters = checkedFilters(input);
+  if (input.state !== undefined) filters.state = input.state;
   const limit = checkedLimit(input.limit);
   const traces: SearchTrace[] = [];
   const ids = await search.search(owner, input.query, filters, limit, (t) => traces.push(t));

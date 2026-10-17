@@ -28,7 +28,7 @@ You talk to your AI; it uses the library for you.
   - The shelf shows up to eight. Any tool asking **Still using?** comes first, then the most recently opened. **Show all** shows the rest, and on a phone the row scrolls sideways.
   - Opening one from the shelf counts as an opening but doesn't mark it as shown.
   - When a tool goes unopened, from the web page or by your AI, for a wait counted from the latest of its last recorded opening, its last answer and the day you kept it, its tile asks **Still using?**. The wait starts at 30 days. When the tool comes up unopened and you say you're still using it, the wait doubles, up to 120 days, and any recorded opening sets it back to 30. **Yes** keeps the tool, and **Done** archives it, with an **Undo** bar.
-  - **Add** opens a search that asks you to find the link to keep, where each active result has **Keep handy**. Active links in search results, All links and space pages have the same button, which reads **Handy · Not handy anymore** once a link is kept.
+  - **Add** opens a search that asks you to find the link to keep. It lists only active links, each with **Keep handy**. Active links in search results, All links and space pages have the same button, which reads **Handy · Not handy anymore** once a link is kept.
   - Up to two tools an AI only guessed at show faded at the end of the shelf, asking **Keep handy?** with **Yes** and **No**.
   - Each tile's **⋯** menu has **Not handy anymore**, with an **Undo** bar.
 

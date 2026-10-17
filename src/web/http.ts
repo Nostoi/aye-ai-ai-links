@@ -351,7 +351,9 @@ export function webApp({
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
     const keep = c.req.query("keep") === "1";
-    const links = await searchLinks(deps, caller.owner, { query }, caller.savedBy);
+    // Keep mode lists only links that can go on the shelf.
+    const input = keep ? { query, state: "active" as const } : { query };
+    const links = await searchLinks(deps, caller.owner, input, caller.savedBy);
     const images = await deps.images.imageVersions(
       caller.owner,
       links.map((l) => l.id),

@@ -175,6 +175,23 @@ describe("web door", () => {
     expect(html).toContain('<input type="hidden" name="keep" value="1">');
   });
 
+  it("keep mode lists only active links, for a blank and a word search; ordinary search lists archived ones too", async () => {
+    const t = await setup();
+    const { link } = await saveLink(t.deps, "owner", {
+      url: "https://example.com/done",
+      savedBy: "codex",
+      title: "Finished lunch notes",
+    });
+    await t.deps.store.update("owner", link.id, { state: "archived" });
+    const cookie = await t.signIn();
+    const page = async (path: string) => (await t.get(path, cookie)).text();
+    for (const q of ["", "lunch"]) {
+      expect(await page(`/search?q=${q}&keep=1`), q).not.toContain("Finished lunch notes");
+      expect(await page(`/search?q=${q}`), q).toContain("Finished lunch notes");
+    }
+    expect(await page("/search?q=&keep=1")).toContain("Own &lt;b&gt;link&lt;/b&gt;");
+  });
+
   it("keep mode is on only for keep=1; ordinary search has none of its markup", async () => {
     const t = await setup();
     const cookie = await t.signIn();

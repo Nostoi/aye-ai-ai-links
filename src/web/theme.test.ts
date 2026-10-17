@@ -163,6 +163,16 @@ describe("the Handy postcards", () => {
     const alphas = [...photo.matchAll(/rgb\(0 0 0 \/ (\.\d+)\)/g)].map((m) => Number(m[1]));
     expect(alphas.length).toBeGreaterThan(1);
     expect(Math.max(...alphas)).toBeLessThanOrEqual(0.62);
+    const blurs = [...photo.matchAll(/text-shadow:[^;]*/g)].flatMap((m) =>
+      [...m[0].matchAll(/(\d+)px rgb/g)].map((b) => Number(b[1])),
+    );
+    expect(Math.max(...blurs)).toBeGreaterThanOrEqual(8);
+  });
+
+  it("darkens the host line toward ink, so it reads on a space-tinted card", () => {
+    expect(rule(".handy-caption .card-site")).toContain(
+      "color:color-mix(in srgb,var(--soft) 70%,var(--ink))",
+    );
   });
 
   it("keeps the initials in the card's top half, small enough never to meet a 3-line title", () => {

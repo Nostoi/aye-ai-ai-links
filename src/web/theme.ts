@@ -167,13 +167,13 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .handy-image{position:absolute;inset:0;z-index:-1;width:100%;height:100%;object-fit:cover;border-radius:inherit}
 .handy-initials{position:absolute;inset:0 0 auto;height:50%;z-index:-1;display:flex;align-items:center;justify-content:center;font-size:34px;line-height:1;font-weight:800;letter-spacing:.02em;color:color-mix(in srgb,var(--space,var(--field)) 55%,var(--ink))}
 .handy-caption{min-width:0;padding:0 12px 10px;border-radius:0 0 18px 18px;color:var(--ink)}
-.handy-tile.photo .handy-caption{padding-top:28px;color:#fff;background:linear-gradient(to bottom,rgb(0 0 0 / 0),rgb(0 0 0 / .42) 45%,rgb(0 0 0 / .62));text-shadow:0 1px 2px rgb(0 0 0 / .5)}
+.handy-tile.photo .handy-caption{padding-top:28px;color:#fff;background:linear-gradient(to bottom,rgb(0 0 0 / 0),rgb(0 0 0 / .42) 45%,rgb(0 0 0 / .62));text-shadow:0 1px 2px rgb(0 0 0 / .6),0 0 10px rgb(0 0 0 / .5)}
 .handy-tile h3{margin:0 0 2px;font-size:14.5px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .handy-tile h3 a{color:inherit}
 .handy-tile h3 a::after{content:"";position:absolute;inset:0;border-radius:18px}
 .handy-tile h3 a:focus-visible{outline:none}
 .handy-tile h3 a:focus-visible::after{outline:3px solid var(--blue);outline-offset:-3px;box-shadow:inset 0 0 0 6px var(--surface)}
-.handy-caption .card-site{min-width:0;margin:0;font-size:13px;color:var(--soft)}
+.handy-caption .card-site{min-width:0;margin:0;font-size:13px;color:color-mix(in srgb,var(--soft) 70%,var(--ink))}
 .handy-tile.photo .handy-caption .card-site{color:#ffffffe6}
 .handy-caption .host{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .handy-tile .ask{position:absolute;top:4px;left:4px;right:4px;z-index:2;margin:0;padding:3px 10px 0;border-radius:13px;background:color-mix(in srgb,var(--surface) 94%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 4px 14px rgb(0 0 0 / .12)}

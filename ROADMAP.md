@@ -49,7 +49,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - Undo comes with removals and with Done.
     - The tile menu is a native `<details>`.
   - **Keep handy follow-ups (#140).** Owner rulings, 2026-10-16 and 2026-10-17 (#140 comments): Worth a look leaves out the suggestions the shelf shows (up to two, newest first, a cap that lives in core), before it picks, so they use up no focus match; any other suggestion is an ordinary link there, and `get_digest` still includes every suggestion. The ⋯ menu is lined up in the bottom-right of every shelf tile.
-  - **The Handy shelf's tiles are postcards (#144).** The owner chose the postcard design from three options. Owner rulings, 2026-10-17 (#144 comments 6234614437 and 6234962721):
+  - **The Handy shelf's tiles are postcards (#144).** The owner chose the postcard design from three options. Owner rulings, 2026-10-17 (#144 comments 6234614437, 6234962721 and 6235422367):
     - Square cards, 176 px on desktop and 156 px on a phone.
     - The saved picture fills the card. Without one, the card shows the space's colour and the title's initials, with dark text and no fade.
     - The title runs to 3 lines, with the space dot and the site's host under it.

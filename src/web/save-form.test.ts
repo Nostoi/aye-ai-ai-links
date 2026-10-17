@@ -345,6 +345,64 @@ describe("Save on the page", () => {
     expect(page.replaced).toEqual([]);
   });
 
+  it("a network failure shows the general message and enables Save again", async () => {
+    const page = load(() => {
+      throw new TypeError("network down");
+    });
+    page.fire("#save-form", "submit");
+    await page.settle();
+    expect(page.$("#save-error").textContent).toBe(
+      "That did not work. Reload the page and try again.",
+    );
+    expect(page.$("#save-form button[type=submit]").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("a 400 whose body is not JSON shows the general message and enables Save again", async () => {
+    const page = load(() => ({ status: 400 }));
+    page.fire("#save-form", "submit");
+    await page.settle();
+    expect(page.$("#save-error").textContent).toBe(
+      "That did not work. Reload the page and try again.",
+    );
+    expect(page.$("#save-form button[type=submit]").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("after a failed Save, a second Save sends a second POST", async () => {
+    const page = load(() => ({ status: 500 }));
+    page.fire("#save-form", "submit");
+    await page.settle();
+    page.fire("#save-form", "submit");
+    await page.settle();
+    expect(page.sent).toHaveLength(2);
+  });
+
+  it("Bring it back sends one POST for two clicks while the first is pending", async () => {
+    const page = load(answering({ ...ANSWER, state: "archived" }));
+    page.fire("#save-form", "submit");
+    await page.settle();
+    page.fire("#bring-back", "click");
+    page.fire("#bring-back", "click");
+    await page.settle();
+    expect(page.sent.filter((s) => s.url === "/home/unarchive")).toHaveLength(1);
+  });
+
+  it("shows an answer's title and why as typed text, never as markup", async () => {
+    const hostile = "<img src=x onerror=alert(1)>";
+    const kept = load(answering({ ...ANSWER, title: hostile, why: hostile }));
+    kept.fire("#save-form", "submit");
+    await kept.settle();
+    expect(kept.$("#result").querySelectorAll("img")).toHaveLength(0);
+    expect(kept.$("#saved-link a").textContent).toBe(hostile);
+    expect(kept.$("#saved-why").textContent).toBe(`Why: ${hostile}`);
+    const notKept = load(answering({ ...ANSWER, title: hostile, why: hostile, whyKept: false }));
+    notKept.fire("#save-form", "submit");
+    await notKept.settle();
+    expect(notKept.$("#result").querySelectorAll("img")).toHaveLength(0);
+    expect(notKept.$("#why-kept").textContent).toBe(
+      `It already had a reason, so yours wasn't saved: “${hostile}”`,
+    );
+  });
+
   it("Close closes the tab when the browser allows it", async () => {
     const page = load(answering({ ...ANSWER, created: true }), { closes: true });
     page.fire("#save-form", "submit");

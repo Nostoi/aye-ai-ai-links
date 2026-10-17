@@ -61,6 +61,8 @@ describe("returnAfterLogin and the Save page", () => {
 
   it.each([
     ["/save/"],
+    ["/save;x"],
+    ["/save/."],
     ["/saveX"],
     ["/Save"],
     ["/save%2F"],

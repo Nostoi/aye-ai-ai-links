@@ -300,7 +300,9 @@ describe("POST /save", () => {
   ])("refuses a body with %s with 400, and writes nothing", async (_, json) => {
     const { world, browser } = await signedIn();
     const before = allRows(world);
-    expect((await save(browser, json)).status).toBe(400);
+    const res = await save(browser, json);
+    expect(res.status).toBe(400);
+    expect((res.body as { code?: unknown }).code).toBe("BAD_REQUEST");
     expect(allRows(world)).toEqual(before);
   });
 

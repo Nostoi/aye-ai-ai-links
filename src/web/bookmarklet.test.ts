@@ -77,6 +77,15 @@ describe("bookmarkletCode", () => {
     expect(bookmarkletCode(BASE)).not.toContain("%");
   });
 
+  it("quotes an origin that holds a double quote, so the code holds no % and opens that origin", () => {
+    const origin = new URL('https://a"b.example').origin;
+    expect(origin).toContain('"');
+    const code = bookmarkletCode('https://a"b.example');
+    expect(code).not.toContain("%");
+    const { opened } = run(code, "https://ex.com/", "T");
+    expect(String(opened[0]?.[0]).startsWith(`${origin}/save?url=`)).toBe(true);
+  });
+
   it("uses only the configured origin, never a path or query that came with it", () => {
     const { opened } = run(bookmarkletCode(`${BASE}/some/path?q=1`), "https://ex.com/", "T");
     expect(opened[0]?.[0]).toBe(saveUrl("https://ex.com/", "T"));

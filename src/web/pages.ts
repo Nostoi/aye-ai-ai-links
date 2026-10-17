@@ -14,7 +14,7 @@ import { CARD_FETCH } from "./tell-why.js";
  * was opened with a signed OAuth query (`sig`), passes that query on as `oauth_query`, which is
  * how better-auth resumes an authorization after login. After sign-in it goes, in order, to the
  * url better-auth returns with `redirect: true`, or to `next`, the already-checked page the door
- * passes in (`returnAfterLogin`: this site's authorize path, or home), held in `data-next`.
+ * passes in (`returnAfterLogin`: this site's authorize path, the rebuilt `/save`, or home), held in `data-next`.
  */
 export const loginPage = ({ next }: { next: string }) =>
   page(

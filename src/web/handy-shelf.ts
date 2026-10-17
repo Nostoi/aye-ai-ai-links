@@ -1,15 +1,20 @@
-import { linkSpace } from "../core/link-space.js";
+import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
-import { siteLine, spaceClass } from "./pages.js";
+import { hostOf, spaceClass, tile } from "./pages.js";
 
 /** Tiles the shelf shows before Show all (#125). */
 export const SHELF_SIZE = 8;
 
-/** The shelf's kept tools in shelf order, its suggestions, and the owner's tags for each tile's space. */
-export type Shelf = { items: ShelfItem[]; suggestions: ToolItem[]; catalog: Tag[] };
+/** The shelf's kept tools in shelf order, its suggestions, the owner's tags for each tile's space, and image versions by link id. */
+export type Shelf = {
+  items: ShelfItem[];
+  suggestions: ToolItem[];
+  catalog: Tag[];
+  images: Map<string, string>;
+};
 
 /** Add: search results each carry Keep handy, so picking one there keeps it. */
 const ADD = `<a class="button" href="/search?q=&keep=1">Add</a>`;
@@ -22,53 +27,94 @@ const STILL_USING = `<div class="ask">
 </div>
 </div>`;
 
-const menu = (link: Link) => `<details class="tile-menu">
-<summary><span aria-hidden="true">⋯</span><span class="visually-hidden">More for ${escapeHtml(link.title ?? link.url)}</span></summary>
-<div class="actions small-actions"><button type="button" data-act="not-handy">Not handy anymore</button></div>
-</details>`;
-
-/** The title, opening the link and recorded by `openedScript`, then its space and site. */
-function head(link: Link, catalog: Tag[]): { space: string; html: string } {
-  const space = linkSpace(link, catalog);
-  return {
-    space: spaceClass(space),
-    html: `<h3>${linkTitle(link)}</h3>\n${siteLine(link, space)}`,
-  };
-}
-
-/** A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A due one needs you. */
-function tile({ link, due }: ShelfItem, catalog: Tag[], more: boolean): string {
-  const { space, html } = head(link, catalog);
-  return `<article class="handy-tile${due ? " needs-you" : ""}${space}" data-id="${escapeHtml(link.id)}"${more ? " data-more hidden" : ""}>
-${html}${due ? `${STILL_USING}\n` : ""}${menu(link)}
-</article>`;
-}
-
-/** An agent's guess: a faded tile asking the owner, at the end of the row. */
-function suggestion({ link }: ToolItem, catalog: Tag[]): string {
-  const { space, html } = head(link, catalog);
-  return `<article class="handy-tile guess${space}" data-id="${escapeHtml(link.id)}">
-${html}<p class="small">Keep handy?</p>
+const KEEP_HANDY = `<div class="ask">
+<p class="small">Keep handy?</p>
 <div class="actions small-actions">
 <button type="button" data-act="suggest-yes">Yes</button>
 <button type="button" data-act="suggest-no">No</button>
 </div>
+</div>`;
+
+const menu = (link: Link) => `<details class="tile-menu">
+<summary><span class="tile-menu-dot" aria-hidden="true">⋯</span><span class="visually-hidden">More for ${escapeHtml(link.title ?? link.url)}</span></summary>
+<div class="actions small-actions"><button type="button" data-act="not-handy">Not handy anymore</button></div>
+</details>`;
+
+/** The first letter or digit of each of the first two words that have one, uppercased. */
+const initialsOf = (text: string) =>
+  text
+    .split(/\s+/)
+    .map((word) => word.match(/[\p{L}\p{N}]/u)?.[0])
+    .filter((c): c is string => c !== undefined)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+/** What a tile with no picture shows over its space color: the title's initials, else the host's. */
+function initials(link: Link): string {
+  const host = hostOf(link.url).replace(/^www\./, "");
+  const text = initialsOf(link.title ?? "") || initialsOf(host.replaceAll(".", " "));
+  return text ? `<span class="handy-initials" aria-hidden="true">${escapeHtml(text)}</span>\n` : "";
+}
+
+/** The space's dot and the site's host, without the space's name (All links uses `siteLine`). */
+function hostLine(link: Link, space: Space | null): string {
+  const host = hostOf(link.url);
+  if (!host) return "";
+  const dot = space ? `<span class="dot" aria-hidden="true"></span>` : "";
+  return `<p class="card-site">${dot}${escapeHtml(host)}</p>\n`;
+}
+
+/**
+ * A postcard: the stored image (or the space color with initials) fills the card, and the title,
+ * opening the link and recorded by `openedScript`, sits over a fade with the host under it. `after`
+ * holds the tile's panel and menu.
+ */
+function card(
+  { link }: ToolItem,
+  { catalog, images }: Shelf,
+  classes: string,
+  after: string,
+  attrs = "",
+): string {
+  const space = linkSpace(link, catalog);
+  const version = images.get(link.id);
+  return `<article class="handy-tile${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
+${tile(link, version, "handy-image")}
+${version === undefined ? initials(link) : ""}<div class="handy-caption">
+<h3>${linkTitle(link)}</h3>
+${hostLine(link, space)}</div>
+${after}
 </article>`;
 }
+
+/** A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A due one needs you. */
+const keptTile = (item: ShelfItem, shelf: Shelf, more: boolean) =>
+  card(
+    item,
+    shelf,
+    item.due ? " needs-you" : "",
+    `${item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
+    more ? " data-more hidden" : "",
+  );
+
+/** An agent's guess: a faded tile asking the owner, at the end of the row. */
+const suggestion = (item: ToolItem, shelf: Shelf) => card(item, shelf, " guess", KEEP_HANDY);
 
 /**
  * The Handy shelf on home: kept tools in core's order (due first), the first SHELF_SIZE shown and
  * Show all for the rest, then up to SUGGESTION_SIZE suggestions; Add; or one line when it holds
  * nothing. The script swaps `#handy-shelf`'s contents for a fresh copy after each action.
  */
-export function handyShelf({ items, suggestions, catalog }: Shelf): string {
+export function handyShelf(shelf: Shelf): string {
+  const { items, suggestions } = shelf;
   const empty = items.length === 0 && suggestions.length === 0;
   const body = empty
     ? `<div class="actions handy-empty"><p class="small">Keep links you use often here</p>${ADD}</div>`
     : `<div class="handy-row">
 ${[
-  ...items.map((item, i) => tile(item, catalog, i >= SHELF_SIZE)),
-  ...suggestions.map((s) => suggestion(s, catalog)),
+  ...items.map((item, i) => keptTile(item, shelf, i >= SHELF_SIZE)),
+  ...suggestions.map((s) => suggestion(s, shelf)),
 ].join("\n")}
 </div>
 <div class="actions handy-foot">${items.length > SHELF_SIZE ? '<button type="button" data-act="show-all">Show all</button>' : ""}${ADD}</div>`;

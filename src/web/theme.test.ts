@@ -84,25 +84,60 @@ describe("the theme css", () => {
     expect(themeCss).toContain('ui-rounded, "SF Pro Rounded", system-ui, sans-serif');
   });
 
-  it("lays the shelf out in the spaces grid, and on a phone as one sideways row showing part of the next tile", () => {
+  it("lays the spaces out in a grid, and on a phone the shelf as one sideways row showing part of the next tile", () => {
     expect(themeCss).toMatch(
-      /\.home-spaces,\.handy-row\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(200px,1fr\)\)/,
+      /\.home-spaces\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(200px,1fr\)\)/,
     );
     const phone = /@media \(max-width:600px\)\{(.*)\}$/m.exec(themeCss)?.[1] ?? "";
     const rule = (sel: string) =>
       new RegExp(`${sel.replace(/[.>]/g, "\\$&")}\\{([^}]*)\\}`).exec(phone)?.[1] ?? "";
     expect(rule(".handy-row")).toContain("display:flex");
     expect(rule(".handy-row")).toContain("overflow-x:auto");
-    expect(rule(".handy-row>.handy-tile")).toContain("flex:0 0 72%");
+    expect(rule(".handy-row>.handy-tile")).toContain("flex:0 0 156px");
   });
 
-  it("puts the tile menu in the bottom-right corner of every tile in a row", () => {
-    expect(themeCss).toMatch(/\.handy-tile\{[^}]*display:flex;[^}]*flex-direction:column/);
-    expect(themeCss).toMatch(/\.tile-menu\{[^}]*margin-top:auto;[^}]*align-self:flex-end/);
-    expect(themeCss).toMatch(/\.tile-menu\{[^}]*text-align:right/);
+  it("puts the tile menu in the top-right corner of every tile, on a translucent circle", () => {
+    expect(themeCss).toMatch(/\.tile-menu\{[^}]*top:\d+px;right:\d+px/);
+    expect(themeCss).toMatch(
+      /\.tile-menu-dot\{[^}]*border-radius:50%;[^}]*background:rgb\(0 0 0 \/ \.\d+\)/,
+    );
   });
 
   it("holds a tile's absolutely placed text inside the tile, so the sideways row doesn't widen the page", () => {
     expect(themeCss).toMatch(/\.handy-tile\{[^}]*position:relative/);
+  });
+});
+
+describe("the Handy postcards", () => {
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\})${selector.replace(/[.[\]*>]/g, "\\$&")}\\{([^}]*)\\}`, "m").exec(
+      themeCss,
+    )?.[1] ?? "";
+  const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
+
+  it("makes square 176px cards in a wrapping grid, and 156px ones in a sideways row on a phone", () => {
+    expect(rule(".handy-row")).toContain("grid-template-columns:repeat(auto-fill,176px)");
+    expect(rule(".handy-tile")).toContain("aspect-ratio:1");
+    expect(phone).toMatch(/\.handy-row\{[^}]*overflow-x:auto/);
+    expect(phone).toMatch(/\.handy-row>\.handy-tile\{[^}]*flex:0 0 156px/);
+  });
+
+  it("stretches the title's link over the card, with the menu and panels above it", () => {
+    expect(rule(".handy-tile h3 a::after")).toMatch(/position:absolute;[^}]*inset:0/);
+    for (const sel of [".tile-menu", ".handy-tile .ask"]) {
+      expect(rule(sel), sel).toMatch(/position:absolute/);
+      expect(rule(sel), sel).toMatch(/z-index:[2-9]/);
+    }
+  });
+
+  it("keeps every panel and menu button at least 44px tall, and the card clip-free for the open menu", () => {
+    expect(rule(".handy-tile .small-actions button")).toContain("min-height:44px");
+    expect(rule(".tile-menu summary")).toContain("min-height:44px");
+    expect(rule(".handy-tile")).toContain("overflow:visible");
+  });
+
+  it("sets the title in white over a dark fade, whatever the theme", () => {
+    expect(rule(".handy-caption")).toMatch(/linear-gradient\([^)]*rgb\(0 0 0/);
+    expect(rule(".handy-caption")).toContain("color:#fff");
   });
 });

@@ -338,11 +338,14 @@ export function webApp({
     );
     const { spaces, catalog } = await homeSpaces(deps, owner);
     const worth = { links, images, now: deps.now(), catalog };
-    const shelf = handyShelf({
-      items: await listShelf(deps, owner),
-      suggestions: await listSuggestions(deps, owner),
-      catalog,
-    });
+    const items = await listShelf(deps, owner);
+    const suggestions = await listSuggestions(deps, owner);
+    // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
+    const shelfImages = await deps.images.imageVersions(
+      owner,
+      [...items, ...suggestions].map((t) => t.link.id),
+    );
+    const shelf = handyShelf({ items, suggestions, catalog, images: shelfImages });
     const page = homePage({ worth, shelf, spaces: spacesSection(spaces) });
     return c.html(page, 200, NO_STORE);
   });

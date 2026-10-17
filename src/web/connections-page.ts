@@ -81,6 +81,7 @@ ${keys
 <label for="bookmarklet-code">The bookmark's code</label>
 <textarea class="bookmarklet-code" id="bookmarklet-code" readonly rows="4">${escapeHtml(bookmarklet)}</textarea>
 <p><button type="button" id="copy-bookmarklet">Copy code</button></p>
+<p class="small" id="bookmarklet-status" role="status"></p>
 <ul class="phone-steps">
 <li><strong>iPhone and iPad (Safari):</strong> bookmark any page; open Bookmarks, tap Edit, edit that bookmark, rename it, and replace its address with the copied code. To save a page, open Bookmarks and tap it.</li>
 <li><strong>Android (Chrome):</strong> bookmark any page; edit the bookmark, rename it, and replace its URL with the copied code. To save a page, type the bookmark's name in the address bar and tap the bookmark in the suggestions.</li>
@@ -207,13 +208,18 @@ document.getElementById("copied-key").addEventListener("click", () => {
 {
   const codeField = document.getElementById("bookmarklet-code");
   const copyCode = document.getElementById("copy-bookmarklet");
+  const copyStatus = document.getElementById("bookmarklet-status");
   copyCode.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(codeField.textContent);
       copyCode.textContent = "Copied";
+      copyStatus.textContent = "";
     } catch {
+      copyCode.textContent = "Copy code";
+      copyStatus.textContent = "Copy didn't work. The code is selected: press and hold it, then Copy.";
       codeField.focus();
       codeField.select();
+      codeField.setSelectionRange(0, codeField.value.length);
     }
   });
 }

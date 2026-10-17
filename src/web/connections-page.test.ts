@@ -306,22 +306,67 @@ describe("Save from your browser", () => {
     expect(page.$("#copy-bookmarklet").textContent).toBe("Copied");
   });
 
-  it("where the clipboard is refused, selects the code for copying by hand", async () => {
+  const FAILED = "Copy didn't work. The code is selected: press and hold it, then Copy.";
+  const refusing = {
+    writeText: async () => {
+      throw new Error("denied");
+    },
+  };
+
+  /** The field as a browser has it: a value, and selection calls recorded. */
+  function selectable(page: ReturnType<typeof load>) {
+    const calls: unknown[][] = [];
+    const field = page.$("#bookmarklet-code") as HTMLElement & Record<string, unknown>;
+    field.value = CODE;
+    field.select = () => calls.push(["select"]);
+    field.setSelectionRange = (...args: unknown[]) => calls.push(["setSelectionRange", ...args]);
+    field.focus = () => {};
+    return calls;
+  }
+
+  it("where the clipboard refuses, selects the whole code and says the copy failed", async () => {
+    const page = load(() => ({ status: 204 }), [], { clipboard: refusing });
+    const calls = selectable(page);
+    expect(page.$("#bookmarklet-status").getAttribute("role")).toBe("status");
+    expect(page.$("#bookmarklet-status").textContent).toBe("");
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(calls).toEqual([["select"], ["setSelectionRange", 0, CODE.length]]);
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copy code");
+    expect(page.$("#bookmarklet-status").textContent).toBe(FAILED);
+  });
+
+  it("where there is no clipboard, selects the code and says the copy failed", async () => {
+    const page = load(() => ({ status: 204 }), [], {});
+    const calls = selectable(page);
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(calls).toEqual([["select"], ["setSelectionRange", 0, CODE.length]]);
+    expect(page.$("#bookmarklet-status").textContent).toBe(FAILED);
+  });
+
+  it("each tap shows its own outcome: a refusal after a success ends on Copy code with the status", async () => {
+    let refuse = false;
     const clipboard = {
       writeText: async () => {
-        throw new Error("denied");
+        if (refuse) throw new Error("denied");
       },
     };
     const page = load(() => ({ status: 204 }), [], { clipboard });
-    let selected = false;
-    const field = page.$("#bookmarklet-code") as HTMLElement & { select: () => void };
-    field.select = () => {
-      selected = true;
-    };
-    field.focus = () => {};
+    selectable(page);
     page.click("#copy-bookmarklet");
     await page.settle();
-    expect(selected).toBe(true);
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copied");
+    expect(page.$("#bookmarklet-status").textContent).toBe("");
+    refuse = true;
+    page.click("#copy-bookmarklet");
+    await page.settle();
     expect(page.$("#copy-bookmarklet").textContent).toBe("Copy code");
+    expect(page.$("#bookmarklet-status").textContent).toBe(FAILED);
+    refuse = false;
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copied");
+    expect(page.$("#bookmarklet-status").textContent).toBe("");
   });
 });

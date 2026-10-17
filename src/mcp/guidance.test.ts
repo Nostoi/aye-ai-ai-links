@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import * as guidance from "./guidance.js";
-import { GET_DIGEST, GET_PROFILE, INSTRUCTIONS, SAVE_LINK, UPDATE_TAG } from "./guidance.js";
+import {
+  GET_DIGEST,
+  GET_PROFILE,
+  INSTRUCTIONS,
+  SAVE_LINK,
+  UPDATE_LINK,
+  UPDATE_TAG,
+} from "./guidance.js";
 
 describe("list_links guidance", () => {
   const LIST_LINKS = (guidance as Record<string, string>).LIST_LINKS ?? "";
@@ -46,7 +53,13 @@ describe("guidance on a tag's kindSource", () => {
 
 describe("get_digest guidance", () => {
   it("names every reason, and the cautions that go with focus words and openings", () => {
-    for (const kind of ["focus_words", "no_why", "not_opened_recently", "never_surfaced"]) {
+    for (const kind of [
+      "focus_words",
+      "no_why",
+      "not_opened_recently",
+      "never_surfaced",
+      "still_using_check",
+    ]) {
       expect(GET_DIGEST).toContain(`- ${kind}:`);
     }
     expect(GET_DIGEST).toContain("not proof it is relevant");
@@ -62,5 +75,41 @@ describe("get_digest guidance", () => {
     // #124: openings are recorded from every web page, not only home's cards.
     expect(GET_DIGEST).toMatch(/opened: true.*from the web page.*bookmark/s);
     expect(GET_DIGEST).not.toMatch(/home page/);
+  });
+});
+
+describe("Keep handy guidance", () => {
+  it("tells save_link when to keep, when to ask once, and that a guess only suggests", () => {
+    expect(SAVE_LINK).toMatch(/says they use a link regularly.*"keep", source: "stated"/s);
+    expect(SAVE_LINK).toContain("a login page, form or dashboard");
+    expect(SAVE_LINK).toContain('"Is this something you\'ll use regularly?" at most once per save');
+    expect(SAVE_LINK).toMatch(/only for such pages/);
+    // The guess is tied to tool-like pages, so an agent never suggests every link it saves.
+    expect(SAVE_LINK).toContain(
+      `If you don't ask about such a page, send "keep" with "inferred", which only suggests it.`,
+    );
+    expect(SAVE_LINK).toMatch(/repeat save ignores handy.*update_link/s);
+  });
+
+  it("tells update_link what each action does and what the handy view holds", () => {
+    for (const word of ['"keep"', '"still_using"', '"not_handy"', "{status, source, due}"]) {
+      expect(UPDATE_LINK).toContain(word);
+    }
+    expect(UPDATE_LINK).toMatch(/"inferred" only suggests it/);
+    expect(UPDATE_LINK).toMatch(/present a "suggested" link as a guess/);
+  });
+
+  it("tells get_digest to report the days since the last recorded opening, never that the owner hasn't used it", () => {
+    expect(GET_DIGEST).toContain("daysSinceOpened");
+    expect(GET_DIGEST).toMatch(/last recorded opening/);
+    expect(GET_DIGEST).toContain("never say the owner hasn't used it");
+    expect(GET_DIGEST).toMatch(/Bookmark clicks are not seen/);
+    // Every handy example carries the source the schema requires.
+    expect(GET_DIGEST).toContain('handy {action: "still_using", source: "asked"}');
+    expect(GET_DIGEST).toContain('handy {action: "not_handy", source: "asked"}');
+  });
+
+  it("leaves the server instructions as they were, already at the 2048-character limit", () => {
+    expect(INSTRUCTIONS).not.toContain("handy");
   });
 });

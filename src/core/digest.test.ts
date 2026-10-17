@@ -15,6 +15,7 @@ import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
 import type { LinkStore } from "./store.js";
+import { keepHandy, notHandy } from "./tools.js";
 import type { FocusEntry, Link, NewLink, Source } from "./types.js";
 
 const OWNER = "o";
@@ -46,6 +47,7 @@ let keyword: FakeKeywordSearch;
 let clock: Date;
 const deps = (over: { store?: LinkStore } = {}) => ({
   store,
+  tools: store,
   profile,
   keywordSearch: keyword,
   now: () => clock,
@@ -441,5 +443,41 @@ describe("previewDigest", () => {
     const all = (await previewDigest(deps(), OWNER, Number.POSITIVE_INFINITY)).links;
     expect(all.length).toBe(DIGEST_SIZE + 5);
     expect(all.slice(0, DIGEST_SIZE).map((l) => l.link.id)).toEqual(first);
+  });
+});
+
+describe("kept tools", () => {
+  it("gives a kept tool no reading reason and leaves it unmarked", async () => {
+    const tool = await link({ why: null, savedAt: at(-60 * DAY), lastSurfacedAt: null });
+    await focus("lunch", at(-DAY));
+    keyword.hits.set("lunch", [tool.id]);
+    await keepHandy(deps(), OWNER, tool.id, "stated");
+    expect((await previewDigest(deps(), OWNER)).links).toEqual([]);
+    expect((await getDigest(deps(), OWNER)).links).toEqual([]);
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toBeNull();
+  });
+
+  it("does not let a kept tool use up a focus entry's matches", async () => {
+    const tool = await link();
+    const others = [await link(), await link(), await link()];
+    const entry = await focus("lunch", at(-DAY));
+    keyword.hits.set("lunch", [tool.id, ...others.map((l) => l.id)]);
+    await keepHandy(deps(), OWNER, tool.id, "stated");
+    const digest = await getDigest(deps(), OWNER);
+    expect(digest.links.map((l) => [l.link.id, l.reasons])).toEqual(
+      others.map((l) => [l.id, [focusWords(entry)]]),
+    );
+  });
+
+  it("gives suggested and declined links their reasons, as ordinary links", async () => {
+    const suggested = await link({ why: null });
+    const declined = await link({ why: null });
+    await keepHandy(deps(), OWNER, suggested.id, "inferred");
+    await notHandy(deps(), OWNER, declined.id, "stated");
+    const digest = await getDigest(deps(), OWNER);
+    expect(digest.links.map((l) => [l.link.id, l.reasons])).toEqual([
+      [suggested.id, [{ kind: "no_why" }]],
+      [declined.id, [{ kind: "no_why" }]],
+    ]);
   });
 });

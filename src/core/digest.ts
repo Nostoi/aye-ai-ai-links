@@ -3,6 +3,7 @@ import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { LinkSearch } from "./search.js";
 import type { LinkStore, SurfacedClaim } from "./store.js";
+import type { ToolStore } from "./tool-store.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
 
 // Uncalibrated defaults (ROADMAP #34); the owner may change them.
@@ -34,6 +35,8 @@ export type DigestLink = { link: Link; reasons: DigestReason[] };
 
 export type DigestDeps = {
   store: LinkStore;
+  /** Keep handy rows: a kept tool is not reading, so it gets no reason. */
+  tools: ToolStore;
   profile: ProfileStore;
   /** Keyword matching only: with no similarity floor yet (#68), any link can come back as a meaning match. */
   keywordSearch: LinkSearch;
@@ -108,7 +111,7 @@ async function focusReasons(
 
 /**
  * Up to `limit` eligible links that have a reason, in digest order, with each one's focus reasons.
- * Reads only. Eligible: active, not snoozed at now, and surfaced at or before now -
+ * Reads only. Eligible: active, not a kept tool, not snoozed at now, and surfaced at or before now -
  * SURFACE_COOLDOWN_MS.
  */
 async function select(
@@ -119,8 +122,11 @@ async function select(
 ): Promise<{ picked: Link[]; focus: Map<string, DigestReason[]> }> {
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   const all = await deps.store.listLinks(owner);
+  const tools = await deps.tools.listTools(owner);
   const candidates = new Map(
-    all.filter((l) => eligible(l, now, notSurfacedAfter)).map((l) => [l.id, l]),
+    all
+      .filter((l) => tools.get(l.id)?.status !== "kept" && eligible(l, now, notSurfacedAfter))
+      .map((l) => [l.id, l]),
   );
   if (candidates.size === 0) return { picked: [], focus: new Map() };
 

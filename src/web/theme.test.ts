@@ -95,4 +95,8 @@ describe("the theme css", () => {
     expect(rule(".handy-row")).toContain("overflow-x:auto");
     expect(rule(".handy-row>.handy-tile")).toContain("flex:0 0 72%");
   });
+
+  it("holds a tile's absolutely placed text inside the tile, so the sideways row doesn't widen the page", () => {
+    expect(themeCss).toMatch(/\.handy-tile\{[^}]*position:relative/);
+  });
 });

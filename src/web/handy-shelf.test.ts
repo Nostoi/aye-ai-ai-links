@@ -63,7 +63,10 @@ describe("the Handy shelf", () => {
     expect(ids(tiles(html))).toEqual(items.map((i) => i.link.id));
     expect(tiles(html).map((t) => t.hidden)).toEqual([...Array(8).fill(false), true, true]);
     expect(tiles(html).filter((t) => t.hasAttribute("data-more"))).toHaveLength(2);
-    expect(dom(html).querySelector("button[data-act=show-all]")?.textContent).toBe("Show all");
+    expect(
+      dom(html).querySelector("#handy-shelf .handy-head button[data-act=show-all]")?.textContent,
+    ).toBe("Show all 10");
+    expect(dom(html).querySelector(".handy-foot")).toBeNull();
   });
 
   it("offers no Show all for 8 or fewer, and hides none", () => {
@@ -224,17 +227,23 @@ describe("the Handy shelf", () => {
     ).toBeNull();
   });
 
-  it("offers Add, a search over the owner's links", () => {
-    const add = dom(render([kept()])).querySelector("#handy-shelf a.button");
+  it("offers Add in the header, inside the refreshed shelf: a search over the owner's links", () => {
+    const d = dom(render([kept()]));
+    const add = d.querySelector("#handy-shelf .handy-head a.handy-add");
     expect(add?.textContent).toBe("Add");
     expect(add?.getAttribute("href")).toBe("/search?q=&keep=1");
+    expect(add?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(d.querySelector(".handy-head button[data-act=show-all]")).toBeNull();
   });
 
-  it("shows one line with Add when there is nothing on it and nothing suggested", () => {
+  it("shows one line with Add when there is nothing on it and nothing suggested, and no header buttons", () => {
     const d = dom(render([]));
     expect(d.querySelector(".handy-row")).toBeNull();
-    expect(d.querySelector("#handy-shelf p")?.textContent).toBe("Keep links you use often here");
-    expect(d.querySelector("#handy-shelf a.button")?.getAttribute("href")).toBe(
+    expect(d.querySelector(".handy-head")).toBeNull();
+    expect(d.querySelector("#handy-shelf .handy-empty p")?.textContent).toBe(
+      "Keep links you use often here",
+    );
+    expect(d.querySelector("#handy-shelf .handy-empty a.handy-add")?.getAttribute("href")).toBe(
       "/search?q=&keep=1",
     );
     expect(d.querySelector("h2")?.textContent).toBe("Handy");
@@ -327,6 +336,23 @@ describe("the shelf's script", () => {
     expect(p.sent[2]).toMatchObject({ url: "/tools/undo", body: { id: a.link.id, ...MOVED } });
     expect(urls(p)).toEqual(["/tools/not-handy", "/", "/tools/undo", "/"]);
     expect(shelfIds(p)).toEqual([a.link.id, b.link.id]);
+  });
+
+  it("a refresh re-renders the header with the tiles: emptying swaps it for the empty line, Undo brings it back", async () => {
+    const only = kept();
+    const p = shelfPage(
+      home([only]),
+      (s) => (s.url === "/tools/undo" ? { status: 204 } : { status: 200, body: MOVED }),
+      [home([]), home([only])],
+    );
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(p.document.querySelector("#handy-shelf .handy-head")).toBeNull();
+    expect(p.document.querySelector("#handy-shelf .handy-empty a.handy-add")).not.toBeNull();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.document.querySelector("#handy-shelf .handy-head a.handy-add")).not.toBeNull();
+    expect(p.document.querySelector("#handy-shelf .handy-empty")).toBeNull();
   });
 
   it("Done archives through /home/archive and offers Undo through /home/unarchive", async () => {

@@ -195,6 +195,27 @@ describe("the Handy postcards", () => {
     }
   });
 
+  it("puts Show all and Add beside the heading: a grid in which the swapped shelf's head takes row 1, column 2", () => {
+    expect(rule(".handy")).toContain("display:grid;grid-template-columns:1fr auto");
+    expect(rule("#handy-shelf")).toBe("display:contents");
+    expect(rule(".handy-head")).toContain("grid-row:1;grid-column:2");
+    expect(rule(".handy>h2")).toContain("grid-row:1;grid-column:1");
+    expect(themeCss).toMatch(/(?:^|\})\.handy-row,\.handy-empty,#handy-error\{grid-column:1\/-1/m);
+    expect(themeCss).not.toContain(".handy-foot");
+  });
+
+  it("makes Add a tinted 44px pill and Show all a quiet 44px text button", () => {
+    const add = rule(".handy-add");
+    for (const part of ["min-height:44px", "border-radius:999px", "text-decoration:none"]) {
+      expect(add).toContain(part);
+    }
+    expect(add).toContain("background:color-mix(in srgb,var(--ink) 5%,transparent)");
+    const showAll = rule(".handy-show-all");
+    for (const part of ["min-height:44px", "color:var(--soft)", "background:none", "border:0"]) {
+      expect(showAll).toContain(part);
+    }
+  });
+
   it("keeps a due panel's text and buttons clear of the menu circle, and a suggestion's unpadded", () => {
     expect(rule(".handy-tile.needs-you .ask")).toBe("padding-right:40px");
     const gap = /gap:0 (\d+)px/.exec(rule(".handy-tile.needs-you .small-actions"))?.[1];

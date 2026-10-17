@@ -1,5 +1,8 @@
+import { SAVE_PATH } from "../auth/login-return.js";
 import { hostOf } from "./host.js";
+import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
+import { CARD_FETCH } from "./tell-why.js";
 
 /** What the Save page says when the bookmarklet found the page's address too long to send. */
 export const LONG_MESSAGE = "This page's address is too long to save from the bookmarklet.";
@@ -51,10 +54,131 @@ const longBody = `<main class="save">
 </main>`;
 
 /**
+ * Save posts the form to `POST /save` without following a redirect. An answer replaces the form:
+ * Saved; or Already saved on its date, with the link opening in a new tab (its opening recorded by
+ * `openedScript`), its why, and Bring it back when it is archived. Once there is an answer the
+ * address bar is cleaned to `/save`, so a reload shows an empty form; before that the query stays,
+ * so a reload after a sign-out refills the form. A refusal is shown under its field. Close closes
+ * the tab, or says it can be closed when the browser keeps it open. Needs `CARD_FETCH`.
+ */
+const SAVE_SCRIPT = `<script>
+${CARD_FETCH}
+{
+const form = document.getElementById("save-form");
+const urlField = document.getElementById("save-url");
+const hostLine = document.getElementById("save-host");
+const titleField = document.getElementById("save-title");
+const whyField = document.getElementById("save-why");
+const urlError = document.getElementById("url-error");
+const titleError = document.getElementById("title-error");
+const saveError = document.getElementById("save-error");
+const heading = document.getElementById("save-heading");
+const result = document.getElementById("result");
+const savedLink = document.getElementById("saved-link");
+const anchor = savedLink.querySelector("a");
+const savedWhy = document.getElementById("saved-why");
+const whyKept = document.getElementById("why-kept");
+const bringBack = document.getElementById("bring-back");
+const closeButton = document.getElementById("close");
+const closeNote = document.getElementById("close-note");
+const resultError = document.getElementById("result-error");
+
+urlField.addEventListener("input", () => {
+  const parsed = URL.parse(urlField.value.trim());
+  const name = parsed ? parsed.hostname : "";
+  hostLine.textContent = name ? "Saving a page from " + name : "";
+  hostLine.hidden = name === "";
+});
+
+const show = (data) => {
+  heading.textContent = data.created ? "Saved" : "Already saved on " + data.savedOn;
+  if (!data.created) {
+    savedLink.dataset.id = data.id;
+    anchor.setAttribute("href", data.url);
+    anchor.textContent = data.title || data.url;
+    savedLink.hidden = false;
+    if (data.whyKept) {
+      savedWhy.textContent = data.why ? "Why: " + data.why : "";
+      savedWhy.hidden = !data.why;
+    } else {
+      whyKept.textContent = "It already had a reason, so yours wasn't saved: “" + data.why + "”";
+      whyKept.hidden = false;
+    }
+    bringBack.hidden = data.state !== "archived";
+  }
+  form.hidden = true;
+  result.hidden = false;
+  history.replaceState(null, "", ${JSON.stringify(SAVE_PATH)});
+};
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submit = form.querySelector("button[type=submit]");
+  if (submit.disabled) return;
+  urlError.textContent = "";
+  titleError.textContent = "";
+  saveError.textContent = "";
+  submit.disabled = true;
+  const res = await post(${JSON.stringify(SAVE_PATH)}, {
+    url: urlField.value,
+    title: titleField.value,
+    why: whyField.value,
+  });
+  const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
+  submit.disabled = false;
+  if (data && typeof data.id === "string" && typeof data.created === "boolean") {
+    show(data);
+    return;
+  }
+  if (res && (res.type === "opaqueredirect" || res.status === 0)) {
+    saveError.textContent = ${JSON.stringify(SIGNED_OUT)};
+    return;
+  }
+  const refused = res && res.status === 400 ? await res.json().catch(() => null) : null;
+  const where =
+    refused && refused.code === "invalid_url"
+      ? urlError
+      : refused && refused.code === "invalid_input"
+        ? titleError
+        : saveError;
+  where.textContent =
+    refused && typeof refused.message === "string" ? refused.message : await failure(res);
+});
+
+bringBack.addEventListener("click", async () => {
+  if (bringBack.disabled) return;
+  resultError.textContent = "";
+  bringBack.disabled = true;
+  const res = await post("/home/unarchive", { id: savedLink.dataset.id });
+  bringBack.disabled = false;
+  if (res && res.status === 204) {
+    heading.textContent = "Back in your list";
+    bringBack.hidden = true;
+  } else {
+    resultError.textContent = await failure(res);
+  }
+});
+
+closeButton.addEventListener("click", () => {
+  window.close();
+  if (window.closed) return;
+  closeButton.hidden = true;
+  closeNote.hidden = false;
+});
+}
+</script>`;
+
+/**
  * The Save page (#129). It is filled only from its own query, never from the owner's data, and
  * it writes nothing; Save posts the form to `POST /save`. Every value is escaped into an
  * attribute or element text, never into a script. `long` shows the long-address message and no
  * form. A bare page is an ordinary "add a link" form.
  */
 export const saveForm = ({ url, title, long }: { url: string; title: string; long: boolean }) =>
-  page("Save a link · Aye-AI-AI Links", long ? longBody : formBody(url, title), { home: true });
+  page(
+    "Save a link · Aye-AI-AI Links",
+    long
+      ? longBody
+      : `${formBody(url, title)}\n${SAVE_SCRIPT}\n${openedScript("result", "/links/opened")}`,
+    { home: true },
+  );

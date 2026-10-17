@@ -1,8 +1,12 @@
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
+import type { LinkChecker, LinkCheckOutcome } from "../core/fetch.js";
+import { createLinkCheckRunner } from "../core/link-check-runner.js";
 import { describeLinkCheckStoreContract } from "../core/link-check-store-contract.js";
+import { newLink, record } from "../core/snapshot-store-contract.js";
 import { openDatabase } from "./database.js";
 import { MIGRATIONS, migrate } from "./migrations.js";
+import { SqliteImageStore } from "./sqlite-image-store.js";
 import { SqliteLinkCheckStore } from "./sqlite-link-checks.js";
 import { SqliteStore } from "./sqlite-store.js";
 
@@ -100,4 +104,71 @@ describe("the link_checks migration, from the version before it, with links", ()
       { link_id: 2 },
     ]);
   });
+});
+
+describe("a check, on SQLite", () => {
+  const SAVED = new Date(Date.UTC(2026, 0, 1));
+  const PNG = {
+    contentType: "image/png" as const,
+    bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 2]),
+  };
+
+  it.each([
+    ["a 404", { kind: "http_error", status: 404 }],
+    ["a name that no longer resolves", { kind: "network_error", code: "ENOTFOUND" }],
+  ] as [string, LinkCheckOutcome][])(
+    "ending in %s records the link dead and leaves its snapshot, page text and stored image byte-identical",
+    async (_, outcome) => {
+      const db = openDatabase(":memory:");
+      open.push(db);
+      const links = new SqliteStore(db);
+      links.ensureUser("a", "a");
+      const up = (
+        await links.insertIfAbsent("a", {
+          ...newLink(1, SAVED),
+          url: "https://up.test/",
+          urlKey: "up.test/",
+        })
+      ).link.id;
+      const { link } = await links.insertIfAbsent("a", {
+        ...newLink(2, SAVED),
+        url: "https://gone.test/page",
+        urlKey: "gone.test/page",
+      });
+      const lease = await links.leaseSnapshot("a", link.id, SAVED, new Date(SAVED.getTime() + 1));
+      if (!lease) throw new Error("the new link's snapshot should be leasable");
+      expect(await links.recordSnapshot("a", link.id, lease.claim, record())).toBe(true);
+      const imageUrl = record().imageUrl as string;
+      expect(await new SqliteImageStore(db).writeImage("a", link.id, imageUrl, PNG, SAVED)).toBe(
+        true,
+      );
+      const n = Number(link.id);
+      const kept = () => ({
+        snapshot: db.prepare("SELECT * FROM snapshots WHERE link_id = ?").get(n),
+        text: db.prepare("SELECT * FROM snapshot_search WHERE rowid = ?").get(n),
+        image: db.prepare("SELECT * FROM link_images WHERE link_id = ?").get(n),
+      });
+      const before = kept();
+      expect(before.image).toBeDefined();
+      const checker: LinkChecker = {
+        check: async (url) =>
+          url === "https://up.test/" ? { kind: "ok", finalUrl: url } : outcome,
+        close: async () => {},
+      };
+      const runner = createLinkCheckRunner({
+        checks: new SqliteLinkCheckStore(db),
+        checker,
+        now: () => new Date(SAVED.getTime() + 8 * 86_400_000),
+        log: () => {},
+        gapMs: 0,
+        hostGapMs: 0,
+      });
+      await runner.sweep();
+      expect(db.prepare("SELECT link_id, result FROM link_checks ORDER BY link_id").all()).toEqual([
+        { link_id: Number(up), result: "alive" },
+        { link_id: n, result: "dead" },
+      ]);
+      expect(kept()).toEqual(before);
+    },
+  );
 });

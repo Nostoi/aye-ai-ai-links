@@ -26,6 +26,9 @@ function isTracking(segment: string): boolean {
   return name.startsWith("utm_") || TRACKING.has(name);
 }
 
+/** A web address (http or https): only these are opened as links or requested by a check. */
+export const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
+
 /** Practical duplicate key: same page, ignoring tracking params, fragments and trailing slashes. */
 export function urlKey(raw: string): string {
   const trimmed = raw.trim();

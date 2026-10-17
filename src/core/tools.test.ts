@@ -12,6 +12,8 @@ import {
   handyOfLinks,
   isDue,
   keepHandy,
+  listShelf,
+  listSuggestions,
   notHandy,
   restoreTool,
   stillUsing,
@@ -498,5 +500,74 @@ describe("handy views", () => {
     const link = await linkOf(id);
     expect(await handyOf(deps(), A, link)).toEqual({ status: "kept", source: "stated", due: true });
     expect(await handyOf(deps(), B, link)).toBeNull();
+  });
+});
+
+describe("listShelf", () => {
+  it("lists kept tools on active links: opened newest first, then never-opened by since, newest first", async () => {
+    const [opened5, opened9, never2, never7, archived, suggested, declined] = [
+      await saved(),
+      await saved(),
+      await saved(),
+      await saved(),
+      await saved(),
+      await saved(),
+      await saved(),
+    ];
+    await saved();
+    const theirs = await saved(B);
+    const keptOn = [
+      [opened5, 0],
+      [opened9, 0],
+      [never2, 2],
+      [never7, 7],
+      [archived, 0],
+    ] as const;
+    for (const [id, d] of keptOn) {
+      clock = day(d);
+      await keepHandy(deps(), A, id, "stated");
+    }
+    await keepHandy(deps(), A, suggested, "inferred");
+    await notHandy(deps(), A, declined, "stated");
+    await keepHandy(deps(), B, theirs, "stated");
+    await store.update(A, opened5, { lastOpenedAt: day(5) });
+    await store.update(A, opened9, { lastOpenedAt: day(9) });
+    await store.update(A, archived, { state: "archived" });
+    clock = day(36);
+    const shelf = await listShelf(deps(), A);
+    expect(shelf.map((s) => s.link.id)).toEqual([opened9, opened5, never7, never2]);
+    expect(shelf.map((s) => s.due)).toEqual([false, true, false, true]);
+  });
+
+  it("returns every kept tool with its row, ties in the store's order", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const id = await saved();
+      await keepHandy(deps(), A, id, "stated");
+      ids.push(id);
+    }
+    const shelf = await listShelf(deps(), A);
+    expect(shelf.map((s) => s.link.id)).toEqual(ids);
+    expect(shelf[0]?.tool).toEqual(tool());
+  });
+});
+
+describe("listSuggestions", () => {
+  it("lists suggested tools on active links, newest suggestion first", async () => {
+    const older = await saved();
+    const newer = await saved();
+    const archived = await saved();
+    const kept = await saved();
+    clock = day(1);
+    await keepHandy(deps(), A, older, "inferred");
+    clock = day(4);
+    await keepHandy(deps(), A, newer, "inferred");
+    await keepHandy(deps(), A, archived, "inferred");
+    await keepHandy(deps(), A, kept, "stated");
+    await store.update(A, archived, { state: "archived" });
+    expect((await listSuggestions(deps(), A)).map((s) => [s.link.id, s.tool.status])).toEqual([
+      [newer, "suggested"],
+      [older, "suggested"],
+    ]);
   });
 });

@@ -221,3 +221,43 @@ export async function handyOfLinks(
   const now = deps.now();
   return new Map(links.map((l) => [l.id, handyView(l, tools.get(l.id) ?? null, now)]));
 }
+
+/** A tool row with its link. */
+export type ToolItem = { link: Link; tool: ToolRecord };
+/** A tile on the Handy shelf. */
+export type ShelfItem = ToolItem & { due: boolean };
+
+/** The owner's active links whose row has `status`, in the store's link order. */
+async function toolItems(deps: ToolsDeps, owner: OwnerId, status: ToolStatus): Promise<ToolItem[]> {
+  const links = await deps.store.listLinks(owner);
+  const tools = await deps.tools.listTools(owner);
+  return links.flatMap((link) => {
+    const tool = tools.get(link.id);
+    return tool?.status === status && link.state === "active" ? [{ link, tool }] : [];
+  });
+}
+
+const newestFirst = (a: Date, b: Date) => b.getTime() - a.getTime();
+
+/** Opened tools first, most recent opening first; then never-opened ones by since, newest first. */
+function shelfOrder(a: ToolItem, b: ToolItem): number {
+  const x = a.link.lastOpenedAt;
+  const y = b.link.lastOpenedAt;
+  if (x && y) return newestFirst(x, y);
+  if (x || y) return x ? -1 : 1;
+  return newestFirst(a.tool.since, b.tool.since);
+}
+
+/** The Handy shelf: every kept tool on an active link, in shelf order, each with its due flag. */
+export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfItem[]> {
+  const now = deps.now();
+  const items = (await toolItems(deps, owner, "kept")).sort(shelfOrder);
+  return items.map((i) => ({ ...i, due: isDue(i.link, i.tool, now) }));
+}
+
+/** The shelf's suggestions: suggested tools on active links, newest suggestion first. */
+export async function listSuggestions(deps: ToolsDeps, owner: OwnerId): Promise<ToolItem[]> {
+  return (await toolItems(deps, owner, "suggested")).sort((a, b) =>
+    newestFirst(a.tool.since, b.tool.since),
+  );
+}

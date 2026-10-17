@@ -49,7 +49,8 @@ function meta(link: Link, now: Date, withDate: boolean): string {
 }
 
 const BUTTONS = `<button type="button" data-act="snooze">Not now</button>
-<button type="button" data-act="archive">I'm done with it</button>`;
+<button type="button" data-act="archive">I'm done with it</button>
+<button type="button" data-act="keep">Keep handy</button>`;
 
 function classes(base: string, link: Link, catalog: Tag[]): string {
   return `${base}${link.why ? "" : " needs-you"}${spaceClass(linkSpace(link, catalog))}`;
@@ -114,8 +115,9 @@ document.addEventListener("keydown", (event) => {
 
 /**
  * The cards' buttons. Opening a link is recorded by `openedScript` with `/home/opened`, which also
- * marks the link surfaced. Not now and I'm done hide the card at once and put it back if the server
- * refuses; Undo asks the server to reverse, and the card stays gone if it cannot. Tell me why is
+ * marks the link surfaced. Not now, I'm done and Keep handy hide the card at once and put it back if
+ * the server refuses; Keep handy also refreshes the Handy shelf. Undo asks the server to reverse,
+ * and the card stays gone if it cannot. Tell me why is
  * `tellWhyScript`. The Handy shelf's buttons are `SHELF_SCRIPT`'s.
  */
 const CARDS_SCRIPT = `<script>
@@ -124,17 +126,25 @@ ${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}
 const homeError = document.getElementById("home-error");
 const cards = document.getElementById("worth-cards");
+const CARD_ROUTES = { snooze: "/home/snooze", archive: "/home/archive", keep: "/tools/keep" };
 const hideFor = async (card, act) => {
+  if (!CARD_ROUTES[act]) return;
   const id = card.dataset.id;
   homeError.textContent = "";
   card.hidden = true;
-  const res = await post("/home/" + act, { id });
+  const res = await post(CARD_ROUTES[act], { id });
   let undo = null;
   if (act === "snooze") {
     const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (data && typeof data.until === "string") {
       const { until, claimedAt, previousSurfacedAt } = data;
       undo = ["Hidden for two weeks.", "/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }];
+    }
+  } else if (act === "keep") {
+    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (moved && moved.tool) {
+      undo = ["Kept on your Handy shelf.", "/tools/undo", { id, tool: moved.tool, previous: moved.previous }];
+      await refreshShelf();
     }
   } else if (res && res.status === 204) {
     undo = ["Moved out of your list.", "/home/unarchive", { id }];
@@ -146,8 +156,10 @@ const hideFor = async (card, act) => {
   }
   showUndo(undo[0], async () => {
     const back = await post(undo[1], undo[2]);
-    if (back && back.status === 204) card.hidden = false;
-    else homeError.textContent = await failure(back);
+    if (back && back.status === 204) {
+      card.hidden = false;
+      if (act === "keep") await refreshShelf();
+    } else homeError.textContent = await failure(back);
   });
 };
 if (cards) {

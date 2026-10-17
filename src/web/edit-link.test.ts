@@ -398,6 +398,25 @@ describe("the edit dialog's script", () => {
     ).toBe(true);
   });
 
+  it("leaves a stored title with line breaks alone on a picture-only Save, though the field drops them", async () => {
+    fakeImages([{ width: 64, height: 48 }]);
+    const p = opened(undefined, undefined, undefined, [link("1", { title: "Two\nlines" })]);
+    let shown = "";
+    Object.defineProperty(p.title, "value", {
+      get: () => shown,
+      set: (v: string) => {
+        shown = v.replace(/[\r\n]/g, "");
+      },
+    });
+    p.open();
+    expect(p.title.value).toBe("Twolines");
+    p.pick(SHOT);
+    await p.settle();
+    p.submit();
+    await p.settle();
+    expect([...p.form().keys()]).toEqual(["id", "picture"]);
+  });
+
   it.each([
     ["a PNG over 1600px", 3200, 2400, "image/png", [1600, 1200]],
     ["a HEIC the browser can open", 800, 600, "image/heic", [800, 600]],

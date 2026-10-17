@@ -254,8 +254,8 @@ const open = (from, menu) => {
   picture = null;
   dragDepth = 0;
   const d = card.dataset;
-  openedTitle = d.title;
   titleField.value = d.title;
+  openedTitle = titleField.value;
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
   pageLine.hidden = page === "" || page === d.title.trim();

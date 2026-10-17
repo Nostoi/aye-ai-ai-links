@@ -170,19 +170,41 @@ export async function stillUsing(
   });
 }
 
+const WAIT_DAYS: readonly number[] = [30, 60, 120];
+const SOURCES_BY_STATUS: Record<ToolStatus, readonly Source[]> = {
+  kept: ["stated", "asked"],
+  suggested: ["inferred"],
+  declined: ["stated", "asked"],
+};
+
+/** Whether some tool action could have written `row` by `now`. */
+function isProducible(row: ToolRecord, now: Date): boolean {
+  const { since, answeredAt } = row;
+  return (
+    SOURCES_BY_STATUS[row.status].includes(row.source) &&
+    WAIT_DAYS.includes(row.waitDays) &&
+    since <= now &&
+    (answeredAt === null || (answeredAt <= now && answeredAt >= since))
+  );
+}
+
 /**
  * The Undo of a tool action: puts `previous` back (null removes the row), but only while the row
  * still holds the values `expectedCurrent` (the action's written row) has, compared by value. If
  * it differs, that is a conflict and nothing changes, as with home's Undo. A later change that
- * leaves the row with identical values is not detected.
+ * leaves the row with identical values is not detected. A `previous` no action could have
+ * written is refused as invalid_input.
  */
 export async function restoreTool(
-  deps: Pick<ToolsDeps, "tools">,
+  deps: Pick<ToolsDeps, "tools" | "now">,
   owner: OwnerId,
   id: string,
   previous: ToolRecord | null,
   expectedCurrent: ToolRecord,
 ): Promise<void> {
+  if (previous && !isProducible(previous, deps.now())) {
+    throw new CoreError("invalid_input", "That Keep handy state can't be restored.");
+  }
   const result = await deps.tools.updateToolIf(owner, id, expectedCurrent, previous);
   if (!result) throw notFound(id);
   if (!result.applied) {

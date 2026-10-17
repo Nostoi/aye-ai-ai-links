@@ -446,6 +446,23 @@ describe("restoreTool", () => {
     expect(await code(restoreTool(deps(), B, id, kept.previous, kept.tool))).toBe("not_found");
     expect(await store.getTool(A, id)).toEqual(kept.tool);
   });
+
+  it.each([
+    ["kept by inference", { status: "kept", source: "inferred" }],
+    ["suggested by the owner", { status: "suggested", source: "stated" }],
+    ["declined by inference", { status: "declined", source: "inferred" }],
+    ["a wait of 45 days", { waitDays: 45 }],
+    ["a start in the future", { since: day(5) }],
+    ["an answer in the future", { answeredAt: day(5) }],
+    ["an answer before the start", { since: day(0), answeredAt: day(-1) }],
+  ] as const)("refuses to restore a row core can't produce: %s", async (_name, over) => {
+    const id = await saved();
+    const kept = await keepHandy(deps(), A, id, "stated");
+    clock = day(1);
+    const bad = tool(over as unknown as Partial<ToolRecord>);
+    expect(await code(restoreTool(deps(), A, id, bad, kept.tool))).toBe("invalid_input");
+    expect(await store.getTool(A, id)).toEqual(kept.tool);
+  });
 });
 
 describe("handy views", () => {

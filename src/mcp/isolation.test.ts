@@ -530,6 +530,7 @@ describe("owner isolation coverage", () => {
       noOwnerData: "names the client in the signed authorize query, no owner data",
     },
     "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
+    "GET /save": { noOwnerData: "the save form, filled only from its own query" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
   };

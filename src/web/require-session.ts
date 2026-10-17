@@ -8,14 +8,20 @@ export type SessionEnv = { Variables: { caller: Caller } };
 
 /**
  * Lets a request through only with a live session, and sets its `caller`. Without one it
- * redirects to `/login`. Either way it forwards any `Set-Cookie` that reading the session set.
+ * redirects to `toLogin(url)`: a bare `/login` unless the route passes another, as the Save page
+ * passes `loginRedirect` so sign-in comes back to it (#129). Either way it forwards any
+ * `Set-Cookie` that reading the session set.
  */
-export const requireSession = (auth: Auth, withAuthLock: WithAuthLock) =>
+export const requireSession = (
+  auth: Auth,
+  withAuthLock: WithAuthLock,
+  toLogin: (url: URL) => string = () => "/login",
+) =>
   createMiddleware<SessionEnv>(async (c, next) => {
     const { caller, headers } = await readSession(auth, withAuthLock, c.req.raw.headers);
     const cookies = headers.getSetCookie();
     if (!caller) {
-      const res = c.redirect("/login", 302);
+      const res = c.redirect(toLogin(new URL(c.req.url)), 302);
       res.headers.set("Cache-Control", "no-store");
       for (const cookie of cookies) res.headers.append("Set-Cookie", cookie);
       return res;

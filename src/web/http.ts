@@ -5,7 +5,7 @@ import type { WithAuthLock } from "../auth/auth-lock.js";
 import type { Auth } from "../auth/better-auth.js";
 import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
-import { returnAfterLogin } from "../auth/login-return.js";
+import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
@@ -68,6 +68,7 @@ import { initialsText } from "./initials.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
+import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
 import { SPACE_RESTART, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
@@ -78,6 +79,8 @@ const LINK_PAGE = 24;
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
+/** The Save page's headers: uncached, and never framed, so no site can lay a fake Save button over it. */
+const SAVE_PAGE_HEADERS = { ...NO_STORE, "Content-Security-Policy": "frame-ancestors 'none'" };
 
 /** A link's stored preview image. The id must be digits; anything else is not this route. */
 export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
@@ -367,6 +370,8 @@ export function webApp({
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
+  // The Save page alone sends a signed-out owner to sign in and straight back to it (#129).
+  const saveSession = requireSession(auth, withAuthLock, loginRedirect);
 
   /** What a card shows after an edit or its Undo, read after the write. */
   const cardState = async (owner: OwnerId, id: string) => {
@@ -549,6 +554,20 @@ export function webApp({
     });
     return c.html(page, 200, NO_STORE);
   });
+
+  // The Save page (#129). Any site can open it, and the Lax cookie comes along, so it never
+  // writes and reads none of the owner's data: it is filled only from its own query.
+  app.get(SAVE_PATH, saveSession, (c) =>
+    c.html(
+      saveForm({
+        url: c.req.query("url") ?? "",
+        title: c.req.query("title") ?? "",
+        long: c.req.query("long") === "1",
+      }),
+      200,
+      SAVE_PAGE_HEADERS,
+    ),
+  );
 
   // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
   // writes could be set off from another site.

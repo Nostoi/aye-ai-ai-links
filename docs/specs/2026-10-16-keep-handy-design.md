@@ -28,7 +28,7 @@ A link with no row is an ordinary link. A `ToolStore` interface in `core/`, impl
 
 Every rule lives here. The web door and the MCP door only translate requests into calls to it.
 
-- **Keep handy** sets `kept` with the given source and `wait_days = 30`. It works from any status, including `declined`, because it is the owner's request.
+- **Keep handy** sets `kept` with the given source and `wait_days = 30`. It works from any status, including `declined`, because it is the owner's request. On a link already `kept`, only the source changes: the wait and the clock stay as the answers left them, so restating it isn't due at once.
 - **`since`** is set to now whenever the status changes, so a late Yes to a suggestion, or a re-kept link, is not due at once.
 - **Suggest** is for an inferred keep only. It does nothing when the link is `kept` or `declined`; otherwise it sets `suggested`.
 - **Answer a suggestion.** Yes sets `kept` with source `asked`. No sets `declined`.
@@ -96,7 +96,7 @@ Every rule lives here. The web door and the MCP door only translate requests int
 
 ## Landing
 
-1. **Store and rules:** migration 12, `ToolStore`, `core/tools.ts` and the digest's exclusion of kept tools. It also carries every core read and action PR 2 and PR 3 need (the shelf list, the suggestions, the due tool for the digest, the `handy` view of links, and conditional Undo), so those two PRs can be built in parallel without editing core (owner, 2026-10-16). Owner-invisible on its own. Carries this spec and the ROADMAP entry.
+1. **Store and rules:** migration 12, `ToolStore`, `core/tools.ts` and the digest's exclusion of kept tools. It also carries every core read and action PR 2 and PR 3 need (the shelf list, the suggestions, the due tool for the digest, the `handy` view of links, and conditional Undo), so those two PRs can be built in parallel (owner, 2026-10-16). PR 3 edits no core file; PR 2 adds the `still_using_check` reason and its slot to `core/digest.ts`, which PR 3 doesn't touch. Owner-invisible on its own. Carries this spec and the ROADMAP entry.
 2. **MCP:** `handy` input and output, `still_using_check`, guidance, and README. Tools can be marked through an AI from here on.
 3. **Web:** the shelf, the controls, and README. Closes #125. PR 2 and PR 3 are built in parallel after PR 1 merges; whichever merges second brings `main` in before its final review.
 

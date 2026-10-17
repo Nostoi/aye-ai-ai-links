@@ -1,4 +1,4 @@
-import type { ImageType } from "../core/fetch.js";
+import type { ImageType } from "./fetch.js";
 
 export type ImageHeader = { type: ImageType; width: number; height: number };
 
@@ -89,6 +89,11 @@ function webp(b: Buffer): ImageHeader | null {
   return null;
 }
 
+/** Largest picture kept, counted after decompression. `link_images` and `owner_images` hold the same cap. */
+export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+/** Most pixels a picture's header may declare, so a small file cannot claim a huge canvas. */
+export const MAX_IMAGE_PIXELS = 40_000_000;
+
 /**
  * The image's type, from its magic bytes, and its size, from its own header: PNG, JPEG, GIF or
  * WebP. Null for any other type (SVG and AVIF included), a header cut short, or a zero size.
@@ -102,4 +107,21 @@ export function readImageHeader(bytes: Uint8Array): ImageHeader | null {
   else if (startsWith(b, ascii("RIFF")) && startsWith(b, ascii("WEBP"), 8)) header = webp(b);
   if (!header || header.width === 0 || header.height === 0) return null;
   return header;
+}
+
+export type ImageCheck =
+  | { ok: true; type: ImageType }
+  | { ok: false; reason: "not_image" | "too_large" };
+
+/**
+ * Whether these bytes are a picture the app keeps: PNG, JPEG, GIF or WebP by its own header, at
+ * most `MAX_IMAGE_BYTES` and declaring at most `MAX_IMAGE_PIXELS`. It reads the header only and
+ * never decodes. The type it names is the one to store.
+ */
+export function checkImage(bytes: Uint8Array): ImageCheck {
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return { ok: false, reason: "too_large" };
+  const header = readImageHeader(bytes);
+  if (!header) return { ok: false, reason: "not_image" };
+  if (header.width * header.height > MAX_IMAGE_PIXELS) return { ok: false, reason: "too_large" };
+  return { ok: true, type: header.type };
 }

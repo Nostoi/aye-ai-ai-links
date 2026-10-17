@@ -19,12 +19,12 @@ import {
   saveLinkWith,
   type World,
 } from "../auth/oauth-test-kit.js";
+import { png } from "../core/image-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
 import { setTagPinned } from "../core/tag-space.js";
 import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
-import { png } from "../fetch/image-test-kit.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";

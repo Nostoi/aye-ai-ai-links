@@ -4,10 +4,11 @@ import type { AddressInfo } from "node:net";
 import zlib from "node:zlib";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ImageFetcher, ImageOutcome } from "../core/fetch.js";
+import { gif, png, svg } from "../core/image-test-kit.js";
+import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { isPublicAddress } from "./address-policy.js";
 import type { Resolve } from "./guarded-lookup.js";
-import { createImageFetcher, MAX_IMAGE_BYTES } from "./image-fetcher.js";
-import { gif, png, svg } from "./image-test-kit.js";
+import { createImageFetcher } from "./image-fetcher.js";
 
 /*
  * The layout of guarded-fetcher.test.ts. No test touches the network.

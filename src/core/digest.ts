@@ -180,7 +180,7 @@ export async function unclaimSurfaced(
  * Reading picks, without marking anything: up to `limit` eligible links that have a reason
  * (DIGEST_SIZE by default), in the order `getDigest` uses, with every reason that applies. It never
  * holds the still-using check: `getDigest` claims that first and, when it has one, gives it one of
- * its slots. Home shows due tools on the Handy shelf instead.
+ * its slots.
  */
 export async function previewDigest(
   deps: DigestDeps,

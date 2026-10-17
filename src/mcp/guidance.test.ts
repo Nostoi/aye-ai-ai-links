@@ -82,8 +82,9 @@ describe("Keep handy guidance", () => {
   it("tells save_link when to keep, when to ask once, and that a guess only suggests", () => {
     expect(SAVE_LINK).toMatch(/says they use a link regularly.*"keep", source: "stated"/s);
     expect(SAVE_LINK).toContain("a login page, form or dashboard");
-    expect(SAVE_LINK).toContain('"Is this something you\'ll use regularly?" at most once per save');
-    expect(SAVE_LINK).toMatch(/only for such pages/);
+    expect(SAVE_LINK).toContain(
+      '"Is this something you\'ll use regularly?" once, and only for such pages not saved before:',
+    );
     // The guess is tied to tool-like pages, so an agent never suggests every link it saves.
     expect(SAVE_LINK).toContain(
       `If you don't ask about such a page, send "keep" with "inferred", which only suggests it.`,
@@ -96,6 +97,8 @@ describe("Keep handy guidance", () => {
       expect(UPDATE_LINK).toContain(word);
     }
     expect(UPDATE_LINK).toMatch(/"inferred" only suggests it/);
+    expect(UPDATE_LINK).toContain('"keep" keeps the link handy as a tool');
+    expect(UPDATE_LINK).not.toMatch(/shelf/i);
     expect(UPDATE_LINK).toMatch(/present a "suggested" link as a guess/);
   });
 

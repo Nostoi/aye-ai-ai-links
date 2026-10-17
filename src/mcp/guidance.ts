@@ -34,13 +34,13 @@ A repeat save (created: false) discards the tags you sent, including a requested
 
 Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it. A repeat save does not fetch the page again.
 
-Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" at most once per save, and only for such pages: send "keep" or "not_handy" with "asked" for the answer. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.`;
+Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" once, and only for such pages not saved before: send "keep" or "not_handy" with "asked" for the answer. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.`;
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
 title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
 
-handy: "keep" puts the link on the owner's Handy shelf ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
+handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
 Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
 

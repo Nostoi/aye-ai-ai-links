@@ -99,6 +99,7 @@ describe("the theme css", () => {
   it("puts the tile menu in the bottom-right corner of every tile in a row", () => {
     expect(themeCss).toMatch(/\.handy-tile\{[^}]*display:flex;[^}]*flex-direction:column/);
     expect(themeCss).toMatch(/\.tile-menu\{[^}]*margin-top:auto;[^}]*align-self:flex-end/);
+    expect(themeCss).toMatch(/\.tile-menu\{[^}]*text-align:right/);
   });
 
   it("holds a tile's absolutely placed text inside the tile, so the sideways row doesn't widen the page", () => {

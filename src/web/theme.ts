@@ -163,7 +163,7 @@ img.worth-tile{display:block;width:104px;height:auto;contain:size;object-fit:cov
 .worth-small .worth-body{flex:1;padding:16px 18px}
 .worth-small h3,.handy-tile h3{font-size:16px;line-height:1.3;margin:0 0 6px}
 .handy-tile{position:relative;display:flex;flex-direction:column;padding:16px 18px;overflow-wrap:anywhere}
-.tile-menu{margin-top:auto;align-self:flex-end}
+.tile-menu{margin-top:auto;align-self:flex-end;text-align:right}
 .handy-tile p{margin:0 0 4px}
 .worth-small .meta{font-size:14px;margin:0 0 4px}
 .small-actions{gap:0 18px}

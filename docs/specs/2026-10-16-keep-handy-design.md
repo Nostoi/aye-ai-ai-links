@@ -28,13 +28,15 @@ A link with no row is an ordinary link. A `ToolStore` interface in `core/`, impl
 
 Every rule lives here. The web door and the MCP door only translate requests into calls to it.
 
-- **Keep handy** sets `kept` with the given source and `wait_days = 30`, and sets `since` when the row is new. It works from any status, including `declined`, because it is the owner's request.
+- **Keep handy** sets `kept` with the given source and `wait_days = 30`. It works from any status, including `declined`, because it is the owner's request.
+- **`since`** is set to now whenever the status changes, so a late Yes to a suggestion, or a re-kept link, is not due at once.
 - **Suggest** is for an inferred keep only. It does nothing when the link is `kept` or `declined`; otherwise it sets `suggested`.
 - **Answer a suggestion.** Yes sets `kept` with source `asked`. No sets `declined`.
 - **Not handy anymore** sets `declined`, so no agent re-suggests the link.
-- **Clock start** is the latest of `lastOpenedAt`, `answered_at` and `since`.
-- **Still using it.** If `lastOpenedAt` is not after the clock start, then `wait_days = min(2 × wait_days, 120)`; otherwise `wait_days = 30`. In both cases `answered_at = now`.
-- **Due** means a `kept` tool on an active link with `now − clock start ≥ wait_days` days. An archived link is never due.
+- **Last check** is the later of `answered_at` and `since`. **Clock start** is the latest of `lastOpenedAt`, `answered_at` and `since`.
+- **Current wait** is 30 days when `lastOpenedAt` is after the last check (any opening resets the wait to 30 from that opening); otherwise it is the stored `wait_days`.
+- **Due** means a `kept` tool on an active link with `now − clock start ≥ current wait` days. An archived link is never due.
+- **Still using it**, answered while the tool is due: `wait_days = min(2 × wait_days, 120)` when nothing was opened since the last check, otherwise `wait_days = 30`. Answered while it is not due, the wait is unchanged except that an opening since the last check sets it to 30; nothing doubles, so a repeated or unprompted answer can't jump the wait. In every case `answered_at = now`. (Corrected 2026-10-16 before implementation: the first draft compared `lastOpenedAt` with the clock start, which always doubled, and ignored openings when checking due, against the #125 ruling.)
 - **No write on opening.** An opening of any kind moves the clock start through `lastOpenedAt`: a web opening (#124) or `update_link` with `opened: true`. Neither path needs to know about tools (#125 comment 6225715918).
 
 ## Digest (`core/digest.ts`)

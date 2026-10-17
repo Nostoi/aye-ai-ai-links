@@ -302,6 +302,7 @@ removeButton.addEventListener("click", () => {
   chooseButton.focus();
 });
 dialog.addEventListener("paste", (event) => {
+  if (event.target === titleField && [...(event.clipboardData?.types || [])].includes("text/plain")) return;
   const files = event.clipboardData ? [...event.clipboardData.files] : [];
   const file = files.find((f) => f.type.startsWith("image/"));
   if (!file) return;

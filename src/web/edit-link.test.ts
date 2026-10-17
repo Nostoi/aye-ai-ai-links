@@ -542,6 +542,21 @@ describe("the edit dialog's script", () => {
     expect(p.$(".edit-chip").textContent).toBe("New · not saved yet");
   });
 
+  it("lets text with an image beside it paste into the title, and still takes an image alone pasted there", async () => {
+    fakeImages([{ width: 64, height: 48 }]);
+    const p = opened();
+    p.open();
+    const both = { types: ["text/plain", "Files"], files: [SHOT] };
+    const text = p.dispatch(p.title, "paste", { clipboardData: both });
+    await p.settle();
+    expect(text.defaultPrevented).toBe(false);
+    expect(p.$(".edit-chip").hidden).toBe(true);
+    expect(p.$("[data-edit=remove]").hidden).toBe(true);
+    p.dispatch(p.title, "paste", { clipboardData: { types: ["Files"], files: [SHOT] } });
+    await p.settle();
+    expect(p.$(".edit-chip").textContent).toBe("New · not saved yet");
+  });
+
   it("with the owner's picture over a page picture, offers Use the page's picture, previews it and sends page", async () => {
     const p = opened(
       undefined,

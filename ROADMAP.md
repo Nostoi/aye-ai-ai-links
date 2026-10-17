@@ -33,7 +33,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Keep handy's design** is `docs/specs/2026-10-16-keep-handy-design.md`. It lands in three PRs: first the store and rules, then the MCP door and the web page in parallel. Tools live in their own `link_tools` table, and nothing is written on an opening. A tool's writes and Undo apply only while its row still holds the values they read, compared by value. Shelf tools never opened sort by when they were kept, newest first. The digest's still-using check is judged again once claimed, so a tool opened or answered since selection drops out but stays marked.
   - **Keep handy on the web page (PR 3).** Owner rulings, 2026-10-16:
     - The shelf is a grid of about four tiles per line on wide screens, and one sideways row below 600 px.
-    - Due tools come first on the shelf. This is core's `listShelf` order, so no tile asking "Still using?" sits past the 8.
+    - Due tools come first on the shelf. This is core's `listShelf` order, so a tile asking "Still using?" is behind Show all only when more than 8 are due.
     - At most 2 suggestion tiles show, newest first, after the kept tools and outside the 8.
     - The page sends `asked` for Still using, and core keeps the row's existing source. Keep handy and Not handy anymore send `stated`.
     - After a shelf refresh, focus goes back where it was, or else to the next tile or the heading.

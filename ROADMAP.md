@@ -16,11 +16,16 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), an archived copy of each page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a readable copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-17:** Dead-link checks (#128). Owner rulings, 2026-10-17, recorded in #128 comment 6241000784, which is binding.
+  - **The design** is `docs/specs/2026-10-17-dead-link-checks-design.md`. It implements those rulings by reference and lands in two PRs: first the store, rules, runner and checker, then the doors (MCP, the web page and the routes). PR 1 updates the README for what it ships: the checks, gone pages leaving the digest and Worth a look, and gone tools not asked "Still using it?".
+  - **Its assumptions are settled.** A3 (It still works clears the streak as well as the flag) and the amber tile for a gone tool on the Handy shelf are owner rulings. A1, A2 and A4 to A7 are controller rulings, accepted as written. All are dated 2026-10-17.
+  - **Undo of It still works refuses a row no check could have written** (controller ruling): besides the spec's three refusals, an unflagged row, or any date that is invalid or later than now. **After a store error the runner waits an hour** before its next sweep (controller ruling).
 
 - **2026-10-17:** Editing a link's title and picture (#145). Owner rulings, 2026-10-17 (#145 comments 6235920412 and 6236065873).
   - **The design** is `docs/specs/2026-10-17-edit-title-picture-design.md`, following the approved "Edit title & picture" mockup. It lands in two PRs: the Handy header first, then title and picture.

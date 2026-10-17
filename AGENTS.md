@@ -68,7 +68,7 @@ aye-ai-ai-links/
    ├─ core/       rules and use cases
    ├─ store/      SQLite persistence (swappable)
    ├─ search/     keyword + meaning search
-   ├─ fetch/      page snapshots and preview images, through one guarded request (has its own `AGENTS.md`)
+   ├─ fetch/      page snapshots, preview images and link checks, through one guarded request (has its own `AGENTS.md`)
    ├─ auth/       agent keys, the caller identity, the web login and OAuth: better-auth, its lock, routes and client admission
    ├─ http/       request rate limiting and the request log
    ├─ cli/        the `keys` command for agent keys, the `owner` command for the web login, and the model prefetch

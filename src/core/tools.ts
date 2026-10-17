@@ -268,11 +268,18 @@ function shelfOrder(a: ToolItem, b: ToolItem): number {
   return newestFirst(a.tool.since, b.tool.since);
 }
 
-/** The Handy shelf: every kept tool on an active link, in shelf order, each with its due flag. */
+/**
+ * The Handy shelf: every kept tool on an active link, each with its due flag. Due tools come
+ * first (owner ruling 2026-10-16), so a tool asking "Still using?" is never cut from view; within
+ * each group, shelf order.
+ */
 export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfItem[]> {
   const now = deps.now();
-  const items = (await toolItems(deps, owner, "kept")).sort(shelfOrder);
-  return items.map((i) => ({ ...i, due: isDue(i.link, i.tool, now) }));
+  const items = (await toolItems(deps, owner, "kept")).map((i) => ({
+    ...i,
+    due: isDue(i.link, i.tool, now),
+  }));
+  return items.sort((a, b) => Number(b.due) - Number(a.due) || shelfOrder(a, b));
 }
 
 /** The shelf's suggestions: suggested tools on active links, newest suggestion first. */

@@ -313,6 +313,80 @@ describe("the check runner", () => {
     }
   });
 
+  it("judges an unconfirmed dead name again when its sweep ends: a lapsed name checked first in each weekly sweep is flagged at the second", async () => {
+    const t = setup(async (url) =>
+      url.includes("lapsed") ? { kind: "network_error", code: "ENOTFOUND" } : okFor(url),
+    );
+    const dead = await save(t.store, "https://lapsed.test/");
+    await save(t.store, "https://up.test/");
+    await t.runner.sweep();
+    const first = t.now();
+    expect(await t.store.getCheck(OWNER, dead)).toMatchObject({
+      result: "dead",
+      detail: "network:ENOTFOUND",
+      firstDeadAt: first,
+      flaggedAt: null,
+    });
+    t.advance(7 * DAY + 60_000);
+    await t.runner.sweep();
+    expect(await t.store.getCheck(OWNER, dead)).toMatchObject({
+      result: "dead",
+      firstDeadAt: first,
+      flaggedAt: t.now(),
+    });
+  });
+
+  it("records a held name with its own check's start, not the sweep's end, and unconfirmed when no other host answered in the whole sweep", async () => {
+    const t = setup(async (url) => {
+      t.advance(5_000);
+      return url.includes("lapsed") ? { kind: "network_error", code: "ENOTFOUND" } : okFor(url);
+    });
+    const confirmed = await save(t.store, "https://lapsed.test/");
+    await save(t.store, "https://up.test/");
+    const start = t.now();
+    await t.runner.sweep();
+    expect(await t.store.getCheck(OWNER, confirmed)).toMatchObject({
+      checkedAt: start,
+      result: "dead",
+      firstDeadAt: start,
+    });
+    const alone = setup(async () => {
+      return { kind: "network_error", code: "ENOTFOUND" };
+    });
+    const lone = await save(alone.store, "https://lone.test/");
+    const begun = alone.now();
+    await alone.runner.sweep();
+    expect(await alone.store.getCheck(OWNER, lone)).toMatchObject({
+      checkedAt: begun,
+      result: "unknown",
+      detail: "network:ENOTFOUND:unconfirmed",
+      firstDeadAt: null,
+    });
+  });
+
+  it("records a held name when stop ends its sweep, and nothing for the check stop aborted", async () => {
+    const t = setup((url, signal) => {
+      if (url.includes("lapsed"))
+        return Promise.resolve({ kind: "network_error", code: "ENOTFOUND" });
+      if (url.includes("up")) return Promise.resolve(okFor(url));
+      return new Promise<LinkCheckOutcome>((resolve) =>
+        signal?.addEventListener("abort", () => resolve({ kind: "aborted" })),
+      );
+    });
+    const lapsed = await save(t.store, "https://lapsed.test/");
+    await save(t.store, "https://up.test/");
+    const hanging = await save(t.store, "https://hang.test/");
+    const sweeping = t.runner.sweep();
+    await waitFor(() => t.urls().length === 3);
+    await t.runner.stop();
+    await sweeping;
+    expect(await t.store.getCheck(OWNER, lapsed)).toMatchObject({
+      result: "dead",
+      detail: "network:ENOTFOUND",
+    });
+    expect(await t.store.getCheck(OWNER, hanging)).toBeNull();
+  });
+
   it("moves on when a link is deleted during its check, writing nothing and logging nothing", async () => {
     let deleted = "";
     const t = setup(async (url) => okFor(url), {

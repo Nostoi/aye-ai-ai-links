@@ -1,4 +1,4 @@
-import type { LinkChecker } from "./fetch.js";
+import type { LinkChecker, LinkCheckOutcome } from "./fetch.js";
 import {
   ANSWER_WINDOW_MS,
   answeredElsewhere,
@@ -44,6 +44,16 @@ export type LinkCheckRunner = {
 
 /** A link that isn't a web address is never requested. */
 const NOT_WEB: CheckVerdict = { result: "unknown", detail: "refused:scheme" };
+
+const UNCONFIRMED = "network:ENOTFOUND:unconfirmed";
+
+type Held = {
+  due: DueCheck;
+  expected: LinkCheck | null;
+  host: string | null;
+  at: Date;
+  outcome: LinkCheckOutcome;
+};
 
 /** The host a URL names, lower-cased, or null when it does not parse. */
 function hostOf(url: string): string | null {
@@ -146,7 +156,7 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
   }
 
   /** Checks one due link and records the verdict. Throws only for a store error. */
-  async function checkOne(due: DueCheck, host: string | null): Promise<void> {
+  async function checkOne(due: DueCheck, host: string | null, held: Held[]): Promise<void> {
     const expected = await checks.getCheck(due.owner, due.linkId);
     if (!isWebUrl(due.url)) {
       await record(due, expected, NOT_WEB, now());
@@ -161,30 +171,51 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
       noteAnswer(host, now());
     }
     const verdict = judgeCheck(outcome, answeredElsewhere(answers, host, at));
-    if (verdict !== null) await record(due, expected, verdict, at);
+    if (verdict === null) return;
+    if (outcome.kind === "network_error" && verdict.detail === UNCONFIRMED) {
+      held.push({ due, expected, host, at, outcome });
+      return;
+    }
+    await record(due, expected, verdict, at);
   }
 
-  async function scan(): Promise<void> {
+  async function settle(held: Held[]): Promise<void> {
+    const ended = now();
+    for (const h of held.splice(0)) {
+      const verdict = judgeCheck(h.outcome, answeredElsewhere(answers, h.host, h.at, ended));
+      if (verdict !== null) await record(h.due, h.expected, verdict, h.at);
+    }
+  }
+
+  async function scan(held: Held[]): Promise<void> {
     const due = await checks.dueChecks(checkCutoffs(now()), SWEEP_SIZE);
     for (const d of due) {
       if (quiet) return;
       const host = hostOf(d.url);
       const last = host === null ? undefined : requested.get(host);
       if (last !== undefined && now().getTime() - last < hostGapMs) continue;
-      await checkOne(d, host);
+      await checkOne(d, host, held);
     }
   }
 
   /** Resolves true when the sweep ended on a store error. */
   async function sweepOnce(): Promise<boolean> {
     if (quiet) return false;
+    const held: Held[] = [];
+    let failed = false;
     try {
-      await scan();
-      return false;
+      await scan(held);
     } catch (error) {
       log("link check sweep failed", error);
-      return true;
+      failed = true;
     }
+    try {
+      await settle(held);
+    } catch (error) {
+      log("link check sweep failed", error);
+      failed = true;
+    }
+    return failed;
   }
 
   /** Runs `work` as the one thing in flight, so `stop` can wait for it and sweeps never overlap. */

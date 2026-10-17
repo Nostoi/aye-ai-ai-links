@@ -300,8 +300,8 @@ function shelfOrder(a: ToolItem, b: ToolItem): number {
 }
 
 /**
- * The Handy shelf: every kept tool on an active link, each with its due and gone flags. Due and
- * gone tools come first (owner ruling 2026-10-16; #128), so a tile asking something is never cut
+ * The Handy shelf: every kept tool on an active link, each with its due and gone flags. Due
+ * tools come first (owner ruling 2026-10-16; #128), so a tile asking something is never cut
  * from view; within each group, shelf order.
  */
 export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfItem[]> {
@@ -311,8 +311,7 @@ export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfI
     const check = checks.get(i.link.id) ?? null;
     return { ...i, due: isDue(i.link, i.tool, check, now), gone: isGone(check) };
   });
-  const asks = (s: ShelfItem) => Number(s.due || s.gone);
-  return items.sort((a, b) => asks(b) - asks(a) || shelfOrder(a, b));
+  return items.sort((a, b) => Number(b.due) - Number(a.due) || shelfOrder(a, b));
 }
 
 export const SUGGESTION_SIZE = 2;

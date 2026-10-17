@@ -592,7 +592,7 @@ describe("handy views", () => {
 });
 
 describe("listShelf", () => {
-  it("marks a gone tool gone and not due, and lists it first with the due ones (#128)", async () => {
+  it("marks a gone tool gone and not due, and keeps its normal place on the shelf (#128)", async () => {
     const plain = await saved();
     const due = await saved();
     const gone = await saved();
@@ -603,8 +603,8 @@ describe("listShelf", () => {
     const shelf = await listShelf(deps(), A);
     expect(shelf.map((s) => [s.link.id, s.due, s.gone])).toEqual([
       [due, true, false],
-      [gone, false, true],
       [plain, false, false],
+      [gone, false, true],
     ]);
   });
 

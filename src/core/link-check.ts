@@ -40,10 +40,11 @@ export function answeredElsewhere(
   answers: ReadonlyMap<string, Date>,
   host: string | null,
   at: Date,
+  until: Date = at,
 ): boolean {
   const since = at.getTime() - ANSWER_WINDOW_MS;
   for (const [h, when] of answers) {
-    if (h !== host && when.getTime() >= since && when.getTime() <= at.getTime()) return true;
+    if (h !== host && when.getTime() >= since && when.getTime() <= until.getTime()) return true;
   }
   return false;
 }

@@ -163,14 +163,16 @@ describe("the Handy shelf", () => {
   it("offers Add, a search over the owner's links", () => {
     const add = dom(render([kept()])).querySelector("#handy-shelf a.button");
     expect(add?.textContent).toBe("Add");
-    expect(add?.getAttribute("href")).toBe("/search?q=");
+    expect(add?.getAttribute("href")).toBe("/search?q=&keep=1");
   });
 
   it("shows one line with Add when there is nothing on it and nothing suggested", () => {
     const d = dom(render([]));
     expect(d.querySelector(".handy-row")).toBeNull();
     expect(d.querySelector("#handy-shelf p")?.textContent).toBe("Keep links you use often here");
-    expect(d.querySelector("#handy-shelf a.button")?.getAttribute("href")).toBe("/search?q=");
+    expect(d.querySelector("#handy-shelf a.button")?.getAttribute("href")).toBe(
+      "/search?q=&keep=1",
+    );
     expect(d.querySelector("h2")?.textContent).toBe("Handy");
   });
 

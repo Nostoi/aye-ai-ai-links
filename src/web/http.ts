@@ -350,6 +350,7 @@ export function webApp({
   app.get("/search", session, async (c) => {
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
+    const keep = c.req.query("keep") === "1";
     const links = await searchLinks(deps, caller.owner, { query }, caller.savedBy);
     const images = await deps.images.imageVersions(
       caller.owner,
@@ -358,7 +359,7 @@ export function webApp({
     const catalog = await deps.store.listTags(caller.owner);
     const handy = await handyOfLinks(deps, caller.owner, links);
     const now = (deps.now ?? (() => new Date()))();
-    return c.html(searchPage({ query, links, now, images, catalog, handy }), 200, NO_STORE);
+    return c.html(searchPage({ query, links, now, images, catalog, handy, keep }), 200, NO_STORE);
   });
 
   // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does

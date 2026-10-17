@@ -141,7 +141,7 @@ describe("the Handy postcards", () => {
 
   it("on a phone, opens the menu from the card's left edge, above the next card, inside a row that bleeds to the screen edge", () => {
     expect(phone).toMatch(/\.tile-menu-list\{right:auto;left:-106px/);
-    expect(phone).toMatch(/\.handy-row\{[^}]*margin:0 -16px;padding:4px 16px/);
+    expect(phone).toMatch(/\.handy-row\{[^}]*margin:16px -16px 0;padding:4px 16px/);
     expect(themeCss).toContain(".handy-tile:has(.tile-menu[open]){z-index:5}");
   });
 

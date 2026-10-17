@@ -90,6 +90,28 @@ export function describeLinkCheckStoreContract(
       expect(await h.checks.getCheck(A, id)).toEqual(next);
     });
 
+    it("writes nothing when the expected row is set but the link has no row", async () => {
+      const id = await save(A);
+      expect(await h.checks.updateCheckIf(A, id, row(), row({ result: "alive" }))).toEqual({
+        check: null,
+        applied: false,
+      });
+      expect(await h.checks.getCheck(A, id)).toBeNull();
+    });
+
+    it("refuses a row flagged without a first dead check, or with an invalid date, leaving the row as it was", async () => {
+      const id = await save(A);
+      await h.checks.updateCheckIf(A, id, null, row());
+      const bad = [
+        row({ flaggedAt: at(900), firstDeadAt: null }),
+        row({ checkedAt: new Date(Number.NaN) }),
+      ];
+      for (const next of bad) {
+        await expect(h.checks.updateCheckIf(A, id, row(), next)).rejects.toThrow();
+        expect(await h.checks.getCheck(A, id)).toEqual(row());
+      }
+    });
+
     it("lists every row of the owner's, by link id", async () => {
       const first = await save(A);
       const second = await save(A);

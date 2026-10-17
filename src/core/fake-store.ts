@@ -391,6 +391,15 @@ export class FakeStore
     if (!sameCheck(current, expected)) {
       return { check: current && structuredClone(current), applied: false };
     }
+    // What the table refuses (its CHECK, and `toMs` on an invalid date), refused before any write.
+    if (next.flaggedAt !== null && next.firstDeadAt === null) {
+      throw new Error("A check cannot be flagged without a first dead check.");
+    }
+    for (const d of [next.checkedAt, next.firstDeadAt, next.flaggedAt, next.stillWorksAt]) {
+      if (d !== null && !Number.isFinite(d.getTime())) {
+        throw new RangeError("Cannot store an invalid date.");
+      }
+    }
     mine.set(linkId, structuredClone(next));
     return { check: structuredClone(next), applied: true };
   }

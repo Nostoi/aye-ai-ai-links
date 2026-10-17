@@ -35,9 +35,12 @@ const KEEP_HANDY = `<div class="ask">
 </div>
 </div>`;
 
+const DOTS = `<svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>`;
+const MINUS = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>`;
+
 const menu = (link: Link) => `<details class="tile-menu">
-<summary><span class="tile-menu-dot" aria-hidden="true">⋯</span><span class="visually-hidden">More for ${escapeHtml(link.title ?? link.url)}</span></summary>
-<div class="actions small-actions"><button type="button" data-act="not-handy">Not handy anymore</button></div>
+<summary><span class="tile-menu-dot" aria-hidden="true">${DOTS}</span><span class="visually-hidden">More for ${escapeHtml(link.title ?? link.url)}</span></summary>
+<div class="tile-menu-list"><button type="button" data-act="not-handy">${MINUS}Not handy anymore</button></div>
 </details>`;
 
 /** The first letter or digit of each of the first two words that have one, uppercased. */
@@ -79,7 +82,7 @@ function card(
 ): string {
   const space = linkSpace(link, catalog);
   const version = images.get(link.id);
-  return `<article class="handy-tile${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
+  return `<article class="handy-tile${version === undefined ? "" : " photo"}${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
 ${tile(link, version, "handy-image")}
 ${version === undefined ? initials(link) : ""}<div class="handy-caption">
 <h3>${linkTitle(link)}</h3>

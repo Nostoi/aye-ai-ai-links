@@ -99,7 +99,10 @@ describe("the theme css", () => {
   it("puts the tile menu in the top-right corner of every tile, on a translucent circle", () => {
     expect(themeCss).toMatch(/\.tile-menu\{[^}]*top:\d+px;right:\d+px/);
     expect(themeCss).toMatch(
-      /\.tile-menu-dot\{[^}]*border-radius:50%;[^}]*background:rgb\(0 0 0 \/ \.\d+\)/,
+      /\.tile-menu-dot\{[^}]*border-radius:50%;[^}]*background:color-mix\(in srgb,var\(--surface\) \d+%,transparent\)/,
+    );
+    expect(themeCss).toMatch(
+      /\.handy-tile\.photo \.tile-menu-dot\{[^}]*background:rgb\(\d+ \d+ \d+ \/ \.\d+\)/,
     );
   });
 
@@ -136,24 +139,36 @@ describe("the Handy postcards", () => {
     expect(rule(".handy-tile")).toContain("overflow:visible");
   });
 
-  it("keeps the open menu inside a 156px phone card, so the sideways row doesn't clip it", () => {
-    const max = /max-width:(\d+)px/.exec(rule(".tile-menu .actions"))?.[1];
-    expect(Number(max)).toBeGreaterThan(0);
-    expect(Number(max)).toBeLessThanOrEqual(148);
-    expect(rule(".tile-menu .actions")).toContain("white-space:normal");
+  it("on a phone, opens the menu from the card's left edge, above the next card, inside a row that bleeds to the screen edge", () => {
+    expect(phone).toMatch(/\.tile-menu-list\{right:auto;left:-106px/);
+    expect(phone).toMatch(/\.handy-row\{[^}]*margin:0 -16px;padding:4px 16px/);
+    expect(themeCss).toContain(".handy-tile:has(.tile-menu[open]){z-index:5}");
   });
 
-  it("sets the title in white over a dark fade, whatever the theme", () => {
-    expect(rule(".handy-caption")).toMatch(/linear-gradient\([^)]*rgb\(0 0 0/);
-    expect(rule(".handy-caption")).toContain("color:#fff");
+  it("styles the menu as a card of full-width 44px rows, not a link", () => {
+    expect(rule(".tile-menu-list")).toMatch(/border-radius:14px;[^}]*box-shadow:/);
+    const item = rule(".tile-menu-list button");
+    for (const part of ["min-height:44px", "width:100%", "background:none", "white-space:nowrap"]) {
+      expect(item).toContain(part);
+    }
+    expect(item).not.toContain("underline");
   });
 
-  it("keeps the fade to the caption and the initials above it, small enough never to meet it", () => {
-    expect(rule(".handy-caption")).toMatch(/padding:(\d+)px 12px/);
-    expect(Number(/padding:(\d+)px/.exec(rule(".handy-caption"))?.[1])).toBeLessThanOrEqual(20);
+  it("puts dark text straight on a picture-less card, and a light fade with white text only on a photo", () => {
+    expect(rule(".handy-caption")).not.toContain("gradient");
+    expect(rule(".handy-caption")).toContain("color:var(--ink)");
+    const photo = rule(".handy-tile.photo .handy-caption");
+    expect(photo).toContain("color:#fff");
+    expect(photo).toContain("text-shadow:");
+    const alphas = [...photo.matchAll(/rgb\(0 0 0 \/ (\.\d+)\)/g)].map((m) => Number(m[1]));
+    expect(alphas.length).toBeGreaterThan(1);
+    expect(Math.max(...alphas)).toBeLessThanOrEqual(0.62);
+  });
+
+  it("keeps the initials in the card's top half, small enough never to meet a 3-line title", () => {
     const initials = rule(".handy-initials");
-    expect(Number(/font-size:(\d+)px/.exec(initials)?.[1])).toBeLessThanOrEqual(40);
-    expect(Number(/inset:0 0 (\d+)px/.exec(initials)?.[1])).toBeGreaterThanOrEqual(108);
+    expect(Number(/font-size:(\d+)px/.exec(initials)?.[1])).toBeLessThanOrEqual(36);
+    expect(initials).toContain("inset:0 0 auto;height:50%");
     expect(initials).toContain("line-height:1;");
   });
 
@@ -171,7 +186,7 @@ describe("the Handy postcards", () => {
   });
 
   it("keeps a due panel's text and buttons clear of the menu circle, and a suggestion's unpadded", () => {
-    expect(Number(/padding:\d+px (\d+)px/.exec(rule(".handy-tile.needs-you .ask"))?.[1])).toBe(52);
-    expect(rule(".handy-tile .ask")).not.toMatch(/padding:\d+px 5\d/);
+    expect(rule(".handy-tile.needs-you .ask")).toBe("padding-right:40px");
+    expect(rule(".handy-tile .ask")).toContain("padding:3px 10px 0");
   });
 });

@@ -119,7 +119,7 @@ const refreshShelf = async (from) => {
   const turn = ++shelfTurn;
   const res = await fetch("/", { headers: { accept: "text/html" }, redirect: "manual" }).catch(() => null);
   const text = res && res.ok ? await res.text().catch(() => null) : null;
-  if (turn !== shelfTurn) return;
+  if (turn !== shelfTurn) return true;
   const next = text === null ? null : new DOMParser().parseFromString(text, "text/html").getElementById("handy-shelf");
   if (!next) {
     document.getElementById("handy-error").textContent = ${JSON.stringify(SHELF_STALE)};
@@ -166,6 +166,7 @@ if (handy) {
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
     button.disabled = true;
+    let dropped = false;
     try {
       if (act === "done") {
         const res = await post("/home/archive", { id });
@@ -173,7 +174,7 @@ if (handy) {
           handyError.textContent = await failure(res);
           return;
         }
-        await refreshShelf(from);
+        dropped = await refreshShelf(from);
         offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
         return;
       }
@@ -184,10 +185,10 @@ if (handy) {
         handyError.textContent = await failure(res);
         return;
       }
-      await refreshShelf(from);
+      dropped = await refreshShelf(from);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
-      button.disabled = false;
+      if (!dropped) button.disabled = false;
     }
   });
 }

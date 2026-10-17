@@ -410,6 +410,30 @@ describe("the shelf's script", () => {
     await p.settle();
   });
 
+  it("keeps a tile's button off when its refresh was dropped for a newer one, so a third click posts nothing", async () => {
+    const [a, b] = [kept(), kept()];
+    const gates: Array<() => void> = [];
+    const hold = () => new Promise<void>((resolve) => gates.push(resolve));
+    const p = runPage(home([a, b]), (s) =>
+      s.body === undefined
+        ? { status: 200, text: home([]), wait: hold() }
+        : { status: 200, body: MOVED },
+    );
+    const buttonA = p.$(`[data-id="${a.link.id}"] button[data-act=not-handy]`);
+    p.dispatch(buttonA, "click");
+    await p.settle();
+    p.dispatch(p.$(`[data-id="${b.link.id}"] button[data-act=not-handy]`), "click");
+    await p.settle();
+    gates[0]?.();
+    await p.settle();
+    expect((buttonA as HTMLButtonElement).disabled).toBe(true);
+    p.dispatch(buttonA, "click");
+    await p.settle();
+    expect(p.sent.filter((s) => s.url === "/tools/not-handy")).toHaveLength(2);
+    gates[1]?.();
+    await p.settle();
+  });
+
   it("lets the button work again when the action is refused or the refresh is redirected", async () => {
     const refused = shelfPage(home([kept()]), () => ({ status: 409, body: { message: "no" } }));
     refused.dispatch(refused.$("button[data-act=not-handy]"), "click");

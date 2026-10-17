@@ -116,6 +116,17 @@ describe("worthALook", () => {
     expect(await ids()).toEqual([other.id]);
   });
 
+  it("leaves out a due tool, which the shelf shows instead, even one that matches the focus", async () => {
+    const tool = await link();
+    const other = await link();
+    await focus("lunch", at(-DAY), [tool.id]);
+    clock = at(-40 * DAY);
+    await keepHandy(deps(), A, tool.id, "stated");
+    clock = NOW;
+    expect(await ids()).toEqual([other.id]);
+    expect((await get(tool.id)).lastSurfacedAt).toBeNull();
+  });
+
   it("shows the same three picks all day, writing nothing", async () => {
     for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
     const before = structuredClone(store.all(A));

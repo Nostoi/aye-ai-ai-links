@@ -16,11 +16,23 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), an archived copy of each page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a readable copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-17:** The bookmarklet and the Save page (#129). Owner rulings, 2026-10-17 (#129 comment 6241001472); controller answers the same day. The design is `docs/specs/2026-10-17-bookmarklet-design.md`.
+  - **One tap opens the Save page,** `/save?url=&title=`, with the page's address and title filled in. The title is cut to 200 code points; an address over 3,000 encoded characters opens `/save?long=1` instead. An optional why, then **Save**, then "Saved" with Close. The address is the stable one a phone Shortcut will open later.
+  - **The limit is 3,000, not the design's 4,000** (controller ruling). Signed out, the Save address travels through `/login?next=` and back, and `returnAfterLogin` re-encodes `( ) ! ' ~`. At 4,000, an address of `(` came back as a 14,371-character URL, too near Node's 16 KiB header limit. At 3,000 the worst case measured is 11,371 (`src/web/save-size.test.ts`). The sign-in page also sends `Referrer-Policy: no-referrer`, so its own long address is not sent again as the Referer.
+  - **The share sheet will open the Save page,** not go through a JSON API in `api/` as design spec §2 (line 50) had it. No `api/` door is made for this.
+  - **The Save page never writes on GET,** reads none of the owner's data, sends `frame-ancestors 'none'`, and `/save` is origin-checked (`CHECKED_PAGES`). Saving is `POST /save`.
+  - **The why is stored as `asked`,** like Tell me why, and `savedBy` is the session's `web`. Dedupe is unchanged. On a repeat save over an AI's guessed why, the owner's why replaces it (`tellWhy`); over a reason someone gave, it is kept and the page says yours wasn't saved (controller answer).
+  - **Already saved** shows the date and the link's title (or address) as a new-tab link, with its why; an archived link offers **Bring it back** through the existing `/home/unarchive` (controller answer on the link).
+  - **A new link saved with no title keeps none:** it does not take the fetched page's title (controller answer). A show-time fallback would be its own issue.
+  - **Signed out, the owner signs in and comes straight back.** `returnAfterLogin` now also accepts exactly `/save`, rebuilt with only its first `url` and `title`; only `GET /save` sends its address to sign-in.
+  - **Install** is "Save from your browser" on Apps and keys: a link to drag, and code to copy into a phone bookmark. The bookmarklet never reads selected text.
+  - **Where the build departs from the design's wording:** the POST answer also carries `savedOn`, the date in the page's words, because the page's script builds the Already saved view; the Save page reuses `loginRedirect` rather than a copy named `saveLoginRedirect`; and a signed-out `/save?long=1` comes back as an empty form, because only `url` and `title` return.
 
 - **2026-10-17:** Editing a link's title and picture (#145). Owner rulings, 2026-10-17 (#145 comments 6235920412 and 6236065873).
   - **The design** is `docs/specs/2026-10-17-edit-title-picture-design.md`, following the approved "Edit title & picture" mockup. It lands in two PRs: the Handy header first, then title and picture.

@@ -141,7 +141,7 @@ describe("the Handy postcards", () => {
 
   it("on a phone, opens the menu from the card's left edge, above the next card, inside a row that bleeds to the screen edge", () => {
     expect(phone).toMatch(/\.tile-menu-list\{right:auto;left:-106px/);
-    expect(phone).toMatch(/\.handy-row\{[^}]*margin:0 -16px;padding:4px 16px/);
+    expect(phone).toMatch(/\.handy-row\{[^}]*margin:16px -16px 0;padding:4px 16px/);
     expect(themeCss).toContain(".handy-tile:has(.tile-menu[open]){z-index:5}");
   });
 
@@ -192,6 +192,27 @@ describe("the Handy postcards", () => {
     const host = rule(".handy-caption .host");
     for (const part of ["white-space:nowrap", "overflow:hidden", "text-overflow:ellipsis"]) {
       expect(host).toContain(part);
+    }
+  });
+
+  it("puts Show all and Add beside the heading: a grid in which the swapped shelf's head takes row 1, column 2", () => {
+    expect(rule(".handy")).toContain("display:grid;grid-template-columns:1fr auto");
+    expect(rule("#handy-shelf")).toBe("display:contents");
+    expect(rule(".handy-head")).toContain("grid-row:1;grid-column:2");
+    expect(rule(".handy>h2")).toContain("grid-row:1;grid-column:1");
+    expect(themeCss).toMatch(/(?:^|\})\.handy-row,\.handy-empty,#handy-error\{grid-column:1\/-1/m);
+    expect(themeCss).not.toContain(".handy-foot");
+  });
+
+  it("makes Add a tinted 44px pill and Show all a quiet 44px text button", () => {
+    const add = rule(".handy-add");
+    for (const part of ["min-height:44px", "border-radius:999px", "text-decoration:none"]) {
+      expect(add).toContain(part);
+    }
+    expect(add).toContain("background:color-mix(in srgb,var(--ink) 5%,transparent)");
+    const showAll = rule(".handy-show-all");
+    for (const part of ["min-height:44px", "color:var(--soft)", "background:none", "border:0"]) {
+      expect(showAll).toContain(part);
     }
   });
 

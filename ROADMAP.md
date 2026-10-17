@@ -22,6 +22,10 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-17:** Editing a link's title and picture (#145). Owner rulings, 2026-10-17 (#145 comments 6235920412 and 6236065873).
+  - **The design** is `docs/specs/2026-10-17-edit-title-picture-design.md`, following the approved "Edit title & picture" mockup. It lands in two PRs: the Handy header first, then title and picture.
+  - **Handy's Add and Show all sit in the shelf's header,** beside "Handy". Show all reads "Show all N" with the kept count. The line of buttons under the tiles is gone. An empty shelf keeps its line with Add beside it.
+
 - **2026-10-16:** Phase 3 is done; the current phase is Later. Owner rulings, in session.
   - **Phase 3's last checks.** ChatGPT kept its connection by refreshing for about 11 hours, across two deploys (#102 comment 6184365831). #105 is fixed by `offline-access.ts` and closed with no upstream report to better-auth (owner ruling, 2026-10-14). #77 B2's F1 moved to Later as #119.
   - **A stale connected app gets the error page (#119).** A connected CIMD app whose snapshot is not current is sent to `/oauth-error` by the authorize gate, signed in or not, instead of getting admission's raw JSON 400. Admission still refuses it either way.

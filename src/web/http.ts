@@ -550,8 +550,6 @@ export function webApp({
     return c.html(page, 200, NO_STORE);
   });
 
-  // Each POST's body is read, capped, before the session read takes the lock.
-
   // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
   // writes could be set off from another site.
   const linkId = { id: isLinkId };
@@ -574,7 +572,7 @@ export function webApp({
 
   // The owner's edit of a link's title and picture (#145). It answers the card's new state and
   // the edit's id for its Undo (null when nothing changed).
-  app.post("/links/edit", editForm, session, (c) =>
+  app.post("/links/edit", session, editForm, (c) =>
     homeAction(c, async () => {
       const { owner } = c.get("caller");
       const { id, title, picture } = c.get("edit");

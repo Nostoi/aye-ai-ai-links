@@ -244,12 +244,23 @@ describe("owner isolation and refusals", () => {
     },
   );
 
-  it("POST /links/edit refuses a body over 2 MiB + 16 KiB with 413 before reading any session", async () => {
+  it("POST /links/edit refuses a body over 2 MiB + 16 KiB with 413", async () => {
+    const { world, browser, id } = await edited();
+    const before = allRows(world);
+    const over = Buffer.alloc(MAX_IMAGE_BYTES + AUTH_BODY_LIMIT + 1);
+    expect((await edit(browser, { id, picture: file(over) })).status).toBe(413);
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it("POST /links/edit sends a signed-out caller to sign in before reading its body", async () => {
     const { world, id } = await edited();
     const before = allRows(world);
     const over = Buffer.alloc(MAX_IMAGE_BYTES + AUTH_BODY_LIMIT + 1);
-    // Signed out: a session read would answer 302, so 413 shows the cap came first.
-    expect((await edit(world.agent(), { id, picture: file(over) })).status).toBe(413);
+    expect((await edit(world.agent(), { id, picture: file(over) })).status).toBe(302);
+    const notAForm = await world
+      .agent()
+      .send("/links/edit", { method: "POST", json: { id, title: "x" } });
+    expect(notAForm.status).toBe(302);
     expect(allRows(world)).toEqual(before);
   });
 

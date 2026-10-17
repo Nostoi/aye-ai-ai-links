@@ -53,3 +53,15 @@ export interface ImageFetcher {
   fetch(url: string, signal?: AbortSignal): Promise<ImageOutcome>;
   close(): Promise<void>;
 }
+
+/** Every way a link check can end: a 2xx answer after any redirects (its body unread), or a failure. */
+export type LinkCheckOutcome = { kind: "ok"; finalUrl: string } | FetchFailure;
+
+/**
+ * Checks that a saved link still leads somewhere, under the same address rules as `PageFetcher`.
+ * It never reads the page: a 2xx body is discarded. `close()` stops checks in flight.
+ */
+export interface LinkChecker {
+  check(url: string, signal?: AbortSignal): Promise<LinkCheckOutcome>;
+  close(): Promise<void>;
+}

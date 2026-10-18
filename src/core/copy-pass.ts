@@ -99,9 +99,6 @@ function judgePage(page: Exclude<FetchOutcome, { kind: "ok" }>): "none" | "trans
  * copy for a link saved without one, fetches the images of saved copies, finishes copies whose
  * images have settled, sweeps orphans every `sweepEveryMs`, and logs usage thresholds.
  *
- * The backfill fetches at most one page per sweep. A transient failure of a page or an image is
- * tried again after a backoff and settles (`failed` for a link, `none` for an image) on its
- * `MAX_IMAGE_ATTEMPTS`th; a spent budget is never fetched again, only its final write is retried.
  * A folder that is not `ready` is no failure and ends the sweep. Backoffs are kept in memory, so
  * a restart tries everything again. A fetch or extraction aborted by `stop` leaves its link a
  * candidate or its image pending, and nothing is counted or written after `stop`.

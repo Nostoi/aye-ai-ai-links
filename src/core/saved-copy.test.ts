@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finishedMarkdown, imageRef } from "./saved-copy.js";
+import { finishedMarkdown, imageRef, isCopyDraft } from "./saved-copy.js";
 
 const N = "0123456789abcdef0123456789abcdef";
 const M = "fedcba9876543210fedcba9876543210";
@@ -54,5 +54,26 @@ describe("finishedMarkdown", () => {
 
   it("refuses an invalid nonce", () => {
     expect(() => finishedMarkdown("x", "x", [])).toThrow("Invalid copy nonce");
+  });
+});
+
+describe("isCopyDraft", () => {
+  const nonce = "0123456789abcdef0123456789abcdef";
+  const ok = { markdown: "m", imageUrls: ["https://ex.com/a.png"], nonce };
+  it("accepts a valid draft", () => {
+    expect(isCopyDraft(ok)).toBe(true);
+    expect(isCopyDraft({ ...ok, imageUrls: [] })).toBe(true);
+  });
+  it.each([
+    ["a non-object", "x"],
+    ["null", null],
+    ["a non-string markdown", { ...ok, markdown: 1 }],
+    ["a nonce of 31 hex", { ...ok, nonce: nonce.slice(1) }],
+    ["an uppercase nonce", { ...ok, nonce: "0123456789ABCDEF0123456789ABCDEF" }],
+    ["31 URLs", { ...ok, imageUrls: Array.from({ length: 31 }, () => "https://ex.com/a.png") }],
+    ["a javascript: URL", { ...ok, imageUrls: ["javascript:alert(1)"] }],
+    ["a non-URL string", { ...ok, imageUrls: ["not a url"] }],
+  ])("rejects %s", (_name, value) => {
+    expect(isCopyDraft(value)).toBe(false);
   });
 });

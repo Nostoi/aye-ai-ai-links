@@ -1,6 +1,6 @@
 import { parseHTML } from "linkedom";
 import { extractMetadata, type Metadata } from "./extract-metadata.ts";
-import { articleText, flattenTemplates } from "./extract-text.ts";
+import { articleText, flattenTemplates, readArticle } from "./extract-text.ts";
 
 // The extraction child loads this file: see AGENTS.md in this folder for the import rules.
 
@@ -23,7 +23,8 @@ export function pageText(doc: Document): string | null {
   if (!doc.documentElement) return null;
   try {
     flattenTemplates(doc);
-    return articleText(doc);
+    const article = readArticle(doc);
+    return article ? articleText(article) : null;
   } catch {
     return null;
   }

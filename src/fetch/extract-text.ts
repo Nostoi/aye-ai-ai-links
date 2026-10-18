@@ -98,12 +98,16 @@ export function flatten(root: Node): string {
     .trim();
 }
 
-/** Readability's article text, or null when it finds no article. */
-export function articleText(doc: Document): string | null {
+/** Readability's article element, or null when it finds no article. It changes the document. */
+export function readArticle(doc: Document): Element | null {
   const article = new Readability(doc, {
     serializer: (el) => el as unknown as string,
   }).parse();
-  if (!article) return null;
-  const text = flatten(article.content as unknown as Node);
+  return article ? (article.content as unknown as Element) : null;
+}
+
+/** The article's text, or null when it has none. */
+export function articleText(article: Element): string | null {
+  const text = flatten(article);
   return text ? capCodePoints(text, TEXT_MAX) : null;
 }

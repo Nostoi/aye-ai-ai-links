@@ -1,0 +1,75 @@
+import TurndownService from "turndown";
+import type { CopyDraft } from "../core/saved-copy.ts";
+import { imageRef, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
+
+const webUrl = (url: URL): boolean => url.protocol === "http:" || url.protocol === "https:";
+
+function resolve(href: string, base: string): URL | null {
+  try {
+    return new URL(href, base);
+  } catch {
+    return null;
+  }
+}
+
+/** The page's first `<base href>` when it resolves to http(s), else the final URL. */
+export function copyBase(doc: Document, finalUrl: string): string {
+  const href = doc.querySelector("base[href]")?.getAttribute("href");
+  const url = href ? resolve(href, finalUrl) : null;
+  return url && webUrl(url) ? url.href : finalUrl;
+}
+
+const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
+const escapeAlt = (alt: string): string => collapse(alt).replace(/[\\[\]]/g, "\\$&");
+
+/**
+ * Turns Readability's article element into Markdown, working on the element in place.
+ * Images carry provisional ids while turndown runs, because a parent rule (fenced code) can drop
+ * a child's output; the final numbers go to what survived.
+ */
+export function articleMarkdown(article: Element, base: string, nonce: string): CopyDraft {
+  for (const a of [...article.querySelectorAll("a[href]")]) {
+    const url = resolve(a.getAttribute("href") ?? "", base);
+    if (url && (webUrl(url) || url.protocol === "mailto:")) a.setAttribute("href", url.href);
+    else a.replaceWith(...a.childNodes);
+  }
+
+  const td = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+  const found: { url: string; text: string }[] = [];
+  const provisional = new Map<string, number>();
+  td.addRule("copyImage", {
+    filter: "img",
+    replacement: (_content, node) => {
+      const alt = (node as Element).getAttribute("alt") ?? "";
+      const src = (node as Element).getAttribute("src");
+      const url = src ? resolve(src, base) : null;
+      const text = td.escape(collapse(alt));
+      if (!url || !webUrl(url)) return text;
+      let k = provisional.get(url.href);
+      if (k === undefined) {
+        k = found.length;
+        found.push({ url: url.href, text });
+        provisional.set(url.href, k);
+      }
+      return `![${escapeAlt(alt)}](images/x${k}-${nonce})`;
+    },
+  });
+  const draft = td.turndown(article as HTMLElement);
+
+  const imageUrls: string[] = [];
+  const given = new Map<number, number>();
+  const ref = new RegExp(`!\\[((?:\\\\.|[^\\[\\]\\\\])*)\\]\\(images/x([0-9]+)-${nonce}\\)`, "g");
+  const markdown = draft.replace(ref, (_all, alt: string, k: string) => {
+    const image = found[Number(k)];
+    if (!image) return alt;
+    let n = given.get(Number(k));
+    if (n === undefined) {
+      if (imageUrls.length >= MAX_COPY_IMAGES) return image.text;
+      imageUrls.push(image.url);
+      n = imageUrls.length;
+      given.set(Number(k), n);
+    }
+    return `![${alt}](${imageRef(n, nonce)})`;
+  });
+  return { markdown, imageUrls, nonce };
+}

@@ -1,17 +1,22 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import type { ImageType } from "../core/fetch.js";
-import { imageVersion, type StoredImage } from "../core/image-store.js";
+import { type ImageBytes, imageVersion, type StoredImage } from "../core/image-store.js";
 import {
   COPY_NONCE,
   type CopyCandidate,
   type CopyDraft,
+  type CopyImageEnd,
+  type CopyImageResult,
   type CopyInfo,
   type CopyLimits,
+  type CopyRef,
+  type FinishImage,
   type FolderCheck,
   IMAGE_EXT,
   MAX_COPY_IMAGES,
   type NoCopyStatus,
+  type PendingCopyImage,
   type ReadCopy,
   type SaveCopyResult,
   type SavedCopyMaintenance,
@@ -25,11 +30,18 @@ import { parseId, toMs } from "./sqlite-store.js";
 
 const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
 
-type Saved = Pick<SavedCopyWriter, "saveCopy" | "recordNoCopy">;
-type Maintained = Pick<SavedCopyMaintenance, "checkFolder" | "backfillCandidates">;
+type Maintained = Pick<
+  SavedCopyMaintenance,
+  "checkFolder" | "backfillCandidates" | "pendingCopyImages" | "unfinishedCopies"
+>;
+
+const imageName = (n: number, type: ImageType) =>
+  `${String(n).padStart(2, "0")}.${IMAGE_EXT[type]}`;
 
 /** Saved copies (#135): the `saved_copies*` rows and the folder holding their files. */
-export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Saved, Maintained {
+export class SqliteSavedCopyStore
+  implements SavedCopyReader, SavedCopyUsage, SavedCopyWriter, Maintained
+{
   private readonly folder: CopyFolder;
   private check: FolderCheck = {
     state: "mismatch",
@@ -168,11 +180,7 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
     if (this.check.state !== "ready") return "unavailable";
     const md = Buffer.byteLength(draft.markdown);
     if (md > limits.copyBytes) return this.settle(owner, id, "too_large");
-    const used = this.db
-      .prepare("SELECT coalesce(sum(bytes), 0) FROM saved_copies")
-      .pluck()
-      .get() as number;
-    if (used + md > limits.totalBytes) return this.settle(owner, id, "no_room");
+    if (this.usedNow() + md > limits.totalBytes) return this.settle(owner, id, "no_room");
     this.db
       .prepare(
         `INSERT INTO saved_copies (owner_id, link_id, status, made_at, finished_at, image_nonce,
@@ -217,6 +225,259 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
       )
       .immediate();
     if (changed !== 1) throw new Error("The saved copy was not waiting to be confirmed");
+  }
+
+  async saveCopyImage(
+    owner: OwnerId,
+    linkId: string,
+    n: number,
+    url: string,
+    image: ImageBytes,
+    limits: CopyLimits,
+  ): Promise<CopyImageResult | false> {
+    const id = parseId(linkId);
+    if (id === null || !Number.isInteger(n)) return false;
+    const size = image.bytes.byteLength;
+    const name = imageName(n, image.contentType);
+    const outcome = this.db
+      .transaction((): CopyImageResult | false | "write" => {
+        const row = this.db
+          .prepare(
+            `SELECT c.bytes FROM saved_copy_images i
+             JOIN saved_copies c ON c.owner_id = i.owner_id AND c.link_id = i.link_id
+             WHERE i.owner_id = ? AND i.link_id = ? AND i.n = ? AND i.url = ?
+               AND i.status = 'pending' AND c.status = 'ok'`,
+          )
+          .get(owner, id, n, url) as { bytes: number } | undefined;
+        if (!row) return false;
+        if (this.check.state !== "ready") return "unavailable";
+        if (row.bytes + size > limits.copyBytes) return this.refuseImage(owner, id, n, "too_large");
+        if (this.usedNow() + size > limits.totalBytes) {
+          return this.refuseImage(owner, id, n, "no_room");
+        }
+        this.db
+          .prepare(
+            `UPDATE saved_copy_images SET status = 'saving', content_type = ?, size = ?, sha256 = ?
+             WHERE owner_id = ? AND link_id = ? AND n = ?`,
+          )
+          .run(
+            image.contentType,
+            size,
+            createHash("sha256").update(image.bytes).digest("hex"),
+            owner,
+            id,
+            n,
+          );
+        this.db
+          .prepare("UPDATE saved_copies SET bytes = bytes + ? WHERE owner_id = ? AND link_id = ?")
+          .run(size, owner, id);
+        return "write";
+      })
+      .immediate();
+    if (outcome !== "write") return outcome;
+    try {
+      this.folder.writeImage(linkId, name, image.bytes);
+      this.confirmImage(owner, id, n);
+    } catch (e) {
+      try {
+        this.releaseImage(owner, id, n, size);
+      } catch {
+        // the row stays `saving` until the startup undo
+      }
+      try {
+        this.folder.removeImage(linkId, name);
+      } catch {
+        // an orphan image is the sweep's
+      }
+      throw e;
+    }
+    return "saved";
+  }
+
+  private usedNow(): number {
+    return this.db
+      .prepare("SELECT coalesce(sum(bytes), 0) FROM saved_copies")
+      .pluck()
+      .get() as number;
+  }
+
+  /** Settles a pending image as one that will not be stored, and returns the answer for it. */
+  private refuseImage(
+    owner: OwnerId,
+    id: number,
+    n: number,
+    status: "too_large" | "no_room",
+  ): "too_large" | "no_room" {
+    this.db
+      .prepare(
+        "UPDATE saved_copy_images SET status = ? WHERE owner_id = ? AND link_id = ? AND n = ?",
+      )
+      .run(status, owner, id, n);
+    return status;
+  }
+
+  /** Moves a `saving` image to `ok`. */
+  private confirmImage(owner: OwnerId, id: number, n: number): void {
+    const changed = this.db
+      .transaction(
+        () =>
+          this.db
+            .prepare(
+              `UPDATE saved_copy_images SET status = 'ok'
+               WHERE owner_id = ? AND link_id = ? AND n = ? AND status = 'saving'`,
+            )
+            .run(owner, id, n).changes,
+      )
+      .immediate();
+    if (changed !== 1) throw new Error("The saved image was not waiting to be confirmed");
+  }
+
+  /** Puts a `saving` image back to `pending` and gives its bytes back. */
+  private releaseImage(owner: OwnerId, id: number, n: number, size: number): void {
+    this.db
+      .transaction(() => {
+        const changed = this.db
+          .prepare(
+            `UPDATE saved_copy_images SET status = 'pending', content_type = NULL, size = NULL,
+               sha256 = NULL WHERE owner_id = ? AND link_id = ? AND n = ? AND status = 'saving'`,
+          )
+          .run(owner, id, n).changes;
+        if (changed === 1) {
+          this.db
+            .prepare("UPDATE saved_copies SET bytes = bytes - ? WHERE owner_id = ? AND link_id = ?")
+            .run(size, owner, id);
+        }
+      })
+      .immediate();
+  }
+
+  async endCopyImage(
+    owner: OwnerId,
+    linkId: string,
+    n: number,
+    url: string,
+    end: CopyImageEnd,
+  ): Promise<boolean> {
+    const id = parseId(linkId);
+    if (id === null || !Number.isInteger(n)) return false;
+    return (
+      this.db
+        .transaction(
+          () =>
+            this.db
+              .prepare(
+                `UPDATE saved_copy_images SET status = ?
+                 WHERE owner_id = ? AND link_id = ? AND n = ? AND url = ? AND status = 'pending'`,
+              )
+              .run(end, owner, id, n, url).changes,
+        )
+        .immediate() === 1
+    );
+  }
+
+  async pendingCopyImages(
+    after: { linkId: string; n: number } | null,
+    limit: number,
+  ): Promise<PendingCopyImage[]> {
+    const from = after === null ? 0 : parseId(after.linkId);
+    if (from === null) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT i.owner_id, i.link_id, i.n, i.url FROM saved_copy_images i
+         JOIN saved_copies c ON c.owner_id = i.owner_id AND c.link_id = i.link_id
+         WHERE i.status = 'pending' AND c.status = 'ok' AND (i.link_id, i.n) > (?, ?)
+         ORDER BY i.link_id, i.n LIMIT ?`,
+      )
+      .all(from, after?.n ?? 0, limit) as {
+      owner_id: string;
+      link_id: number;
+      n: number;
+      url: string;
+    }[];
+    return rows.map((r) => ({
+      owner: r.owner_id,
+      linkId: String(r.link_id),
+      n: r.n,
+      url: r.url,
+    }));
+  }
+
+  async unfinishedCopies(afterId: string | null, limit: number): Promise<CopyRef[]> {
+    const after = afterId === null ? 0 : parseId(afterId);
+    if (after === null) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT c.owner_id, c.link_id FROM saved_copies c
+         WHERE c.status = 'ok' AND c.finished_at IS NULL AND c.link_id > ?
+           AND NOT EXISTS (SELECT 1 FROM saved_copy_images i WHERE i.owner_id = c.owner_id
+             AND i.link_id = c.link_id AND i.status IN ('pending', 'saving'))
+         ORDER BY c.link_id, c.owner_id LIMIT ?`,
+      )
+      .all(after, limit) as { owner_id: string; link_id: number }[];
+    return rows.map((r) => ({ owner: r.owner_id, linkId: String(r.link_id) }));
+  }
+
+  async finishCopy(
+    owner: OwnerId,
+    linkId: string,
+    finish: (markdown: string, nonce: string, images: FinishImage[]) => string,
+    at: Date,
+  ): Promise<boolean> {
+    const id = parseId(linkId);
+    if (id === null || this.check.state !== "ready") return false;
+    const row = this.finishable(owner, id);
+    if (!row) return false;
+    const markdown = await this.folder.readMarkdown(linkId);
+    if (markdown === null) return false;
+    const images = (
+      this.db
+        .prepare(
+          `SELECT n, status, content_type FROM saved_copy_images
+           WHERE owner_id = ? AND link_id = ? ORDER BY n`,
+        )
+        .all(owner, id) as { n: number; status: string; content_type: ImageType | null }[]
+    ).map((i) => ({
+      n: i.n,
+      ext: i.status === "ok" && i.content_type ? IMAGE_EXT[i.content_type] : null,
+    }));
+    const finished = finish(markdown, row.image_nonce, images);
+    const length = Buffer.byteLength(finished);
+    if (length > row.md_bytes) throw new Error("The finished copy is longer than reserved");
+    // No await from here: the recheck and the file replacement see the same rows.
+    if (this.check.state !== "ready" || !this.finishable(owner, id)) return false;
+    this.folder.replaceMarkdown(linkId, finished);
+    return (
+      this.db
+        .transaction(
+          () =>
+            this.db
+              .prepare(
+                `UPDATE saved_copies SET md_bytes = ?, finished_at = ?,
+                   bytes = ? + (SELECT coalesce(sum(size), 0) FROM saved_copy_images i
+                     WHERE i.owner_id = saved_copies.owner_id
+                       AND i.link_id = saved_copies.link_id AND i.status = 'ok')
+                 WHERE owner_id = ? AND link_id = ? AND status = 'ok' AND finished_at IS NULL`,
+              )
+              .run(length, toMs(at), length, owner, id).changes,
+        )
+        .immediate() === 1
+    );
+  }
+
+  /** An `ok` copy with an image nonce that is not finished and has no image in flight. */
+  private finishable(
+    owner: OwnerId,
+    id: number,
+  ): { image_nonce: string; md_bytes: number } | undefined {
+    return this.db
+      .prepare(
+        `SELECT image_nonce, md_bytes FROM saved_copies c
+         WHERE owner_id = ? AND link_id = ? AND status = 'ok' AND finished_at IS NULL
+           AND image_nonce IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM saved_copy_images i WHERE i.owner_id = c.owner_id
+             AND i.link_id = c.link_id AND i.status IN ('pending', 'saving'))`,
+      )
+      .get(owner, id) as { image_nonce: string; md_bytes: number } | undefined;
   }
 
   async recordNoCopy(owner: OwnerId, linkId: string, status: NoCopyStatus): Promise<boolean> {
@@ -291,18 +552,14 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
       )
       .get(owner, id, n) as { content_type: ImageType; sha256: string } | undefined;
     if (!row || !this.readable) return null;
-    const name = `${String(n).padStart(2, "0")}.${IMAGE_EXT[row.content_type]}`;
-    const bytes = await this.folder.readImage(linkId, name);
+    const bytes = await this.folder.readImage(linkId, imageName(n, row.content_type));
     return bytes
       ? { contentType: row.content_type, bytes, version: imageVersion(row.sha256) }
       : null;
   }
 
   async usedBytes(): Promise<number> {
-    return this.db
-      .prepare("SELECT coalesce(sum(bytes), 0) FROM saved_copies")
-      .pluck()
-      .get() as number;
+    return this.usedNow();
   }
 
   async backfillCandidates(

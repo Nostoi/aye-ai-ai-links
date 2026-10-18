@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { ImageBytes } from "./image-store.js";
 import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import {
   type CopyDraft,
   copyLimits,
+  finishedMarkdown,
+  imageRef,
   type SavedCopyMaintenance,
   type SavedCopyReader,
   type SavedCopyUsage,
@@ -18,11 +21,10 @@ type MaybeAsync<T> = T | Promise<T>;
 export type CopyHarness = {
   links: LinkStore & SnapshotStore;
   checks: LinkCheckStore;
-  // Task 5 widens the Pick with "pendingCopyImages" | "unfinishedCopies".
-  copies: Pick<SavedCopyWriter, "saveCopy" | "recordNoCopy"> &
+  copies: SavedCopyWriter &
     SavedCopyReader &
     SavedCopyUsage &
-    Pick<SavedCopyMaintenance, "backfillCandidates">;
+    Pick<SavedCopyMaintenance, "backfillCandidates" | "pendingCopyImages" | "unfinishedCopies">;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
   /** Make the folder unusable for writes (the next write returns "unavailable"). */
@@ -37,6 +39,11 @@ const draft = (markdown: string, n = 0): CopyDraft => ({
   imageUrls: [...Array(n)].map((_, i) => `https://img.example/${i + 1}.png`),
   nonce: N,
 });
+const img = (size: number): ImageBytes => ({
+  contentType: "image/png",
+  bytes: new Uint8Array(size).fill(7),
+});
+const urlOf = (n: number) => `https://img.example/${n}.png`;
 const flagged = (): LinkCheck => ({
   checkedAt: at(100),
   result: "dead",
@@ -204,6 +211,113 @@ export function describeSavedCopyStoreContract(
         images: new Map(),
       });
       expect(await h.copies.usedBytes()).toBe(bytes("pic"));
+    });
+
+    describe("images", () => {
+      const withImages = async (owner: string, count = 2, markdown = "pic") => {
+        const id = await save(owner);
+        await h.copies.saveCopy(owner, id, draft(markdown, count), LIMITS, at(5));
+        return id;
+      };
+      const pending = async (after: { linkId: string; n: number } | null = null, limit = 50) =>
+        (await h.copies.pendingCopyImages(after, limit)).map((p) => [p.owner, p.linkId, p.n]);
+
+      it("lists pending images across owners in link and number order", async () => {
+        const a = await withImages(A);
+        const b = await withImages(B);
+        await h.copies.saveCopy(A, await save(A), draft("none"), LIMITS, at(5));
+        expect(await h.copies.pendingCopyImages(null, 50)).toEqual([
+          { owner: A, linkId: a, n: 1, url: urlOf(1) },
+          { owner: A, linkId: a, n: 2, url: urlOf(2) },
+          { owner: B, linkId: b, n: 1, url: urlOf(1) },
+          { owner: B, linkId: b, n: 2, url: urlOf(2) },
+        ]);
+        expect(await pending({ linkId: a, n: 1 }, 2)).toEqual([
+          [A, a, 2],
+          [B, b, 1],
+        ]);
+      });
+
+      it("stores an image once and reads it back", async () => {
+        const id = await withImages(A);
+        const before = await h.copies.usedBytes();
+        expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(7), LIMITS)).toBe("saved");
+        const copy = (await h.copies.readCopy(A, id)) as { images: Map<number, unknown> };
+        expect([...copy.images.keys()]).toEqual([1]);
+        expect(copy.images.get(1)).toMatchObject({ contentType: "image/png" });
+        const stored = await h.copies.copyImage(A, id, 1);
+        expect(stored?.contentType).toBe("image/png");
+        expect(Array.from(stored?.bytes ?? [])).toEqual(Array.from(img(7).bytes));
+        expect(await h.copies.usedBytes()).toBe(before + 7);
+        expect((await pending()).map((p) => p[2])).toEqual([2]);
+      });
+
+      it("settles each image once, for the owner and url it was queued with", async () => {
+        const id = await withImages(A);
+        await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(3), LIMITS);
+        expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(3), LIMITS)).toBe(false);
+        expect(await h.copies.saveCopyImage(A, id, 2, "https://other/2.png", img(3), LIMITS)).toBe(
+          false,
+        );
+        expect(await h.copies.endCopyImage(A, id, 1, urlOf(1), "none")).toBe(false);
+        expect(await h.copies.endCopyImage(B, id, 2, urlOf(2), "none")).toBe(false);
+        expect(await h.copies.saveCopyImage(B, id, 2, urlOf(2), img(3), LIMITS)).toBe(false);
+        expect(await h.copies.endCopyImage(A, id, 2, "https://other/2.png", "none")).toBe(false);
+        expect(await h.copies.endCopyImage(A, id, 2, urlOf(2), "none")).toBe(true);
+        expect(await h.copies.endCopyImage(A, id, 2, urlOf(2), "none")).toBe(false);
+        const copy = (await h.copies.readCopy(A, id)) as { images: Map<number, unknown> };
+        expect([...copy.images.keys()]).toEqual([1]);
+        expect(await pending()).toEqual([]);
+      });
+
+      it("settles an image over the per-copy cap as too_large, charging nothing", async () => {
+        const id = await withImages(A);
+        const used = await h.copies.usedBytes();
+        const tight = { ...LIMITS, copyBytes: bytes("pic") + 5 - 1 };
+        expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(5), tight)).toBe("too_large");
+        expect(await h.copies.usedBytes()).toBe(used);
+        expect((await pending()).map((p) => p[2])).toEqual([2]);
+        expect(await h.copies.copyImage(A, id, 1)).toBeNull();
+      });
+
+      it("settles an image over the total cap as no_room, charging nothing", async () => {
+        const id = await withImages(A);
+        const used = await h.copies.usedBytes();
+        const tight = { ...LIMITS, totalBytes: used + 5 - 1 };
+        expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(5), tight)).toBe("no_room");
+        expect(await h.copies.usedBytes()).toBe(used);
+        expect((await pending()).map((p) => p[2])).toEqual([2]);
+      });
+
+      it("answers unavailable and keeps the image pending when the folder is unusable", async () => {
+        const id = await withImages(A);
+        await h.breakFolder();
+        expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(5), LIMITS)).toBe(
+          "unavailable",
+        );
+        expect(await h.copies.usedBytes()).toBe(bytes("pic"));
+        expect((await pending()).map((p) => p[2])).toEqual([1, 2]);
+      });
+
+      it("finishes a copy once every image has settled", async () => {
+        const md = `![a](${imageRef(1, N)}) and ![b](${imageRef(2, N)}) and ![a](${imageRef(1, N)})`;
+        const id = await withImages(A, 2, md);
+        const finish = finishedMarkdown;
+        expect(await h.copies.finishCopy(A, id, finish, at(9))).toBe(false);
+        expect(await h.copies.unfinishedCopies(null, 50)).toEqual([]);
+        await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(7), LIMITS);
+        expect(await h.copies.finishCopy(A, id, finish, at(9))).toBe(false);
+        await h.copies.endCopyImage(A, id, 2, urlOf(2), "none");
+        expect(await h.copies.unfinishedCopies(null, 50)).toEqual([{ owner: A, linkId: id }]);
+        expect(await h.copies.finishCopy(B, id, finish, at(9))).toBe(false);
+        expect(await h.copies.finishCopy(A, id, finish, at(9))).toBe(true);
+        const copy = (await h.copies.readCopy(A, id)) as { markdown: string; finished: boolean };
+        expect(copy.markdown).toBe("![a](images/01.png) and b and ![a](images/01.png)");
+        expect(copy.finished).toBe(true);
+        expect(await h.copies.usedBytes()).toBe(bytes(copy.markdown) + 7);
+        expect(await h.copies.unfinishedCopies(null, 50)).toEqual([]);
+        expect(await h.copies.finishCopy(A, id, finish, at(9))).toBe(false);
+      });
     });
 
     describe("backfillCandidates", () => {

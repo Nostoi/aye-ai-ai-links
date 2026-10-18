@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   chmodSync,
   existsSync,
   mkdirSync,
@@ -6,13 +7,14 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { copyLimits } from "../core/saved-copy.js";
+import { copyLimits, finishedMarkdown, imageRef } from "../core/saved-copy.js";
 import { describeSavedCopyStoreContract } from "../core/saved-copy-store-contract.js";
 import { at, newLink } from "../core/snapshot-store-contract.js";
 import { CopyFolder, MARKER } from "./copy-folder.js";
@@ -249,5 +251,110 @@ describe("a bad draft", () => {
     const urls = [...Array(31)].map((_, i) => `https://i.example/${i}.png`);
     await expect(copies.saveCopy("o", id, draft("body", urls), LIMITS, at(1))).rejects.toThrow();
     expect(rows(db)).toBe(0);
+  });
+});
+
+describe("images", () => {
+  const url = "https://i.example/1.png";
+  const png = { contentType: "image/png" as const, bytes: new Uint8Array([1, 2, 3]) };
+  const withImage = async (markdown = "body") => {
+    const s = await ready();
+    expect(await s.copies.saveCopy("o", s.id, draft(markdown, [url]), LIMITS, at(1))).toBe("saved");
+    return s;
+  };
+  const imageRow = (db: Db) =>
+    db.prepare("SELECT status, content_type, size, sha256 FROM saved_copy_images").get();
+  const imagesDir = (root: string, id: string) => join(root, id, "images");
+  const failing = (store: SqliteSavedCopyStore, method: "confirmImage" | "releaseImage") =>
+    vi.spyOn(store as unknown as Record<string, () => void>, method).mockImplementation(() => {
+      throw new Error(method);
+    });
+
+  const expectReleased = async (s: Awaited<ReturnType<typeof withImage>>) => {
+    expect(imageRow(s.db)).toEqual({
+      status: "pending",
+      content_type: null,
+      size: null,
+      sha256: null,
+    });
+    expect(await s.copies.usedBytes()).toBe(Buffer.byteLength("body"));
+    expect(readdirSync(imagesDir(s.root, s.id))).toEqual([]);
+  };
+
+  it("puts the image back to pending when the file write fails", async () => {
+    const s = await withImage();
+    vi.spyOn(CopyFolder.prototype, "writeImage").mockImplementation(() => {
+      throw new Error("disk");
+    });
+    await expect(s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).rejects.toThrow("disk");
+    await expectReleased(s);
+  });
+
+  it("puts the image back to pending and removes the file when confirming fails", async () => {
+    const s = await withImage();
+    failing(s.copies, "confirmImage");
+    await expect(s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).rejects.toThrow(
+      "confirmImage",
+    );
+    await expectReleased(s);
+  });
+
+  it("rethrows the original error when releasing and cleaning up both fail", async () => {
+    const s = await withImage();
+    failing(s.copies, "confirmImage");
+    failing(s.copies, "releaseImage");
+    const remove = vi.spyOn(CopyFolder.prototype, "removeImage").mockImplementation(() => {
+      throw new Error("cleanup");
+    });
+    await expect(s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).rejects.toThrow(
+      "confirmImage",
+    );
+    expect(remove).toHaveBeenCalledWith(s.id, "01.png");
+  });
+
+  it("refuses a symlinked images folder planted after the save, and writes nothing outside", async () => {
+    const s = await withImage();
+    const outside = mkdtempSync(join(tmpdir(), "aye-outside-"));
+    try {
+      rmSync(imagesDir(s.root, s.id), { recursive: true });
+      symlinkSync(outside, imagesDir(s.root, s.id));
+      await expect(s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).rejects.toThrow();
+      expect(readdirSync(outside)).toEqual([]);
+      expect(imageRow(s.db)).toMatchObject({ status: "pending", size: null });
+      expect(await s.copies.usedBytes()).toBe(Buffer.byteLength("body"));
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the files alone once the folder check mismatches", async () => {
+    const s = await ready();
+    const second = "https://i.example/2.png";
+    const urls = [url, second];
+    await s.copies.saveCopy("o", s.id, draft(`![a](${imageRef(1, N)})`, urls), LIMITS, at(1));
+    expect(await s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).toBe("saved");
+    const md = join(s.root, s.id, "copy.md");
+    const image = join(imagesDir(s.root, s.id), "01.png");
+    const before = [readFileSync(md), readFileSync(image)];
+    rmSync(join(s.root, MARKER));
+    writeFileSync(join(s.root, "stray.txt"), "x");
+    expect(await s.copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(await s.copies.copyImage("o", s.id, 1)).toBeNull();
+    expect(await s.copies.saveCopyImage("o", s.id, 2, second, png, LIMITS)).toBe("unavailable");
+    expect(await s.copies.endCopyImage("o", s.id, 2, second, "none")).toBe(true);
+    expect(await s.copies.finishCopy("o", s.id, finishedMarkdown, at(2))).toBe(false);
+    expect([readFileSync(md), readFileSync(image)]).toEqual(before);
+    expect(readdirSync(imagesDir(s.root, s.id))).toEqual(["01.png"]);
+  });
+
+  it("throws, and keeps copy.md, when the finished copy would grow", async () => {
+    const s = await withImage(`![a](${imageRef(1, N)})`);
+    await s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS);
+    const md = join(s.root, s.id, "copy.md");
+    appendFileSync(md, " and a long hand-written tail that was never reserved");
+    const before = readFileSync(md);
+    await expect(s.copies.finishCopy("o", s.id, (m) => m, at(2))).rejects.toThrow();
+    expect(readFileSync(md)).toEqual(before);
+    expect(s.db.prepare("SELECT finished_at FROM saved_copies").pluck().get()).toBeNull();
   });
 });

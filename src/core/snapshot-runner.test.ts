@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome } from "./fetch.js";
+import type { CopyKeeper } from "./keep-copy.js";
+import type { CopyDraft } from "./saved-copy.js";
 import { MAX_ATTEMPTS } from "./snapshot-outcome.js";
 import { createSnapshotRunner, type SnapshotRunner } from "./snapshot-runner.js";
 import type { SnapshotRecord } from "./snapshot-store.js";
@@ -49,7 +51,9 @@ afterEach(async () => {
   await Promise.all(runners.splice(0).map((r) => r.stop()));
 });
 
-function setup(opts: { slots?: number; leaseMs?: number; pollMs?: number } = {}) {
+function setup(
+  opts: { slots?: number; leaseMs?: number; pollMs?: number; copies?: CopyKeeper } = {},
+) {
   const store = new FakeStore();
   const order: string[] = [];
   const h = {
@@ -65,6 +69,7 @@ function setup(opts: { slots?: number; leaseMs?: number; pollMs?: number } = {})
     leaseGate: null as Promise<void> | null,
     rawLease: store.leaseSnapshot.bind(store),
     log: vi.fn(),
+    extractOptions: [] as ({ copy?: boolean } | undefined)[],
     fetch: step<FetchOutcome>(
       "fetch",
       order,
@@ -99,7 +104,13 @@ function setup(opts: { slots?: number; leaseMs?: number; pollMs?: number } = {})
   const runner = createSnapshotRunner({
     store,
     fetcher: { fetch: (u, s) => h.fetch.run(u, s), close: () => h.fetch.close() },
-    extractor: { extract: (html, _u, s) => h.extract.run(html, s), close: () => h.extract.close() },
+    extractor: {
+      extract: (html, _u, s, options) => {
+        h.extractOptions.push(options);
+        return h.extract.run(html, s);
+      },
+      close: () => h.extract.close(),
+    },
     now: () => new Date(h.clock),
     log: h.log,
     ...opts,
@@ -536,5 +547,110 @@ describe("snapshot runner", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("snapshot runner saved copies", () => {
+  const draft: CopyDraft = { markdown: "# T", imageUrls: [], nonce: "0".repeat(32) };
+  const withCopy = (copy?: CopyDraft | null): ExtractOutcome => ({
+    ...pageOk,
+    ...(copy === undefined ? {} : { copy }),
+  });
+  const keeper = (wanted = true) => ({
+    wanted,
+    keep: vi.fn<CopyKeeper["keep"]>(async () => "saved"),
+  });
+
+  it("asks the extractor for a copy only when the keeper wants one", async () => {
+    const none = setup();
+    await none.runner.kick(A, (await none.save(A, 1)).id);
+    expect(none.extractOptions).toEqual([{ copy: false }]);
+    const off = setup({ copies: keeper(false) });
+    await off.runner.kick(A, (await off.save(A, 1)).id);
+    expect(off.extractOptions).toEqual([{ copy: false }]);
+    const on = setup({ copies: keeper() });
+    await on.runner.kick(A, (await on.save(A, 1)).id);
+    expect(on.extractOptions).toEqual([{ copy: true }]);
+  });
+
+  it("keeps the draft once the snapshot is recorded", async () => {
+    const copies = keeper();
+    const s = setup({ copies });
+    const link = await s.save(A, 1);
+    copies.keep.mockImplementation(async () => {
+      expect(s.records).toHaveLength(1);
+      return "saved";
+    });
+    s.extract.run = async () => withCopy(draft);
+    await s.runner.kick(A, link.id);
+    expect(copies.keep).toHaveBeenCalledTimes(1);
+    expect(copies.keep).toHaveBeenCalledWith(A, link.id, draft);
+    expect(s.records.map((r) => r.rec.status)).toEqual(["ok"]);
+  });
+
+  it.each([
+    ["no copy asked", withCopy()],
+    ["no article", withCopy(null)],
+    ["a failed extract", { kind: "aborted" } as ExtractOutcome],
+  ])("does not keep for %s", async (_name, outcome) => {
+    const copies = keeper();
+    const s = setup({ copies });
+    s.extract.run = async () => outcome;
+    await s.runner.kick(A, (await s.save(A, 1)).id);
+    expect(s.records).toHaveLength(1);
+    expect(copies.keep).not.toHaveBeenCalled();
+  });
+
+  it("does not keep when the record is refused", async () => {
+    const copies = keeper();
+    const s = setup({ copies });
+    const link = await s.save(A, 1);
+    s.extract.run = async () => withCopy(draft);
+    s.store.recordSnapshot = async () => false;
+    await s.runner.kick(A, link.id);
+    expect(copies.keep).not.toHaveBeenCalled();
+  });
+
+  it("logs a keep that throws, and carries on", async () => {
+    const copies = keeper();
+    const s = setup({ copies, slots: 1 });
+    const [one, two] = [await s.save(A, 1), await s.save(A, 2)];
+    const boom = new Error("boom");
+    copies.keep.mockRejectedValueOnce(boom);
+    s.extract.run = async () => withCopy(draft);
+    await s.runner.kick(A, one.id);
+    expect(s.log).toHaveBeenCalledWith(expect.stringContaining("saved copy failed"), boom);
+    expect(s.records).toHaveLength(1);
+    await s.runner.kick(A, two.id);
+    expect(copies.keep).toHaveBeenCalledTimes(2);
+    expect(s.records).toHaveLength(2);
+  });
+
+  it("logs a folder that is not ready", async () => {
+    const copies = keeper();
+    copies.keep.mockResolvedValue("unavailable");
+    const s = setup({ copies });
+    s.extract.run = async () => withCopy(draft);
+    await s.runner.kick(A, (await s.save(A, 1)).id);
+    expect(s.log).toHaveBeenCalledWith(expect.stringContaining("folder is not ready"));
+    expect(s.records).toHaveLength(1);
+  });
+
+  it.each([
+    ["a draft", withCopy(draft), 1],
+    ["no copy", withCopy(), 0],
+  ])("after stop() during extraction, an ok with %s is recorded", async (_n, outcome, kept) => {
+    const copies = keeper();
+    const s = setup({ copies });
+    const link = await s.save(A, 1);
+    s.extract.hold = true;
+    s.extract.ignoreAbort = true;
+    void s.runner.kick(A, link.id);
+    await vi.waitFor(() => expect(s.extract.calls).toHaveLength(1));
+    const stopped = s.runner.stop();
+    s.extract.calls[0]?.finish(outcome);
+    await stopped;
+    expect(s.records.map((r) => r.rec.status)).toEqual(["ok"]);
+    expect(copies.keep).toHaveBeenCalledTimes(kept);
   });
 });

@@ -1,5 +1,6 @@
-import type { PageExtractor } from "./extract.js";
+import type { ExtractOutcome, PageExtractor } from "./extract.js";
 import type { PageFetcher } from "./fetch.js";
+import type { CopyKeeper } from "./keep-copy.js";
 import {
   type AttemptOutcome,
   pastLastAttempt,
@@ -20,6 +21,8 @@ export type SnapshotRunnerOptions = {
   fetcher: PageFetcher;
   extractor: PageExtractor;
   now: () => Date;
+  /** Keeps a saved copy of each page recorded ok. Absent: no copies are asked for. */
+  copies?: CopyKeeper;
   log?: (message: string, error?: unknown) => void;
   /** How long a job holds its snapshot; at least `MIN_LEASE_MS`. Default 120 s. */
   leaseMs?: number;
@@ -137,7 +140,8 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
     if (!lease) return;
     job.leased = true;
     if (pastLastAttempt(lease.attempts)) {
-      return write(job, lease, pastLastAttemptRecord(lease.attempts));
+      await write(job, lease, pastLastAttemptRecord(lease.attempts));
+      return;
     }
     const outcome = shutDown(job) ? null : await fetchAndExtract(job, lease.url);
     // A page extracted ok is finished work: record it even when the shutdown came during it.
@@ -147,7 +151,25 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
       if (!released) log(`snapshot ${job.key}: release refused`);
       return;
     }
-    return write(job, lease, snapshotRecord({ outcome, attempts: lease.attempts, now: now() }));
+    const recorded = await write(
+      job,
+      lease,
+      snapshotRecord({ outcome, attempts: lease.attempts, now: now() }),
+    );
+    if (recorded && outcome.stage === "extract") await keepCopy(job, outcome.extract);
+  }
+
+  /** Keeps the draft of a recorded page. A failure is logged and never fails the job. */
+  async function keepCopy(job: Job, extract: ExtractOutcome): Promise<void> {
+    if (!o.copies || extract.kind !== "ok" || !extract.copy) return;
+    try {
+      const result = await o.copies.keep(job.owner, job.linkId, extract.copy);
+      if (result === "unavailable") {
+        log(`snapshot ${job.key}: saved copy skipped, the folder is not ready`);
+      }
+    } catch (err) {
+      log(`snapshot ${job.key}: saved copy failed`, err);
+    }
   }
 
   /** The attempt's outcome, or null for a page fetched after shutdown: it is not extracted. */
@@ -156,14 +178,18 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
     const fetched = await fetcher.fetch(url, signal);
     if (fetched.kind !== "ok") return { stage: "fetch", fetch: fetched };
     if (shutDown(job)) return null;
-    const extract = await extractor.extract(fetched.html, fetched.finalUrl, signal);
+    const extract = await extractor.extract(fetched.html, fetched.finalUrl, signal, {
+      copy: o.copies?.wanted ?? false,
+    });
     return { stage: "extract", extract };
   }
 
-  async function write(job: Job, lease: SnapshotLease, record: SnapshotRecord): Promise<void> {
-    if (!(await store.recordSnapshot(job.owner, job.linkId, lease.claim, record))) {
+  async function write(job: Job, lease: SnapshotLease, record: SnapshotRecord): Promise<boolean> {
+    const recorded = await store.recordSnapshot(job.owner, job.linkId, lease.claim, record);
+    if (!recorded) {
       log(`snapshot ${job.key}: record refused (lease lost, or status and next time disagree)`);
     }
+    return recorded;
   }
 
   async function sweep(): Promise<void> {

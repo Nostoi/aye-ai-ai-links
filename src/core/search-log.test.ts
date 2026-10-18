@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import { getLinkWithText, saveLink } from "./links.js";
 import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
@@ -73,7 +74,8 @@ async function setup(search: LinkSearch, log: SearchLog | undefined) {
       (await saveLink({ store, now }, "a", { url: `https://ex.com/${n}`, savedBy: "t" })).link,
     );
   }
-  return { deps: { store, search, searchLog: log, now, pages: store }, saved };
+  const savedCopies = new FakeSavedCopies(store);
+  return { deps: { store, search, searchLog: log, now, pages: store, savedCopies }, saved };
 }
 
 afterEach(() => vi.restoreAllMocks());

@@ -148,7 +148,12 @@ export const saveLinkOutput = z.strictObject({
   profile: profileOutput,
 });
 export const linkResultOutput = z.strictObject({ link: linkOutput });
-export const getLinkOutput = z.strictObject({ link: linkOutput, snapshotText: snapshotTextOutput });
+const savedCopyOutput = z.strictObject({ madeAt: timestamp }).nullable();
+export const getLinkOutput = z.strictObject({
+  link: linkOutput,
+  snapshotText: snapshotTextOutput,
+  savedCopy: savedCopyOutput,
+});
 export const searchLinksOutput = z.strictObject({ links: z.array(linkOutput) });
 export const listLinksOutput = z.strictObject({
   links: z.array(linkOutput),

@@ -91,6 +91,15 @@ describe("gone guidance", () => {
   });
 });
 
+describe("get_link guidance", () => {
+  it("says what savedCopy means and that the copy is not available to the agent", () => {
+    expect(guidance.GET_LINK).toContain(
+      "savedCopy is {madeAt} when the server keeps a saved copy of the page, which the owner can read from the link's ⋯ menu on the web page, and null when it keeps none. The copy itself is not available to you.",
+    );
+    expect(guidance.GET_LINK.endsWith(`\n${guidance.GONE_NOTE}`)).toBe(true);
+  });
+});
+
 describe("Keep handy guidance", () => {
   it("tells save_link when to keep, when to ask once, and that a guess only suggests", () => {
     expect(SAVE_LINK).toMatch(/says they use a link regularly.*"keep", source: "stated"/s);

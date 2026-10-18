@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/server";
 import {
@@ -7,7 +8,7 @@ import {
   addFormats,
 } from "@modelcontextprotocol/server/validators/ajv";
 import type { Hono } from "hono";
-import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { z } from "zod";
 import { createApp } from "../app.js";
 import type { Caller } from "../auth/caller.js";
@@ -17,6 +18,7 @@ import type { GoneView } from "../core/link-check.js";
 import type { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import type { listLinks } from "../core/list-links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
+import { copyLimits } from "../core/saved-copy.js";
 import type { searchLinks } from "../core/search-links.js";
 import type { changeTagKind } from "../core/tag-kind.js";
 import { type HandyView, keepHandy, notHandy } from "../core/tools.js";
@@ -50,9 +52,9 @@ type Json = any;
 type Era = "2025" | "2026";
 const ERAS: Era[] = ["2025", "2026"];
 
-function freshApp() {
+function freshApp(savedCopyDir: string | null = null) {
   const db = openDatabase(":memory:");
-  const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => NOW };
+  const deps = { ...createDeps(db, new FakeEmbedder(DIMS), savedCopyDir), now: () => NOW };
   deps.store.ensureUser(A.owner, A.owner);
   const app = createApp({ deps, identify: async () => ({ ...A, rateKey: "a" }) }).app;
   return { db, deps, app };
@@ -460,7 +462,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
 
     // Enums stay closed: a new enum value is still a contract change.
     // With snapshotText present, only the unknown enum value can make the second one fail.
-    const got = { link: saved.link, snapshotText: null };
+    const got = { link: saved.link, snapshotText: null, savedCopy: null };
     expect(cached.get_link?.(got)).toBe(true);
     expect(cached.get_link?.({ ...got, link: { ...saved.link, state: "deleted" } })).toBe(false);
   });
@@ -576,6 +578,43 @@ describe("page text stays strict on the server (D11)", () => {
     const stray = { text: "t", truncated: false, stray: 1 };
     const issues = schema.safeParse({ link, snapshotText: stray }).error?.issues ?? [];
     expect(issues.some((i) => i.code === "unrecognized_keys" && i.path[0] === "snapshotText")).toBe(
+      true,
+    );
+  });
+});
+
+describe.each(ERAS)("get_link's savedCopy, %s era", (era) => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "aye-schema-copies-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("is madeAt as an ISO string for an ok copy, null before, and passes the strict check", async () => {
+    const { deps, app } = freshApp(dir);
+    expect(await deps.savedCopies.checkFolder()).toEqual({ state: "ready" });
+    await callTool(app, era, "save_link", { url: "https://example.com/a" });
+    const before = await callTool(app, era, "get_link", { id: "1" });
+    expect(before.result.structuredContent.savedCopy).toBeNull();
+
+    const madeAt = new Date("2026-10-10T08:00:00.000Z");
+    const draft = { markdown: "# Page", imageUrls: [], nonce: "0".repeat(32) };
+    expect(
+      await deps.savedCopies.saveCopy(A.owner, "1", draft, copyLimits(1_000_000), madeAt),
+    ).toBe("saved");
+    const after = await callTool(app, era, "get_link", { id: "1" });
+    expect(after.result.isError).toBeUndefined();
+    expect(after.result.structuredContent.savedCopy).toEqual({ madeAt: madeAt.toISOString() });
+  });
+});
+
+describe("savedCopy stays strict on the server", () => {
+  const link = { snapshot: null } as unknown;
+  it("getLinkOutput refuses an extra key inside savedCopy", () => {
+    const savedCopy = { madeAt: NOW.toISOString(), stray: 1 };
+    const issues =
+      getLinkOutput.safeParse({ link, snapshotText: null, savedCopy }).error?.issues ?? [];
+    expect(issues.some((i) => i.code === "unrecognized_keys" && i.path[0] === "savedCopy")).toBe(
       true,
     );
   });

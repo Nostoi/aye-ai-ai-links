@@ -398,8 +398,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
           if (result === "timeout") {
             log(`copy ${key}: finishing timed out`);
             backOffFinishing(key);
-          } else {
+          } else if (result) {
             finishFailures.delete(key);
+          } else {
+            backOffFinishing(key);
           }
         } catch (error) {
           if (abort.signal.aborted) return;

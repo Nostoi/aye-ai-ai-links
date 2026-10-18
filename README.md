@@ -85,7 +85,6 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    `AYE_DB` is required and must be an absolute path. `AYE_PORT` defaults to 3002. `AYE_ALLOWED_HOSTS` is a comma-separated list of the host names the server answers to; `localhost` and `127.0.0.1` are always allowed.
 
    `AYE_SAVED_COPY_DIR` is where the server keeps a saved copy of each new link's article (Markdown, with its pictures fetched later). It defaults to `~/.aye-links/saved-copies`. It must be an absolute path outside the release folders. You can put it inside iCloud Drive or Dropbox, and the sync service then stores the copies too. It is not in the database backups. Links saved before this version get their copies in the background, one page every 15 seconds or so, and a copy's pictures are fetched in the background after the copy is made.
-   - If the log says the folder can't be written, grant the Node binary access to it in System Settings → Privacy & Security. Copies pause meanwhile and the app keeps working, and they resume by themselves once the folder can be written again, with no restart.
    - If the log says the folder belongs to another library (for example after a deploy rolled the database back), move the folder aside and restart. A new, empty one is made. A folder you delete by hand is made again within a minute or so, and the copies that were in it are missing.
    - Use one server per folder. A copied database pointed at the same folder (a second Mac sharing a synced folder) is not supported.
 

@@ -937,6 +937,20 @@ describe("copy pass finishing", () => {
     expect(finish).toHaveBeenCalledTimes(1);
     expect(t.logged.filter((m) => m.includes("finish"))).toEqual([]);
   });
+
+  it("backs off a copy that finishCopy keeps answering false for, as when its copy.md is gone", async () => {
+    const t = setup();
+    await settled(t, 1);
+    const finish = vi.spyOn(t.copies, "finishCopy").mockResolvedValue(false);
+    await t.pass.sweep();
+    t.advance(RETRY_BASE_MS - 1);
+    await t.pass.sweep();
+    expect(finish).toHaveBeenCalledTimes(1);
+    t.advance(1);
+    await t.pass.sweep();
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(t.logged.filter((m) => m.includes("finish"))).toEqual([]);
+  });
 });
 
 describe("copy pass orphan sweep", () => {

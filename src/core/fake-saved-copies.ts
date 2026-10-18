@@ -136,10 +136,10 @@ export class FakeSavedCopies
     limits: CopyLimits,
     at: Date,
   ): Promise<SaveCopyResult | null> {
-    if (!(await this.owns(owner, linkId))) return null;
     const count = draft.imageUrls.length;
     if (count > MAX_COPY_IMAGES) throw new Error("Too many images for a saved copy");
     if (count > 0 && !COPY_NONCE.test(draft.nonce)) throw new Error("Invalid copy nonce");
+    if (!(await this.owns(owner, linkId))) return null;
     const existing = this.rowOf(owner, linkId);
     if (existing && existing.status !== "no_room") return "exists";
     if (!this.ready) return "unavailable";
@@ -322,9 +322,13 @@ export class FakeSavedCopies
       if (l.snapshotStatus !== "ok" || l.snapshotText === null || order(l.linkId) <= after) {
         continue;
       }
-      const row = this.rowOf(l.owner, l.linkId);
-      if (row && !(options.retryNoRoom && row.status === "no_room")) continue;
+      const wanted = () => {
+        const row = this.rowOf(l.owner, l.linkId);
+        return !row || (options.retryNoRoom && row.status === "no_room");
+      };
+      if (!wanted()) continue;
       if ((await this.store.getCheck(l.owner, l.linkId))?.flaggedAt) continue;
+      if (!wanted()) continue;
       found.push({ owner: l.owner, linkId: l.linkId, url: l.url });
     }
     return found.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
@@ -334,6 +338,7 @@ export class FakeSavedCopies
     after: { linkId: string; n: number } | null,
     limit: number,
   ): Promise<PendingCopyImage[]> {
+    if (after !== null && Number.isNaN(order(after.linkId))) return [];
     const pending: PendingCopyImage[] = [];
     for (const row of this.rows.values()) {
       if (row.status !== "ok") continue;

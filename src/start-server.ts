@@ -204,6 +204,7 @@ export async function startServer(
       dir: config.savedCopies.dir,
       initialCheck: folder,
       now: deps.now,
+      canResolve: (signal) => linkChecker.canResolve(signal),
       ...(copyPollMs !== undefined && { pollMs: copyPollMs }),
     });
     checks = createLinkCheckRunner({

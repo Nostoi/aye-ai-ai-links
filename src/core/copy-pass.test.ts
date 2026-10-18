@@ -71,6 +71,7 @@ function setup(
     page?: Answer<FetchOutcome>;
     image?: Answer<ImageOutcome>;
     sweepEveryMs?: number;
+    canResolve?: (signal?: AbortSignal) => Promise<boolean> | boolean;
     extract?: (options: { copy?: boolean } | undefined) => Promise<ExtractOutcome> | ExtractOutcome;
     store?: FakeStore;
     copies?: FakeSavedCopies;
@@ -105,6 +106,7 @@ function setup(
   };
   let clock = at(1000).getTime();
   const logged: string[] = [];
+  const canResolveCalls: number[] = [];
   const now = () => new Date(clock);
   const pass = createCopyPass({
     copies,
@@ -118,6 +120,10 @@ function setup(
     now,
     log: (message) => logged.push(message),
     sweepEveryMs: o.sweepEveryMs,
+    canResolve: async (signal) => {
+      canResolveCalls.push(1);
+      return (o.canResolve ?? (() => true))(signal);
+    },
   });
   running.push(pass);
   return {
@@ -126,6 +132,7 @@ function setup(
     pass,
     pageCalls,
     imageCalls,
+    canResolveCalls,
     extractOptions,
     logged,
     now,
@@ -1218,13 +1225,15 @@ describe("copy pass timeout backoff, stop and unavailable paths", () => {
 
 describe("copy pass network outage", () => {
   const down: FetchOutcome = { kind: "network_error", code: "ECONNREFUSED" };
-  const notFound: FetchOutcome = { kind: "http_error", status: 404 };
-  const service: FetchOutcome = { kind: "http_error", status: 503 };
+  const slow: FetchOutcome = { kind: "timeout" };
   const urlOf = (n: number) => `https://ex.com/${n}`;
 
-  it("spends no budget while every page fetch fails to connect", async () => {
+  it("spends no budget while the canary says the network is down", async () => {
     let answer: "down" | "up" = "down";
-    const t = setup({ page: (url) => (answer === "down" ? down : okPage(url)) });
+    const t = setup({
+      page: (url) => (answer === "down" ? down : okPage(url)),
+      canResolve: () => answer === "up",
+    });
     const ids = [await t.link(1), await t.link(2), await t.link(3)];
     await t.sweeps(40);
     expect(ids.map(t.status)).toEqual([null, null, null]);
@@ -1233,69 +1242,103 @@ describe("copy pass network outage", () => {
     expect(ids.map(t.status)).toEqual(["ok", "ok", "ok"]);
   });
 
-  it("counts at most one attempt in an outage, after a server has answered", async () => {
-    let answer: FetchOutcome = service;
-    const t = setup({ page: () => answer });
-    const a = await t.link(1);
-    const b = await t.link(2);
+  it("settles a dead host as failed on its fifth fetch while the network is up", async () => {
+    const t = setup({ page: () => slow, canResolve: () => true });
+    const id = await t.link(1);
     await t.sweeps(4);
-    answer = down;
-    await t.pass.sweep();
-    expect(t.pageCalls.slice(-1)).toEqual([urlOf(2)]);
-    await t.sweeps(20);
-    expect([t.status(a), t.status(b)]).toEqual([null, null]);
+    expect(t.status(id)).toBeNull();
+    await t.sweeps(1);
+    expect(t.status(id)).toBe("failed");
+    await t.sweeps(3);
+    expect(t.pageCalls).toHaveLength(5);
   });
 
-  it("counts again once a server has answered", async () => {
-    const t = setup({ page: (url) => (url === urlOf(1) ? down : notFound) });
-    const a = await t.link(1);
-    for (const n of [2, 3, 4, 5]) await t.link(n);
-    const sweepAfterWait = async () => {
-      t.wait();
+  it("saves a healthy link behind four dead hosts at the real 15 s cadence", async () => {
+    const t = setup({
+      page: (url) => (url === urlOf(5) ? okPage(url) : slow),
+      canResolve: () => true,
+    });
+    const dead = [await t.link(1), await t.link(2), await t.link(3), await t.link(4)];
+    const healthy = await t.link(5);
+    for (let i = 0; i < 2000; i++) {
+      t.advance(15_000);
       await t.pass.sweep();
-    };
-    const fetchesOfA = () => t.pageCalls.filter((u) => u === urlOf(1)).length;
-    await sweepAfterWait();
-    await sweepAfterWait();
-    for (let i = 0; i < 2; i++) {
-      await t.pass.sweep();
-      await sweepAfterWait();
     }
-    expect(fetchesOfA()).toBe(4);
-    await t.pass.sweep();
-    await sweepAfterWait();
-    expect(fetchesOfA()).toBe(5);
-    expect(t.status(a)).toBeNull();
-    await t.pass.sweep();
-    await sweepAfterWait();
-    expect(t.status(a)).toBe("failed");
+    expect(t.status(healthy)).toBe("ok");
+    expect(dead.map(t.status)).toEqual(["failed", "failed", "failed", "failed"]);
   });
 
-  it("leaves both pending pictures pending through an outage, then saves them", async () => {
-    let answer: "timeout" | "up" = "timeout";
-    const t = setup({ image: () => (answer === "timeout" ? { kind: "timeout" } : okImage()) });
-    const id = await t.copyWith(1, [IMG(1), IMG(2)]);
+  it("keeps a picture pending while the network is down, then ends it after five counted failures", async () => {
+    let up = false;
+    const t = setup({ image: () => slow, canResolve: () => up });
+    const id = await t.copyWith(1, [IMG(1)]);
     await t.sweeps(40);
-    expect(await pendingImages(t)).toHaveLength(2);
-    answer = "up";
+    expect(await pendingImages(t)).toHaveLength(1);
+    up = true;
+    await t.sweeps(4);
+    expect(await pendingImages(t)).toHaveLength(1);
     await t.sweeps(1);
     expect(await pendingImages(t)).toEqual([]);
-    const copy = (await t.copies.readCopy(OWNER, id)) as { images: Map<number, unknown> };
-    expect([...copy.images.keys()]).toEqual([1, 2]);
+    expect(await isFinished(t, id)).toBe(true);
   });
 
+  it.each([
+    ["a 503", { page: (): FetchOutcome => ({ kind: "http_error", status: 503 }) }],
+    ["a 404", { page: (): FetchOutcome => ({ kind: "http_error", status: 404 }) }],
+    ["a page that is ok", {}],
+    ["a refusal", { page: (): FetchOutcome => ({ kind: "refused", reason: "address" }) }],
+    [
+      "a crashed extraction",
+      { extract: () => ({ kind: "crashed", metadata: null, detail: "x" }) as ExtractOutcome },
+    ],
+  ])("never asks the canary after %s", async (_name, options) => {
+    const t = setup(options);
+    await t.link(1);
+    await t.sweeps(3);
+    expect(t.pageCalls.length).toBeGreaterThan(0);
+    expect(t.canResolveCalls).toHaveLength(0);
+  });
+
+  it("never asks the canary after an image 503", async () => {
+    const t = setup({ image: () => ({ kind: "http_error", status: 503 }) });
+    await t.copyWith(1, [IMG(1)]);
+    await t.sweeps(3);
+    expect(t.imageCalls.length).toBeGreaterThan(0);
+    expect(t.canResolveCalls).toHaveLength(0);
+  });
+
+  it.each([true, false])(
+    "counts and writes nothing when stop lands while the canary answers %s",
+    async (answer) => {
+      const t = setup({
+        page: () => down,
+        canResolve: (signal) =>
+          new Promise<boolean>((resolve) => {
+            signal?.addEventListener("abort", () => resolve(answer), { once: true });
+          }),
+      });
+      const id = await t.link(1);
+      const swept = t.pass.sweep();
+      await vi.waitFor(() => expect(t.canResolveCalls).toHaveLength(1));
+      await t.pass.stop();
+      await swept;
+      expect(t.status(id)).toBeNull();
+      expect(t.logged.filter((m) => m.includes("(attempt"))).toEqual([]);
+      await t.sweeps(5);
+      expect(t.pageCalls).toHaveLength(1);
+    },
+  );
+
   it("makes an uncounted failure wait out the base backoff", async () => {
-    const t = setup({ page: () => down });
+    const t = setup({ page: () => down, canResolve: () => false });
     await t.link(1);
     await t.pass.sweep();
-    t.advance(RETRY_BASE_MS);
-    await t.pass.sweep();
-    expect(t.pageCalls).toHaveLength(2);
+    expect(t.pageCalls).toHaveLength(1);
     t.advance(RETRY_BASE_MS - 1);
     await t.pass.sweep();
-    expect(t.pageCalls).toHaveLength(2);
+    expect(t.pageCalls).toHaveLength(1);
     t.advance(1);
     await t.pass.sweep();
-    expect(t.pageCalls).toHaveLength(3);
+    expect(t.pageCalls).toHaveLength(2);
   });
 });

@@ -29,6 +29,7 @@ export type CopyPassOptions = {
   /** The start-up folder check, so a folder paused at start is not logged twice. */
   initialCheck: FolderCheck;
   now: () => Date;
+  canResolve: (signal?: AbortSignal) => Promise<boolean>;
   log?: (message: string, error?: unknown) => void;
   /** Time between sweeps. Default 15 s. */
   pollMs?: number;
@@ -116,7 +117,6 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
 
   /** Links with a spent or running budget, by owner and link. Dropped only when the link is done. */
   const failures: Budget = new Map();
-  let networkProven = true;
   /** Images with a spent or running budget, by owner, link and number. */
   const imageFailures: Budget = new Map();
   /** Copies whose finishing failed, with the time they are next tried. */
@@ -149,10 +149,6 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     budget.delete(key);
   }
 
-  function sawFetch(outcome: { kind: string }): void {
-    if (outcome.kind !== "aborted" && !isNetworkClass(outcome)) networkProven = true;
-  }
-
   /** Counts a failed attempt: a backoff, or on the last one the entry's final write. */
   async function countFailure(
     budget: Budget,
@@ -163,12 +159,15 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     network = false,
   ): Promise<void> {
     const before = budget.get(key)?.attempts ?? 0;
-    if (network && !networkProven) {
-      const retryAt = now().getTime() + backoff(Math.max(before, 1));
-      budget.set(key, { attempts: before, retryAt, settle: false });
-      return;
+    if (network) {
+      const up = await o.canResolve(abort.signal);
+      if (abort.signal.aborted) return;
+      if (!up) {
+        const retryAt = now().getTime() + backoff(Math.max(before, 1));
+        budget.set(key, { attempts: before, retryAt, settle: false });
+        return;
+      }
     }
-    if (network) networkProven = false;
     const attempts = before + 1;
     log(`${what} ${key}: ${why} (attempt ${attempts})`);
     if (attempts < MAX_IMAGE_ATTEMPTS) {
@@ -196,7 +195,6 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     const { signal } = abort;
     const page = await pages.fetch(c.url, signal);
     if (signal.aborted) return "abandon";
-    sawFetch(page);
     if (page.kind !== "ok") {
       const verdict = judgePage(page);
       if (verdict === "transient" && isNetworkClass(page)) return "network";
@@ -316,7 +314,6 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     if (signal.aborted) return;
     const verdict = judgeImage(outcome);
     if ("abandon" in verdict) return;
-    sawFetch(outcome);
     if ("store" in verdict && outcome.kind === "ok") {
       const { contentType, bytes } = outcome;
       const image = { contentType, bytes };

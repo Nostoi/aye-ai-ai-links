@@ -6,7 +6,7 @@ import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkSearch } from "./search.js";
 import type { SearchLog } from "./search-log.js";
-import { answerSuggestion, keepHandy } from "./tools.js";
+import { answerSuggestion, keepHandy, listSuggestions, type ToolItem } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
 import {
   archiveLink,
@@ -97,7 +97,8 @@ async function focus(text: string, created: Date, found: string[]): Promise<void
 }
 
 const get = async (id: string, owner = A) => (await store.get(owner, id)) as Link;
-const ids = async () => (await worthALook(deps(), A)).map((d) => d.link.id);
+const picked = async () => worthALook(deps(), A, await listSuggestions(deps(), A));
+const ids = async () => (await picked()).map((d) => d.link.id);
 
 async function code(p: Promise<unknown>): Promise<string> {
   try {
@@ -175,7 +176,7 @@ describe("worthALook", () => {
       await keepHandy(deps(), A, s.id, "inferred");
     }
     clock = NOW;
-    const picks = await worthALook(deps(), A);
+    const picks = await picked();
     expect(picks.map((d) => d.link.id).sort()).toEqual([oldest.id, ordinary.id].sort());
     for (const d of picks) expect(d.reasons.map((r) => r.kind)).toContain("focus_words");
   });
@@ -188,6 +189,22 @@ describe("worthALook", () => {
     }
     clock = NOW;
     expect(await ids()).toEqual([oldest.id]);
+  });
+
+  it("leaves out exactly the suggestions it is given, not a fresh read of them", async () => {
+    const suggested: Link[] = [];
+    for (let i = 0; i < 3; i++) {
+      suggested.push(await link());
+      clock = at(-(3 - i) * DAY);
+      await keepHandy(deps(), A, (suggested[i] as Link).id, "inferred");
+    }
+    clock = NOW;
+    const [oldest, , newest] = suggested as [Link, Link, Link];
+    // The caller's list: the middle and oldest tools, though a fresh read would give newest and middle.
+    const [, middleItem] = await listSuggestions(deps(), A);
+    const shown = [middleItem as ToolItem, { ...(middleItem as ToolItem), link: oldest }];
+    const picks = await worthALook(deps(), A, shown);
+    expect(picks.map((d) => d.link.id)).toEqual([newest.id]);
   });
 
   it("brings a suggested tool back once it is declined", async () => {

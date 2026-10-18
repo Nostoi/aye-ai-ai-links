@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -943,6 +944,31 @@ describe("startServer", () => {
       expect(logs).toContain("[saved copies] paused");
       expect(logs).toContain("move this one aside and restart");
     });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "advises granting access, not moving the folder aside, when its own folder can't be read",
+      async () => {
+        const db = openDatabase(dbPath);
+        try {
+          expect(await new SqliteSavedCopyStore(db, copiesDir()).checkFolder()).toEqual({
+            state: "ready",
+          });
+        } finally {
+          db.close();
+        }
+        chmodSync(copiesDir(), 0o000);
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          await startWith(ON(), {});
+        } finally {
+          chmodSync(copiesDir(), 0o755);
+        }
+        const logs = errors.mock.calls.flat().join("\n");
+        expect(logs).toContain("[saved copies] paused");
+        expect(logs).toContain("Privacy & Security");
+        expect(logs).not.toContain("move this one aside");
+      },
+    );
 
     it("undoes a copy left mid-write before the start resolves", async () => {
       const db = openDatabase(dbPath);

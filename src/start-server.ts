@@ -34,12 +34,11 @@ const DRAIN_MS = 10_000;
 const SETTLE_MS = 5_000;
 
 function folderMessage(folder: Exclude<FolderCheck, { state: "ready" }>): string {
-  const advice =
-    folder.state === "mismatch"
+  const advice = /EPERM|EACCES/.test(folder.detail)
+    ? " Grant the Node binary access to this folder in System Settings → Privacy & Security, then restart the service."
+    : folder.state === "mismatch"
       ? " To start a new, empty folder, move this one aside and restart."
-      : /EPERM|EACCES/.test(folder.detail)
-        ? " Grant the Node binary access to this folder in System Settings → Privacy & Security, then restart the service."
-        : "";
+      : "";
   return `[saved copies] paused: ${folder.detail}${advice}`;
 }
 

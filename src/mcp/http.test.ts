@@ -374,6 +374,7 @@ describe("MCP door over HTTP", () => {
     expect(got.body.result.structuredContent).toEqual(
       wire({ ...gotDirect, link: plain(gotDirect.link) }),
     );
+    expect(got.body.result.structuredContent.savedCopy).toBeNull();
 
     const found = await call(app, "key-a", "search_links", {
       query: "parity",

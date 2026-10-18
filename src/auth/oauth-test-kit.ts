@@ -224,6 +224,7 @@ export async function oauthWorld({
   authDb,
   net = fakeNetwork(),
   log,
+  savedCopyDir,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -232,6 +233,8 @@ export async function oauthWorld({
   authDb?: Database.Database;
   net?: ReturnType<typeof fakeNetwork>;
   log?: (line: string) => void;
+  /** A folder for saved copies; without it, copies read as missing and none are written. */
+  savedCopyDir?: string;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -241,7 +244,12 @@ export async function oauthWorld({
     ...(now && { now }),
     ...(authDb && { db: authDb }),
   });
-  const deps = createDeps(links, new FakeEmbedder(DIMS));
+  const deps = createDeps(links, new FakeEmbedder(DIMS), savedCopyDir ?? null);
+  if (savedCopyDir !== undefined) {
+    const folder = await deps.savedCopies.checkFolder();
+    if (folder.state !== "ready")
+      throw new Error(`The saved-copy folder is not ready: ${folder.detail}`);
+  }
   deps.store.ensureUser("owner", "Owner");
   const { app } = createApp({
     deps,
@@ -255,7 +263,16 @@ export async function oauthWorld({
     (links.prepare("SELECT saved_by AS s FROM links ORDER BY rowid").all() as { s: string }[]).map(
       (r) => r.s,
     );
-  return { ...auth, net, app, links, keyStore, savedBy, agent: () => new Agent(app) };
+  return {
+    ...auth,
+    net,
+    app,
+    links,
+    keyStore,
+    savedCopies: deps.savedCopies,
+    savedBy,
+    agent: () => new Agent(app),
+  };
 }
 
 export type World = Awaited<ReturnType<typeof oauthWorld>>;

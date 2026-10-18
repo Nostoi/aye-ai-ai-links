@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome, PageExtractor } from "./extract.js";
+import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome, PageFetcher } from "./fetch.js";
 import {
@@ -11,6 +12,7 @@ import {
   titleFits,
   updateLink,
 } from "./links.js";
+import { copyLimits } from "./saved-copy.js";
 import { createSnapshotRunner } from "./snapshot-runner.js";
 import { newLink } from "./snapshot-store-contract.js";
 import { EXCERPT_CHARS, TEXT_CHARS } from "./snapshot-text.js";
@@ -232,7 +234,12 @@ describe("saveLink waits for a new link's page", () => {
       const { link } = await saveLink({ store, now: () => T0 }, "a", URL_A);
       coherent(
         await getLinkWithText(
-          { store, now: () => T0, pages: racingPages(store) },
+          {
+            store,
+            now: () => T0,
+            pages: racingPages(store),
+            savedCopies: new FakeSavedCopies(store),
+          },
           "a",
           link.id,
           "t",
@@ -351,12 +358,65 @@ describe("saveLink with the real snapshot runner", () => {
 describe("getLinkWithText", () => {
   it("returns the link and its text, capped at TEXT_CHARS", async () => {
     const store = new FakeStore();
-    const deps = { store, pages: store, now: () => T0 };
+    const deps = { store, pages: store, now: () => T0, savedCopies: new FakeSavedCopies(store) };
     const { link } = await saveLink(deps, "a", URL_A);
     await finishOk(store, "a", link.id, "y".repeat(TEXT_CHARS + 1));
     const got = await getLinkWithText(deps, "a", link.id, "t");
     expect(got.link.snapshot?.status).toBe("ok");
     expect(got.snapshotText).toEqual({ text: "y".repeat(TEXT_CHARS), truncated: true });
+  });
+});
+
+describe("getLinkWithText savedCopy", () => {
+  const draft = { markdown: "body", imageUrls: [], nonce: "0123456789abcdef0123456789abcdef" };
+  const madeAt = new Date("2026-02-03T04:05:06Z");
+  const setup = async () => {
+    const store = new FakeStore();
+    const savedCopies = new FakeSavedCopies(store);
+    const deps = { store, pages: store, savedCopies, now: () => T0 };
+    const { link } = await saveLink(deps, "a", URL_A);
+    return { deps, savedCopies, link };
+  };
+
+  it("is { madeAt } for a link with an ok copy", async () => {
+    const { deps, savedCopies, link } = await setup();
+    await savedCopies.saveCopy("a", link.id, draft, copyLimits(1_000_000), madeAt);
+    expect((await getLinkWithText(deps, "a", link.id, "t")).savedCopy).toEqual({ madeAt });
+  });
+
+  it("is null for a link with no copy row", async () => {
+    const { deps, link } = await setup();
+    expect((await getLinkWithText(deps, "a", link.id, "t")).savedCopy).toBeNull();
+  });
+
+  it("is null for a none row", async () => {
+    const { deps, savedCopies, link } = await setup();
+    await savedCopies.recordNoCopy("a", link.id, "none");
+    expect((await getLinkWithText(deps, "a", link.id, "t")).savedCopy).toBeNull();
+  });
+
+  it("is null for a no_room row", async () => {
+    const { deps, savedCopies, link } = await setup();
+    expect(await savedCopies.saveCopy("a", link.id, draft, copyLimits(1), madeAt)).toBe("no_room");
+    expect((await getLinkWithText(deps, "a", link.id, "t")).savedCopy).toBeNull();
+  });
+
+  it("is null after a copy whose file write failed was released", async () => {
+    const { deps, savedCopies, link } = await setup();
+    savedCopies.failNextWrite(new Error("disk full"));
+    await expect(
+      savedCopies.saveCopy("a", link.id, draft, copyLimits(1_000_000), madeAt),
+    ).rejects.toThrow("disk full");
+    expect((await getLinkWithText(deps, "a", link.id, "t")).savedCopy).toBeNull();
+  });
+
+  it("refuses another owner's id before reading any copy info", async () => {
+    const { deps, savedCopies, link } = await setup();
+    const spy = vi.spyOn(savedCopies, "copyInfo");
+    await expect(getLinkWithText(deps, "b", link.id, "t")).rejects.toMatchObject({
+      code: "not_found",
+    });
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 

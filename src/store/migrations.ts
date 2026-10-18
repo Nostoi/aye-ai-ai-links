@@ -259,6 +259,53 @@ export const MIGRATIONS: string[] = [
     CHECK (flagged_at IS NULL OR first_dead_at IS NOT NULL)
   );
   `,
+  // Saved copies (#135): one row per link that has had a copy attempt, one per numbered image of
+  // a copy, and the library id the folder's marker must match. Rows are deleted with their link by
+  // the composite foreign key, as link_images rows are; the files are the store's to delete.
+  // Additive; rebuilds nothing.
+  `
+  CREATE TABLE saved_copies (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    status TEXT NOT NULL
+      CHECK (status IN ('saving', 'ok', 'removed', 'none', 'failed', 'no_room', 'too_large')),
+    made_at INTEGER,
+    finished_at INTEGER,
+    image_nonce TEXT,
+    md_bytes INTEGER NOT NULL DEFAULT 0,
+    bytes INTEGER NOT NULL DEFAULT 0,
+    removed_at INTEGER,
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK ((made_at IS NOT NULL) = (status IN ('saving', 'ok', 'removed'))),
+    CHECK ((removed_at IS NOT NULL) = (status = 'removed')),
+    CHECK (md_bytes >= 0 AND bytes >= md_bytes)
+  );
+
+  CREATE TABLE saved_copy_images (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    n INTEGER NOT NULL CHECK (n BETWEEN 1 AND 30),
+    url TEXT NOT NULL,
+    status TEXT NOT NULL
+      CHECK (status IN ('pending', 'saving', 'ok', 'none', 'refused', 'no_room', 'too_large')),
+    content_type TEXT
+      CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    size INTEGER,
+    sha256 TEXT,
+    PRIMARY KEY (owner_id, link_id, n),
+    FOREIGN KEY (owner_id, link_id) REFERENCES saved_copies(owner_id, link_id) ON DELETE CASCADE,
+    CHECK ((content_type IS NOT NULL) = (status IN ('saving', 'ok'))
+      AND (size IS NOT NULL) = (status IN ('saving', 'ok'))
+      AND (sha256 IS NOT NULL) = (status IN ('saving', 'ok')))
+  );
+  CREATE INDEX saved_copy_images_pending ON saved_copy_images (link_id, n) WHERE status = 'pending';
+
+  CREATE TABLE saved_copy_library (
+    only INTEGER PRIMARY KEY CHECK (only = 1),
+    id TEXT NOT NULL
+  );
+  `,
 ];
 
 /**

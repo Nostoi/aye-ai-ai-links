@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ImageBytes } from "./image-store.js";
+import { type ImageBytes, imageVersion } from "./image-store.js";
 import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import {
   type CopyDraft,
@@ -244,7 +245,10 @@ export function describeSavedCopyStoreContract(
         expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(7), LIMITS)).toBe("saved");
         const copy = (await h.copies.readCopy(A, id)) as { images: Map<number, unknown> };
         expect([...copy.images.keys()]).toEqual([1]);
-        expect(copy.images.get(1)).toMatchObject({ contentType: "image/png" });
+        expect(copy.images.get(1)).toEqual({
+          contentType: "image/png",
+          version: imageVersion(createHash("sha256").update(img(7).bytes).digest("hex")),
+        });
         const stored = await h.copies.copyImage(A, id, 1);
         expect(stored?.contentType).toBe("image/png");
         expect(Array.from(stored?.bytes ?? [])).toEqual(Array.from(img(7).bytes));

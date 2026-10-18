@@ -546,12 +546,13 @@ describe("copy pass fix round 1", () => {
   it.each([
     [1, RETRY_BASE_MS],
     [2, RETRY_BASE_MS * 2],
+    [3, RETRY_BASE_MS * 4],
   ])("waits RETRY_BASE_MS * 2^(k-1) after attempt %i", async (k, gap) => {
     const t = setup({ page: () => ({ kind: "http_error", status: 503 }) });
     await t.link(1);
     await t.pass.sweep();
-    if (k === 2) {
-      t.advance(RETRY_BASE_MS);
+    for (let j = 1; j < k; j++) {
+      t.advance(RETRY_BASE_MS * 2 ** (j - 1));
       await t.pass.sweep();
     }
     expect(t.pageCalls).toHaveLength(k);
@@ -561,6 +562,17 @@ describe("copy pass fix round 1", () => {
     t.advance(1);
     await t.pass.sweep();
     expect(t.pageCalls).toHaveLength(k + 1);
+  });
+
+  it("fetches only one page in a sweep even when the write after the fetch throws", async () => {
+    const t = setup();
+    const a = await t.link(1);
+    const b = await t.link(2);
+    vi.spyOn(t.copies, "saveCopy").mockRejectedValueOnce(new Error("EIO"));
+    await t.pass.sweep();
+    expect(t.pageCalls).toEqual(["https://ex.com/1"]);
+    expect(t.status(a)).toBeNull();
+    expect(t.status(b)).toBeNull();
   });
 
   it("resets the failure budget when a keep completes", async () => {

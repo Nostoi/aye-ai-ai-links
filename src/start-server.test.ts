@@ -941,7 +941,7 @@ describe("startServer", () => {
       expect(readdirSync(copiesDir())).toEqual(["notes.txt"]);
       expect(readFileSync(join(copiesDir(), "notes.txt"), "utf8")).toBe("mine");
       const logs = errors.mock.calls.flat().join("\n");
-      expect(logs).toContain("[saved copies] paused");
+      expect(logs).toContain(`[saved copies] paused (${copiesDir()})`);
       expect(logs).toContain("move this one aside and restart");
     });
 
@@ -969,6 +969,32 @@ describe("startServer", () => {
         expect(logs).not.toContain("move this one aside");
       },
     );
+
+    it("refuses the start when start-up recovery hits a database error, and closes what it opened", async () => {
+      const s = await startWith(ON(), {});
+      await s.stop();
+      started.pop();
+      const db = openDatabase(dbPath);
+      let ddl: string;
+      try {
+        ddl = db
+          .prepare("SELECT sql FROM sqlite_master WHERE name = 'saved_copy_images'")
+          .pluck()
+          .get() as string;
+        db.exec("DROP TABLE saved_copy_images");
+      } finally {
+        db.close();
+      }
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await expect(startWith(ON(), {})).rejects.toThrow(/saved_copy_images/);
+      const back = openDatabase(dbPath);
+      try {
+        back.exec(ddl);
+      } finally {
+        back.close();
+      }
+      await startWith(ON(), {});
+    });
 
     it("undoes a copy left mid-write before the start resolves", async () => {
       const db = openDatabase(dbPath);

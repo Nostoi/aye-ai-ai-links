@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CopyDraft } from "../core/saved-copy.js";
 import { finishedMarkdown } from "../core/saved-copy.js";
 import { parsePage } from "./extract.ts";
-import { articleMarkdown, copyBase } from "./extract-copy.ts";
+import { articleMarkdown, copyBase, makeCopy } from "./extract-copy.ts";
 import { readArticle } from "./extract-text.ts";
 
 const NONCE = "0123456789abcdef0123456789abcdef";
@@ -183,5 +183,26 @@ describe("budget", () => {
     const d = draft(body + imgs(30));
     expect(performance.now() - t0).toBeLessThan(5000);
     expect(d.imageUrls).toHaveLength(30);
+  });
+});
+
+describe("makeCopy", () => {
+  it("gives null when there is no article", () => {
+    expect(makeCopy(null, FINAL)).toBeNull();
+  });
+  it("gives undefined when making the copy throws", () => {
+    const broken = {
+      querySelectorAll() {
+        throw new Error("x");
+      },
+    } as unknown as Element;
+    expect(makeCopy(broken, FINAL)).toBeUndefined();
+  });
+  it("gives a draft with a fresh 32-hex nonce for a real article", () => {
+    const el = readArticle(parsePage(`<html><body><article>${FILLER}</article></body></html>`));
+    if (!el) throw new Error("no article");
+    const d = makeCopy(el, FINAL);
+    expect(d?.nonce).toMatch(/^[0-9a-f]{32}$/);
+    expect(d?.markdown).toContain("Some long paragraph");
   });
 });

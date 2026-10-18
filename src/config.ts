@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, type Stats, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 
@@ -132,6 +132,23 @@ function isInside(path: string, parent: string): boolean {
   return path === parent || path.startsWith(parent + sep);
 }
 
+/** Whether `path`, or a folder above it, is the very folder `tree` names (same device and inode). */
+function within(path: string, tree: string): boolean {
+  let target: Stats;
+  try {
+    target = statSync(tree);
+  } catch {
+    return false;
+  }
+  for (let p = canonical(path); ; p = dirname(p)) {
+    try {
+      const s = statSync(p);
+      if (s.dev === target.dev && s.ino === target.ino) return true;
+    } catch {}
+    if (dirname(p) === p) return false;
+  }
+}
+
 /**
  * Where saved copies live and how large the folder may grow. A deploy replaces the release
  * tree, so a folder inside it (directly or through the `current` link) would lose its copies.
@@ -142,7 +159,9 @@ export function savedCopyConfig(env: Env, home: string = homedir()): SavedCopyCo
   if (!isAbsolute(dir)) throw new Error("AYE_SAVED_COPY_DIR must be an absolute path.");
   const real = canonical(dir);
   if (
-    [join(root, "releases"), join(root, "current")].some((tree) => isInside(real, canonical(tree)))
+    [join(root, "releases"), join(root, "current")].some(
+      (tree) => isInside(real, canonical(tree)) || within(dir, tree),
+    )
   ) {
     throw new Error(
       "AYE_SAVED_COPY_DIR must not be inside ~/.aye-links/releases or ~/.aye-links/current, which deploys replace.",

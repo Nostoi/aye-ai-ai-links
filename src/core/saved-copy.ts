@@ -38,6 +38,19 @@ export type CopyRef = { owner: OwnerId; linkId: string };
 export type FolderCheck = { state: "ready" } | { state: "unwritable" | "mismatch"; detail: string };
 export type SweepReport = { folders: number; temp: number; images: number; unknown: string[] };
 
+/** The log line for a folder that is not ready, naming it. */
+export function pausedMessage(
+  dir: string,
+  check: Exclude<FolderCheck, { state: "ready" }>,
+): string {
+  const advice = /EPERM|EACCES/.test(check.detail)
+    ? " Grant the Node binary access to this folder in System Settings → Privacy & Security, then restart the service."
+    : check.state === "mismatch"
+      ? " To start a new, empty folder, move this one aside and restart."
+      : "";
+  return `[saved copies] paused (${dir}): ${check.detail}${advice}`;
+}
+
 /** Writes copies and their images. A null or false means the link or row is not the owner's. */
 export interface SavedCopyWriter {
   /** Saves a copy for a link with no row or a `no_room` row; "exists" when one is already there. */

@@ -1,4 +1,5 @@
 import {
+  existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
@@ -314,6 +315,41 @@ describe("savedCopyConfig", () => {
     expect(() =>
       savedCopyConfig({ AYE_SAVED_COPY_DIR: join(h, ".aye-links", "current", "copies") }, h),
     ).toThrow(INSIDE);
+  });
+
+  describe("by folder identity", () => {
+    const release = (h: string) => {
+      mkdirSync(join(h, ".aye-links", "releases", "v1"), { recursive: true });
+      symlinkSync(join(h, ".aye-links", "releases", "v1"), join(h, ".aye-links", "current"));
+    };
+
+    it("refuses another spelling of the releases folder", (ctx) => {
+      const h = fresh();
+      release(h);
+      if (!existsSync(join(h, ".aye-links", "RELEASES"))) return ctx.skip(); // case-sensitive volume
+      expect(() =>
+        savedCopyConfig({ AYE_SAVED_COPY_DIR: join(h, ".aye-links", "RELEASES", "x") }, h),
+      ).toThrow(INSIDE);
+    });
+
+    it("refuses a folder reached through a symlink to a release", () => {
+      const h = fresh();
+      release(h);
+      symlinkSync(join(h, ".aye-links", "releases", "v1"), join(h, "elsewhere"));
+      expect(() => savedCopyConfig({ AYE_SAVED_COPY_DIR: join(h, "elsewhere", "x") }, h)).toThrow(
+        INSIDE,
+      );
+    });
+
+    it("refuses a path under a release tree that does not exist yet", () => {
+      const h = fresh();
+      expect(() =>
+        savedCopyConfig(
+          { AYE_SAVED_COPY_DIR: join(h, ".aye-links", "releases", "v1", "copies") },
+          h,
+        ),
+      ).toThrow(INSIDE);
+    });
   });
 
   it("accepts a sibling whose name only starts like releases", () => {

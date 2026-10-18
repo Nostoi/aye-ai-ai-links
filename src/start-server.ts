@@ -13,7 +13,7 @@ import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
 import { createCopyKeeper } from "./core/keep-copy.js";
 import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-runner.js";
-import type { FolderCheck } from "./core/saved-copy.js";
+import { pausedMessage } from "./core/saved-copy.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
@@ -32,15 +32,6 @@ import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 const DRAIN_MS = 10_000;
 /** The drain, this wait and the closes must end inside launchd's 20 s `ExitTimeOut`. */
 const SETTLE_MS = 5_000;
-
-function folderMessage(folder: Exclude<FolderCheck, { state: "ready" }>): string {
-  const advice = /EPERM|EACCES/.test(folder.detail)
-    ? " Grant the Node binary access to this folder in System Settings → Privacy & Security, then restart the service."
-    : folder.state === "mismatch"
-      ? " To start a new, empty folder, move this one aside and restart."
-      : "";
-  return `[saved copies] paused: ${folder.detail}${advice}`;
-}
 
 /**
  * Seams for tests: `decorateDeps` wraps the deps (the snapshot runner uses the wrapped store),
@@ -157,7 +148,7 @@ export async function startServer(
     // Before anything can listen or save: an unready folder pauses copies, it never refuses the start.
     const savedCopies = new SqliteSavedCopyStore(db, config.savedCopies.dir);
     const folder = await savedCopies.checkFolder();
-    if (folder.state !== "ready") console.error(folderMessage(folder));
+    if (folder.state !== "ready") console.error(pausedMessage(config.savedCopies.dir, folder));
     const undone = await savedCopies.undoUnconfirmed();
     if (undone.copies + undone.images > 0) {
       console.error(

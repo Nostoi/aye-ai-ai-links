@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finishedMarkdown, imageRef, isCopyDraft } from "./saved-copy.js";
+import { finishedMarkdown, imageRef, isCopyDraft, pausedMessage } from "./saved-copy.js";
 
 const N = "0123456789abcdef0123456789abcdef";
 const M = "fedcba9876543210fedcba9876543210";
@@ -90,5 +90,28 @@ describe("isCopyDraft", () => {
     ["a non-URL string", { ...ok, imageUrls: ["not a url"] }],
   ])("rejects %s", (_name, value) => {
     expect(isCopyDraft(value)).toBe(false);
+  });
+});
+
+describe("pausedMessage", () => {
+  const ACCESS = "Privacy & Security";
+  const ASIDE = "move this one aside and restart";
+  it("names the folder", () => {
+    expect(pausedMessage("/x/copies", { state: "mismatch", detail: "d" })).toContain(
+      "paused (/x/copies): d",
+    );
+  });
+  it("advises access for an unwritable EACCES and for a mismatch EACCES", () => {
+    for (const state of ["unwritable", "mismatch"] as const) {
+      const m = pausedMessage("/x", { state, detail: "EACCES: denied" });
+      expect(m).toContain(ACCESS);
+      expect(m).not.toContain(ASIDE);
+    }
+  });
+  it("advises moving a plain mismatch aside, and nothing for a plain unwritable", () => {
+    expect(pausedMessage("/x", { state: "mismatch", detail: "d" })).toContain(ASIDE);
+    expect(pausedMessage("/x", { state: "unwritable", detail: "d" })).toBe(
+      "[saved copies] paused (/x): d",
+    );
   });
 });

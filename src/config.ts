@@ -1,6 +1,6 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, sep } from "node:path";
 
 export type Env = Record<string, string | undefined>;
 
@@ -124,11 +124,44 @@ export function authConfig(env: Env): AuthConfig {
   return { dbPath, secret, baseUrl: baseUrl(env.AYE_BASE_URL) };
 }
 
+export type SavedCopyConfig = { dir: string; limitBytes: number };
+
+const DEFAULT_LIMIT_GB = 1;
+
+function isInside(path: string, parent: string): boolean {
+  return path === parent || path.startsWith(parent + sep);
+}
+
+/**
+ * Where saved copies live and how large the folder may grow. A deploy replaces the release
+ * tree, so a folder inside it (directly or through the `current` link) would lose its copies.
+ */
+export function savedCopyConfig(env: Env, home: string = homedir()): SavedCopyConfig {
+  const root = join(home, ".aye-links");
+  const dir = env.AYE_SAVED_COPY_DIR ?? join(root, "saved-copies");
+  if (!isAbsolute(dir)) throw new Error("AYE_SAVED_COPY_DIR must be an absolute path.");
+  const real = canonical(dir);
+  if (
+    [join(root, "releases"), join(root, "current")].some((tree) => isInside(real, canonical(tree)))
+  ) {
+    throw new Error(
+      "AYE_SAVED_COPY_DIR must not be inside ~/.aye-links/releases or ~/.aye-links/current, which deploys replace.",
+    );
+  }
+  const raw = env.AYE_SAVED_COPY_LIMIT_GB;
+  const gib = raw === undefined ? DEFAULT_LIMIT_GB : Number(raw);
+  if ((raw !== undefined && !/^\d+(\.\d+)?$/.test(raw)) || !Number.isFinite(gib)) {
+    throw new Error("AYE_SAVED_COPY_LIMIT_GB must be a number of GiB, 0 or more.");
+  }
+  return { dir, limitBytes: Math.floor(gib * 1024 ** 3) };
+}
+
 export type ServerConfig = {
   dbPath: string;
   port: number;
   allowedHosts?: string[];
   auth: AuthConfig;
+  savedCopies: SavedCopyConfig;
   version: string;
 };
 
@@ -139,6 +172,7 @@ export function serverConfig(env: Env): ServerConfig {
     port: port(env.AYE_PORT),
     ...(hosts && { allowedHosts: hosts }),
     auth: authConfig(env),
+    savedCopies: savedCopyConfig(env),
     version: appVersion(),
   };
 }

@@ -68,6 +68,9 @@ const handyOutput = z.strictObject({
   due: z.boolean(),
 });
 
+// When a link was flagged as seeming gone, and when it was last checked.
+const goneOutput = z.strictObject({ since: timestamp, checkedAt: timestamp });
+
 export const linkOutput = z.strictObject({
   id: z.string(),
   url: z.string(),
@@ -84,6 +87,7 @@ export const linkOutput = z.strictObject({
   state: z.enum(STATES),
   snapshot: snapshotOutput.nullable(),
   handy: handyOutput.nullable(),
+  gone: goneOutput.nullable(),
 });
 
 export const tagOutput = z.strictObject({

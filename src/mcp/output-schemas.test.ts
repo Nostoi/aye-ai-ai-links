@@ -13,6 +13,7 @@ import { createApp } from "../app.js";
 import type { Caller } from "../auth/caller.js";
 import type { getDigest } from "../core/digest.js";
 import type { filingContext } from "../core/filing-context.js";
+import type { GoneView } from "../core/link-check.js";
 import type { getLinkWithText, saveLink, updateLink } from "../core/links.js";
 import type { listLinks } from "../core/list-links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
@@ -206,6 +207,11 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     db.prepare("UPDATE snapshots SET fetch_status = 'extract_timeout' WHERE link_id = 2").run();
     // Text longer than save's cap and shorter than get's: truncated both ways.
     db.prepare("UPDATE snapshots SET text = ? WHERE link_id = 1").run("t".repeat(600));
+    // A flagged check row: link 1 is the one gone link.
+    db.prepare(
+      `INSERT INTO link_checks (owner_id, link_id, checked_at, result, first_dead_at, flagged_at)
+       VALUES (?, 1, ?, 'dead', ?, ?)`,
+    ).run(A.owner, NOW.getTime(), NOW.getTime() - 5 * DAY, NOW.getTime() - DAY);
     await run(get("1"));
     await run(save({ url: "https://example.com/a" }));
     await run(save({ url: "https://example.com/c" })); // its filingContext holds the seeded tags
@@ -325,6 +331,11 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     expect(values(views, (h) => h.status)).toEqual(new Set(["kept", "suggested", "declined"]));
     expect(values(views, (h) => h.source)).toEqual(new Set(["stated", "asked", "inferred"]));
     expect(values(views, (h) => h.due)).toEqual(new Set([true, false]));
+    expect(values(links, (l) => l.gone === null)).toEqual(new Set([true, false]));
+    expect(links.find((l) => l.gone !== null).gone).toEqual({
+      since: new Date(NOW.getTime() - DAY).toISOString(),
+      checkedAt: NOW.toISOString(),
+    });
     expect(values(links, (l) => l.snapshot === null)).toEqual(new Set([true, false]));
     const snapshots = links.map((l) => l.snapshot).filter(Boolean);
     expect(values(snapshots, (x) => x.status)).toEqual(
@@ -624,11 +635,11 @@ type Wire<T> = T extends Date
     : T extends object
       ? { [K in keyof T]: Wire<T[K]> }
       : T;
-/** What the door adds to each link it returns: its Keep handy view. */
+/** What the door adds to each link it returns: its Keep handy view and its gone view. */
 type Handied<T> = T extends Date
   ? T
   : T extends Link
-    ? T & { handy: HandyView | null }
+    ? T & { handy: HandyView | null; gone: GoneView | null }
     : T extends (infer U)[]
       ? Handied<U>[]
       : T extends object

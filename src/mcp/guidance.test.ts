@@ -78,6 +78,19 @@ describe("get_digest guidance", () => {
   });
 });
 
+describe("gone guidance", () => {
+  it("get_link, search_links and list_links end with the gone note; the shared instructions do not carry it", () => {
+    const GONE_NOTE = (guidance as Record<string, string>).GONE_NOTE ?? "";
+    expect(GONE_NOTE).toMatch(
+      /seems gone.*never that it is certainly dead.*update_link state "archived"/s,
+    );
+    for (const d of [guidance.GET_LINK, guidance.SEARCH_LINKS, guidance.LIST_LINKS]) {
+      expect(d.endsWith(`\n${GONE_NOTE}`)).toBe(true);
+    }
+    expect(guidance.INSTRUCTIONS).not.toContain(GONE_NOTE);
+  });
+});
+
 describe("Keep handy guidance", () => {
   it("tells save_link when to keep, when to ask once, and that a guess only suggests", () => {
     expect(SAVE_LINK).toMatch(/says they use a link regularly.*"keep", source: "stated"/s);

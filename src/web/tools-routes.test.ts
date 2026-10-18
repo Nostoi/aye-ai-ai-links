@@ -473,7 +473,7 @@ describe("GET / and the Handy shelf", () => {
     const tiles = shelf(String((await browser.send("/")).body));
     expect(tiles.map((t) => t.dataset.id)).toEqual([id, other.id]);
     expect(tiles[0]?.classList.contains("needs-you")).toBe(true);
-    expect(tiles[0]?.textContent).toContain("This page seems gone");
+    expect(tiles[0]?.textContent).toContain("Seems gone");
     expect(tiles[0]?.textContent).not.toContain("Still using?");
     expect(tiles[1]?.textContent).toContain("Still using?");
   });

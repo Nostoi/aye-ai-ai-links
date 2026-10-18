@@ -2,7 +2,6 @@ import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
-import { GONE_TEXT } from "./gone-line.js";
 import { hostOf } from "./host.js";
 import { initialsText } from "./initials.js";
 import { linkTitle } from "./open-link.js";
@@ -33,12 +32,14 @@ const STILL_USING = `<div class="ask">
 </div>
 </div>`;
 
-/** A gone link's ask (#128); its buttons stack, since both labels do not fit a tile's width. */
-const GONE_ASK = `<div class="ask ask-gone">
-<p class="small">${GONE_TEXT}</p>
+/** The tile's words for a gone link (#128), short to fit the square; cards say GONE_TEXT. */
+const SEEMS_GONE = "Seems gone";
+
+const GONE_ASK = `<div class="ask">
+<p class="small">${SEEMS_GONE}</p>
 <div class="actions small-actions">
-<button type="button" data-act="still-works">It still works</button>
-<button type="button" data-act="done">I'm done with it</button>
+<button type="button" data-act="still-works">It works</button>
+<button type="button" data-act="done">Done</button>
 </div>
 </div>`;
 
@@ -150,7 +151,7 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`).
  * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
  *   on the same button, else the same tile's first control, else the next tile's, else the heading. * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
- *   It still works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
+ *   It works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
  */
 export const SHELF_SCRIPT = `const showAll = (shelf) => {
   for (const tile of shelf.querySelectorAll("[data-more]")) tile.hidden = false;

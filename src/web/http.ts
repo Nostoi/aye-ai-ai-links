@@ -10,6 +10,8 @@ import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
+import { type LinkCheckDeps, restoreCheck, stillWorks } from "../core/link-check.js";
+import { CHECK_RESULTS, type LinkCheck } from "../core/link-check-store.js";
 import { editLink, undoEdit } from "../core/link-edit.js";
 import type { LinkEditStore } from "../core/link-edit-store.js";
 import { checkedOrder, linkPage } from "../core/link-pages.js";
@@ -287,6 +289,48 @@ const toolMoved = (c: Context, change: ToolChange) =>
     NO_STORE,
   );
 
+/** A check row as the page holds it between It still works and its Undo: dates as ISO strings. */
+type CheckJson = {
+  checkedAt: string;
+  result: LinkCheck["result"];
+  detail: string | null;
+  firstDeadAt: string | null;
+  flaggedAt: string | null;
+  stillWorksAt: string | null;
+};
+
+const checkJson = (c: LinkCheck): CheckJson => ({
+  checkedAt: c.checkedAt.toISOString(),
+  result: c.result,
+  detail: c.detail,
+  firstDeadAt: c.firstDeadAt?.toISOString() ?? null,
+  flaggedAt: c.flaggedAt?.toISOString() ?? null,
+  stillWorksAt: c.stillWorksAt?.toISOString() ?? null,
+});
+
+/** A row the page sends back: a result among core's, a string or null detail, and dates that parse. */
+const isCheckJson = (value: unknown): value is CheckJson => {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    (CHECK_RESULTS as readonly unknown[]).includes(row.result) &&
+    isStringOrNull(row.detail) &&
+    isDate(row.checkedAt) &&
+    isDateOrNull(row.firstDeadAt) &&
+    isDateOrNull(row.flaggedAt) &&
+    isDateOrNull(row.stillWorksAt)
+  );
+};
+
+const checkRecord = (c: CheckJson): LinkCheck => ({
+  checkedAt: new Date(c.checkedAt),
+  result: c.result,
+  detail: c.detail,
+  firstDeadAt: c.firstDeadAt === null ? null : new Date(c.firstDeadAt),
+  flaggedAt: c.flaggedAt === null ? null : new Date(c.flaggedAt),
+  stillWorksAt: c.stillWorksAt === null ? null : new Date(c.stillWorksAt),
+});
+
 /** What the owner is told when a Keep handy action is refused; core's words are written for an agent. */
 const TOOL_REFUSALS = {
   not_found: { status: 404, message: LINK_GONE },
@@ -376,7 +420,8 @@ export function webApp({
   baseUrl,
 }: {
   deps: SearchLinksDeps &
-    WorthDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
+    WorthDeps &
+    LinkCheckDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -749,6 +794,35 @@ export function webApp({
       const { id, tool, previous } = c.get("body");
       const restored = previous && toolRecord(previous);
       await restoreTool(deps, c.get("caller").owner, id, restored, toolRecord(tool));
+      return done(c);
+    }),
+  );
+
+  // It still works on a gone link. Answers the row it wrote and the one it replaced; core's
+  // words reach the page as they are.
+  app.post("/links/still-works", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      const change = await stillWorks(deps, c.get("caller").owner, c.get("body").id);
+      return c.json(
+        { check: checkJson(change.check), previous: checkJson(change.previous) },
+        200,
+        NO_STORE,
+      );
+    }),
+  );
+
+  // The Undo of It still works: puts `previous` back while the row still holds `check`.
+  const undoCheck = { check: isCheckJson, previous: isCheckJson };
+  app.post("/links/still-works/undo", jsonBody({ ...linkId, ...undoCheck }), session, (c) =>
+    homeAction(c, async () => {
+      const { id, check, previous } = c.get("body");
+      await restoreCheck(
+        deps,
+        c.get("caller").owner,
+        id,
+        checkRecord(previous),
+        checkRecord(check),
+      );
       return done(c);
     }),
   );

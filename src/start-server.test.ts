@@ -1119,20 +1119,29 @@ describe("startServer", () => {
     it("on stop, ends with the copy extractor pending and closes it", async () => {
       await seedFetched();
       let asked = false;
-      let closed = 0;
+      const events: string[] = [];
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       const pending: PageExtractor = {
         extract: (_html, _url, signal) => {
           asked = true;
           return new Promise<ExtractOutcome>((resolve) => {
-            signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
+            signal?.addEventListener(
+              "abort",
+              () => {
+                events.push("aborted");
+                resolve({ kind: "aborted" });
+              },
+              { once: true },
+            );
           });
         },
-        close: async () => void closed++,
+        close: async () => void events.push("closed"),
       };
       const { stop } = await startWith({ copyExtractor: pending });
       await until(() => asked, "the copy extraction");
       await stop();
-      expect(closed).toBe(1);
+      expect(events).toEqual(["aborted", "closed"]);
+      expect(errors.mock.calls.flat().join("\n")).not.toContain("copy pass still running");
       expect(copyRow()).toEqual([]);
     });
   });

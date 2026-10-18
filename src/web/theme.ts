@@ -184,6 +184,7 @@ img.handy-image{background:#fff}
 .handy-tile.needs-you .small-actions{gap:0 8px}
 .handy-tile .ask p{margin:0;font-size:13px;line-height:15px;font-weight:700;color:var(--ink)}
 .handy-tile .small-actions{flex-wrap:nowrap;gap:0 14px}
+.handy-tile .ask-gone .small-actions{flex-direction:column;align-items:flex-start;gap:0}
 .handy-tile .small-actions button{min-height:44px;min-width:44px;padding:0 2px;color:var(--ink);font-weight:600;text-decoration-color:color-mix(in srgb,var(--ink) 35%,transparent)}
 .card-menu{position:absolute;top:2px;right:2px;z-index:3}
 .card-menu summary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;color:var(--soft);cursor:pointer;list-style:none}

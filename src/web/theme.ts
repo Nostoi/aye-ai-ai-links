@@ -205,6 +205,8 @@ img.handy-image{background:#fff}
 .worth-small .meta{font-size:14px;margin:0 0 4px}
 .small-actions{gap:0 18px}
 .small-actions button{min-height:44px;padding:0;background:none;border:0;color:var(--soft);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.gone-line{color:var(--soft)}
+.gone-line p{margin:0 0 4px}
 .handy-control{align-items:center;font-size:14px;color:var(--soft)}
 .handy-on{display:inline-flex;align-items:center;gap:6px}
 .needs-you{outline:2px solid var(--amber);outline-offset:-2px}

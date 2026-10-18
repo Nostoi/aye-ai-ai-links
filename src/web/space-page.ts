@@ -1,8 +1,10 @@
 import type { PictureInfo } from "../core/image-store.js";
+import type { GoneView } from "../core/link-check.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
@@ -51,6 +53,7 @@ type Input = {
   older: string | null;
   images: Map<string, string>;
   handy: Map<string, HandyView | null>;
+  gone?: Map<string, GoneView | null>;
   now: Date;
   /** The links you're done with, rather than the active ones. */
   done: boolean;
@@ -66,7 +69,7 @@ type Input = {
  */
 function card(
   link: Link,
-  { tag, catalog, images, handy, now, done, pictures = new Map() }: Input,
+  { tag, catalog, images, handy, gone = new Map(), now, done, pictures = new Map() }: Input,
 ): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
@@ -82,6 +85,7 @@ ${done ? "" : `${editMenu(link)}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
+${goneLine(link, gone.get(link.id))}
 ${done ? "" : handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
@@ -94,6 +98,7 @@ const CARDS_SCRIPT = `<script>
 ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
+${goneScript("space-links", "space-error")}
 ${editLinkScript("space-links", "space-error")}
 </script>
 `;

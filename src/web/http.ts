@@ -33,8 +33,8 @@ import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
-  handyOfLinks,
   keepHandy,
+  linkViews,
   listShelf,
   listSuggestions,
   notHandy,
@@ -511,9 +511,11 @@ export function webApp({
       links.map((l) => l.id),
     );
     const catalog = await deps.store.listTags(caller.owner);
-    const handy = await handyOfLinks(deps, caller.owner, links);
+    const views = await linkViews(deps, caller.owner, links);
+    const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
+    const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
     const now = (deps.now ?? (() => new Date()))();
-    const html = searchPage({ query, links, now, images, catalog, handy, keep, pictures });
+    const html = searchPage({ query, links, now, images, catalog, handy, gone, keep, pictures });
     return c.html(html, 200, NO_STORE);
   });
 
@@ -536,7 +538,9 @@ export function webApp({
         owner,
         page.links.map((l) => l.id),
       );
-      const handy = await handyOfLinks(deps, owner, page.links);
+      const views = await linkViews(deps, owner, page.links);
+      const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
+      const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
       const pictures = done
         ? new Map()
         : await deps.images.pictureInfo(
@@ -550,6 +554,7 @@ export function webApp({
         ...page,
         images,
         handy,
+        gone,
         pictures,
         now: deps.now(),
         done,
@@ -584,7 +589,9 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const catalog = await deps.store.listTags(owner);
-      const handy = await handyOfLinks(deps, owner, page.links);
+      const views = await linkViews(deps, owner, page.links);
+      const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
+      const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
       const pictures = done
         ? new Map()
         : await deps.images.pictureInfo(
@@ -598,6 +605,7 @@ export function webApp({
         catalog,
         images,
         handy,
+        gone,
         pictures,
         now: deps.now(),
         done,

@@ -1,8 +1,10 @@
 import type { PictureInfo } from "../core/image-store.js";
+import type { GoneView } from "../core/link-check.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
@@ -156,6 +158,7 @@ function resultItem(
   version: string | undefined,
   space: Space | null,
   view: HandyView | null | undefined,
+  gone: GoneView | null | undefined,
   info: PictureInfo | undefined,
 ): string {
   const host = hostOf(link.url);
@@ -167,7 +170,7 @@ ${editMenu(link)}
 <h2>${linkTitle(link)}</h2>
 <p class="small">${saved}</p>
 ${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${spaceName(space)}${whyLine(link.why)}</p>
-${handyControl(link, view)}</div>
+${goneLine(link, gone)}${handyControl(link, view)}</div>
 </li>`;
 }
 
@@ -185,6 +188,7 @@ export const searchPage = ({
   images = new Map(),
   catalog = [],
   handy = new Map(),
+  gone = new Map(),
   keep = false,
   pictures = new Map(),
 }: {
@@ -194,6 +198,7 @@ export const searchPage = ({
   images?: Map<string, string>;
   catalog?: Tag[];
   handy?: Map<string, HandyView | null>;
+  gone?: Map<string, GoneView | null>;
   keep?: boolean;
   pictures?: Map<string, PictureInfo>;
 }) =>
@@ -210,7 +215,7 @@ ${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}</form>
 <h1>${query.trim() !== "" ? "Best matches first" : keep ? "Find the link to keep handy" : "Your newest links"}</h1>
 ${keep ? `<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>\n` : ""}
 <p id="results-error" role="alert"></p>
-${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "No active links to keep handy." : "No links saved yet."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id), pictures.get(l.id))).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "No active links to keep handy." : "No links saved yet."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id), gone.get(l.id), pictures.get(l.id))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=${keep ? "&keep=1" : ""}">your newest links</a>.</p>
@@ -220,6 +225,7 @@ ${editDialog()}
 <script>
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}
+${goneScript("results", "results-error")}
 ${editLinkScript("results", "results-error")}
 </script>
 ${openedScript("results", "/links/opened")}`,

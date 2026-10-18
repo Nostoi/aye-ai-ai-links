@@ -19,6 +19,10 @@ export interface CopyKeeper {
    * reaches the caller.
    */
   keep(owner: OwnerId, linkId: string, draft: CopyDraft): Promise<KeepResult>;
+  /** Records `none` and answers true when core gives this link no copy before any fetch (a kept tool). */
+  refuse(owner: OwnerId, linkId: string): Promise<boolean>;
+  /** Records `none` and answers true when core gives this link no copy before any fetch (a kept tool). */
+  refuse(owner: OwnerId, linkId: string): Promise<boolean>;
 }
 
 /** The rules for which link gets a copy; the store holds none of them. */
@@ -30,13 +34,22 @@ export function createCopyKeeper(o: {
 }): CopyKeeper {
   const { copies, tools, limitBytes, now } = o;
   const limits = copyLimits(limitBytes);
+  /** For a kept tool, records `none` and answers whether a row was written; otherwise undefined. */
+  async function refuseTool(owner: OwnerId, linkId: string): Promise<boolean | undefined> {
+    if ((await tools.getTool(owner, linkId))?.status !== "kept") return undefined;
+    return copies.recordNoCopy(owner, linkId, "none");
+  }
+
   return {
     wanted: limitBytes > 0,
 
+    async refuse(owner, linkId) {
+      return (await refuseTool(owner, linkId)) !== undefined;
+    },
+
     async keep(owner, linkId, draft) {
-      if ((await tools.getTool(owner, linkId))?.status === "kept") {
-        return (await copies.recordNoCopy(owner, linkId, "none")) ? "tool" : null;
-      }
+      const refused = await refuseTool(owner, linkId);
+      if (refused !== undefined) return refused ? "tool" : null;
       if (Buffer.byteLength(draft.markdown, "utf8") > MAX_COPY_MARKDOWN_BYTES) {
         return (await copies.recordNoCopy(owner, linkId, "too_large")) ? "too_large" : null;
       }

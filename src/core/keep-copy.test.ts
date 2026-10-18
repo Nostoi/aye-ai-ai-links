@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import { createCopyKeeper } from "./keep-copy.js";
@@ -79,6 +79,48 @@ describe("copy keeper", () => {
     const { copies, link, keeper } = await setup();
     copies.failNextWrite(new Error("disk"));
     await expect(keeper.keep(A, link.id, draft())).rejects.toThrow("disk");
+  });
+
+  describe("refuse", () => {
+    it("records none and answers true for a kept tool", async () => {
+      const { store, copies, link, keeper } = await setup();
+      await store.updateToolIf(A, link.id, null, tool("kept"));
+      const record = vi.spyOn(copies, "recordNoCopy");
+      expect(await keeper.refuse(A, link.id)).toBe(true);
+      expect(record).toHaveBeenCalledExactlyOnceWith(A, link.id, "none");
+      // The row exists now: a second record is refused.
+      expect(await copies.recordNoCopy(A, link.id, "too_large")).toBe(false);
+    });
+
+    it("answers false and writes nothing for a suggested tool or a plain link", async () => {
+      const { store, copies, link, keeper } = await setup();
+      const record = vi.spyOn(copies, "recordNoCopy");
+      expect(await keeper.refuse(A, link.id)).toBe(false);
+      await store.updateToolIf(A, link.id, null, tool("suggested"));
+      expect(await keeper.refuse(A, link.id)).toBe(false);
+      expect(record).not.toHaveBeenCalled();
+      expect(await keeper.keep(A, link.id, draft())).toBe("saved");
+    });
+
+    it("answers true and leaves an existing row alone", async () => {
+      const { store, copies, link, keeper } = await setup();
+      await store.updateToolIf(A, link.id, null, tool("kept"));
+      await copies.recordNoCopy(A, link.id, "too_large");
+      const record = vi.spyOn(copies, "recordNoCopy");
+      expect(await keeper.refuse(A, link.id)).toBe(true);
+      expect(await record.mock.results[0]?.value).toBe(false);
+    });
+
+    it("lets a tool store error reach the caller", async () => {
+      const { copies, link } = await setup();
+      const keeper = createCopyKeeper({
+        copies,
+        tools: { getTool: () => Promise.reject(new Error("db")) },
+        limitBytes: 1,
+        now: () => at(5),
+      });
+      await expect(keeper.refuse(A, link.id)).rejects.toThrow("db");
+    });
   });
 
   it("wants copies only when the limit is above zero", async () => {

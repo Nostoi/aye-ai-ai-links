@@ -29,10 +29,14 @@ export type ImageIndexer = {
   sweep(): Promise<void>;
 };
 
-type Verdict = { store: true } | { end: ImageEnd } | { retry: true } | { abandon: true };
+export type ImageVerdict =
+  | { store: true }
+  | { end: ImageEnd }
+  | { retry: true }
+  | { abandon: true };
 
 /** What an outcome means for the image: stored, ended for good, tried again, or left as it is. */
-function judge(outcome: ImageOutcome): Verdict {
+export function judgeImage(outcome: ImageOutcome): ImageVerdict {
   switch (outcome.kind) {
     case "ok":
       return { store: true };
@@ -94,7 +98,7 @@ export function createImageIndexer(o: ImageIndexerOptions): ImageIndexer {
   /** Fetches one image and records what came of it. Throws only for a store error. */
   async function take(p: PendingImage, key: string): Promise<void> {
     const outcome = await fetcher.fetch(p.imageUrl, abort.signal);
-    const verdict = judge(outcome);
+    const verdict = judgeImage(outcome);
     if ("abandon" in verdict) return;
     if ("store" in verdict && outcome.kind === "ok") {
       const { contentType, bytes } = outcome;

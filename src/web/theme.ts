@@ -158,6 +158,7 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .meta:empty{display:none}
 a.button{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:999px;font-size:15.5px;font-weight:600;text-decoration:none;border:1.5px solid var(--line)}
 a.button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.worth-grid>.worth-side:first-child{flex:0 1 280px}
 .worth-side{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:22px}
 .worth-small{display:flex}
 .worth-small,.handy-tile{border-radius:18px;box-shadow:0 2px 10px #0000000b}
@@ -185,6 +186,9 @@ img.handy-image{background:#fff}
 .handy-tile .ask p{margin:0;font-size:13px;line-height:15px;font-weight:700;color:var(--ink)}
 .handy-tile .small-actions{flex-wrap:nowrap;gap:0 14px}
 .handy-tile .ask-gone .small-actions{flex-direction:column;align-items:flex-start;gap:0}
+.handy-tile.needs-you .ask-gone{position:static;order:-1;margin:4px 4px auto;padding:3px 10px 0 10px}
+.ask-gone p,.ask-gone button[data-act=still-works]{margin-right:30px}
+.ask-gone button[data-act=done]{white-space:nowrap}
 .handy-tile .small-actions button{min-height:44px;min-width:44px;padding:0 2px;color:var(--ink);font-weight:600;text-decoration-color:color-mix(in srgb,var(--ink) 35%,transparent)}
 .card-menu{position:absolute;top:2px;right:2px;z-index:3}
 .card-menu summary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;color:var(--soft);cursor:pointer;list-style:none}

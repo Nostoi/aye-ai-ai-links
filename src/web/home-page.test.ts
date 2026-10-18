@@ -645,6 +645,8 @@ describe("the Worth a look gone card (#128)", () => {
     const only = d.querySelectorAll("#worth-cards article");
     expect(only).toHaveLength(1);
     expect(only[0]?.className).toMatch(/worth-small worth-gone/);
+    // The theme sizes a side column that is the grid's first child as one small card.
+    expect(d.getElementById("worth-cards")?.firstElementChild?.className).toBe("worth-side");
   });
 
   it("leaves home without a Worth a look section when there is nothing at all", () => {

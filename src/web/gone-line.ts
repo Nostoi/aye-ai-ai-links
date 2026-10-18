@@ -1,19 +1,25 @@
 import type { GoneView } from "../core/link-check.js";
+import type { CopyInfo } from "../core/saved-copy.js";
 import type { Link } from "../core/types.js";
+import { copyHref } from "./copy-page.js";
 
 /** The words on a card whose link seems gone. */
 export const GONE_TEXT = "This page seems gone";
 
 /**
  * The line a card carries once its link seems gone (#128). An active link also gets It still works
- * and I'm done with it; a link already done with gets the line only. It carries no date.
+ * and I'm done with it; a link already done with gets the line only. It carries no date. A link
+ * with a saved copy (`copy`) also gets a link to read it, first in the row.
  */
-export function goneLine(link: Link, view: GoneView | null | undefined): string {
+export function goneLine(link: Link, view: GoneView | null | undefined, copy?: CopyInfo): string {
   if (!view) return "";
-  const buttons =
+  const read = copy ? `<a href="${copyHref(link.id)}">Read the saved copy</a>` : "";
+  const answers =
     link.state === "active"
-      ? `\n<div class="actions small-actions"><button type="button" data-act="still-works">It still works</button><button type="button" data-act="gone-done">I'm done with it</button></div>`
+      ? `<button type="button" data-act="still-works">It still works</button><button type="button" data-act="gone-done">I'm done with it</button>`
       : "";
+  const buttons =
+    read + answers === "" ? "" : `\n<div class="actions small-actions">${read}${answers}</div>`;
   return `<div class="gone-line" data-gone>
 <p class="small">${GONE_TEXT}</p>${buttons}
 </div>`;

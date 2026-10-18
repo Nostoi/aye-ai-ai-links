@@ -198,15 +198,16 @@ img.handy-image{background:#fff}
 .result .card-menu-dot{background:color-mix(in srgb,var(--ink) 7%,transparent);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
 .result .card-menu summary:hover .card-menu-dot,.result .card-menu[open] .card-menu-dot{background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .card-menu-list{position:absolute;top:42px;right:-4px;width:max-content;padding:4px;border-radius:14px;background:var(--surface);border:1px solid color-mix(in srgb,var(--ink) 9%,transparent);box-shadow:0 12px 32px rgb(0 0 0 / .16),0 2px 6px rgb(0 0 0 / .06);transform-origin:top right;animation:menu-in .12s ease-out}
-.card-menu-list button{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left}
-.card-menu-list button:hover,.card-menu-list button:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.card-menu-list button,.card-menu-list a{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left;text-decoration:none}
+.card-menu-list button:hover,.card-menu-list button:focus-visible,.card-menu-list a:hover,.card-menu-list a:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
 .card-menu-list svg{flex:none;fill:none;stroke:var(--soft);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 @keyframes menu-in{from{opacity:0;transform:translateY(-4px) scale(.97)}}
 @media (prefers-reduced-motion:reduce){.card-menu-list{animation:none}.card-menu-dot{transition:none}}
 .handy-tile p{margin:0 0 4px}
 .worth-small .meta{font-size:14px;margin:0 0 4px}
 .small-actions{gap:0 18px}
-.small-actions button{min-height:44px;padding:0;background:none;border:0;color:var(--soft);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.small-actions button,.small-actions a{min-height:44px;padding:0;background:none;border:0;color:var(--soft);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.small-actions a{display:inline-flex;align-items:center}
 .gone-line{color:var(--soft)}
 .gone-line p{margin:0 0 4px}
 .handy-control{align-items:center;font-size:14px;color:var(--soft)}

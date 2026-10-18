@@ -1,6 +1,7 @@
 import type { PictureInfo } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
+import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
@@ -61,6 +62,8 @@ type Input = {
   later?: boolean;
   /** Each card's picture info, for the edit dialog; read on the active pages only. */
   pictures?: Map<string, PictureInfo>;
+  /** The links that have a saved copy. */
+  copies?: Map<string, CopyInfo>;
 };
 
 /**
@@ -69,7 +72,17 @@ type Input = {
  */
 function card(
   link: Link,
-  { tag, catalog, images, handy, gone = new Map(), now, done, pictures = new Map() }: Input,
+  {
+    tag,
+    catalog,
+    images,
+    handy,
+    gone = new Map(),
+    now,
+    done,
+    pictures = new Map(),
+    copies = new Map(),
+  }: Input,
 ): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
@@ -81,11 +94,11 @@ function card(
   const version = images.get(link.id);
   return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
 ${tile(link, version, "card-image")}
-${done ? "" : `${editMenu(link)}\n`}<div class="card-body">
+${done ? "" : `${editMenu(link, copies.get(link.id))}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
-${goneLine(link, gone.get(link.id))}
+${goneLine(link, gone.get(link.id), copies.get(link.id))}
 ${done ? "" : handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }

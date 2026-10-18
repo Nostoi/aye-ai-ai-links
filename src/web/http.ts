@@ -498,7 +498,10 @@ export function webApp({
       ...(gone ? [gone.id] : []),
     ]);
     const { spaces, catalog } = await homeSpaces(deps, owner);
-    const worth = { links, images, now: deps.now(), catalog, gone };
+    const goneCopy = gone
+      ? ((await deps.savedCopies.copyInfo(owner, [gone.id])).get(gone.id) ?? null)
+      : null;
+    const worth = { links, images, now: deps.now(), catalog, gone, goneCopy };
     const items = await listShelf(deps, owner);
     // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
     const shelfImages = await deps.images.imageVersions(
@@ -521,6 +524,10 @@ export function webApp({
       caller.owner,
       links.map((l) => l.id),
     );
+    const copies = await deps.savedCopies.copyInfo(
+      caller.owner,
+      links.map((l) => l.id),
+    );
     const pictures = await deps.images.pictureInfo(
       caller.owner,
       links.map((l) => l.id),
@@ -530,7 +537,18 @@ export function webApp({
     const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
     const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
     const now = (deps.now ?? (() => new Date()))();
-    const html = searchPage({ query, links, now, images, catalog, handy, gone, keep, pictures });
+    const html = searchPage({
+      query,
+      links,
+      now,
+      images,
+      catalog,
+      handy,
+      gone,
+      keep,
+      pictures,
+      copies,
+    });
     return c.html(html, 200, NO_STORE);
   });
 
@@ -553,6 +571,10 @@ export function webApp({
         owner,
         page.links.map((l) => l.id),
       );
+      const copies = await deps.savedCopies.copyInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
@@ -571,6 +593,7 @@ export function webApp({
         handy,
         gone,
         pictures,
+        copies,
         now: deps.now(),
         done,
         later,
@@ -604,6 +627,10 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const catalog = await deps.store.listTags(owner);
+      const copies = await deps.savedCopies.copyInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
@@ -622,6 +649,7 @@ export function webApp({
         handy,
         gone,
         pictures,
+        copies,
         now: deps.now(),
         done,
         later,

@@ -1,8 +1,12 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { bookmarkletCode } from "./bookmarklet.js";
 import { connectionsPage } from "./connections-page.js";
+import { outsideRefs } from "./outside-refs-test-kit.js";
+import { escapeHtml } from "./page.js";
 
 const NOW = new Date("2026-10-14T10:00:00Z");
+const CODE = bookmarkletCode("https://links.example");
 const key = (id: number, name: string) => ({
   id,
   name,
@@ -20,8 +24,12 @@ const REDIRECT: Answer = { status: 0, type: "opaqueredirect" };
  * The page in linkedom, with its own script and the Undo bar's run against it. The menu's script
  * is left out. `answer` gives each request's response; every request is recorded.
  */
-function load(answer: (sent: Sent) => Answer, keys = [key(7, "codex"), key(8, "claude")]) {
-  const html = connectionsPage({ connections: [], keys, now: NOW });
+function load(
+  answer: (sent: Sent) => Answer,
+  keys = [key(7, "codex"), key(8, "claude")],
+  navigator: object = {},
+) {
+  const html = connectionsPage({ connections: [], keys, now: NOW, bookmarklet: CODE });
   const { document, window } = parseHTML(html);
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
@@ -59,7 +67,7 @@ function load(answer: (sent: Sent) => Answer, keys = [key(7, "codex"), key(8, "c
     document,
     fetch,
     location,
-    {},
+    navigator,
     () => ({}),
     (type: string, fn: (event: unknown) => void) => onWindow.set(type, fn),
     noTimer,
@@ -233,6 +241,7 @@ describe("the page as served", () => {
       ],
       keys: [key(7, "codex"), { ...key(8, "Retired agent"), revokedAt: NOW }],
       now: NOW,
+      bookmarklet: CODE,
     });
     expect(html).toContain("Connected October 13");
     expect(html).toContain(
@@ -242,5 +251,122 @@ describe("the page as served", () => {
     expect(html).not.toContain('data-key-id="8"');
     expect(html).not.toMatch(/aak_[A-Za-z0-9]/);
     expect(html).toContain('<div class="new-key" id="new-key" role="status" hidden>');
+  });
+});
+
+describe("Save from your browser", () => {
+  const html = connectionsPage({ connections: [], keys: [], now: NOW, bookmarklet: CODE });
+
+  it("offers the bookmarklet as a link to drag and as code to copy, the same code in both, with the phone steps", () => {
+    const { document } = parseHTML(html);
+    const section = document.querySelector("section[aria-labelledby=bookmarklet-heading]");
+    expect(section?.querySelector("h2")?.textContent).toBe("Save from your browser");
+    const link = document.getElementById("bookmarklet");
+    expect(link?.getAttribute("href")).toBe(CODE);
+    expect(link?.textContent).toBe("Save to Aye-AI-AI Links");
+    const code = document.getElementById("bookmarklet-code");
+    expect(code?.tagName).toBe("TEXTAREA");
+    expect(code?.hasAttribute("readonly")).toBe(true);
+    // linkedom leaves a textarea's character references undecoded (checked 2026-10-17), so the
+    // text a browser shows is pinned in the markup: the code, escaped, as the textarea's whole text.
+    expect(html).toContain(`rows="4">${escapeHtml(CODE)}</textarea>`);
+    const text = section?.textContent ?? "";
+    expect(text).toContain(
+      "Drag this to your bookmarks bar. On any page, click it to save that page.",
+    );
+    expect(text).toContain("iPhone and iPad (Safari):");
+    expect(text).toContain("replace its address with the copied code");
+    expect(text).toContain("Android (Chrome):");
+    expect(text).toContain("type the bookmark's name in the address bar");
+  });
+
+  it("comes after Agent keys", () => {
+    expect(html.indexOf('id="bookmarklet-heading"')).toBeGreaterThan(
+      html.indexOf('id="keys-heading"'),
+    );
+  });
+
+  it("makes no outside request: the code sits only in the link's href and in element text", () => {
+    expect(outsideRefs(html)).toEqual([]);
+  });
+
+  it("Copy code copies the field's text and says Copied", async () => {
+    const copied: string[] = [];
+    const clipboard = {
+      writeText: async (text: string) => {
+        copied.push(text);
+      },
+    };
+    const page = load(() => ({ status: 204 }), [], { clipboard });
+    // Set as a browser decodes it; linkedom would hand back the escaped markup.
+    page.$("#bookmarklet-code").textContent = CODE;
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(copied).toEqual([CODE]);
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copied");
+  });
+
+  const FAILED = "Copy didn't work. The code is selected: press and hold it, then Copy.";
+  const refusing = {
+    writeText: async () => {
+      throw new Error("denied");
+    },
+  };
+
+  /** The field as a browser has it: a value, and selection calls recorded. */
+  function selectable(page: ReturnType<typeof load>) {
+    const calls: unknown[][] = [];
+    const field = page.$("#bookmarklet-code") as HTMLElement & Record<string, unknown>;
+    field.value = CODE;
+    field.select = () => calls.push(["select"]);
+    field.setSelectionRange = (...args: unknown[]) => calls.push(["setSelectionRange", ...args]);
+    field.focus = () => {};
+    return calls;
+  }
+
+  it("where the clipboard refuses, selects the whole code and says the copy failed", async () => {
+    const page = load(() => ({ status: 204 }), [], { clipboard: refusing });
+    const calls = selectable(page);
+    expect(page.$("#bookmarklet-status").getAttribute("role")).toBe("status");
+    expect(page.$("#bookmarklet-status").textContent).toBe("");
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(calls).toEqual([["select"], ["setSelectionRange", 0, CODE.length]]);
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copy code");
+    expect(page.$("#bookmarklet-status").textContent).toBe(FAILED);
+  });
+
+  it("where there is no clipboard, selects the code and says the copy failed", async () => {
+    const page = load(() => ({ status: 204 }), [], {});
+    const calls = selectable(page);
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(calls).toEqual([["select"], ["setSelectionRange", 0, CODE.length]]);
+    expect(page.$("#bookmarklet-status").textContent).toBe(FAILED);
+  });
+
+  it("each tap shows its own outcome: a refusal after a success ends on Copy code with the status", async () => {
+    let refuse = false;
+    const clipboard = {
+      writeText: async () => {
+        if (refuse) throw new Error("denied");
+      },
+    };
+    const page = load(() => ({ status: 204 }), [], { clipboard });
+    selectable(page);
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copied");
+    expect(page.$("#bookmarklet-status").textContent).toBe("");
+    refuse = true;
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copy code");
+    expect(page.$("#bookmarklet-status").textContent).toBe(FAILED);
+    refuse = false;
+    page.click("#copy-bookmarklet");
+    await page.settle();
+    expect(page.$("#copy-bookmarklet").textContent).toBe("Copied");
+    expect(page.$("#bookmarklet-status").textContent).toBe("");
   });
 });

@@ -5,9 +5,9 @@ import type { WithAuthLock } from "../auth/auth-lock.js";
 import type { Auth } from "../auth/better-auth.js";
 import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
-import { returnAfterLogin } from "../auth/login-return.js";
+import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
-import { CoreError } from "../core/errors.js";
+import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { editLink, undoEdit } from "../core/link-edit.js";
@@ -23,6 +23,7 @@ import {
 } from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
+import { type SavedPage, savePage } from "../core/save-page.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -61,13 +62,16 @@ import {
 } from "../core/worth-a-look.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allPage } from "./all-page.js";
+import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
+import { savedOn } from "./page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
+import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
 import { SPACE_RESTART, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
@@ -78,6 +82,8 @@ const LINK_PAGE = 24;
 
 /** Pages show one person's data, so no browser or proxy may keep a copy. */
 const NO_STORE = { "Cache-Control": "no-store" };
+/** The Save page's headers: uncached, and never framed, so no site can lay a fake Save button over it. */
+const SAVE_PAGE_HEADERS = { ...NO_STORE, "Content-Security-Policy": "frame-ancestors 'none'" };
 
 /** A link's stored preview image. The id must be digits; anything else is not this route. */
 export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
@@ -99,6 +105,7 @@ const imageHeaders = (contentType: string, cached: boolean) => ({
 
 type Check<T> = (value: unknown) => value is T;
 const isString: Check<string> = (value) => typeof value === "string";
+const isStringOrNull: Check<string | null> = (value) => value === null || typeof value === "string";
 const isBoolean: Check<boolean> = (value) => typeof value === "boolean";
 const isSafeInteger = (value: unknown): value is number => Number.isSafeInteger(value);
 const isId = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
@@ -192,19 +199,40 @@ const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, n
 
 /** The page's words for a link that is gone; core's are written for an agent. */
 const LINK_GONE = "That link is gone. Reload the page.";
-const HOME_REFUSALS = { not_found: 404, conflict: 409, invalid_input: 400 } as const;
+/** The status for each core refusal an action answers; any other error is thrown on. */
+type Refusals = Partial<Record<CoreErrorCode, 400 | 404 | 409>>;
+const HOME_REFUSALS: Refusals = { not_found: 404, conflict: 409, invalid_input: 400 };
+/** The Save page's refusals: the home ones, and an address core cannot save. */
+const SAVE_REFUSALS: Refusals = { ...HOME_REFUSALS, invalid_url: 400 };
 
-/** A refused home action answers with its status and message; anything else is thrown on. */
-async function homeAction(c: Context, act: () => Promise<Response>): Promise<Response> {
+/** A refused action answers with its status and message; anything else is thrown on. */
+async function homeAction(
+  c: Context,
+  act: () => Promise<Response>,
+  refusals: Refusals = HOME_REFUSALS,
+): Promise<Response> {
   try {
     return await act();
   } catch (error) {
-    if (!(error instanceof CoreError) || !(error.code in HOME_REFUSALS)) throw error;
-    const code = error.code as keyof typeof HOME_REFUSALS;
-    const message = code === "not_found" ? LINK_GONE : error.message;
-    return c.json({ code, message }, HOME_REFUSALS[code], NO_STORE);
+    const status = error instanceof CoreError ? refusals[error.code] : undefined;
+    if (!(error instanceof CoreError) || status === undefined) throw error;
+    const message = error.code === "not_found" ? LINK_GONE : error.message;
+    return c.json({ code: error.code, message }, status, NO_STORE);
   }
 }
+
+/** The Save page's answer: the link as saved, with its date in the page's words. */
+const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
+  id: link.id,
+  created,
+  whyKept,
+  state: link.state,
+  savedAt: link.savedAt.toISOString(),
+  savedOn: savedOn(link.savedAt, now),
+  title: link.title,
+  url: link.url,
+  why: link.why?.text ?? null,
+});
 
 /** A Keep handy row as the page holds it between an action and its Undo: dates as ISO strings. */
 type ToolJson = {
@@ -345,6 +373,7 @@ export function webApp({
   consent,
   connections,
   keys,
+  baseUrl,
 }: {
   deps: SearchLinksDeps &
     WorthDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
@@ -364,9 +393,14 @@ export function webApp({
     turnOff: (owner: OwnerId, id: number) => void;
     turnOn: (owner: OwnerId, id: number) => void;
   };
+  /** The server's public origin (`AYE_BASE_URL`), which the bookmarklet opens. */
+  baseUrl: string;
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
+  // The Save page alone sends a signed-out owner to sign in and straight back to it (#129).
+  const saveSession = requireSession(auth, withAuthLock, loginRedirect);
+  const bookmarklet = bookmarkletCode(baseUrl);
 
   /** What a card shows after an edit or its Undo, read after the write. */
   const cardState = async (owner: OwnerId, id: string) => {
@@ -383,7 +417,11 @@ export function webApp({
   };
 
   app.get("/login", (c) =>
-    c.html(loginPage({ next: returnAfterLogin(c.req.query("next") ?? null) }), 200, NO_STORE),
+    // No Referer, so the return to a long Save address does not carry this whole URL as a header (#129).
+    c.html(loginPage({ next: returnAfterLogin(c.req.query("next") ?? null) }), 200, {
+      ...NO_STORE,
+      "Referrer-Policy": "no-referrer",
+    }),
   );
 
   app.get(OAUTH_ERROR_PATH, (c) =>
@@ -546,9 +584,40 @@ export function webApp({
       connections: await connections.list(owner),
       keys: keys.list(owner),
       now,
+      bookmarklet,
     });
     return c.html(page, 200, NO_STORE);
   });
+
+  // The Save page (#129). Any site can open it, and the Lax cookie comes along, so it never
+  // writes and reads none of the owner's data: it is filled only from its own query.
+  app.get(SAVE_PATH, saveSession, (c) =>
+    c.html(
+      saveForm({
+        url: c.req.query("url") ?? "",
+        title: c.req.query("title") ?? "",
+        long: c.req.query("long") === "1",
+      }),
+      200,
+      SAVE_PAGE_HEADERS,
+    ),
+  );
+
+  // The Save page's Save (#129). The why is the owner's own, so core records it as "asked", and
+  // the link is saved by the session's caller. A repeat save answers the link already saved.
+  const saveBody = { url: isString, title: isStringOrNull, why: isStringOrNull };
+  app.post(SAVE_PATH, jsonBody(saveBody), session, (c) =>
+    homeAction(
+      c,
+      async () => {
+        const { owner, savedBy } = c.get("caller");
+        const { url, title, why } = c.get("body");
+        const saved = await savePage(deps, owner, { url, title, why, savedBy });
+        return c.json(savedJson(saved, deps.now()), 200, NO_STORE);
+      },
+      SAVE_REFUSALS,
+    ),
+  );
 
   // The home cards' buttons. Recording an opening is a POST, never a redirect route: a GET that
   // writes could be set off from another site.

@@ -3,6 +3,7 @@ import type { CoreError } from "./errors.js";
 import { filingContext } from "./filing-context.js";
 import { getLink, saveLink, updateLink } from "./links.js";
 import { setProjectStatus } from "./project-status.js";
+import { type SavePageInput, savePage } from "./save-page.js";
 import type { LinkStore } from "./store.js";
 import { changeTagKind } from "./tag-kind.js";
 import { SPACE_COLORS, setTagColor, setTagPinned } from "./tag-space.js";
@@ -1617,6 +1618,172 @@ export function describeStoreContract(
         const p = updateLink(deps(), B, link.id, { summary: "hacked", state: "archived" });
         expect(await code(p)).toBe("not_found");
         expect(await h.all(A)).toEqual(before);
+      });
+
+      describe("savePage", () => {
+        const URL_A = "https://ex.com/a";
+        const page = (over: Partial<SavePageInput> = {}): SavePageInput => ({
+          url: URL_A,
+          title: "A page",
+          why: null,
+          savedBy: "web",
+          ...over,
+        });
+
+        it("saves a new link with the owner's why as asked, by the caller's savedBy", async () => {
+          const { link, created, whyKept } = await savePage(
+            deps(),
+            A,
+            page({ why: "  for the trip " }),
+          );
+          expect(created).toBe(true);
+          expect(whyKept).toBe(true);
+          expect(link).toMatchObject({
+            title: "A page",
+            why: { text: "for the trip", source: "asked" },
+          });
+          expect(await h.all(A)).toMatchObject([
+            {
+              url: URL_A,
+              title: "A page",
+              why: { text: "for the trip", source: "asked" },
+              savedBy: "web",
+              state: "active",
+            },
+          ]);
+        });
+
+        it("stores no why for a blank one, and no title for a blank one", async () => {
+          const { link, whyKept } = await savePage(deps(), A, page({ why: "   ", title: "  " }));
+          expect(link.why).toBeNull();
+          expect(link.title).toBeNull();
+          expect(whyKept).toBe(true);
+        });
+
+        it("refuses a title of 201 code points and writes no link", async () => {
+          expect(await code(savePage(deps(), A, page({ title: "😀".repeat(201) })))).toBe(
+            "invalid_input",
+          );
+          expect(await h.all(A)).toEqual([]);
+        });
+
+        it.each(["ftp://ex.com/a", "https://user:pw@ex.com/a"])(
+          "refuses %s as invalid_url and writes no link",
+          async (url) => {
+            expect(await code(savePage(deps(), A, page({ url })))).toBe("invalid_url");
+            expect(await h.all(A)).toEqual([]);
+          },
+        );
+
+        it("a repeat save returns the same link, fills a missing why, and keeps its title", async () => {
+          const first = await savePage(deps(), A, page());
+          const again = await savePage(deps(), A, page({ title: "Other", why: "to cook" }));
+          expect(again.created).toBe(false);
+          expect(again.link.id).toBe(first.link.id);
+          expect(again.link.why).toEqual({ text: "to cook", source: "asked" });
+          expect(again.link.title).toBe("A page");
+          expect(again.whyKept).toBe(true);
+          expect(await h.all(A)).toHaveLength(1);
+        });
+
+        it("over an agent's guess, a repeat save replaces it with the owner's why", async () => {
+          await saveLink(deps(), A, {
+            url: URL_A,
+            savedBy: "agent",
+            why: { text: "guess", source: "inferred" },
+          });
+          const again = await savePage(deps(), A, page({ why: "mine" }));
+          expect(again.whyKept).toBe(true);
+          expect(again.link.why).toEqual({ text: "mine", source: "asked" });
+          expect((await h.all(A))[0]?.why).toEqual({ text: "mine", source: "asked" });
+        });
+
+        it.each(["stated", "asked"] as const)(
+          "over a %s why, a repeat save keeps it and says the owner's was not kept",
+          async (source) => {
+            await saveLink(deps(), A, {
+              url: URL_A,
+              savedBy: "agent",
+              why: { text: "theirs", source },
+            });
+            const again = await savePage(deps(), A, page({ why: "mine" }));
+            expect(again.whyKept).toBe(false);
+            expect(again.link.why).toEqual({ text: "theirs", source });
+            expect((await h.all(A))[0]?.why).toEqual({ text: "theirs", source });
+          },
+        );
+
+        it("a repeat save with no why leaves a guess alone and counts as kept", async () => {
+          await saveLink(deps(), A, {
+            url: URL_A,
+            savedBy: "agent",
+            why: { text: "guess", source: "inferred" },
+          });
+          const again = await savePage(deps(), A, page());
+          expect(again.whyKept).toBe(true);
+          expect((await h.all(A))[0]?.why).toEqual({ text: "guess", source: "inferred" });
+        });
+
+        it("keeps a reason given between its read and its write, and says the owner's was not kept", async () => {
+          await saveLink(deps(), A, {
+            url: URL_A,
+            savedBy: "agent",
+            why: { text: "guess", source: "inferred" },
+          });
+          const store = wrap(h.store, {
+            async updateIf(owner, id, expected, patch) {
+              await h.store.update(owner, id, {
+                why: { text: "given meanwhile", source: "stated" },
+              });
+              return h.store.updateIf(owner, id, expected, patch);
+            },
+          });
+          const again = await savePage({ store, now: () => clock }, A, page({ why: "mine" }));
+          expect(again.created).toBe(false);
+          expect(again.whyKept).toBe(false);
+          expect(again.link.why).toEqual({ text: "given meanwhile", source: "stated" });
+          expect((await h.all(A))[0]?.why).toEqual({ text: "given meanwhile", source: "stated" });
+        });
+
+        it("does not wait for the page: a kick that never settles does not hold it, and still runs", async () => {
+          const kicks: [string, string][] = [];
+          const never = {
+            kick: (owner: string, id: string) => {
+              kicks.push([owner, id]);
+              return new Promise<void>(() => {});
+            },
+          };
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const waited = new Promise<"waited">((resolve) => {
+            timer = setTimeout(() => resolve("waited"), 1_000);
+          });
+          try {
+            const result = await Promise.race([
+              savePage({ ...deps(), snapshots: never }, A, page()),
+              waited,
+            ]);
+            expect(result).not.toBe("waited");
+            expect(kicks).toEqual([[A, (await h.all(A))[0]?.id]]);
+          } finally {
+            clearTimeout(timer);
+          }
+        });
+
+        it("leaves another owner's link with the same address untouched", async () => {
+          await saveLink(deps(), A, {
+            url: URL_A,
+            savedBy: "agent",
+            title: "A's",
+            why: { text: "A's reason", source: "stated" },
+          });
+          const before = structuredClone(await h.all(A));
+          const theirs = await savePage(deps(), B, page({ why: "B's reason" }));
+          expect(theirs.created).toBe(true);
+          expect(theirs.whyKept).toBe(true);
+          expect(theirs.link.why).toEqual({ text: "B's reason", source: "asked" });
+          expect(await h.all(A)).toEqual(before);
+          expect(await h.all(B)).toHaveLength(1);
+        });
       });
     });
   });

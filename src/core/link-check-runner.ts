@@ -1,12 +1,5 @@
-import type { LinkChecker, LinkCheckOutcome } from "./fetch.js";
-import {
-  ANSWER_WINDOW_MS,
-  answeredElsewhere,
-  applyCheck,
-  type CheckVerdict,
-  checkCutoffs,
-  judgeCheck,
-} from "./link-check.js";
+import type { LinkChecker } from "./fetch.js";
+import { applyCheck, type CheckVerdict, checkCutoffs, judgeCheck } from "./link-check.js";
 import type { DueCheck, LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import { isWebUrl } from "./url-key.js";
 
@@ -45,16 +38,6 @@ export type LinkCheckRunner = {
 /** A link that isn't a web address is never requested. */
 const NOT_WEB: CheckVerdict = { result: "unknown", detail: "refused:scheme" };
 
-const UNCONFIRMED = "network:ENOTFOUND:unconfirmed";
-
-type Held = {
-  due: DueCheck;
-  expected: LinkCheck | null;
-  host: string | null;
-  at: Date;
-  outcome: LinkCheckOutcome;
-};
-
 /** The host a URL names, lower-cased, or null when it does not parse. */
 function hostOf(url: string): string | null {
   try {
@@ -82,9 +65,10 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
  * Checks every saved link again now and then (#128), in the background and apart from the
  * snapshot runner: it holds no `SnapshotStore`, so a check never changes a snapshot. What is due
  * comes from the stored rows (`dueChecks` with core's cutoffs), so a restart loses nothing; the
- * host spacing and the offline guard's answers are kept in memory.
+ * host spacing is kept in memory.
  *
- * Per due link: read its row, check its URL, judge, `applyCheck`, then `updateCheckIf` against the
+ * Per due link: read its row, check its URL (a name that doesn't resolve asks the checker's canary
+ * lookup whether the server is online), judge, `applyCheck`, then `updateCheckIf` against the
  * row read. If the owner changed the row meanwhile, the same verdict is applied once more to the
  * row as it now is. A null write means the link was deleted. Every check is recorded except one
  * aborted by `stop`, so no link stays due forever.
@@ -102,8 +86,6 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
 
   /** When each host was last requested, by `now`. */
   const requested = new Map<string, number>();
-  /** Each host's last HTTP answer, by `now`; ones older than ANSWER_WINDOW_MS are dropped. */
-  const answers = new Map<string, Date>();
   /** When the last request ended, on the timer clock. */
   let lastEnded: number | null = null;
   const abort = new AbortController();
@@ -114,12 +96,6 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** The sweep in flight. */
   let running: Promise<void> | undefined;
-
-  function noteAnswer(host: string, at: Date): void {
-    answers.set(host, at);
-    const since = at.getTime() - ANSWER_WINDOW_MS;
-    for (const [h, when] of answers) if (when.getTime() < since) answers.delete(h);
-  }
 
   /** Waits out `gapMs` since the last request; false when stopped or quiesced meanwhile. */
   async function waitForGap(): Promise<boolean> {
@@ -156,7 +132,7 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
   }
 
   /** Checks one due link and records the verdict. Throws only for a store error. */
-  async function checkOne(due: DueCheck, host: string | null, held: Held[]): Promise<void> {
+  async function checkOne(due: DueCheck, host: string | null): Promise<void> {
     const expected = await checks.getCheck(due.owner, due.linkId);
     if (!isWebUrl(due.url)) {
       await record(due, expected, NOT_WEB, now());
@@ -167,50 +143,33 @@ export function createLinkCheckRunner(o: LinkCheckRunnerOptions): LinkCheckRunne
     if (host !== null) requested.set(host, at.getTime());
     const outcome = await checker.check(due.url, abort.signal);
     lastEnded = performance.now();
-    if (host !== null && (outcome.kind === "ok" || outcome.kind === "http_error")) {
-      noteAnswer(host, now());
-    }
-    const verdict = judgeCheck(outcome, answeredElsewhere(answers, host, at));
+    const up =
+      outcome.kind === "network_error" && outcome.code === "ENOTFOUND"
+        ? await checker.canResolve(abort.signal)
+        : false;
+    if (abort.signal.aborted) return;
+    const verdict = judgeCheck(outcome, up);
     if (verdict === null) return;
-    if (outcome.kind === "network_error" && verdict.detail === UNCONFIRMED) {
-      held.push({ due, expected, host, at, outcome });
-      return;
-    }
     await record(due, expected, verdict, at);
   }
 
-  async function settle(held: Held[]): Promise<void> {
-    const ended = now();
-    for (const h of held.splice(0)) {
-      const verdict = judgeCheck(h.outcome, answeredElsewhere(answers, h.host, h.at, ended));
-      if (verdict !== null) await record(h.due, h.expected, verdict, h.at);
-    }
-  }
-
-  async function scan(held: Held[]): Promise<void> {
+  async function scan(): Promise<void> {
     const due = await checks.dueChecks(checkCutoffs(now()), SWEEP_SIZE);
     for (const d of due) {
       if (quiet) return;
       const host = hostOf(d.url);
       const last = host === null ? undefined : requested.get(host);
       if (last !== undefined && now().getTime() - last < hostGapMs) continue;
-      await checkOne(d, host, held);
+      await checkOne(d, host);
     }
   }
 
   /** Resolves true when the sweep ended on a store error. */
   async function sweepOnce(): Promise<boolean> {
     if (quiet) return false;
-    const held: Held[] = [];
     let failed = false;
     try {
-      await scan(held);
-    } catch (error) {
-      log("link check sweep failed", error);
-      failed = true;
-    }
-    try {
-      await settle(held);
+      await scan();
     } catch (error) {
       log("link check sweep failed", error);
       failed = true;

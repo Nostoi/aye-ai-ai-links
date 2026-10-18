@@ -431,7 +431,8 @@ export function webApp({
   // Reads only: a cross-site GET carries the Lax session cookie, so it must not use links up.
   app.get("/", session, async (c) => {
     const { owner } = c.get("caller");
-    const links = await worthALook(deps, owner);
+    const suggestions = await listSuggestions(deps, owner);
+    const links = await worthALook(deps, owner, suggestions);
     const images = await deps.images.imageVersions(
       owner,
       links.map((d) => d.link.id),
@@ -439,7 +440,6 @@ export function webApp({
     const { spaces, catalog } = await homeSpaces(deps, owner);
     const worth = { links, images, now: deps.now(), catalog };
     const items = await listShelf(deps, owner);
-    const suggestions = await listSuggestions(deps, owner);
     // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
     const shelfImages = await deps.images.imageVersions(
       owner,

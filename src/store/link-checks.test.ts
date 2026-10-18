@@ -153,6 +153,7 @@ describe("a check, on SQLite", () => {
       const checker: LinkChecker = {
         check: async (url) =>
           url === "https://up.test/" ? { kind: "ok", finalUrl: url } : outcome,
+        canResolve: async () => true,
         close: async () => {},
       };
       const runner = createLinkCheckRunner({

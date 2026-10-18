@@ -477,13 +477,13 @@ export function webApp({
   app.get("/", session, async (c) => {
     const { owner } = c.get("caller");
     const suggestions = await listSuggestions(deps, owner);
-    const { links } = await worthALook(deps, owner, suggestions);
-    const images = await deps.images.imageVersions(
-      owner,
-      links.map((d) => d.link.id),
-    );
+    const { links, gone } = await worthALook(deps, owner, suggestions);
+    const images = await deps.images.imageVersions(owner, [
+      ...links.map((d) => d.link.id),
+      ...(gone ? [gone.id] : []),
+    ]);
     const { spaces, catalog } = await homeSpaces(deps, owner);
-    const worth = { links, images, now: deps.now(), catalog };
+    const worth = { links, images, now: deps.now(), catalog, gone };
     const items = await listShelf(deps, owner);
     // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
     const shelfImages = await deps.images.imageVersions(

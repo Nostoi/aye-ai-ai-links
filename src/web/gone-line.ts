@@ -1,6 +1,9 @@
 import type { GoneView } from "../core/link-check.js";
 import type { Link } from "../core/types.js";
 
+/** The words on a card whose link seems gone. */
+export const GONE_TEXT = "This page seems gone";
+
 /**
  * The line a card carries once its link seems gone (#128). An active link also gets It still works
  * and I'm done with it; a link already done with gets the line only. It carries no date.
@@ -12,7 +15,7 @@ export function goneLine(link: Link, view: GoneView | null | undefined): string 
       ? `\n<div class="actions small-actions"><button type="button" data-act="still-works">It still works</button><button type="button" data-act="gone-done">I'm done with it</button></div>`
       : "";
   return `<div class="gone-line" data-gone>
-<p class="small">This page seems gone</p>${buttons}
+<p class="small">${GONE_TEXT}</p>${buttons}
 </div>`;
 }
 

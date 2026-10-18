@@ -41,8 +41,12 @@ const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => 
   link: link(over),
   reasons,
 });
-const render = (links: DigestLink[], images = new Map<string, string>(), catalog: Tag[] = []) =>
-  homePage({ worth: { links, images, now: NOW, catalog }, shelf: "", spaces: "" });
+const render = (
+  links: DigestLink[],
+  images = new Map<string, string>(),
+  catalog: Tag[] = [],
+  gone: Link | null = null,
+) => homePage({ worth: { links, images, now: NOW, catalog, gone }, shelf: "", spaces: "" });
 const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
@@ -508,7 +512,7 @@ describe("the home page's script", () => {
 
 it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
   const html = homePage({
-    worth: { links: [card([])], images: new Map(), now: NOW, catalog: [] },
+    worth: { links: [card([])], images: new Map(), now: NOW, catalog: [], gone: null },
     shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
     spaces: spacesSection([]),
   });
@@ -527,7 +531,7 @@ it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", 
 describe("Keep handy on a Worth a look card", () => {
   const withShelf = (links: DigestLink[]) =>
     homePage({
-      worth: { links, images: new Map(), now: NOW, catalog: [] },
+      worth: { links, images: new Map(), now: NOW, catalog: [], gone: null },
       shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
       spaces: "",
     });
@@ -543,7 +547,7 @@ describe("Keep handy on a Worth a look card", () => {
     const cards = [card([]), card([])];
     const id = cards[0]?.link.id as string;
     const onShelf = homePage({
-      worth: { links: [], images: new Map(), now: NOW, catalog: [] },
+      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null },
       shelf: handyShelf({
         items: [
           {
@@ -604,5 +608,107 @@ describe("Keep handy on a Worth a look card", () => {
     expect(p.$("#home-error").textContent).toBe(message);
     expect(p.$("#undo-bar").hidden).toBe(true);
     expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep"]);
+  });
+});
+
+describe("the Worth a look gone card (#128)", () => {
+  const goneLink = () => link({ why: null });
+  const html = (links: DigestLink[], gone: Link | null) => render(links, new Map(), [], gone);
+  const ROWS = { check: { result: "alive" }, previous: { result: "dead" } };
+
+  it("is the last card in the side column, small, amber, with its two buttons and nothing else", () => {
+    const g = goneLink();
+    const d = dom(html([card([]), card([]), card([])], g));
+    const side = [...d.querySelectorAll(".worth-side > article")];
+    const last = side[side.length - 1] as HTMLElement;
+    expect(last.dataset.id).toBe(g.id);
+    expect(side).toHaveLength(3);
+    expect(last.className).toMatch(/worth-small worth-gone needs-you/);
+    expect(last.querySelector("p.small")?.textContent).toBe("This page seems gone");
+    expect([...last.querySelectorAll("button")].map((b) => [b.dataset.act, b.textContent])).toEqual(
+      [
+        ["archive", "I'm done with it"],
+        ["still-works", "It still works"],
+      ],
+    );
+    expect(last.textContent).not.toMatch(/Not now|Keep handy|Tell me why/);
+    expect(last.querySelector(".worth-body")?.textContent?.replace(g.title ?? "", "")).not.toMatch(
+      /\d/,
+    );
+    expect(last.querySelector("h3 a")?.getAttribute("href")).toBe(g.url);
+  });
+
+  it("stands alone and small when there are no reading picks, never in the lead slot", () => {
+    const d = dom(html([], goneLink()));
+    expect(d.querySelector("#worth")?.textContent).toBe("Worth a look today");
+    expect(d.querySelectorAll(".worth-lead")).toHaveLength(0);
+    const only = d.querySelectorAll("#worth-cards article");
+    expect(only).toHaveLength(1);
+    expect(only[0]?.className).toMatch(/worth-small worth-gone/);
+  });
+
+  it("leaves home without a Worth a look section when there is nothing at all", () => {
+    expect(dom(html([], null)).querySelector(".worth")).toBeNull();
+  });
+
+  const open = (answer: (s: Sent) => Answer = () => ({ status: 204 })) => {
+    const g = goneLink();
+    const p = runPage(html([card([])], g), answer);
+    return { p, g, gone: () => p.$(".worth-gone") as HTMLElement };
+  };
+
+  it("It still works posts the id, hides the card, and Undo sends back the answer's rows and shows it", async () => {
+    const { p, g, gone } = open((s) =>
+      s.url === "/links/still-works" ? { status: 200, body: ROWS } : { status: 204 },
+    );
+    p.dispatch(p.$(".worth-gone button[data-act=still-works]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/links/still-works", body: { id: g.id } });
+    expect(gone().hidden).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe("Marked as working.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toMatchObject({
+      url: "/links/still-works/undo",
+      body: { id: g.id, ...ROWS },
+    });
+    expect(gone().hidden).toBe(false);
+  });
+
+  it("an Undo the server refuses shows its message and leaves the card hidden", async () => {
+    const message = "This link was checked since, so it stays as it is.";
+    const { p, gone } = open((s) =>
+      s.url === "/links/still-works"
+        ? { status: 200, body: ROWS }
+        : { status: 409, body: { code: "conflict", message } },
+    );
+    p.dispatch(p.$(".worth-gone button[data-act=still-works]"), "click");
+    await p.settle();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(gone().hidden).toBe(true);
+    expect(p.$("#home-error").textContent).toBe(message);
+  });
+
+  it("a refused It still works puts the card back with the message and offers no Undo", async () => {
+    const message = "This link isn't marked as gone. Reload the page.";
+    const { p, gone } = open(() => ({ status: 409, body: { code: "conflict", message } }));
+    p.dispatch(p.$(".worth-gone button[data-act=still-works]"), "click");
+    await p.settle();
+    expect(gone().hidden).toBe(false);
+    expect(p.$("#home-error").textContent).toBe(message);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+  });
+
+  it("I'm done with it archives as on any card, and Undo unarchives", async () => {
+    const { p, g, gone } = open();
+    p.dispatch(p.$(".worth-gone button[data-act=archive]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: g.id } });
+    expect(gone().hidden).toBe(true);
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id: g.id } });
+    expect(gone().hidden).toBe(false);
   });
 });

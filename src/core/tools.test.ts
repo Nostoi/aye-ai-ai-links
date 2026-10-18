@@ -609,6 +609,15 @@ describe("listShelf", () => {
     ]);
   });
 
+  it("does not mark a gone tool due when its wait has run out (#128)", async () => {
+    const gone = await saved();
+    await keepHandy(deps(), A, gone, "stated");
+    await flag(gone);
+    clock = day(31);
+    const shelf = await listShelf(deps(), A);
+    expect(shelf.map((s) => [s.link.id, s.due, s.gone])).toEqual([[gone, false, true]]);
+  });
+
   it("lists kept tools on active links: due tools first, then opened newest first, then never-opened by since, newest first", async () => {
     const [opened5, opened9, never2, never7, archived, suggested, declined] = [
       await saved(),

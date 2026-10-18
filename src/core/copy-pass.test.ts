@@ -909,7 +909,7 @@ describe("copy pass finishing", () => {
     await sweeping;
     expect(finish.mock.calls.map((c) => c[1])).toEqual([a]);
     expect(t.logged).toContain(`copy ${ID(a)}: finishing timed out`);
-    expect(t.logged).toContain(`copy ${ID(b)}: finishing timed out`);
+    expect(t.logged).not.toContain(`copy ${ID(b)}: finishing timed out`);
     late(new Error("closed"));
     await vi.advanceTimersByTimeAsync(0);
     expect(t.logged).toContain(`copy ${ID(a)}: the abandoned finish failed`);
@@ -947,6 +947,53 @@ describe("copy pass finishing", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await again;
     expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends finishing at the first stuck read, leaving the next copy untouched for the next sweep", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const t = setup();
+    const a = await settled(t, 1);
+    const b = await settled(t, 2);
+    const real = t.copies.finishCopy.bind(t.copies);
+    let free!: (done: boolean) => void;
+    const finish = vi.spyOn(t.copies, "finishCopy").mockImplementation((owner, id, f, at) =>
+      id === a && !free
+        ? new Promise<boolean>((resolve) => {
+            free = resolve;
+          })
+        : real(owner, id, f, at),
+    );
+    const sweeping = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await sweeping;
+    expect(finish.mock.calls.map((c) => c[1])).toEqual([a]);
+    expect(t.logged.filter((m) => m.includes("finishing timed out"))).toEqual([
+      `copy ${ID(a)}: finishing timed out`,
+    ]);
+    free(false);
+    await vi.advanceTimersByTimeAsync(0);
+    await t.pass.sweep();
+    expect(finish.mock.calls.map((c) => c[1])).toEqual([a, b]);
+    expect(await isFinished(t, b)).toBe(true);
+  });
+
+  it("never starts a finish still waiting for the gate when stop is called", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const gate = createReadGate();
+    let free!: () => void;
+    void gate.run(() => new Promise<void>((resolve) => (free = resolve)), 60_000);
+    const t = setup({ gate });
+    await settled(t, 1);
+    const finish = vi.spyOn(t.copies, "finishCopy");
+    const unfinished = vi.spyOn(t.copies, "unfinishedCopies");
+    const sweeping = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(unfinished).toHaveBeenCalled();
+    await t.pass.stop();
+    await sweeping;
+    free();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(finish).not.toHaveBeenCalled();
   });
 
   it("clears the timer when the call wins", async () => {

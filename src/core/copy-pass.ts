@@ -408,7 +408,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     return attempts;
   }
 
-  /** The finishing phase: copies whose images have all settled. */
+  /**
+   * The finishing phase: copies whose images have all settled. The first timeout ends it, since
+   * the read gate is stuck; the copies after it wait for the next sweep, untouched.
+   */
   async function finishPages(): Promise<void> {
     const seen = new Set<string>();
     let after: string | null = null;
@@ -426,6 +429,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
           if (result === "timeout") {
             log(`copy ${key}: finishing timed out`);
             backOffFinishing(key);
+            return;
           } else if (result) {
             finishFailures.delete(key);
           } else {

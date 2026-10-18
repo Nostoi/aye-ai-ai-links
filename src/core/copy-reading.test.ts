@@ -55,6 +55,21 @@ async function setup() {
   return { store, copies, reader, logged, save, bare, hold };
 }
 
+describe("read gate", () => {
+  it("never starts a waiter whose deadline arrives in the turn the slot frees", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const gate = createReadGate();
+    const first = gate.run(() => new Promise((r) => setTimeout(() => r("a"), 10_000)), 20_000);
+    const late = vi.fn(async () => "b");
+    const waiter = gate.run(late, 10_000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await first).toBe("a");
+    expect(await waiter).toBe("timeout");
+    expect(late).not.toHaveBeenCalled();
+    expect(await gate.run(async () => "c", 10_000)).toBe("c");
+  });
+});
+
 describe("copy reader view", () => {
   it("answers an ok copy with its markdown and made-at time", async () => {
     const t = await setup();

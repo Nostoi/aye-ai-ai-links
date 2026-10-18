@@ -23,17 +23,25 @@ export type ReadGate = {
  */
 export function createReadGate(): ReadGate {
   let busy = false;
-  const waiting: (() => void)[] = [];
+  /** Each starts its read and answers true, or answers false when its deadline has come. */
+  const waiting: (() => boolean)[] = [];
   const release = () => {
-    const next = waiting.shift();
-    if (next) next();
-    else busy = false;
+    for (let next = waiting.shift(); next; next = waiting.shift()) if (next()) return;
+    busy = false;
   };
   return {
     run<T>(read: () => Promise<T>, deadlineMs: number): Promise<T | "timeout"> {
       return new Promise<T | "timeout">((resolve, reject) => {
         let done = false;
-        const start = () => {
+        const deadline = performance.now() + deadlineMs;
+        const start = (): boolean => {
+          // The slot can free in the same turn as this waiter's deadline, before its timer runs.
+          if (performance.now() >= deadline) {
+            done = true;
+            clearTimeout(timer);
+            resolve("timeout");
+            return false;
+          }
           busy = true;
           let call: Promise<T>;
           try {
@@ -55,6 +63,7 @@ export function createReadGate(): ReadGate {
               clearTimeout(timer);
               release();
             });
+          return true;
         };
         const timer = setTimeout(() => {
           done = true;

@@ -7,6 +7,7 @@ import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
+import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
@@ -26,6 +27,7 @@ import {
 import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
+import type { SavedCopyReader } from "../core/saved-copy.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -89,6 +91,9 @@ const SAVE_PAGE_HEADERS = { ...NO_STORE, "Content-Security-Policy": "frame-ances
 
 /** A link's stored preview image. The id must be digits; anything else is not this route. */
 export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
+
+/** A picture of a link's saved copy: `n` is one or two digits, as the copy numbers them. */
+export const COPY_IMAGE_ROUTE = "/links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}";
 
 /**
  * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
@@ -421,7 +426,13 @@ export function webApp({
 }: {
   deps: SearchLinksDeps &
     WorthDeps &
-    LinkCheckDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
+    LinkCheckDeps & {
+      images: LinkImageReader;
+      edits: LinkEditStore;
+      profile: ProfileStore;
+      savedCopies: SavedCopyReader;
+      readGate: ReadGate;
+    };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -628,6 +639,24 @@ export function webApp({
     if (!image) return c.text("Not found.", 404, NO_STORE);
     const cached = c.req.query("v") === image.version;
     return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
+  });
+
+  // A picture that is not an `ok` image of the owner's copy answers the same 404 as `/images/:id`.
+  // Never cached: removing a copy must hide it at once.
+  const copies = createCopyReader({
+    store: deps.store,
+    copies: deps.savedCopies,
+    gate: deps.readGate,
+  });
+  app.get(COPY_IMAGE_ROUTE, session, async (c) => {
+    const image = await copies.image(
+      c.get("caller").owner,
+      c.req.param("id"),
+      Number(c.req.param("n")),
+    );
+    if (image === null) return c.text("Not found.", 404, NO_STORE);
+    if (image === "unreadable") return c.text("Unavailable.", 503, NO_STORE);
+    return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, false));
   });
 
   app.get("/connections", session, async (c) => {

@@ -19,14 +19,16 @@ import { SAVE_PATH } from "./auth/login-return.js";
 import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
+import type { ReadGate } from "./core/copy-reading.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
+import type { SavedCopyReader } from "./core/saved-copy.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import type { SqliteKeyStore } from "./store/key-store.js";
-import { IMAGE_ROUTE, webApp } from "./web/http.js";
+import { COPY_IMAGE_ROUTE, IMAGE_ROUTE, webApp } from "./web/http.js";
 
 /**
  * better-auth, the lock every call into it goes through, the OAuth state around it, and the
@@ -86,6 +88,7 @@ const CHECKED_PAGES = [
   SAVE_PATH,
   OAUTH_ERROR_PATH,
   IMAGE_ROUTE,
+  COPY_IMAGE_ROUTE,
 ];
 
 /** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
@@ -108,7 +111,15 @@ export type AppOptions = {
 } & (
   | { deps: McpDeps; auth?: undefined }
   /** The web door also reads stored pictures and writes the owner's edits. */
-  | { deps: McpDeps & { images: LinkImageReader; edits: LinkEditStore }; auth: AuthDeps }
+  | {
+      deps: McpDeps & {
+        images: LinkImageReader;
+        edits: LinkEditStore;
+        savedCopies: SavedCopyReader;
+        readGate: ReadGate;
+      };
+      auth: AuthDeps;
+    }
 );
 
 /**

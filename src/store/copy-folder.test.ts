@@ -23,6 +23,16 @@ const tmpNames = () => {
 };
 const text = (p: string) => fs.readFileSync(p, "utf8");
 
+describe("CopyFolder without a root", () => {
+  it("refuses to prepare", () => {
+    expect(() => new CopyFolder(null).prepare()).toThrow("No saved-copy folder is set");
+  });
+
+  it("still refuses a relative root", () => {
+    expect(() => new CopyFolder("relative/dir")).toThrow("absolute");
+  });
+});
+
 beforeEach(() => {
   root = fresh();
   folder = new CopyFolder(root);

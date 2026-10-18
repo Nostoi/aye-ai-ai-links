@@ -51,7 +51,7 @@ export class SqliteSavedCopyStore
 
   constructor(
     private readonly db: Database,
-    private readonly root: string,
+    private readonly root: string | null,
   ) {
     this.folder = new CopyFolder(root);
   }

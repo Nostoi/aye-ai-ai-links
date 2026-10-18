@@ -31,12 +31,14 @@ const gone = (e: unknown) => ["ENOENT", "ENOTDIR", "ELOOP"].includes(code(e) ?? 
 export class CopyFolder {
   private real: string | null = null;
 
-  constructor(private readonly root: string) {
-    if (!isAbsolute(root)) throw new Error("Saved-copy folder must be an absolute path");
+  constructor(private readonly root: string | null) {
+    if (root !== null && !isAbsolute(root))
+      throw new Error("Saved-copy folder must be an absolute path");
   }
 
   /** Creates the root if missing and returns its real path; throws on failure. */
   prepare(): void {
+    if (this.root === null) throw new Error("No saved-copy folder is set");
     fs.mkdirSync(this.root, { recursive: true });
     const real = fs.realpathSync(this.root);
     if (!fs.statSync(real).isDirectory()) throw new Error("Saved-copy folder is not a directory");

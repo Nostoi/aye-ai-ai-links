@@ -1088,6 +1088,30 @@ describe("startServer", () => {
       }
     };
 
+    it("reads a copy through the deps' own store, checked at start and by the pass", async () => {
+      const id = await seedFetched();
+      let recorded: AppDeps["savedCopies"] | undefined;
+      const checks = vi.fn();
+      await startWith({
+        copyExtractor: copyExtractor(async () => WITH_IMAGE),
+        decorateDeps: (d) => {
+          recorded = d.savedCopies;
+          const real = d.savedCopies.checkFolder.bind(d.savedCopies);
+          vi.spyOn(d.savedCopies, "checkFolder").mockImplementation(async () => {
+            checks();
+            return real();
+          });
+          return d;
+        },
+      });
+      await until(() => copyRow()[0]?.status === "ok", "the finished copy");
+      expect(checks).toHaveBeenCalled();
+      const before = checks.mock.calls.length;
+      const copy = await recorded?.readCopy("owner", id);
+      expect(copy).toEqual(expect.objectContaining({ markdown: expect.any(String) }));
+      expect(checks.mock.calls.length).toBe(before);
+    });
+
     it("makes the copy of a link saved before copies existed, then its pictures", async () => {
       const id = await seedFetched();
       await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });

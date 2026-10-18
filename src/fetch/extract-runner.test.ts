@@ -368,7 +368,7 @@ describe("child extractor: the saved copy", () => {
 
   it("is ok without a copy when the deadline passes after the text", async () => {
     const out = await make({
-      deadlineMs: 500,
+      deadlineMs: DEADLINE_MS,
       childEntry: fixture("child-copy-hang.mjs"),
     }).extract(PAGE, URL0, undefined, { copy: true });
     expect(out).toMatchObject({ kind: "ok", text: "Kept text" });

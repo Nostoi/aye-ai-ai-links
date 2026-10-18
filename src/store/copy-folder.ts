@@ -133,19 +133,24 @@ export class CopyFolder {
 
   /** True when the root holds nothing but the marker and IGNORED_IN_EMPTY names. */
   isEmpty(): boolean {
-    return fs.readdirSync(this.base()).every((n) => n === MARKER || IGNORED_IN_EMPTY.has(n));
+    return fs
+      .readdirSync(this.base())
+      .every((n) => n === MARKER || IGNORED_IN_EMPTY.has(n) || STAGE_DIR.test(n));
   }
 
   writeMarker(id: string): void {
     this.atomicWrite(join(this.base(), MARKER), Buffer.from(id));
   }
 
-  /** Write check: TMP/write-check-<pid>, fsync, read back, rename, delete. Throws on any failure. */
+  /**
+   * Write check: TMP/write-check-<pid>, fsync, read back, rename into the root as a staging name
+   * (so the root itself must be writable), delete. Throws on any failure.
+   */
   probe(): void {
     const tmp = this.tmpDir(true) as string;
     const path = join(tmp, `write-check-${process.pid}`);
     const bytes = randomBytes(16);
-    const renamed = join(tmp, this.stagingName());
+    const renamed = join(this.base(), this.stagingName());
     try {
       fs.rmSync(path, { force: true });
       this.writeNew(path, bytes);
@@ -174,10 +179,10 @@ export class CopyFolder {
     if (!LINK_DIR.test(linkId)) throw refused();
     const target = join(this.base(), linkId);
     if (lstat(target)) {
+      this.imagesDir(linkId, true); // refuses a symlink before anything is deleted
       const left = this.removeCopy(linkId);
-      const link = this.linkDir(linkId, true) as string;
-      this.atomicWrite(join(link, "copy.md"), Buffer.from(markdown));
-      this.dir(join(link, "images"), true);
+      this.imagesDir(linkId, true);
+      this.atomicWrite(join(target, "copy.md"), Buffer.from(markdown));
       return left;
     }
     const name = this.stagingName();
@@ -291,6 +296,11 @@ export class CopyFolder {
     const other: string[] = [];
     for (const e of fs.readdirSync(base, { withFileTypes: true })) {
       if (e.name === MARKER || IGNORED_IN_EMPTY.has(e.name)) continue;
+      if (STAGE_DIR.test(e.name)) {
+        const staged = lstat(join(base, e.name));
+        if (staged) temp.push({ name: e.name, mtimeMs: staged.mtimeMs });
+        continue;
+      }
       const st = LINK_DIR.test(e.name) && e.isDirectory() ? lstat(join(base, e.name)) : null;
       if (st) links.push({ name: e.name, mtimeMs: st.mtimeMs });
       else other.push(e.name);
@@ -317,14 +327,16 @@ export class CopyFolder {
   /**
    * Deletes a staging entry named tmp-<32 hex> or write-check-<digits>: a file, or a folder
    * holding only copy.md and images/<IMAGE_FILE>. Leaves anything else; returns the names left,
-   * relative to TMP.
+   * relative to TMP. A tmp-<hex> entry left in the root (by the write check) is treated the same.
    */
   removeTemp(name: string): string[] {
     if (!STAGE_FILE.test(name)) throw refused();
     const tmp = this.tmpDir(false);
-    const st = tmp && lstat(join(tmp, name));
-    if (!tmp || !st) return [];
-    const path = join(tmp, name);
+    const inTmp = tmp ? join(tmp, name) : null;
+    const inRoot = join(this.base(), name);
+    const path = inTmp && lstat(inTmp) ? inTmp : STAGE_DIR.test(name) ? inRoot : null;
+    const st = path && lstat(path);
+    if (!path || !st) return [];
     if (!st.isDirectory() || st.isSymbolicLink()) {
       fs.unlinkSync(path);
       return [];

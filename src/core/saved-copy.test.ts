@@ -46,6 +46,12 @@ describe("finishedMarkdown", () => {
     expect(out).not.toContain(N);
   });
 
+  it("rewrites a reference whose alt ends in an escaped backslash", () => {
+    expect(finishedMarkdown(`![foo\\\\](${imageRef(1, N)})`, N, [{ n: 1, ext: "png" }])).toBe(
+      "![foo\\\\](images/01.png)",
+    );
+  });
+
   it("refuses an invalid nonce", () => {
     expect(() => finishedMarkdown("x", "x", [])).toThrow("Invalid copy nonce");
   });

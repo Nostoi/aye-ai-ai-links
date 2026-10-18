@@ -71,6 +71,10 @@ describe("isEmpty", () => {
     fs.mkdirSync(join(root, TMP));
     expect(folder.isEmpty()).toBe(true);
   });
+  it("ignores a staging entry left in the root", () => {
+    fs.mkdirSync(join(root, stage));
+    expect(folder.isEmpty()).toBe(true);
+  });
   it("is false with a link folder or a stray file", () => {
     fs.mkdirSync(join(root, "12"));
     expect(folder.isEmpty()).toBe(false);
@@ -102,12 +106,12 @@ describe("probe", () => {
   });
   it.skipIf(asRoot)("throws on a root that cannot be written, and works again after", () => {
     fs.mkdirSync(join(root, TMP));
-    fs.chmodSync(join(root, TMP), 0o500);
     fs.chmodSync(root, 0o500);
     expect(() => folder.probe()).toThrow();
     fs.chmodSync(root, 0o700);
-    fs.chmodSync(join(root, TMP), 0o700);
     folder.probe();
+    expect(fs.readdirSync(root)).toEqual([TMP]);
+    expect(tmpNames()).toEqual([]);
   });
 });
 
@@ -146,6 +150,16 @@ describe("writeCopy", () => {
     });
     expect(() => folder.writeCopy("12", "x")).toThrow("EIO");
     expect(fs.existsSync(join(root, "12"))).toBe(false);
+    expect(tmpNames()).toEqual([]);
+  });
+
+  it("refuses an orphan whose images is a symlink before changing anything", () => {
+    const d = join(root, "12");
+    fs.mkdirSync(d);
+    fs.writeFileSync(join(d, "copy.md"), "old");
+    fs.symlinkSync(fresh(), join(d, "images"));
+    expect(() => folder.writeCopy("12", "new")).toThrow("Refused saved-copy path");
+    expect(text(join(d, "copy.md"))).toBe("old");
     expect(tmpNames()).toEqual([]);
   });
 
@@ -274,6 +288,17 @@ describe("list and removeTemp", () => {
     expect(folder.removeTemp(stage)).toEqual([`${stage}/notes.txt`]);
     expect(fs.existsSync(join(d, "copy.md"))).toBe(false);
     expect(text(join(d, "notes.txt"))).toBe("mine");
+  });
+
+  it("lists and deletes a staging entry left in the root", () => {
+    const d = join(root, stage);
+    fs.mkdirSync(d);
+    fs.writeFileSync(join(d, "copy.md"), "x");
+    const l = folder.list();
+    expect(l.temp.map((e) => e.name)).toEqual([stage]);
+    expect(l.other).toEqual([]);
+    expect(folder.removeTemp(stage)).toEqual([]);
+    expect(fs.existsSync(d)).toBe(false);
   });
 
   it("deletes a staging file but never an unknown name", () => {

@@ -133,7 +133,7 @@ export const imageRef = (n: number, nonce: string): string =>
 /**
  * Rewrites each image reference holding this copy's nonce: a stored image becomes
  * `images/NN.ext`, any other becomes its alt text. Nothing else changes, and the result is never
- * longer than the input. The alt may not hold an unescaped `[` or `]`, as the copy rule writes it.
+ * longer than the input. The alt must escape `\`, `[` and `]`, as the copy rule will write it.
  */
 export function finishedMarkdown(markdown: string, nonce: string, images: FinishImage[]): string {
   if (!COPY_NONCE.test(nonce)) throw new Error("Invalid copy nonce");

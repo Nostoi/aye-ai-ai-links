@@ -577,12 +577,15 @@ describe("snapshot runner saved copies", () => {
     const copies = keeper();
     const s = setup({ copies });
     const link = await s.save(A, 1);
+    // Seen outside the mock: the runner's catch would swallow an expect thrown inside it.
+    let recordedBefore = -1;
     copies.keep.mockImplementation(async () => {
-      expect(s.records).toHaveLength(1);
+      recordedBefore = s.records.length;
       return "saved";
     });
     s.extract.run = async () => withCopy(draft);
     await s.runner.kick(A, link.id);
+    expect(recordedBefore).toBe(1);
     expect(copies.keep).toHaveBeenCalledTimes(1);
     expect(copies.keep).toHaveBeenCalledWith(A, link.id, draft);
     expect(s.records.map((r) => r.rec.status)).toEqual(["ok"]);

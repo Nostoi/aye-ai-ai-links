@@ -61,30 +61,37 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
     } catch (e) {
       return { state: "unwritable", detail: failure(e) };
     }
-    this.prepared = true;
+    let row: { id: string } | undefined;
+    let marker: string | null;
+    let empty = true;
     try {
-      const row = this.db.prepare("SELECT id FROM saved_copy_library WHERE only = 1").get() as
+      row = this.db.prepare("SELECT id FROM saved_copy_library WHERE only = 1").get() as
         | { id: string }
         | undefined;
-      const marker = this.folder.readMarker();
+      marker = this.folder.readMarker();
+      if (marker === null) empty = this.folder.isEmpty();
+    } catch (e) {
+      return { state: "mismatch", detail: `${this.root} could not be checked: ${failure(e)}` };
+    }
+    if (marker === null) {
+      if (!empty) {
+        return { state: "mismatch", detail: `${this.root} holds files but no saved-copy marker` };
+      }
+    } else if (!row) {
+      return {
+        state: "mismatch",
+        detail: `${this.root} has a marker from another library; this database has none`,
+      };
+    } else if (marker !== row.id) {
+      return { state: "mismatch", detail: `${this.root} has a marker from another library` };
+    }
+    this.prepared = true;
+    try {
       if (marker === null) {
-        if (!this.folder.isEmpty()) {
-          return { state: "mismatch", detail: `${this.root} holds files but no saved-copy marker` };
-        }
         const id = row?.id ?? randomUUID();
         if (!row)
           this.db.prepare("INSERT INTO saved_copy_library (only, id) VALUES (1, ?)").run(id);
         this.folder.writeMarker(id);
-      } else if (!row) {
-        return {
-          state: "mismatch",
-          detail: `${this.root} has a marker from another library; this database has none`,
-        };
-      } else if (marker !== row.id) {
-        return {
-          state: "mismatch",
-          detail: `${this.root} has a marker from another library`,
-        };
       }
       this.folder.probe();
     } catch (e) {
@@ -115,15 +122,11 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
       this.folder.writeCopy(linkId, draft.markdown);
       this.confirmCopy(owner, id, at);
     } catch (e) {
-      this.db
-        .transaction(() =>
-          this.db
-            .prepare(
-              "DELETE FROM saved_copies WHERE owner_id = ? AND link_id = ? AND status = 'saving'",
-            )
-            .run(owner, id),
-        )
-        .immediate();
+      try {
+        this.releaseCopy(owner, id);
+      } catch {
+        // the row stays `saving` until the startup undo
+      }
       try {
         this.folder.removeCopy(linkId);
       } catch {
@@ -132,6 +135,19 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
       throw e;
     }
     return "saved";
+  }
+
+  /** Drops a `saving` row; its image rows go with it. */
+  private releaseCopy(owner: OwnerId, id: number): void {
+    this.db
+      .transaction(() =>
+        this.db
+          .prepare(
+            "DELETE FROM saved_copies WHERE owner_id = ? AND link_id = ? AND status = 'saving'",
+          )
+          .run(owner, id),
+      )
+      .immediate();
   }
 
   /** The row check and write of a save; "write" means the files may now be written. */
@@ -157,9 +173,6 @@ export class SqliteSavedCopyStore implements SavedCopyReader, SavedCopyUsage, Sa
       .pluck()
       .get() as number;
     if (used + md > limits.totalBytes) return this.settle(owner, id, "no_room");
-    this.db
-      .prepare("DELETE FROM saved_copy_images WHERE owner_id = ? AND link_id = ?")
-      .run(owner, id);
     this.db
       .prepare(
         `INSERT INTO saved_copies (owner_id, link_id, status, made_at, finished_at, image_nonce,

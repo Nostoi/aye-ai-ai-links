@@ -151,6 +151,15 @@ describe("checkFolder", () => {
 });
 
 describe("reads", () => {
+  it("answer missing when the marker cannot be read, though the row is ok", async () => {
+    const { root, copies, id } = await ready();
+    await copies.saveCopy("o", id, draft("body"), LIMITS, at(1));
+    rmSync(join(root, MARKER));
+    mkdirSync(join(root, MARKER));
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(await copies.readCopy("o", id)).toBe("missing");
+  });
+
   it("answer missing after a mismatch, though the row is ok", async () => {
     const { db, root, copies, id } = await ready();
     expect(await copies.saveCopy("o", id, draft("body"), LIMITS, at(1))).toBe("saved");
@@ -189,6 +198,19 @@ describe("a failed copy write", () => {
     expect(await copies.usedBytes()).toBe(0);
     expect(readdirSync(root).sort()).toEqual([MARKER, ".aye-tmp"]);
     expect(readdirSync(join(root, ".aye-tmp"))).toEqual([]);
+  });
+
+  it("rethrows the original error and still tries the folder when the row delete fails", async () => {
+    const { copies, id } = await ready();
+    vi.spyOn(CopyFolder.prototype, "writeCopy").mockImplementation(() => {
+      throw disk();
+    });
+    vi.spyOn(copies as unknown as { releaseCopy(): void }, "releaseCopy").mockImplementation(() => {
+      throw new Error("db full");
+    });
+    const remove = vi.spyOn(CopyFolder.prototype, "removeCopy");
+    await expect(copies.saveCopy("o", id, draft("body"), LIMITS, at(1))).rejects.toThrow("disk");
+    expect(remove).toHaveBeenCalledWith(id);
   });
 
   it("removes the row and the folder when confirming fails", async () => {

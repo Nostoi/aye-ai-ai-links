@@ -232,6 +232,12 @@ export function describeSavedCopyStoreContract(
         await snapshotOk(A, hasRow);
         await snapshotOk(A, dead);
         await snapshotOk(A, good);
+        const okRow = await save(A);
+        const tooBig = await save(A);
+        await snapshotOk(A, okRow);
+        await snapshotOk(A, tooBig);
+        await h.copies.saveCopy(A, okRow, draft("x"), LIMITS, at(5));
+        await h.copies.saveCopy(A, tooBig, draft("xx"), { ...LIMITS, copyBytes: 1 }, at(5));
         await h.copies.recordNoCopy(A, hasRow, "none");
         await flag(A, dead);
         expect(await candidates()).toEqual([[A, good]]);

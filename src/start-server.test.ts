@@ -30,6 +30,8 @@ import type {
   PageFetcher,
 } from "./core/fetch.js";
 import { saveLink } from "./core/links.js";
+import { imageRef } from "./core/saved-copy.js";
+import { at, record } from "./core/snapshot-store-contract.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
 import { DIMS } from "./search/model.js";
@@ -1019,6 +1021,119 @@ describe("startServer", () => {
       await startWith(ON(), {});
       expect(copyRows()).toEqual([]);
       expect(existsSync(join(copiesDir(), String(id)))).toBe(false);
+    });
+  });
+
+  describe("the copy pass", () => {
+    const copiesDir = () => join(dir, "copies");
+    const ON = () => ({ dir: copiesDir(), limitBytes: 1024 ** 3 });
+    const NONCE = "b".repeat(32);
+    const IMG = "https://example.com/pic.png";
+    const WITH_IMAGE: ExtractOutcome = {
+      ...PAGE,
+      copy: { markdown: `![pic](${imageRef(1, NONCE)})`, imageUrls: [IMG], nonce: NONCE },
+    };
+    const copyRow = () =>
+      read<{ status: string; finished: number | null; image: string | null }>(
+        `SELECT c.status, c.finished_at AS finished,
+           (SELECT status FROM saved_copy_images i WHERE i.link_id = c.link_id AND i.n = 1) AS image
+         FROM saved_copies c`,
+      );
+    const startWith = async (options: StartOptions) => {
+      const s = await startServer(
+        { ...cfg(dbPath, 0), savedCopies: ON() },
+        {
+          ...fakePipeline(),
+          settleMs: 200,
+          requestLog: (l) => logged.push(l),
+          copyPollMs: 20,
+          ...options,
+        },
+      );
+      started.push(s);
+      return s;
+    };
+
+    /** A link saved before saved copies existed: its snapshot is done and it has no copy row. */
+    const seedFetched = async () => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        await saveLink(deps, "owner", { url: "https://example.com/old", savedBy: "seed" });
+        const id = String(db.prepare("SELECT id FROM links").pluck().get());
+        const lease = await deps.store.leaseSnapshot("owner", id, at(1), at(100));
+        await deps.store.recordSnapshot(
+          "owner",
+          id,
+          lease?.claim ?? -1,
+          record({ imageUrl: null, text: "body" }),
+        );
+        return id;
+      } finally {
+        db.close();
+      }
+    };
+    const copyExtractor = (extract: () => Promise<ExtractOutcome>): PageExtractor => ({
+      extract,
+      close: async () => {},
+    });
+    const readyFolder = async () => {
+      const db = openDatabase(dbPath);
+      try {
+        expect(await new SqliteSavedCopyStore(db, copiesDir()).checkFolder()).toEqual({
+          state: "ready",
+        });
+      } finally {
+        db.close();
+      }
+    };
+
+    it("makes the copy of a link saved before copies existed, then its pictures", async () => {
+      const id = await seedFetched();
+      await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });
+      await until(() => copyRow()[0]?.finished != null, "the finished copy");
+      expect(copyRow()).toEqual([{ status: "ok", finished: expect.any(Number), image: "ok" }]);
+      expect(readFileSync(join(copiesDir(), String(id), "copy.md"), "utf8")).toContain(
+        "images/01.png",
+      );
+    });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "makes the copy once its folder can be written again, with no restart",
+      async () => {
+        await readyFolder();
+        await seedFetched();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        chmodSync(copiesDir(), 0o555);
+        try {
+          await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });
+          await sleep(300);
+          expect(copyRow()).toEqual([]);
+        } finally {
+          chmodSync(copiesDir(), 0o755);
+        }
+        await until(() => copyRow()[0]?.image === "ok", "the copy after the folder opened");
+      },
+    );
+
+    it("on stop, ends with the copy extractor pending and closes it", async () => {
+      await seedFetched();
+      let asked = false;
+      let closed = 0;
+      const pending: PageExtractor = {
+        extract: (_html, _url, signal) => {
+          asked = true;
+          return new Promise<ExtractOutcome>((resolve) => {
+            signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
+          });
+        },
+        close: async () => void closed++,
+      };
+      const { stop } = await startWith({ copyExtractor: pending });
+      await until(() => asked, "the copy extraction");
+      await stop();
+      expect(closed).toBe(1);
+      expect(copyRow()).toEqual([]);
     });
   });
 

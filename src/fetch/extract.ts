@@ -1,6 +1,6 @@
 import { parseHTML } from "linkedom";
 import { extractMetadata, type Metadata } from "./extract-metadata.ts";
-import { articleText, flattenTemplates } from "./extract-text.ts";
+import { articleText, flattenTemplates, readArticle } from "./extract-text.ts";
 
 // The extraction child loads this file: see AGENTS.md in this folder for the import rules.
 
@@ -19,14 +19,21 @@ export function pageMetadata(doc: Document, finalUrl: string): Metadata {
   return doc.documentElement ? extractMetadata(doc, finalUrl) : NO_METADATA;
 }
 
-export function pageText(doc: Document): string | null {
-  if (!doc.documentElement) return null;
+/** The readable text and the article element it came from; `article` is null whenever `text` is. */
+export function pageArticle(doc: Document): { text: string | null; article: Element | null } {
+  if (!doc.documentElement) return { text: null, article: null };
   try {
     flattenTemplates(doc);
-    return articleText(doc);
+    const article = readArticle(doc);
+    const text = article ? articleText(article) : null;
+    return text === null ? { text: null, article: null } : { text, article };
   } catch {
-    return null;
+    return { text: null, article: null };
   }
+}
+
+export function pageText(doc: Document): string | null {
+  return pageArticle(doc).text;
 }
 
 /** Pure: all three steps in one call, for callers that don't need the metadata first. */

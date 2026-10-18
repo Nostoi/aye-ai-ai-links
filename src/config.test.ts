@@ -1,4 +1,12 @@
-import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +16,7 @@ import {
   authConfig,
   databasePath,
   modelRoot,
+  savedCopyConfig,
   serverConfig,
   VERSION_FILE,
 } from "./config.js";
@@ -206,6 +215,7 @@ describe("serverConfig", () => {
       dbPath: "/data/links.db",
       port: 3002,
       auth,
+      savedCopies: savedCopyConfig({}),
       version: appVersion(),
     });
   });
@@ -242,5 +252,73 @@ describe("serverConfig", () => {
 
   it("leaves allowed hosts unset when the variable is empty", () => {
     expect(serverConfig({ ...base, AYE_ALLOWED_HOSTS: " , " })).not.toHaveProperty("allowedHosts");
+  });
+});
+
+describe("savedCopyConfig", () => {
+  let home = "";
+  afterEach(() => {
+    if (home) rmSync(home, { recursive: true, force: true });
+    home = "";
+  });
+  const fresh = () => {
+    home = realpathSync(mkdtempSync(join(tmpdir(), "aye-copies-")));
+    return home;
+  };
+  const GIB = 1024 ** 3;
+  const INSIDE = "must not be inside ~/.aye-links/releases or ~/.aye-links/current";
+
+  it("defaults to ~/.aye-links/saved-copies and 1 GiB", () => {
+    const h = fresh();
+    expect(savedCopyConfig({}, h)).toEqual({
+      dir: join(h, ".aye-links", "saved-copies"),
+      limitBytes: GIB,
+    });
+  });
+
+  it("accepts an absolute folder and reads the limit in GiB", () => {
+    const h = fresh();
+    const dir = join(h, "elsewhere");
+    expect(savedCopyConfig({ AYE_SAVED_COPY_DIR: dir, AYE_SAVED_COPY_LIMIT_GB: "0.5" }, h)).toEqual(
+      { dir, limitBytes: GIB / 2 },
+    );
+  });
+
+  it("reads 0 as no new copies", () => {
+    expect(savedCopyConfig({ AYE_SAVED_COPY_LIMIT_GB: "0" }, fresh()).limitBytes).toBe(0);
+  });
+
+  it.each(["-1", "abc", "1e3", "", " 1", "Infinity"])("refuses the limit %j", (limit) => {
+    expect(() => savedCopyConfig({ AYE_SAVED_COPY_LIMIT_GB: limit }, fresh())).toThrow(
+      "AYE_SAVED_COPY_LIMIT_GB must be a number of GiB, 0 or more.",
+    );
+  });
+
+  it("refuses a relative folder", () => {
+    expect(() => savedCopyConfig({ AYE_SAVED_COPY_DIR: "copies" }, fresh())).toThrow(
+      "AYE_SAVED_COPY_DIR must be an absolute path.",
+    );
+  });
+
+  it("refuses a folder inside the releases folder, or the folder itself", () => {
+    const h = fresh();
+    const releases = join(h, ".aye-links", "releases");
+    expect(() => savedCopyConfig({ AYE_SAVED_COPY_DIR: join(releases, "x") }, h)).toThrow(INSIDE);
+    expect(() => savedCopyConfig({ AYE_SAVED_COPY_DIR: releases }, h)).toThrow(INSIDE);
+  });
+
+  it("refuses a folder reached through the current symlink", () => {
+    const h = fresh();
+    mkdirSync(join(h, ".aye-links", "releases", "v1"), { recursive: true });
+    symlinkSync(join(h, ".aye-links", "releases", "v1"), join(h, ".aye-links", "current"));
+    expect(() =>
+      savedCopyConfig({ AYE_SAVED_COPY_DIR: join(h, ".aye-links", "current", "copies") }, h),
+    ).toThrow(INSIDE);
+  });
+
+  it("accepts a sibling whose name only starts like releases", () => {
+    const h = fresh();
+    const dir = join(h, ".aye-links", "releases-copies");
+    expect(savedCopyConfig({ AYE_SAVED_COPY_DIR: dir }, h).dir).toBe(dir);
   });
 });

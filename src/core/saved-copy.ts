@@ -126,6 +126,21 @@ export const copyLimits = (totalBytes: number): CopyLimits => ({
   totalBytes,
 });
 
+/** Whether a value from the extraction child has a draft's shape: the child's message is untrusted. */
+export function isCopyDraft(value: unknown): value is CopyDraft {
+  if (typeof value !== "object" || value === null) return false;
+  const { markdown, imageUrls, nonce } = value as Record<string, unknown>;
+  if (typeof markdown !== "string" || typeof nonce !== "string" || !COPY_NONCE.test(nonce)) {
+    return false;
+  }
+  if (!Array.isArray(imageUrls) || imageUrls.length > MAX_COPY_IMAGES) return false;
+  const urls: unknown[] = Array.from(imageUrls); // holes become undefined, which fail below
+  return (
+    new Set(urls).size === urls.length &&
+    urls.every((u) => typeof u === "string" && /^https?:\/\//.test(u) && URL.canParse(u))
+  );
+}
+
 /** The reference the copy rule writes for image `n` of a draft with this nonce. */
 export const imageRef = (n: number, nonce: string): string =>
   `images/${String(n).padStart(2, "0")}-${nonce}`;

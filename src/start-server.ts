@@ -11,7 +11,9 @@ import { modelRoot, type ServerConfig } from "./config.js";
 import type { PageExtractor } from "./core/extract.js";
 import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
+import { createCopyKeeper } from "./core/keep-copy.js";
 import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-runner.js";
+import type { FolderCheck } from "./core/saved-copy.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
@@ -25,10 +27,20 @@ import { MODEL_KEY, revisionDir } from "./search/model.js";
 import { loadTransformersEmbedder } from "./search/transformers-embedder.js";
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
+import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 
 const DRAIN_MS = 10_000;
 /** The drain, this wait and the closes must end inside launchd's 20 s `ExitTimeOut`. */
 const SETTLE_MS = 5_000;
+
+function folderMessage(folder: Exclude<FolderCheck, { state: "ready" }>): string {
+  const advice = /EPERM|EACCES/.test(folder.detail)
+    ? " Grant the Node binary access to this folder in System Settings → Privacy & Security, then restart the service."
+    : folder.state === "mismatch"
+      ? " To start a new, empty folder, move this one aside and restart."
+      : "";
+  return `[saved copies] paused: ${folder.detail}${advice}`;
+}
 
 /**
  * Seams for tests: `decorateDeps` wraps the deps (the snapshot runner uses the wrapped store),
@@ -64,7 +76,9 @@ export type StartOptions = {
 };
 
 /**
- * Loads the model, opens the database and the auth database, builds the auth side (migrations,
+ * Loads the model, opens the database, checks the saved-copy folder and undoes any copy left
+ * mid-write (before anything listens; an unready folder only pauses copies), opens the auth
+ * database, builds the auth side (migrations,
  * internal client, and the client metadata of every connected OAuth client) and serves on
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
@@ -140,7 +154,28 @@ export async function startServer(
   try {
     db = openDatabase(config.dbPath);
     const deps = decorateDeps(createDeps(db, model));
-    runner = createSnapshotRunner({ store: deps.store, fetcher, extractor, now: deps.now });
+    // Before anything can listen or save: an unready folder pauses copies, it never refuses the start.
+    const savedCopies = new SqliteSavedCopyStore(db, config.savedCopies.dir);
+    const folder = await savedCopies.checkFolder();
+    if (folder.state !== "ready") console.error(folderMessage(folder));
+    const undone = await savedCopies.undoUnconfirmed();
+    if (undone.copies + undone.images > 0) {
+      console.error(
+        `[saved copies] undid ${undone.copies} copies and ${undone.images} images left mid-write`,
+      );
+    }
+    runner = createSnapshotRunner({
+      store: deps.store,
+      fetcher,
+      extractor,
+      now: deps.now,
+      copies: createCopyKeeper({
+        copies: savedCopies,
+        tools: deps.tools,
+        limitBytes: config.savedCopies.limitBytes,
+        now: deps.now,
+      }),
+    });
     // The same embedder as search, so documents and queries share its one queue.
     indexer = createVectorIndexer({
       store: deps.vectorIndex,

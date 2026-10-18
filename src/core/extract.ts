@@ -1,3 +1,5 @@
+import type { CopyDraft } from "./saved-copy.js";
+
 /** What a page says about itself, read from its head. */
 export type PageMetadata = {
   title: string | null;
@@ -13,10 +15,13 @@ export type PageMetadata = {
  *   fail the same way, so callers should not retry them.
  * - `spawn_failed` is about the machine (the child could not start, lost its channel, or ended
  *   before it had received the page), not the page, so a retry is reasonable.
- * - `aborted` means the caller's signal fired or the extractor was closed (shutdown).
+ * - `aborted` means the caller's signal fired or the extractor was closed (shutdown), before the
+ *   metadata and text were in. After them, any end is `ok`.
+ * - On `ok`, `copy` is absent when it was not asked for or did not arrive, and `null` when the
+ *   page had no article.
  */
 export type ExtractOutcome =
-  | { kind: "ok"; metadata: PageMetadata; text: string | null }
+  | { kind: "ok"; metadata: PageMetadata; text: string | null; copy?: CopyDraft | null }
   | { kind: "timeout"; metadata: PageMetadata | null }
   | { kind: "out_of_memory"; metadata: PageMetadata | null }
   | { kind: "crashed"; metadata: PageMetadata | null; detail: string }
@@ -30,6 +35,11 @@ export type ExtractOutcome =
  * - `close()` stops any extraction in flight (reported as `aborted`) and refuses later ones.
  */
 export interface PageExtractor {
-  extract(html: string, finalUrl: string, signal?: AbortSignal): Promise<ExtractOutcome>;
+  extract(
+    html: string,
+    finalUrl: string,
+    signal?: AbortSignal,
+    options?: { copy?: boolean },
+  ): Promise<ExtractOutcome>;
   close(): Promise<void>;
 }

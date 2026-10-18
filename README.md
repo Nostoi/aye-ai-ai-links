@@ -57,12 +57,13 @@ The tools your AI uses:
 - **A web page** for browsing, designed for ADHD brains: lots of space, one thing at a time, and colors that mean something. For now, signing in shows the home page (the search question, your Handy shelf, "Worth a look today" and your spaces), a search page (describe a link however you remember it and see the best matches, each with its page's image and its why), a page for each of your spaces, All links, the Tags page, a Profile page, a Save page, and an Apps and keys page, where you can disconnect an app and make or turn off your AIs' keys. The Profile page shows the notes your AIs keep about you and what you've been working on lately, with each AI's guesses marked as guesses. You can add a note, edit one, confirm a guess with **That's right**, or remove one. A removed note is gone for your AIs at once, and for a few seconds an **Undo** bar can bring it back. If an AI changed a note after the page loaded, your change is refused and the page asks you to reload.
 - **Saving from a phone's share sheet,** through a Shortcut that opens the Save page (`/save?url=…&title=…`).
 - **A JSON API** for scripts.
+- **Reading saved copies** in the app, and copies of links saved before this version.
 
 ## How it works
 
 One small server you host yourself, which AIs reach over MCP.
 
-The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save and their images, and needs **no AI API keys**. Data lives in one SQLite file on your machine. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. The server also checks that saved pages still exist: weekly for active links and monthly for archived ones, one request at a time. A page counts as gone once two checks at least a week apart find it missing (a 404 or 410, or its site's name no longer exists while the server can still look up other names); a login wall, a server error or a timeout never counts. A gone page drops out of the digest and Worth a look's reading picks. Its cards say "This page seems gone", with **It still works** and **I'm done with it**, each with Undo, and every link your AI gets back says whether its page seems gone. A login-walled page is never marked. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
+The AI you're talking to does the thinking: summaries, tags, the why. The server stores, searches and fetches the pages you save and their images, and needs **no AI API keys**. Data lives in one SQLite file on your machine, except saved copies of articles, which are files in their own folder. That file also keeps your searches and the link your AI opened next, to tune meaning search; they never leave your machine. The server also checks that saved pages still exist: weekly for active links and monthly for archived ones, one request at a time. A page counts as gone once two checks at least a week apart find it missing (a 404 or 410, or its site's name no longer exists while the server can still look up other names); a login wall, a server error or a timeout never counts. A gone page drops out of the digest and Worth a look's reading picks. Its cards say "This page seems gone", with **It still works** and **I'm done with it**, each with Undo, and every link your AI gets back says whether its page seems gone. A login-walled page is never marked. Your web login, its sessions and your AI apps' connections live in a second SQLite file beside it.
 
 ## Run it on your Mac
 
@@ -77,9 +78,18 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    AYE_AUTH_DB=/Users/<you>/.aye-links/data/auth.db
    AYE_AUTH_SECRET=<a random secret>
    AYE_BASE_URL=https://links.<your-domain>
+   # AYE_SAVED_COPY_DIR=/Users/<you>/.aye-links/saved-copies
+   # AYE_SAVED_COPY_LIMIT_GB=1
    ```
 
    `AYE_DB` is required and must be an absolute path. `AYE_PORT` defaults to 3002. `AYE_ALLOWED_HOSTS` is a comma-separated list of the host names the server answers to; `localhost` and `127.0.0.1` are always allowed.
+
+   `AYE_SAVED_COPY_DIR` is where the server keeps a saved copy of each new link's article (Markdown, with its pictures fetched later). It defaults to `~/.aye-links/saved-copies`. It must be an absolute path outside the release folders. You can put it inside iCloud Drive or Dropbox, and the sync service then stores the copies too. It is not in the database backups.
+   - If the log says the folder can't be written, grant the Node binary access to it in System Settings → Privacy & Security and restart. Copies pause meanwhile and the app keeps working.
+   - If the log says the folder belongs to another library (for example after a deploy rolled the database back), move the folder aside and restart. A new, empty one is made. A folder you delete by hand is made again at the next start, and the copies that were in it are missing.
+   - Use one server per folder. A copied database pointed at the same folder (a second Mac sharing a synced folder) is not supported.
+
+   `AYE_SAVED_COPY_LIMIT_GB` caps the folder's size in GiB (default 1). When it is full, new links get no copy and old copies are never deleted. `0` stops new copies; existing ones stay.
 
    The other three are for the web login, and the server will not start without them:
    - `AYE_AUTH_DB` is the absolute path of the login database. It must be a different file from `AYE_DB`.

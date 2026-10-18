@@ -1,4 +1,13 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -31,6 +40,7 @@ const SECRET = "test-secret-0123456789abcdef0123456789";
 
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
+import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 
 const URL_A = "https://example.com/served";
 const SAVE = {
@@ -242,6 +252,7 @@ describe("startServer", () => {
     dbPath: links,
     port,
     auth: { dbPath: authPath(), secret: SECRET, baseUrl: BASE },
+    savedCopies: { dir: join(dir, "copies"), limitBytes: 1024 ** 3 },
     version: "v2099.01.02.3",
   });
 
@@ -867,6 +878,119 @@ describe("startServer", () => {
       } finally {
         faults.dispose();
       }
+    });
+  });
+
+  describe("saved copies", () => {
+    const copiesDir = () => join(dir, "copies");
+    const DRAFT = { markdown: "# Saved\n\nbody", imageUrls: [], nonce: "a".repeat(32) };
+    const WITH_COPY: ExtractOutcome = { ...PAGE, copy: DRAFT };
+    const copyRows = () =>
+      read<{ linkId: number; status: string }>(
+        "SELECT link_id AS linkId, status FROM saved_copies ORDER BY link_id",
+      );
+    const linkIds = () => read<{ id: number }>("SELECT id FROM links").map((r) => r.id);
+    const startWith = async (savedCopies: ServerConfig["savedCopies"], options: StartOptions) => {
+      const s = await startServer(
+        { ...cfg(dbPath, 0), savedCopies },
+        { ...fakePipeline(), settleMs: 200, requestLog: (l) => logged.push(l), ...options },
+      );
+      started.push(s);
+      return s;
+    };
+    const ON = () => ({ dir: copiesDir(), limitBytes: 1024 ** 3 });
+
+    it("keeps a copy of a newly saved page beside its snapshot", async () => {
+      await seed("https://example.com/a");
+      await startWith(ON(), {
+        extractor: fakePipeline({ extract: async () => WITH_COPY }).extractor,
+      });
+      await until(() => copyRows().length === 1, "a saved copy row");
+      const [id] = linkIds();
+      expect(copyRows()).toEqual([{ linkId: id, status: "ok" }]);
+      expect(readFileSync(join(copiesDir(), String(id), "copy.md"), "utf8")).toBe(DRAFT.markdown);
+    });
+
+    it("asks for no copy at limit 0 and writes none", async () => {
+      await seed("https://example.com/a");
+      const asked: unknown[] = [];
+      const extractor: PageExtractor = {
+        extract: async (_h, _u, _s, options) => {
+          asked.push(options);
+          return PAGE;
+        },
+        close: async () => {},
+      };
+      await startWith({ dir: copiesDir(), limitBytes: 0 }, { extractor });
+      await until(() => snapshots()[0]?.status === "ok", "the snapshot");
+      expect(asked).toEqual([{ copy: false }]);
+      expect(copyRows()).toEqual([]);
+      expect(existsSync(join(copiesDir(), String(linkIds()[0])))).toBe(false);
+    });
+
+    it("starts and keeps snapshotting when the folder belongs to no library, leaving it alone", async () => {
+      mkdirSync(copiesDir());
+      writeFileSync(join(copiesDir(), "notes.txt"), "mine");
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      await seed("https://example.com/a");
+      await startWith(ON(), {
+        extractor: fakePipeline({ extract: async () => WITH_COPY }).extractor,
+      });
+      await until(() => snapshots()[0]?.status === "ok", "the snapshot");
+      expect(copyRows()).toEqual([]);
+      expect(readdirSync(copiesDir())).toEqual(["notes.txt"]);
+      expect(readFileSync(join(copiesDir(), "notes.txt"), "utf8")).toBe("mine");
+      const logs = errors.mock.calls.flat().join("\n");
+      expect(logs).toContain("[saved copies] paused");
+      expect(logs).toContain("move this one aside and restart");
+    });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "advises granting access, not moving the folder aside, when its own folder can't be read",
+      async () => {
+        const db = openDatabase(dbPath);
+        try {
+          expect(await new SqliteSavedCopyStore(db, copiesDir()).checkFolder()).toEqual({
+            state: "ready",
+          });
+        } finally {
+          db.close();
+        }
+        chmodSync(copiesDir(), 0o000);
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          await startWith(ON(), {});
+        } finally {
+          chmodSync(copiesDir(), 0o755);
+        }
+        const logs = errors.mock.calls.flat().join("\n");
+        expect(logs).toContain("[saved copies] paused");
+        expect(logs).toContain("Privacy & Security");
+        expect(logs).not.toContain("move this one aside");
+      },
+    );
+
+    it("undoes a copy left mid-write before the start resolves", async () => {
+      const db = openDatabase(dbPath);
+      let id: number;
+      try {
+        expect(await new SqliteSavedCopyStore(db, copiesDir()).checkFolder()).toEqual({
+          state: "ready",
+        });
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        await saveLink(deps, "owner", { url: "https://example.com/a", savedBy: "seed" });
+        id = db.prepare("SELECT id FROM links").pluck().get() as number;
+        db.prepare(
+          "INSERT INTO saved_copies (owner_id, link_id, status, made_at) VALUES ('owner', ?, 'saving', 1)",
+        ).run(id);
+        mkdirSync(join(copiesDir(), String(id)));
+        writeFileSync(join(copiesDir(), String(id), "copy.md"), "half");
+      } finally {
+        db.close();
+      }
+      await startWith(ON(), {});
+      expect(copyRows()).toEqual([]);
+      expect(existsSync(join(copiesDir(), String(id)))).toBe(false);
     });
   });
 

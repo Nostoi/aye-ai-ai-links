@@ -45,6 +45,7 @@ export function articleMarkdown(article: Element, base: string, nonce: string): 
     filter: "img",
     replacement: (_content, node) => {
       const alt = (node as Element).getAttribute("alt") ?? "";
+      if ((node as Element).parentElement?.closest("code")) return collapse(alt);
       const src = (node as Element).getAttribute("src");
       const url = src ? resolve(src, base) : null;
       const text = td.escape(collapse(alt));

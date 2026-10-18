@@ -134,6 +134,14 @@ describe("articleMarkdown images", () => {
     expect(d.imageUrls).toEqual(["https://ex.com/v.png"]);
     expect(d.markdown).toContain(`images/01-${NONCE}`);
   });
+  it("gives no number to an image inside inline code, which shows as its alt there", () => {
+    const d = draft(
+      '<p>x <code>a <img src="https://ex.com/c.png" alt="c"></code> vis <img src="https://ex.com/v.png" alt="v"></p>',
+    );
+    expect(d.imageUrls).toEqual(["https://ex.com/v.png"]);
+    expect(d.markdown).toContain("`a c`");
+    expect(d.markdown).toContain(`![v](images/01-${NONCE})`);
+  });
   it("reads only the node's src, never a data attribute", () => {
     const d = draft(
       '<p>x <img src="blob:https://ex.com/1" data-copy-src="https://ex.com/injected.png" alt="B"></p>',

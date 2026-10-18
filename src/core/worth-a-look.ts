@@ -63,6 +63,7 @@ export async function worthALook(
 ): Promise<{ links: DigestLink[]; gone: Link | null }> {
   const gone = await gonePick(deps, owner);
   const shown = new Set(suggestions.map((s) => s.link.id));
+  if (gone) shown.add(gone.id);
   const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY, shown);
   const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
   const day = Math.floor(deps.now().getTime() / DAY_MS);

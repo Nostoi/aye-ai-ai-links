@@ -162,10 +162,29 @@ describe("worthALook's gone pick (#128)", () => {
     expect((await picked()).gone?.id).toBe(ok.id);
   });
 
-  it("picks a link whose snooze has ended", async () => {
+  it("picks a link whose snooze has ended, including one ending exactly now", async () => {
     const over = await link(A, { snoozedUntil: at(-DAY) });
-    await flagGone(over.id, at(-DAY));
+    const now = await link(A, { snoozedUntil: NOW });
+    await flagGone(over.id, at(-2 * DAY));
+    await flagGone(now.id, at(-DAY));
     expect((await picked()).gone?.id).toBe(over.id);
+    await store.update(A, over.id, { snoozedUntil: at(DAY) });
+    expect((await picked()).gone?.id).toBe(now.id);
+  });
+
+  it("is excluded from the reading picks even if the digest would offer it", async () => {
+    const gone = await link();
+    await link();
+    await flagGone(gone.id, at(-DAY));
+    // The digest's own gone filter sees no checks; only the gone pick's read does.
+    let reads = 0;
+    const checks = Object.assign(Object.create(store) as FakeStore, {
+      listChecks: async (...a: Parameters<FakeStore["listChecks"]>) =>
+        reads++ === 0 ? store.listChecks(...a) : new Map(),
+    });
+    const { links, gone: pick } = await worthALook({ ...deps(), checks }, A, []);
+    expect(pick?.id).toBe(gone.id);
+    expect(links.map((d) => d.link.id)).not.toContain(gone.id);
   });
 
   it("writes nothing", async () => {

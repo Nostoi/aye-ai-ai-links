@@ -316,9 +316,14 @@ export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfI
 
 export const SUGGESTION_SIZE = 2;
 
-/** The shelf's suggestions: the newest SUGGESTION_SIZE suggested tools on active links, newest first. */
+/**
+ * The shelf's suggestions: the newest SUGGESTION_SIZE suggested tools on active links that don't
+ * seem gone (#128), newest first. A gone link is skipped, so the next suggestion fills its place.
+ */
 export async function listSuggestions(deps: ToolsDeps, owner: OwnerId): Promise<ToolItem[]> {
+  const checks = await deps.checks.listChecks(owner);
   return (await toolItems(deps, owner, "suggested"))
+    .filter((i) => !isGone(checks.get(i.link.id) ?? null))
     .sort((a, b) => newestFirst(a.tool.since, b.tool.since))
     .slice(0, SUGGESTION_SIZE);
 }

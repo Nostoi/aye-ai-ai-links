@@ -717,4 +717,16 @@ describe("listSuggestions", () => {
     expect(SUGGESTION_SIZE).toBe(2);
     expect((await listSuggestions(deps(), A)).map((s) => s.link.id)).toEqual([made[2], made[1]]);
   });
+
+  it("skips a gone link, and the next suggestion takes its place (#128)", async () => {
+    const made: string[] = [];
+    for (let d = 1; d <= 3; d++) {
+      const id = await saved();
+      clock = day(d);
+      await keepHandy(deps(), A, id, "inferred");
+      made.push(id);
+    }
+    await flag(made[2] as string);
+    expect((await listSuggestions(deps(), A)).map((s) => s.link.id)).toEqual([made[1], made[0]]);
+  });
 });

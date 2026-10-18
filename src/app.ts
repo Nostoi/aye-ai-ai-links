@@ -15,6 +15,7 @@ import type { Identify } from "./auth/caller.js";
 import { consentDetails } from "./auth/consent.js";
 import { disconnect, listConnections } from "./auth/disconnect.js";
 import { authApp, originRefused, type RouteLimit, rootMetadataApp } from "./auth/http.js";
+import { SAVE_PATH } from "./auth/login-return.js";
 import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
@@ -80,6 +81,7 @@ const CHECKED_PAGES = [
   "/profile/notes/confirm",
   "/profile/notes/remove",
   "/profile/notes/restore",
+  SAVE_PATH,
   OAUTH_ERROR_PATH,
   IMAGE_ROUTE,
 ];
@@ -165,6 +167,7 @@ export function createApp(options: AppOptions) {
         deps: { ...web.deps, searchLog: undefined },
         auth: betterAuth,
         withAuthLock,
+        baseUrl,
         consent: consentDetails({ auth: betterAuth, withAuthLock, clients }),
         connections: {
           list: listConnections({ withAuthLock, clients }),

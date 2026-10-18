@@ -105,7 +105,7 @@ export async function unarchiveLink(deps: WorthDeps, owner: OwnerId, id: string)
  * replaces an agent's guess, never a reason the owner gave. Blank text is refused.
  */
 export async function tellWhy(
-  deps: WorthDeps,
+  deps: Pick<WorthDeps, "store">,
   owner: OwnerId,
   id: string,
   text: string,
@@ -126,7 +126,7 @@ const CHANGED_SINCE = "That link was changed since, so it stays as it is. Reload
 
 /** A missing or foreign link is not_found; one that no longer matches is a `conflict`. */
 async function changeIf(
-  deps: WorthDeps,
+  deps: Pick<WorthDeps, "store">,
   owner: OwnerId,
   id: string,
   expected: LinkExpectation,

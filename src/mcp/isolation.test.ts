@@ -530,6 +530,7 @@ describe("owner isolation coverage", () => {
       noOwnerData: "names the client in the signed authorize query, no owner data",
     },
     "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
+    "GET /save": { noOwnerData: "the save form, filled only from its own query" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
   };
@@ -725,6 +726,7 @@ describe("owner isolation coverage", () => {
     "POST /profile/notes/confirm": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/remove": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/restore": "the two-owner profile tests in web/profile-page.test.ts",
+    "POST /save": "the two-owner test of POST /save in web/save-routes.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

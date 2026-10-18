@@ -21,8 +21,6 @@ export interface CopyKeeper {
   keep(owner: OwnerId, linkId: string, draft: CopyDraft): Promise<KeepResult>;
   /** Records `none` and answers true when core gives this link no copy before any fetch (a kept tool). */
   refuse(owner: OwnerId, linkId: string): Promise<boolean>;
-  /** Records `none` and answers true when core gives this link no copy before any fetch (a kept tool). */
-  refuse(owner: OwnerId, linkId: string): Promise<boolean>;
 }
 
 /** The rules for which link gets a copy; the store holds none of them. */

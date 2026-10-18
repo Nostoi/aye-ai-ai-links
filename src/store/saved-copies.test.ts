@@ -1,0 +1,231 @@
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type Database from "better-sqlite3";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { copyLimits } from "../core/saved-copy.js";
+import { describeSavedCopyStoreContract } from "../core/saved-copy-store-contract.js";
+import { at, newLink } from "../core/snapshot-store-contract.js";
+import { CopyFolder, MARKER } from "./copy-folder.js";
+import { openDatabase } from "./database.js";
+import { SqliteSavedCopyStore } from "./saved-copies.js";
+import { SqliteLinkCheckStore } from "./sqlite-link-checks.js";
+import { SqliteStore } from "./sqlite-store.js";
+
+type Db = Database.Database;
+
+const open: { db: Db; root: string }[] = [];
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const { db, root } of open.splice(0)) {
+    if (db.open) db.close();
+    try {
+      chmodSync(root, 0o700);
+    } catch {
+      // already gone
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+const N = "0123456789abcdef0123456789abcdef";
+const LIMITS = copyLimits(10_000);
+const draft = (markdown: string, imageUrls: string[] = [], nonce = N) => ({
+  markdown,
+  imageUrls,
+  nonce,
+});
+
+function setup() {
+  const db = openDatabase(":memory:");
+  const root = mkdtempSync(join(tmpdir(), "aye-copies-"));
+  open.push({ db, root });
+  const links = new SqliteStore(db);
+  const copies = new SqliteSavedCopyStore(db, root);
+  return { db, root, links, copies };
+}
+
+async function ready() {
+  const s = setup();
+  await s.links.ensureUser("o", "o");
+  expect(await s.copies.checkFolder()).toEqual({ state: "ready" });
+  const id = (await s.links.insertIfAbsent("o", newLink(1, at(0)))).link.id;
+  return { ...s, id };
+}
+
+const libraryId = (db: Db) =>
+  (db.prepare("SELECT id FROM saved_copy_library").get() as { id: string } | undefined)?.id;
+const rows = (db: Db) => db.prepare("SELECT count(*) AS c FROM saved_copies").pluck().get();
+
+describeSavedCopyStoreContract("SqliteSavedCopyStore", async () => {
+  const db = openDatabase(":memory:");
+  const root = mkdtempSync(join(tmpdir(), "aye-copies-"));
+  open.push({ db, root });
+  const links = new SqliteStore(db);
+  const copies = new SqliteSavedCopyStore(db, root);
+  expect(await copies.checkFolder()).toEqual({ state: "ready" });
+  return {
+    links,
+    checks: new SqliteLinkCheckStore(db),
+    copies,
+    addOwner: (o) => links.ensureUser(o, o),
+    breakFolder: () => {
+      writeFileSync(join(root, "stray.txt"), "x");
+      rmSync(join(root, MARKER));
+      return copies.checkFolder().then(() => {});
+    },
+  };
+});
+
+describe("checkFolder", () => {
+  it("makes an empty root ready and writes the library id into the marker", async () => {
+    const { db, root, copies } = setup();
+    expect(await copies.checkFolder()).toEqual({ state: "ready" });
+    expect(readFileSync(join(root, MARKER), "utf8")).toBe(libraryId(db));
+  });
+
+  it("ignores names a sync client or Finder adds", async () => {
+    const { root, copies } = setup();
+    writeFileSync(join(root, ".DS_Store"), "");
+    writeFileSync(join(root, "Icon\r"), "");
+    expect(await copies.checkFolder()).toEqual({ state: "ready" });
+  });
+
+  it("refuses a root holding files but no marker, and leaves them", async () => {
+    const { root, copies } = setup();
+    mkdirSync(join(root, "12"));
+    writeFileSync(join(root, ".DS_Store"), "");
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(existsSync(join(root, "12"))).toBe(true);
+    expect(existsSync(join(root, MARKER))).toBe(false);
+  });
+
+  it("refuses a marker holding another library's id", async () => {
+    const { db, root, copies } = setup();
+    db.prepare("INSERT INTO saved_copy_library (only, id) VALUES (1, 'mine')").run();
+    writeFileSync(join(root, MARKER), "someone-else");
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+  });
+
+  it("refuses a marker when the database has no library row, and writes nothing", async () => {
+    const { db, root, copies } = setup();
+    writeFileSync(join(root, MARKER), "from-a-newer-database");
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(readFileSync(join(root, MARKER), "utf8")).toBe("from-a-newer-database");
+    expect(libraryId(db)).toBeUndefined();
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "is unwritable for a read-only root, and ready again once it is fixed",
+    async () => {
+      const { root, copies } = setup();
+      expect(await copies.checkFolder()).toEqual({ state: "ready" });
+      chmodSync(root, 0o500);
+      expect(await copies.checkFolder()).toMatchObject({ state: "unwritable" });
+      chmodSync(root, 0o700);
+      expect(await copies.checkFolder()).toEqual({ state: "ready" });
+    },
+  );
+
+  it("records the library row before the marker, so a failed marker write is retried", async () => {
+    const { db, root, copies } = setup();
+    const spy = vi.spyOn(CopyFolder.prototype, "writeMarker").mockImplementationOnce(() => {
+      throw new Error("disk");
+    });
+    expect(await copies.checkFolder()).toMatchObject({ state: "unwritable" });
+    const id = libraryId(db);
+    expect(id).toBeDefined();
+    spy.mockRestore();
+    expect(await copies.checkFolder()).toEqual({ state: "ready" });
+    expect(readFileSync(join(root, MARKER), "utf8")).toBe(id);
+  });
+});
+
+describe("reads", () => {
+  it("answer missing after a mismatch, though the row is ok", async () => {
+    const { db, root, copies, id } = await ready();
+    expect(await copies.saveCopy("o", id, draft("body"), LIMITS, at(1))).toBe("saved");
+    rmSync(join(root, MARKER));
+    writeFileSync(join(root, "stray.txt"), "x");
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(await copies.readCopy("o", id)).toBe("missing");
+    expect(db.prepare("SELECT status FROM saved_copies").pluck().get()).toBe("ok");
+  });
+
+  it("answer missing when the files were deleted by hand, leaving the row ok", async () => {
+    const { db, root, copies, id } = await ready();
+    await copies.saveCopy("o", id, draft("body"), LIMITS, at(1));
+    rmSync(join(root, id), { recursive: true });
+    expect(await copies.readCopy("o", id)).toBe("missing");
+    expect(db.prepare("SELECT status FROM saved_copies").pluck().get()).toBe("ok");
+  });
+});
+
+/** Makes the store's private confirm step throw. */
+const failConfirm = (store: SqliteSavedCopyStore) =>
+  vi.spyOn(store as unknown as { confirmCopy(): void }, "confirmCopy").mockImplementation(() => {
+    throw new Error("confirm");
+  });
+
+describe("a failed copy write", () => {
+  const disk = () => Object.assign(new Error("disk"), { code: "ENOSPC" });
+
+  it("leaves no row and no files when the write fails", async () => {
+    const { db, root, copies, id } = await ready();
+    vi.spyOn(CopyFolder.prototype, "writeCopy").mockImplementation(() => {
+      throw disk();
+    });
+    await expect(copies.saveCopy("o", id, draft("body"), LIMITS, at(1))).rejects.toThrow("disk");
+    expect(rows(db)).toBe(0);
+    expect(await copies.usedBytes()).toBe(0);
+    expect(readdirSync(root).sort()).toEqual([MARKER, ".aye-tmp"]);
+    expect(readdirSync(join(root, ".aye-tmp"))).toEqual([]);
+  });
+
+  it("removes the row and the folder when confirming fails", async () => {
+    const { db, root, copies, id } = await ready();
+    failConfirm(copies);
+    await expect(copies.saveCopy("o", id, draft("body"), LIMITS, at(1))).rejects.toThrow("confirm");
+    expect(rows(db)).toBe(0);
+    expect(await copies.usedBytes()).toBe(0);
+    expect(existsSync(join(root, id))).toBe(false);
+  });
+
+  it("rethrows the confirm error and leaves the folder for the sweep when cleanup fails too", async () => {
+    const { db, root, copies, id } = await ready();
+    failConfirm(copies);
+    vi.spyOn(CopyFolder.prototype, "removeCopy").mockImplementation(() => {
+      throw new Error("cleanup");
+    });
+    await expect(copies.saveCopy("o", id, draft("body"), LIMITS, at(1))).rejects.toThrow("confirm");
+    expect(rows(db)).toBe(0);
+    expect(await copies.usedBytes()).toBe(0);
+    expect(existsSync(join(root, id, "copy.md"))).toBe(true);
+  });
+});
+
+describe("a bad draft", () => {
+  it("throws before writing a row for a bad nonce", async () => {
+    const { db, copies, id } = await ready();
+    await expect(
+      copies.saveCopy("o", id, draft("body", ["https://i.example/1.png"], "x"), LIMITS, at(1)),
+    ).rejects.toThrow();
+    expect(rows(db)).toBe(0);
+  });
+
+  it("throws before writing a row for more than 30 images", async () => {
+    const { db, copies, id } = await ready();
+    const urls = [...Array(31)].map((_, i) => `https://i.example/${i}.png`);
+    await expect(copies.saveCopy("o", id, draft("body", urls), LIMITS, at(1))).rejects.toThrow();
+    expect(rows(db)).toBe(0);
+  });
+});

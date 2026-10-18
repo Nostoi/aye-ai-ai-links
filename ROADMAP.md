@@ -16,12 +16,19 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134), AI endpoints for a local AI, ChatGPT and Claude (#159), saved summaries (#160), stats and what they say about you (#161) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-18:** Three owner requests join Later, unordered.
+  - **#159:** reach a local AI, ChatGPT and Claude through their APIs for chat and saving, alongside the MCP connectors.
+  - **#160:** the server keeps an AI-made summary of each link.
+  - **#161:** stats over a chosen window (saved, read, saved but not read, put aside), plus an AI reading of what they say about the owner.
+  - **Open conflicts, to settle at design with the owner:**
+    - #159 and #160 reverse AGENTS.md's "the server never calls an AI model API and needs no API keys", so building them changes that principle on purpose;
+    - #161's "saved but not read" count meets src/web/AGENTS.md's "No guilt counters".
 - **2026-10-18:** Saved copies (#135). Owner rulings, 2026-10-17 (#135 comment 6241001150, binding); the naming ruling is the comment before it (comment 6240109297). The design is `docs/specs/2026-10-17-saved-copy-design.md`.
   - **Overrides the 2026-10-10 spec's "Not stored now: full-page archives"** (owner ruling). That spec stays as written; this entry is the override.
   - **Lands in four PRs:** the ledger and folder store (no callers), then copies of new links with the settings, then the copy pass (the one-time backfill, the image pass, finishing, the sweep), then reading and removing them (the copy page, the ⋯ menu rows, the gone line's link, the All links line, `get_link`'s `savedCopy`).

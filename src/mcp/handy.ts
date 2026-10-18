@@ -1,9 +1,10 @@
 import { CoreError } from "../core/errors.js";
+import type { GoneView } from "../core/link-check.js";
 import {
   type HandyView,
-  handyOf,
-  handyOfLinks,
   keepHandy,
+  linkView,
+  linkViews,
   notHandy,
   stillUsing,
   type ToolChange,
@@ -13,8 +14,8 @@ import type { Link, OwnerId, Source } from "../core/types.js";
 
 /** Keep handy at the MCP door: translates into core/tools.ts calls, and holds no rule. */
 
-/** A link as the door returns it: with its Keep handy view (null for an ordinary link). */
-export type HandyLink = Link & { handy: HandyView | null };
+/** A link as the door returns it: with its Keep handy view (null for an ordinary link) and its gone view (null unless flagged). */
+export type HandyLink = Link & { handy: HandyView | null; gone: GoneView | null };
 
 type ViewDeps = Pick<ToolsDeps, "tools" | "checks" | "now">;
 
@@ -23,17 +24,17 @@ export async function linkWithHandy(
   owner: OwnerId,
   link: Link,
 ): Promise<HandyLink> {
-  return { ...link, handy: await handyOf(deps, owner, link) };
+  return { ...link, ...(await linkView(deps, owner, link)) };
 }
 
-/** Each link with its view, from one read of the owner's rows. */
+/** Each link with its views, from one read of the owner's rows. */
 export async function linksWithHandy(
   deps: ViewDeps,
   owner: OwnerId,
   links: Link[],
 ): Promise<HandyLink[]> {
-  const views = await handyOfLinks(deps, owner, links);
-  return links.map((l) => ({ ...l, handy: views.get(l.id) ?? null }));
+  const views = await linkViews(deps, owner, links);
+  return links.map((l) => ({ ...l, handy: null, gone: null, ...views.get(l.id) }));
 }
 
 /** The `handy` input's actions. */

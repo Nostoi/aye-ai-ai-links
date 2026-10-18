@@ -323,6 +323,7 @@ describe("MCP door over HTTP", () => {
           imageUrl: null,
         },
         handy: null,
+        gone: null,
       },
       created: true,
       // No runner here, so the page is not fetched and there is no text.
@@ -335,7 +336,7 @@ describe("MCP door over HTTP", () => {
   });
 
   it("every tool equals the direct core call with the same clock", async () => {
-    const plain = (link: Link) => ({ ...link, handy: null });
+    const plain = (link: Link) => ({ ...link, handy: null, gone: null });
     const input = {
       url: "https://example.com/p",
       title: "Parity",

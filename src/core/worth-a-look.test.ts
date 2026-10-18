@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DIGEST_SIZE, getDigest, previewDigest, SURFACE_COOLDOWN_MS } from "./digest.js";
+import {
+  compareIds,
+  DIGEST_SIZE,
+  getDigest,
+  previewDigest,
+  SURFACE_COOLDOWN_MS,
+} from "./digest.js";
 import type { CoreError } from "./errors.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
@@ -98,7 +104,18 @@ async function focus(text: string, created: Date, found: string[]): Promise<void
 
 const get = async (id: string, owner = A) => (await store.get(owner, id)) as Link;
 const picked = async () => worthALook(deps(), A, await listSuggestions(deps(), A));
-const ids = async () => (await picked()).map((d) => d.link.id);
+const ids = async () => (await picked()).links.map((d) => d.link.id);
+
+/** Flags the link as gone, first flagged at `flaggedAt`. */
+const flagGone = (id: string, flaggedAt: Date) =>
+  store.updateCheckIf(A, id, null, {
+    checkedAt: flaggedAt,
+    result: "dead",
+    detail: "http:404",
+    firstDeadAt: new Date(flaggedAt.getTime() - 7 * DAY),
+    flaggedAt,
+    stillWorksAt: null,
+  });
 
 async function code(p: Promise<unknown>): Promise<string> {
   try {
@@ -108,6 +125,90 @@ async function code(p: Promise<unknown>): Promise<string> {
   }
   return "no error";
 }
+
+describe("worthALook's gone pick (#128)", () => {
+  it("is the earliest flagged link, and the lowest id on a tie", async () => {
+    const late = await link();
+    const early = await link();
+    await flagGone(late.id, at(-2 * DAY));
+    await flagGone(early.id, at(-9 * DAY));
+    expect((await picked()).gone?.id).toBe(early.id);
+    const tied = [await link(), await link()];
+    for (const l of tied) await flagGone(l.id, at(-20 * DAY));
+    expect((await picked()).gone?.id).toBe(tied.map((l) => l.id).sort(compareIds)[0]);
+  });
+
+  it("takes a slot: three reading candidates and a gone link give two reading links and the gone one", async () => {
+    await link();
+    await link();
+    await link();
+    const gone = await link();
+    await flagGone(gone.id, at(-DAY));
+    const { links, gone: pick } = await picked();
+    expect(links).toHaveLength(WORTH_SIZE - 1);
+    expect(pick?.id).toBe(gone.id);
+    expect(links.map((d) => d.link.id)).not.toContain(gone.id);
+  });
+
+  it("is never an archived, snoozed or kept-tool link", async () => {
+    const archived = await link(A, { state: "archived" });
+    const snoozed = await link(A, { snoozedUntil: at(DAY) });
+    const kept = await link();
+    await keepHandy(deps(), A, kept.id, "stated");
+    for (const l of [archived, snoozed, kept]) await flagGone(l.id, at(-9 * DAY));
+    expect((await picked()).gone).toBeNull();
+    const ok = await link();
+    await flagGone(ok.id, at(-DAY));
+    expect((await picked()).gone?.id).toBe(ok.id);
+  });
+
+  it("picks a link whose snooze has ended, including one ending exactly now", async () => {
+    const over = await link(A, { snoozedUntil: at(-DAY) });
+    const now = await link(A, { snoozedUntil: NOW });
+    await flagGone(over.id, at(-2 * DAY));
+    await flagGone(now.id, at(-DAY));
+    expect((await picked()).gone?.id).toBe(over.id);
+    await store.update(A, over.id, { snoozedUntil: at(DAY) });
+    expect((await picked()).gone?.id).toBe(now.id);
+  });
+
+  it("is excluded from the reading picks even if the digest would offer it", async () => {
+    const gone = await link();
+    await link();
+    await flagGone(gone.id, at(-DAY));
+    // The digest's own gone filter sees no checks; only the gone pick's read does.
+    let reads = 0;
+    const checks = Object.assign(Object.create(store) as FakeStore, {
+      listChecks: async (...a: Parameters<FakeStore["listChecks"]>) =>
+        reads++ === 0 ? store.listChecks(...a) : new Map(),
+    });
+    const { links, gone: pick } = await worthALook({ ...deps(), checks }, A, []);
+    expect(pick?.id).toBe(gone.id);
+    expect(links.map((d) => d.link.id)).not.toContain(gone.id);
+  });
+
+  it("writes nothing", async () => {
+    const gone = await link();
+    await link();
+    await flagGone(gone.id, at(-DAY));
+    const rows = async () =>
+      structuredClone([
+        await store.listLinks(A),
+        [...(await store.listChecks(A))],
+        [...(await store.listTools(A))],
+      ]);
+    const before = await rows();
+    await picked();
+    expect(await rows()).toEqual(before);
+  });
+
+  it("is null, and the reading picks fill all slots, with no gone link", async () => {
+    for (let i = 0; i < 4; i++) await link();
+    const { links, gone } = await picked();
+    expect(gone).toBeNull();
+    expect(links).toHaveLength(WORTH_SIZE);
+  });
+});
 
 describe("worthALook", () => {
   it("leaves a gone link out of its reading picks (#128)", async () => {
@@ -122,6 +223,7 @@ describe("worthALook", () => {
       stillWorksAt: null,
     });
     expect(await ids()).toEqual([other.id]);
+    expect((await picked()).gone?.id).toBe(gone.id);
   });
 
   it("leaves out a kept tool, even one that matches the focus", async () => {
@@ -176,7 +278,7 @@ describe("worthALook", () => {
       await keepHandy(deps(), A, s.id, "inferred");
     }
     clock = NOW;
-    const picks = await picked();
+    const { links: picks } = await picked();
     expect(picks.map((d) => d.link.id).sort()).toEqual([oldest.id, ordinary.id].sort());
     for (const d of picks) expect(d.reasons.map((r) => r.kind)).toContain("focus_words");
   });
@@ -203,7 +305,7 @@ describe("worthALook", () => {
     // The caller's list: the middle and oldest tools, though a fresh read would give newest and middle.
     const [, middleItem] = await listSuggestions(deps(), A);
     const shown = [middleItem as ToolItem, { ...(middleItem as ToolItem), link: oldest }];
-    const picks = await worthALook(deps(), A, shown);
+    const { links: picks } = await worthALook(deps(), A, shown);
     expect(picks.map((d) => d.link.id)).toEqual([newest.id]);
   });
 

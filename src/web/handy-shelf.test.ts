@@ -185,6 +185,36 @@ describe("the Handy shelf", () => {
     for (const t of tiles(html)) expect(t.className).not.toMatch(/amber|worth-tile/);
   });
 
+  it("marks a gone tile as needing you with the gone ask in place of Still using?; not gone is unchanged", () => {
+    const [gone, calm] = tiles(render([{ ...kept(), gone: true }, kept()]));
+    expect(gone?.classList.contains("needs-you")).toBe(true);
+    expect(gone?.querySelector(".ask p")?.textContent).toBe("Seems gone");
+    expect(
+      [...(gone?.querySelectorAll(".ask button") ?? [])].map((b) => [
+        (b as HTMLElement).dataset.act,
+        b.textContent,
+      ]),
+    ).toEqual([
+      ["still-works", "It works"],
+      ["done", "Done"],
+    ]);
+    expect(calm?.classList.contains("needs-you")).toBe(false);
+    expect(calm?.querySelector(".ask")).toBeNull();
+  });
+
+  it("shows a gone and due tile only the gone ask", () => {
+    const [both] = tiles(render([{ ...kept({}, true), gone: true }]));
+    expect(both?.querySelectorAll(".ask")).toHaveLength(1);
+    expect(both?.querySelector(".ask p")?.textContent).toBe("Seems gone");
+    expect(both?.querySelector("button[data-act=still-using]")).toBeNull();
+  });
+
+  it("renders the items in the order given, so a gone tile first stays first", () => {
+    const calm = kept();
+    const gone = { ...kept(), gone: true };
+    expect(ids(tiles(render([gone, calm])))).toEqual([gone.link.id, calm.link.id]);
+  });
+
   it("gives every kept tile a menu with Not handy anymore, and a suggestion none", () => {
     const html = render([kept({ title: "Attendance" })], [suggested()]);
     const [tool, guess] = tiles(html);
@@ -274,6 +304,7 @@ const NO_WORTH: WorthCards = {
   images: new Map(),
   now: new Date("2026-10-16T00:00:00Z"),
   catalog: [],
+  gone: null,
 };
 const home = (items: ShelfItem[], suggestions: ToolItem[] = []) =>
   homePage({ worth: NO_WORTH, shelf: render(items, suggestions), spaces: "" });
@@ -319,6 +350,59 @@ describe("the shelf's script", () => {
     expect(urls(p)).toEqual(["/tools/still-using", "/"]);
     expect(p.$(".handy-tile").classList.contains("needs-you")).toBe(false);
     expect(p.$("#undo-bar").hidden).toBe(true);
+  });
+
+  it("It works posts /links/still-works, refreshes the shelf, and offers Undo with the answer's payload", async () => {
+    const item = { ...kept(), gone: true };
+    const CHECK = { checkedAt: "2026-10-17T00:00:00.000Z", status: "ok" };
+    const p = shelfPage(
+      home([item]),
+      (s) =>
+        s.url === "/links/still-works/undo"
+          ? { status: 204 }
+          : { status: 200, body: { check: CHECK, previous: null } },
+      [home([{ ...item, gone: false }]), home([item])],
+    );
+    p.dispatch(p.$("button[data-act=still-works]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/links/still-works", body: { id: item.link.id } });
+    expect(p.$(".handy-tile").classList.contains("needs-you")).toBe(false);
+    expect(p.$("#undo-bar span").textContent).toBe("Marked as working.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/still-works", "/", "/links/still-works/undo", "/"]);
+    expect(p.sent[2]).toMatchObject({ body: { id: item.link.id, check: CHECK, previous: null } });
+    expect(p.$(".handy-tile").classList.contains("needs-you")).toBe(true);
+  });
+
+  it("a refused It works shows the message, leaves the tile and offers no Undo", async () => {
+    const item = { ...kept(), gone: true };
+    const message = "This link isn't marked as gone. Reload the page.";
+    const p = shelfPage(home([item]), () => ({ status: 409, body: { code: "conflict", message } }));
+    p.dispatch(p.$("button[data-act=still-works]"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/still-works"]);
+    expect(p.$("#handy-error").textContent).toBe(message);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect((p.$("button[data-act=still-works]") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("an Undo of It works answered 409 shows the message", async () => {
+    const item = { ...kept(), gone: true };
+    const message = "That link was checked again. Reload the page.";
+    const p = shelfPage(
+      home([item]),
+      (s) =>
+        s.url === "/links/still-works/undo"
+          ? { status: 409, body: { code: "conflict", message } }
+          : { status: 200, body: { check: {}, previous: null } },
+      [home([{ ...item, gone: false }])],
+    );
+    p.dispatch(p.$("button[data-act=still-works]"), "click");
+    await p.settle();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.$("#handy-error").textContent).toBe(message);
   });
 
   it("Not handy anymore posts, refreshes, and offers Undo, which sends back the rows it got and refreshes again", async () => {

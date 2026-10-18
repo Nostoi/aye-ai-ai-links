@@ -13,6 +13,8 @@ import {
   handyOfLinks,
   isDue,
   keepHandy,
+  linkView,
+  linkViews,
   listShelf,
   listSuggestions,
   notHandy,
@@ -563,7 +565,40 @@ describe("handy views", () => {
     expect(calls).toEqual(["listTools"]);
   });
 
-  it("reads the check for a link with a tool row, and not for one without", async () => {
+  it("gives each link its handy and gone views from one read of tools and one of checks (#128)", async () => {
+    const goneKept = await saved();
+    const goneOrdinary = await saved();
+    const plain = await saved();
+    await keepHandy(deps(), A, goneKept, "stated");
+    await flag(goneKept);
+    await flag(goneOrdinary);
+    clock = day(30);
+    const links = await Promise.all([goneKept, goneOrdinary, plain].map(linkOf));
+    const reads: string[] = [];
+    const spy = (name: "listTools" | "listChecks") => async (owner: string) => {
+      reads.push(name);
+      return store[name](owner);
+    };
+    const spied = {
+      ...deps(),
+      tools: Object.assign(Object.create(store) as FakeStore, { listTools: spy("listTools") }),
+      checks: Object.assign(Object.create(store) as FakeStore, { listChecks: spy("listChecks") }),
+    };
+    const gone = { since: day(1), checkedAt: day(1) };
+    const views = await linkViews(spied, A, links);
+    expect(views).toEqual(
+      new Map([
+        [goneKept, { handy: { status: "kept", source: "stated", due: false }, gone }],
+        [goneOrdinary, { handy: null, gone }],
+        [plain, { handy: null, gone: null }],
+      ]),
+    );
+    expect(reads.sort()).toEqual(["listChecks", "listTools"]);
+    expect(await linkView(deps(), A, links[0] as Link)).toEqual(views.get(goneKept));
+    expect(await linkView(deps(), A, links[1] as Link)).toEqual(views.get(goneOrdinary));
+  });
+
+  it("reads the check once for one link's view", async () => {
     const withTool = await saved();
     const ordinary = await saved();
     await keepHandy(deps(), A, withTool, "stated");
@@ -576,7 +611,8 @@ describe("handy views", () => {
     });
     const spied = { ...deps(), checks };
     expect(await handyOf(spied, A, await linkOf(ordinary))).toBeNull();
-    expect(reads).toEqual([]);
+    expect(reads).toEqual([ordinary]);
+    reads.length = 0;
     expect(await handyOf(spied, A, await linkOf(withTool))).not.toBeNull();
     expect(reads).toEqual([withTool]);
   });
@@ -592,19 +628,19 @@ describe("handy views", () => {
 });
 
 describe("listShelf", () => {
-  it("marks a gone tool gone and not due, and keeps its normal place on the shelf (#128)", async () => {
+  it("marks a gone tool gone and not due, and puts it first with the due tiles, in shelf order (#128)", async () => {
     const plain = await saved();
     const due = await saved();
     const gone = await saved();
     for (const id of [plain, due, gone]) await keepHandy(deps(), A, id, "stated");
-    await store.update(A, plain, { lastOpenedAt: day(20) });
-    await store.update(A, gone, { lastOpenedAt: day(25) });
+    await store.update(A, plain, { lastOpenedAt: day(25) });
+    await store.update(A, gone, { lastOpenedAt: day(20) });
     await flag(gone);
     clock = day(31);
     const shelf = await listShelf(deps(), A);
     expect(shelf.map((s) => [s.link.id, s.due, s.gone])).toEqual([
-      [due, true, false],
       [gone, false, true],
+      [due, true, false],
       [plain, false, false],
     ]);
   });

@@ -16,7 +16,7 @@ import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
 const EMPTY_HOME = {
-  worth: { links: [], images: new Map(), now: new Date(0), catalog: [] },
+  worth: { links: [], images: new Map(), now: new Date(0), catalog: [], gone: null },
   shelf: "",
   spaces: "",
 };

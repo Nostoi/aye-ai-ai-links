@@ -50,9 +50,12 @@ name matches the existing tag ignoring case and extra spaces. kind is "topic" or
 
 The result's kindSource becomes "stated". Asking for the kind a tag already has confirms it the same way and leaves everything else as it is, including a done status. Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. A name with no tag is an error: tags are created by tagging a link.`;
 
+export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to archive it (update_link state "archived") if the owner is done with it.`;
+
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
-Use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link: links are matched by their words and by meaning. Results are ranked, not filtered: check that each one fits, and when none does, try other words or a filter before saying it isn't saved. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back. To list every link, page past 50 or count links, use list_links.`;
+Use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link: links are matched by their words and by meaning. Results are ranked, not filtered: check that each one fits, and when none does, try other words or a filter before saying it isn't saved. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back. To list every link, page past 50 or count links, use list_links.
+${GONE_NOTE}`;
 
 export const LIST_LINKS = `List the owner's saved links in a fixed order, a page at a time, with a total. Use it to go through the whole library, to page past search_links' 50, or to say how many links there are. To find a link from what the owner remembers, use search_links.
 
@@ -60,11 +63,13 @@ order: "newest" (the default) or "oldest" by the time each link was saved, or "o
 
 Optional filters: tag, project, state ("active" or "archived"; without it, archived links are included), and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive), which filter by save time in every order. limit is a whole number; at most 50 links come back, 20 by default.
 
-total counts every link that passes the filters in that order, across all pages. nextCursor is null on the last page; otherwise send it back as cursor, with the same order and filters, for the next page. It is opaque: never build or change one. A cursor that does not fit is an error; list again without it. A link saved while you page can change total, and with "opened" a link opened while you page moves to the front and is missed until you list again.`;
+total counts every link that passes the filters in that order, across all pages. nextCursor is null on the last page; otherwise send it back as cursor, with the same order and filters, for the next page. It is opaque: never build or change one. A cursor that does not fit is an error; list again without it. A link saved while you page can change total, and with "opened" a link opened while you page moves to the front and is missed until you list again.
+${GONE_NOTE}`;
 
 export const GET_LINK = `Get one saved link by its id, with its why, tags, state and page snapshot. Use search_links to find an id.
 
-snapshotText is the page's text, up to ${TEXT_CHARS.toLocaleString("en-US")} characters, with truncated: true when it was cut. It is null until the page has been fetched successfully, and for a page with no readable text.`;
+snapshotText is the page's text, up to ${TEXT_CHARS.toLocaleString("en-US")} characters, with truncated: true when it was cut. It is null until the page has been fetched successfully, and for a page with no readable text.
+${GONE_NOTE}`;
 
 export const GET_PROFILE = `Get what is known about the owner: their notes, the projects still active, and what they have been working on lately. Call it before you infer a why or tags.
 

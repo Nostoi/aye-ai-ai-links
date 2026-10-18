@@ -2,6 +2,7 @@ import type { DigestLink, DigestReason } from "../core/digest.js";
 import { linkSpace } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
+import { GONE_TEXT } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -10,13 +11,15 @@ import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
  * What "Worth a look today" shows: the picks, the image version of each that has one, now, and
- * the owner's tags, which give each card its space (`linkSpace`).
+ * the owner's tags, which give each card its space (`linkSpace`), and the one link that seems gone
+ * (#128), shown as its own card.
  */
 export type WorthCards = {
   links: DigestLink[];
   images: Map<string, string>;
   now: Date;
   catalog: Tag[];
+  gone: Link | null;
 };
 
 const quoted = (text: string) => `"${escapeHtml(text)}"`;
@@ -89,16 +92,32 @@ ${BUTTONS}
 </article>`;
 }
 
+/** The gone link's card: small and amber, with only the two answers that fit a page that seems gone. */
+function goneCard(link: Link, cards: WorthCards): string {
+  return `<article class="worth-card worth-small worth-gone needs-you${spaceClass(linkSpace(link, cards.catalog))}" data-id="${escapeHtml(link.id)}">
+${tile(link, cards.images.get(link.id), "worth-tile")}
+<div class="worth-body">
+<h3>${linkTitle(link)}</h3>
+<p class="small">${GONE_TEXT}</p>
+<div class="actions small-actions">
+<button type="button" data-act="archive">I'm done with it</button>
+<button type="button" data-act="still-works">It still works</button>
+</div>
+</div>
+</article>`;
+}
+
 function worthSection(cards: WorthCards): string {
   const [lead, ...rest] = cards.links;
-  if (!lead) return "";
-  const side = rest.slice(0, 2);
+  const side = rest.slice(0, 2).map((d) => smallCard(d, cards));
+  if (cards.gone) side.push(goneCard(cards.gone, cards));
+  if (!lead && side.length === 0) return "";
   return `<section class="worth" aria-labelledby="worth">
 <h2 id="worth">Worth a look today</h2>
 <p id="home-error" role="alert"></p>
 <div class="worth-grid" id="worth-cards">
-${leadCard(lead, cards)}
-${side.length > 0 ? `<div class="worth-side">\n${side.map((d) => smallCard(d, cards)).join("\n")}\n</div>` : ""}
+${lead ? leadCard(lead, cards) : ""}
+${side.length > 0 ? `<div class="worth-side">\n${side.join("\n")}\n</div>` : ""}
 </div>
 </section>`;
 }
@@ -116,7 +135,7 @@ document.addEventListener("keydown", (event) => {
 
 /**
  * The cards' buttons. Opening a link is recorded by `openedScript` with `/home/opened`, which also
- * marks the link surfaced. Not now, I'm done and Keep handy hide the card at once and put it back if
+ * marks the link surfaced. Not now, I'm done, It still works and Keep handy hide the card at once and put it back if
  * the server refuses; Keep handy also refreshes the Handy shelf. Undo asks the server to reverse,
  * and the card stays gone if it cannot. Tell me why is
  * `tellWhyScript`. The Handy shelf's buttons are `SHELF_SCRIPT`'s.
@@ -127,7 +146,12 @@ ${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}
 const homeError = document.getElementById("home-error");
 const cards = document.getElementById("worth-cards");
-const CARD_ROUTES = { snooze: "/home/snooze", archive: "/home/archive", keep: "/tools/keep" };
+const CARD_ROUTES = {
+  snooze: "/home/snooze",
+  archive: "/home/archive",
+  keep: "/tools/keep",
+  "still-works": "/links/still-works",
+};
 const hideFor = async (card, act) => {
   if (!CARD_ROUTES[act]) return;
   const id = card.dataset.id;
@@ -140,6 +164,11 @@ const hideFor = async (card, act) => {
     if (data && typeof data.until === "string") {
       const { until, claimedAt, previousSurfacedAt } = data;
       undo = ["Hidden for two weeks.", "/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }];
+    }
+  } else if (act === "still-works") {
+    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (moved && moved.check) {
+      undo = ["Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }];
     }
   } else if (act === "keep") {
     const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;

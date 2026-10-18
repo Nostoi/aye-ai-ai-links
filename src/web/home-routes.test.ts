@@ -320,3 +320,30 @@ async function signedIn(world: World) {
   await browser.signIn();
   return browser;
 }
+
+describe("GET / with a link that seems gone (#128)", () => {
+  it("shows it once, as the gone card, though it is also a reading candidate", async () => {
+    const world = await oauthWorld();
+    const deps = linkDeps(world);
+    const { link } = await saveLink(deps, A, {
+      url: "https://a.example/old",
+      savedBy: "seed",
+      title: "Old page",
+    });
+    const day = 86_400_000;
+    await deps.checks.updateCheckIf(A, link.id, null, {
+      checkedAt: new Date(Date.now() - day),
+      result: "dead",
+      detail: "http:404",
+      firstDeadAt: new Date(Date.now() - 20 * day),
+      flaggedAt: new Date(Date.now() - 10 * day),
+      stillWorksAt: null,
+    });
+    const browser = world.agent();
+    await browser.signIn();
+    const html = String((await browser.send("/")).body);
+    expect(html.split(`data-id="${link.id}"`)).toHaveLength(2);
+    expect(html).toContain(`worth-gone needs-you`);
+    expect(html).not.toContain("worth-card worth-lead");
+  });
+});

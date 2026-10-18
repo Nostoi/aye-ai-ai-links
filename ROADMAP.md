@@ -27,6 +27,13 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Its assumptions are settled.** A3 (It still works clears the streak as well as the flag) and the amber tile for a gone tool on the Handy shelf are owner rulings. A1, A2 and A4 to A7 are controller rulings, accepted as written. All are dated 2026-10-17.
   - **Undo of It still works refuses a row no check could have written** (controller ruling): besides the spec's three refusals, an unflagged row, or any date that is invalid or later than now. **After a store error the runner waits an hour** before its next sweep (controller ruling).
   - **A canary lookup replaces A2's 24-hour rule** (owner ruling, #128 comment 6244310928). When a link's name doesn't resolve, the checker asks the DNS servers directly for `example.com`: the check is dead if that answers, otherwise unknown (`network:ENOTFOUND:offline`). It narrows the outage gap rather than closing it, since a network that recovers between the two lookups still records one dead check. **Keep handy suggestions skip gone links** (same ruling), and home reads them once for the shelf and Worth a look (#152).
+  - **The doors PR closes #128.**
+    - **The gone shelf tile keeps the square** (owner ruling, #128 comment 6245671142). It copies the Still using? tile: **Seems gone**, with **It works** and **Done**. Cards and the Worth a look gone card keep the full wording.
+    - Controller rulings:
+      - a snoozed link is never the Worth a look gone pick;
+      - I'm done with it on a card hides the card, while It still works hides only the line, both with Undo;
+      - agents get the guidance in the descriptions of `get_link`, `search_links` and `list_links`, because INSTRUCTIONS is at its length cap;
+      - each view reads tool and check rows once, and Worth a look leaves its gone pick out of the reading picks.
 
 - **2026-10-17:** The bookmarklet and the Save page (#129). Owner rulings, 2026-10-17 (#129 comment 6241001472); controller answers the same day. The design is `docs/specs/2026-10-17-bookmarklet-design.md`.
   - **One tap opens the Save page,** `/save?url=&title=`, with the page's address and title filled in. The title is cut to 200 code points; an address over 3,000 encoded characters opens `/save?long=1` instead. An optional why, then **Save**, then "Saved" with Close. The address is the stable one a phone Shortcut will open later.

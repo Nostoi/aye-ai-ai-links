@@ -22,7 +22,7 @@ import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
-import { handyOfLinks } from "../core/tools.js";
+import { linkViews } from "../core/tools.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import * as guidance from "./guidance.js";
 import {
@@ -453,7 +453,7 @@ export function buildMcpServer(
       const now = deps.now();
       const at = { ...deps, now: () => now };
       const { links } = await getDigest(at, owner);
-      const views = await handyOfLinks(
+      const views = await linkViews(
         at,
         owner,
         links.map((d) => d.link),
@@ -461,7 +461,7 @@ export function buildMcpServer(
       return {
         links: links.map((d) => ({
           ...d,
-          link: { ...d.link, handy: views.get(d.link.id) ?? null },
+          link: { ...d.link, handy: null, gone: null, ...views.get(d.link.id) },
         })),
       };
     },

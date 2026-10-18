@@ -1,9 +1,11 @@
 import type { PictureInfo } from "../core/image-store.js";
+import type { GoneView } from "../core/link-check.js";
 import { linkSpace } from "../core/link-space.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
+import { goneLine, goneScript } from "./gone-line.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -42,6 +44,7 @@ type Input = {
   catalog: Tag[];
   images: Map<string, string>;
   handy: Map<string, HandyView | null>;
+  gone?: Map<string, GoneView | null>;
   now: Date;
   /** The links you're done with, rather than the active ones. */
   done: boolean;
@@ -67,14 +70,17 @@ const monthName = (d: Date, now: Date) =>
   });
 
 /** One card: the picture or a tint, the title, the space and site, and Keep handy. No why. */
-function card(link: Link, { catalog, images, handy, done, pictures = new Map() }: Input): string {
+function card(
+  link: Link,
+  { catalog, images, handy, gone = new Map(), done, pictures = new Map() }: Input,
+): string {
   const space = linkSpace(link, catalog);
   const version = images.get(link.id);
   return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
 ${tile(link, version, "card-image")}
 ${done ? "" : `${editMenu(link)}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
-${siteLine(link, space)}${handyControl(link, handy.get(link.id))}</div>
+${siteLine(link, space)}${goneLine(link, gone.get(link.id))}${handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
 
@@ -145,7 +151,7 @@ ${done ? "" : '<p id="all-error" role="alert"></p>'}
 ${list}
 <div class="all-foot">${more}${other}</div>
 </main>
-${done ? "" : `${editDialog()}\n<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+${done ? "" : `${editDialog()}\n<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

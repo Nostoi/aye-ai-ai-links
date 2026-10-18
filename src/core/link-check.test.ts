@@ -6,6 +6,7 @@ import {
   applyCheck,
   type CheckVerdict,
   checkCutoffs,
+  goneView,
   isGone,
   judgeCheck,
   restoreCheck,
@@ -255,6 +256,14 @@ describe("isGone", () => {
     expect(isGone(null)).toBe(false);
     expect(isGone({ ...goneRow, flaggedAt: null })).toBe(false);
     expect(isGone(goneRow)).toBe(true);
+  });
+});
+
+describe("goneView", () => {
+  it("is null unless flagged, else when it was flagged and last checked", () => {
+    expect(goneView(null)).toBeNull();
+    expect(goneView({ ...goneRow, flaggedAt: null })).toBeNull();
+    expect(goneView(goneRow)).toEqual({ since: goneRow.flaggedAt, checkedAt: goneRow.checkedAt });
   });
 });
 

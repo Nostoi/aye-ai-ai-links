@@ -65,6 +65,8 @@ const CHECKED_PAGES = [
   "/links/opened",
   "/links/edit",
   "/links/edit/undo",
+  "/links/still-works",
+  "/links/still-works/undo",
   "/tools/keep",
   "/tools/not-handy",
   "/tools/still-using",

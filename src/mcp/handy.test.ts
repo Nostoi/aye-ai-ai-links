@@ -97,6 +97,35 @@ describe("the handy view on link results", () => {
     expect(byId((await call("list_links", {})).data.links)).toEqual({ 1: view, 2: null });
   });
 
+  it("every tool that returns links gives each its gone view, null unless flagged", async () => {
+    await call("save_link", { url: "https://example.com/gone" });
+    await call("save_link", { url: "https://example.com/fine" });
+    db.prepare(
+      `INSERT INTO link_checks (owner_id, link_id, checked_at, result, first_dead_at, flagged_at)
+       VALUES (?, 1, ?, 'dead', ?, ?)`,
+    ).run(A.owner, NOW.getTime(), NOW.getTime() - 5 * DAY, NOW.getTime() - DAY);
+    const view = {
+      since: new Date(NOW.getTime() - DAY).toISOString(),
+      checkedAt: NOW.toISOString(),
+    };
+    const byId = (links: Json[]) => Object.fromEntries(links.map((l) => [l.id, l.gone]));
+
+    expect((await call("get_link", { id: "1" })).data.link.gone).toEqual(view);
+    expect((await call("get_link", { id: "2" })).data.link.gone).toBeNull();
+    expect((await call("update_link", { id: "1", summary: "s" })).data.link.gone).toEqual(view);
+    expect((await call("save_link", { url: "https://example.com/gone" })).data.link.gone).toEqual(
+      view,
+    );
+    expect(byId((await call("search_links", { query: "" })).data.links)).toEqual({
+      1: view,
+      2: null,
+    });
+    expect(byId((await call("list_links", {})).data.links)).toEqual({ 1: view, 2: null });
+    // The digest leaves a gone link out, so what it returns is not gone.
+    const digest = (await call("get_digest", {})).data.links;
+    expect(byId(digest.map((d: Json) => d.link))).toEqual({ 2: null });
+  });
+
   it("get_digest returns a due tool as a still_using_check item with its handy view, and marks it shown", async () => {
     await call("save_link", { url: "https://example.com/tool" });
     await keptDaysAgo("1", 40);

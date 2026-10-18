@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   claimSurfaced,
+  compareIds,
   type DigestDeps,
   type DigestLink,
   previewDigest,
@@ -26,20 +27,51 @@ export type WorthDeps = DigestDeps;
 const dayRank = (day: number, id: string) =>
   createHash("sha256").update(`${day}:${id}`).digest("hex");
 
-/** Leaves out the links in `suggestions`: the caller passes the suggestions it shows on the shelf. */
+/**
+ * The earliest-flagged gone link the owner could act on: active, not snoozed at `now`, not a kept
+ * tool (the shelf asks about those). Ties go to the lowest id. Reads only.
+ */
+async function gonePick(deps: WorthDeps, owner: OwnerId): Promise<Link | null> {
+  const now = deps.now();
+  const links = await deps.store.listLinks(owner);
+  const checks = await deps.checks.listChecks(owner);
+  const tools = await deps.tools.listTools(owner);
+  const flaggedAt = (l: Link) => checks.get(l.id)?.flaggedAt ?? null;
+  const gone = links.filter(
+    (l) =>
+      l.state === "active" &&
+      (l.snoozedUntil === null || l.snoozedUntil <= now) &&
+      tools.get(l.id)?.status !== "kept" &&
+      flaggedAt(l) !== null,
+  );
+  gone.sort(
+    (a, b) =>
+      (flaggedAt(a) as Date).getTime() - (flaggedAt(b) as Date).getTime() || compareIds(a.id, b.id),
+  );
+  return gone[0] ?? null;
+}
+
+/**
+ * Worth a look: at most one gone link, and reading picks for the other slots of WORTH_SIZE. The
+ * digest never offers a gone link, so the gone pick is not among the reading picks. Leaves out the
+ * links in `suggestions`: the caller passes the suggestions it shows on the shelf.
+ */
 export async function worthALook(
   deps: WorthDeps,
   owner: OwnerId,
   suggestions: readonly ToolItem[],
-): Promise<DigestLink[]> {
+): Promise<{ links: DigestLink[]; gone: Link | null }> {
+  const gone = await gonePick(deps, owner);
   const shown = new Set(suggestions.map((s) => s.link.id));
+  if (gone) shown.add(gone.id);
   const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY, shown);
   const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
   const day = Math.floor(deps.now().getTime() / DAY_MS);
   const ranked = links.filter((d) => d !== lead).map((d) => ({ d, rank: dayRank(day, d.link.id) }));
   ranked.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
   const shuffled = ranked.map((r) => r.d);
-  return (lead ? [lead, ...shuffled] : shuffled).slice(0, WORTH_SIZE);
+  const reading = (lead ? [lead, ...shuffled] : shuffled).slice(0, WORTH_SIZE - (gone ? 1 : 0));
+  return { links: reading, gone };
 }
 
 /**

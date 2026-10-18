@@ -32,6 +32,17 @@ const STILL_USING = `<div class="ask">
 </div>
 </div>`;
 
+/** The tile's words for a gone link (#128), short to fit the square; cards say GONE_TEXT. */
+const SEEMS_GONE = "Seems gone";
+
+const GONE_ASK = `<div class="ask">
+<p class="small">${SEEMS_GONE}</p>
+<div class="actions small-actions">
+<button type="button" data-act="still-works">It works</button>
+<button type="button" data-act="done">Done</button>
+</div>
+</div>`;
+
 const KEEP_HANDY = `<div class="ask">
 <p class="small">Keep handy?</p>
 <div class="actions small-actions">
@@ -84,13 +95,13 @@ ${after}
 </article>`;
 }
 
-/** A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A due one needs you. */
+/** A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A gone or due one needs you. */
 const keptTile = (item: ShelfItem, shelf: Shelf, more: boolean) =>
   card(
     item,
     shelf,
-    item.due ? " needs-you" : "",
-    `${item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
+    item.due || item.gone ? " needs-you" : "",
+    `${item.gone ? `${GONE_ASK}\n` : item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
     more ? " data-more hidden" : "",
   );
 
@@ -98,7 +109,7 @@ const keptTile = (item: ShelfItem, shelf: Shelf, more: boolean) =>
 const suggestion = (item: ToolItem, shelf: Shelf) => card(item, shelf, " guess", KEEP_HANDY);
 
 /**
- * The Handy shelf on home: kept tools in core's order (due first), the first SHELF_SIZE shown and
+ * The Handy shelf on home: kept tools in core's order (gone and due first), the first SHELF_SIZE shown and
  * Show all for the rest, then up to SUGGESTION_SIZE suggestions; or one line when it holds nothing.
  * The script swaps `#handy-shelf`'s contents for a fresh copy after each action, so Show all and Add
  * sit inside it, in `.handy-head`, which the theme places beside the heading.
@@ -140,6 +151,7 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`).
  * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
  *   on the same button, else the same tile's first control, else the next tile's, else the heading. * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
+ *   It works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
  */
 export const SHELF_SCRIPT = `const showAll = (shelf) => {
   for (const tile of shelf.querySelectorAll("[data-more]")) tile.hidden = false;
@@ -204,7 +216,7 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    if (!make && act !== "done") return;
+    if (!make && act !== "done" && act !== "still-works") return;
     const tile = button.closest("[data-id]");
     const id = tile.dataset.id;
     const after = tile.nextElementSibling;
@@ -221,6 +233,17 @@ if (handy) {
         }
         dropped = await refreshShelf(from);
         offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
+        return;
+      }
+      if (act === "still-works") {
+        const res = await post("/links/still-works", { id });
+        const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+        if (!moved || !moved.check) {
+          handyError.textContent = await failure(res);
+          return;
+        }
+        dropped = await refreshShelf(from);
+        offerUndo("Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
         return;
       }
       const [route, body, undo] = make(id);

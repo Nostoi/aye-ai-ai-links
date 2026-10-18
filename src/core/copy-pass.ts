@@ -32,6 +32,8 @@ export type CopyPassOptions = {
   sweepEveryMs?: number;
   /** Rows read per page. Default 100. */
   pageSize?: number;
+  /** Test seam: called each time the sweep reaches the later phases. */
+  onLaterPhases?: () => void;
 };
 
 export type CopyPass = {
@@ -171,7 +173,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
    */
   async function afterThrow(c: CopyCandidate, key: string, error: unknown): Promise<boolean> {
     log(`copy ${key}: a store call failed`, error);
-    if (!observe(await copies.checkFolder())) return false;
+    if (abort.signal.aborted || !(await folderReady())) return false;
     if (failures.get(key)?.settle) return true;
     try {
       await countFailure(c, key, "a store call failed");
@@ -181,8 +183,28 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     return true;
   }
 
-  /** The backfill: at most one page fetch. True when the folder cannot be written to. */
+  /** Re-checks the folder; a check that throws counts as not ready and changes no logged state. */
+  async function folderReady(): Promise<boolean> {
+    try {
+      return observe(await copies.checkFolder());
+    } catch (error) {
+      log("copy pass backfill failed", error);
+      return false;
+    }
+  }
+
+  /** The backfill. True when the sweep must end: the folder cannot be written to. */
   async function backfill(): Promise<boolean> {
+    try {
+      return await backfillPages();
+    } catch (error) {
+      log("copy pass backfill failed", error);
+      return !(await folderReady());
+    }
+  }
+
+  /** The backfill's page-through: at most one page fetch. */
+  async function backfillPages(): Promise<boolean> {
     const retryNoRoom = limitBytes - (await copies.usedBytes()) >= MAX_COPY_BYTES;
     let after: string | null = null;
     for (;;) {
@@ -191,6 +213,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
         if (quiet) return false;
         const key = keyOf(c);
         const failed = failures.get(key);
+        let fetched = false;
         try {
           if (failed?.settle) {
             await settleFailed(c, key);
@@ -201,11 +224,13 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
             failures.delete(key);
             continue;
           }
+          fetched = true;
           const result = await attempt(c, key);
           if (result === "transient") await countFailure(c, key, "could not be copied");
           return result === "unavailable";
         } catch (error) {
-          return !(await afterThrow(c, key, error));
+          if (!(await afterThrow(c, key, error))) return true;
+          if (fetched) return false;
         }
       }
       if (rows.length < pageSize) return false;
@@ -216,7 +241,9 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
   }
 
   /** The later phases (images, finishing, orphans, usage). */
-  async function laterPhases(): Promise<void> {}
+  async function laterPhases(): Promise<void> {
+    o.onLaterPhases?.();
+  }
 
   async function phase(name: string, work: () => Promise<void>): Promise<void> {
     try {

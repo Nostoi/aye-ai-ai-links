@@ -4,7 +4,7 @@ import type { ExtractOutcome, PageExtractor } from "./extract.js";
 import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome, ImageFetcher, PageFetcher } from "./fetch.js";
-import { RETRY_MAX_MS } from "./image-indexer.js";
+import { RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
 import { createCopyKeeper } from "./keep-copy.js";
 import type { LinkCheck } from "./link-check-store.js";
 import { type CopyDraft, type FolderCheck, MAX_COPY_BYTES } from "./saved-copy.js";
@@ -86,6 +86,7 @@ function setup(
   };
   let clock = at(1000).getTime();
   const logged: string[] = [];
+  let later = 0;
   const now = () => new Date(clock);
   const pass = createCopyPass({
     copies,
@@ -98,6 +99,9 @@ function setup(
     initialCheck: o.initialCheck ?? ready,
     now,
     log: (message) => logged.push(message),
+    onLaterPhases: () => {
+      later++;
+    },
   });
   running.push(pass);
   return {
@@ -108,6 +112,10 @@ function setup(
     extractOptions,
     logged,
     now,
+    laterRuns: () => later,
+    advance: (ms: number) => {
+      clock += ms;
+    },
     /** Passes the longest backoff. */
     wait: () => {
       clock += RETRY_MAX_MS;
@@ -429,5 +437,146 @@ describe("copy pass backfill", () => {
       expect(t.status(id)).toBeNull();
       expect(await t.copies.backfillCandidates(null, 10, { retryNoRoom: false })).toHaveLength(1);
     });
+  });
+});
+
+describe("copy pass fix round 1", () => {
+  it.each(["usedBytes", "backfillCandidates"] as const)(
+    "a throw from %s while the folder breaks pauses the sweep",
+    async (method) => {
+      const t = setup();
+      await t.link(1);
+      vi.spyOn(t.copies, method).mockImplementationOnce(async () => {
+        t.copies.fail("unwritable");
+        throw new Error("EIO");
+      });
+      await t.pass.sweep();
+      expect(t.logged.filter((m) => m.includes("paused"))).toHaveLength(1);
+      expect(t.laterRuns()).toBe(0);
+      await t.pass.sweep();
+      expect(t.logged.filter((m) => m.includes("paused"))).toHaveLength(1);
+    },
+  );
+
+  it("a throw from usedBytes with the folder still ready ends only the backfill", async () => {
+    const t = setup();
+    await t.link(1);
+    vi.spyOn(t.copies, "usedBytes").mockRejectedValueOnce(new Error("busy"));
+    await t.pass.sweep();
+    expect(t.logged).toContain("copy pass backfill failed");
+    expect(t.logged.some((m) => m.includes("paused"))).toBe(false);
+    expect(t.laterRuns()).toBe(1);
+  });
+
+  it("a checkFolder that throws in the re-check ends the sweep and changes no logged state", async () => {
+    const t = setup();
+    await t.link(1);
+    vi.spyOn(t.copies, "usedBytes").mockRejectedValueOnce(new Error("busy"));
+    const check = vi.spyOn(t.copies, "checkFolder");
+    check.mockResolvedValueOnce(ready);
+    check.mockRejectedValueOnce(new Error("gone"));
+    await t.pass.sweep();
+    expect(t.laterRuns()).toBe(0);
+    expect(t.logged.some((m) => m.includes("paused") || m.includes("resumed"))).toBe(false);
+    expect(t.logged).toContain("copy pass backfill failed");
+  });
+
+  it("a settle write that throws does not block the next link's backfill", async () => {
+    let fail = true;
+    const t = setup({
+      page: (url) => (fail ? { kind: "http_error", status: 503 } : okPage(url)),
+    });
+    const a = await t.link(1);
+    await t.sweeps(4);
+    vi.spyOn(t.copies, "recordNoCopy").mockRejectedValue(new Error("busy"));
+    await t.sweeps(1);
+    fail = false;
+    const b = await t.link(2);
+    await t.sweeps(1);
+    expect(t.status(b)).toBe("ok");
+    expect(t.status(a)).toBeNull();
+  });
+
+  it("a refuse that throws does not block the next link's backfill", async () => {
+    const t = setup();
+    const a = await t.link(1);
+    const b = await t.link(2);
+    vi.spyOn(t.store, "getTool").mockRejectedValueOnce(new Error("busy"));
+    await t.pass.sweep();
+    expect(t.status(a)).toBeNull();
+    expect(t.status(b)).toBe("ok");
+  });
+
+  it("counts nothing for a store throw after stop", async () => {
+    let fetches = 0;
+    let stopping: Promise<void> | undefined;
+    const t = setup({
+      page: (url) => (++fetches <= 4 ? { kind: "http_error", status: 503 } : okPage(url)),
+    });
+    const id = await t.link(1);
+    await t.sweeps(4);
+    vi.spyOn(t.copies, "saveCopy").mockImplementationOnce(async () => {
+      stopping = t.pass.stop();
+      throw new Error("EIO");
+    });
+    await t.sweeps(1);
+    await stopping;
+    expect(t.status(id)).toBeNull();
+    expect(t.logged.some((m) => m.includes("attempt 5"))).toBe(false);
+  });
+
+  it.each([
+    ["a 503", { kind: "http_error", status: 503 } as FetchOutcome],
+    ["a 404", { kind: "http_error", status: 404 } as FetchOutcome],
+  ])("counts nothing for %s answered after stop", async (_n, outcome) => {
+    let stopping: Promise<void> | undefined;
+    const t = setup({
+      page: () => {
+        stopping = t.pass.stop();
+        return outcome;
+      },
+    });
+    const id = await t.link(1);
+    await t.pass.sweep();
+    await stopping;
+    expect(t.status(id)).toBeNull();
+    expect(t.logged.some((m) => m.includes("attempt"))).toBe(false);
+  });
+
+  it.each([
+    [1, RETRY_BASE_MS],
+    [2, RETRY_BASE_MS * 2],
+  ])("waits RETRY_BASE_MS * 2^(k-1) after attempt %i", async (k, gap) => {
+    const t = setup({ page: () => ({ kind: "http_error", status: 503 }) });
+    await t.link(1);
+    await t.pass.sweep();
+    if (k === 2) {
+      t.advance(RETRY_BASE_MS);
+      await t.pass.sweep();
+    }
+    expect(t.pageCalls).toHaveLength(k);
+    t.advance(gap - 1);
+    await t.pass.sweep();
+    expect(t.pageCalls).toHaveLength(k);
+    t.advance(1);
+    await t.pass.sweep();
+    expect(t.pageCalls).toHaveLength(k + 1);
+  });
+
+  it("resets the failure budget when a keep completes", async () => {
+    let fail = true;
+    const t = setup({
+      page: (url) => (fail ? { kind: "http_error", status: 503 } : okPage(url)),
+    });
+    const id = await t.link(1);
+    await t.sweeps(4);
+    fail = false;
+    vi.spyOn(t.copies, "saveCopy").mockResolvedValueOnce("no_room");
+    await t.sweeps(1);
+    expect(t.pageCalls).toHaveLength(5);
+    fail = true;
+    await t.sweeps(1);
+    expect(t.pageCalls).toHaveLength(6);
+    expect(t.status(id)).toBeNull();
   });
 });

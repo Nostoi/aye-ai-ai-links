@@ -1215,3 +1215,87 @@ describe("copy pass timeout backoff, stop and unavailable paths", () => {
     ]);
   });
 });
+
+describe("copy pass network outage", () => {
+  const down: FetchOutcome = { kind: "network_error", code: "ECONNREFUSED" };
+  const notFound: FetchOutcome = { kind: "http_error", status: 404 };
+  const service: FetchOutcome = { kind: "http_error", status: 503 };
+  const urlOf = (n: number) => `https://ex.com/${n}`;
+
+  it("spends no budget while every page fetch fails to connect", async () => {
+    let answer: "down" | "up" = "down";
+    const t = setup({ page: (url) => (answer === "down" ? down : okPage(url)) });
+    const ids = [await t.link(1), await t.link(2), await t.link(3)];
+    await t.sweeps(40);
+    expect(ids.map(t.status)).toEqual([null, null, null]);
+    answer = "up";
+    await t.sweeps(3);
+    expect(ids.map(t.status)).toEqual(["ok", "ok", "ok"]);
+  });
+
+  it("counts at most one attempt in an outage, after a server has answered", async () => {
+    let answer: FetchOutcome = service;
+    const t = setup({ page: () => answer });
+    const a = await t.link(1);
+    const b = await t.link(2);
+    await t.sweeps(4);
+    answer = down;
+    await t.pass.sweep();
+    expect(t.pageCalls.slice(-1)).toEqual([urlOf(2)]);
+    await t.sweeps(20);
+    expect([t.status(a), t.status(b)]).toEqual([null, null]);
+  });
+
+  it("counts again once a server has answered", async () => {
+    const t = setup({ page: (url) => (url === urlOf(1) ? down : notFound) });
+    const a = await t.link(1);
+    for (const n of [2, 3, 4, 5]) await t.link(n);
+    const sweepAfterWait = async () => {
+      t.wait();
+      await t.pass.sweep();
+    };
+    const fetchesOfA = () => t.pageCalls.filter((u) => u === urlOf(1)).length;
+    await sweepAfterWait();
+    await sweepAfterWait();
+    for (let i = 0; i < 2; i++) {
+      await t.pass.sweep();
+      await sweepAfterWait();
+    }
+    expect(fetchesOfA()).toBe(4);
+    await t.pass.sweep();
+    await sweepAfterWait();
+    expect(fetchesOfA()).toBe(5);
+    expect(t.status(a)).toBeNull();
+    await t.pass.sweep();
+    await sweepAfterWait();
+    expect(t.status(a)).toBe("failed");
+  });
+
+  it("leaves both pending pictures pending through an outage, then saves them", async () => {
+    let answer: "timeout" | "up" = "timeout";
+    const t = setup({ image: () => (answer === "timeout" ? { kind: "timeout" } : okImage()) });
+    const id = await t.copyWith(1, [IMG(1), IMG(2)]);
+    await t.sweeps(40);
+    expect(await pendingImages(t)).toHaveLength(2);
+    answer = "up";
+    await t.sweeps(1);
+    expect(await pendingImages(t)).toEqual([]);
+    const copy = (await t.copies.readCopy(OWNER, id)) as { images: Map<number, unknown> };
+    expect([...copy.images.keys()]).toEqual([1, 2]);
+  });
+
+  it("makes an uncounted failure wait out the base backoff", async () => {
+    const t = setup({ page: () => down });
+    await t.link(1);
+    await t.pass.sweep();
+    t.advance(RETRY_BASE_MS);
+    await t.pass.sweep();
+    expect(t.pageCalls).toHaveLength(2);
+    t.advance(RETRY_BASE_MS - 1);
+    await t.pass.sweep();
+    expect(t.pageCalls).toHaveLength(2);
+    t.advance(1);
+    await t.pass.sweep();
+    expect(t.pageCalls).toHaveLength(3);
+  });
+});

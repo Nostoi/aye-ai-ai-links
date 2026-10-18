@@ -56,7 +56,7 @@ type Failure = { attempts: number; retryAt: number; settle: boolean };
 type Budget = Map<string, Failure>;
 
 /** What one attempt on a candidate came to. */
-type Attempt = "done" | "transient" | "abandon" | "unavailable";
+type Attempt = "done" | "transient" | "network" | "abandon" | "unavailable";
 
 /** A finishing call that takes longer than this is left running and tried again later. */
 const FINISH_TIMEOUT_MS = 10_000;
@@ -67,6 +67,9 @@ const gib = (bytes: number) => (bytes / 2 ** 30).toFixed(1);
 const backoff = (attempts: number) => Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), RETRY_MAX_MS);
 
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+const isNetworkClass = (outcome: { kind: string }) =>
+  outcome.kind === "network_error" || outcome.kind === "timeout";
 
 /** What a failed page fetch means: no copy, a failure to retry, or nothing. */
 function judgePage(page: Exclude<FetchOutcome, { kind: "ok" }>): "none" | "transient" | "abandon" {
@@ -116,6 +119,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
 
   /** Links with a spent or running budget, by owner and link. Dropped only when the link is done. */
   const failures: Budget = new Map();
+  let networkProven = true;
   /** Images with a spent or running budget, by owner, link and number. */
   const imageFailures: Budget = new Map();
   /** Copies whose finishing failed, with the time they are next tried. */
@@ -148,6 +152,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     budget.delete(key);
   }
 
+  function sawFetch(outcome: { kind: string }): void {
+    if (outcome.kind !== "aborted" && !isNetworkClass(outcome)) networkProven = true;
+  }
+
   /** Counts a failed attempt: a backoff, or on the last one the entry's final write. */
   async function countFailure(
     budget: Budget,
@@ -155,8 +163,16 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     what: string,
     why: string,
     settle: () => Promise<unknown>,
+    network = false,
   ): Promise<void> {
-    const attempts = (budget.get(key)?.attempts ?? 0) + 1;
+    const before = budget.get(key)?.attempts ?? 0;
+    if (network && !networkProven) {
+      const retryAt = now().getTime() + backoff(Math.max(before, 1));
+      budget.set(key, { attempts: before, retryAt, settle: false });
+      return;
+    }
+    if (network) networkProven = false;
+    const attempts = before + 1;
     log(`${what} ${key}: ${why} (attempt ${attempts})`);
     if (attempts < MAX_IMAGE_ATTEMPTS) {
       budget.set(key, { attempts, retryAt: now().getTime() + backoff(attempts), settle: false });
@@ -183,8 +199,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     const { signal } = abort;
     const page = await pages.fetch(c.url, signal);
     if (signal.aborted) return "abandon";
+    sawFetch(page);
     if (page.kind !== "ok") {
       const verdict = judgePage(page);
+      if (verdict === "transient" && isNetworkClass(page)) return "network";
       if (verdict !== "none") return verdict;
       await recordNone(c, key);
       return "done";
@@ -271,8 +289,9 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
           }
           fetched = true;
           const result = await attempt(c, key);
-          if (result === "transient") {
-            await countFailure(failures, key, "copy", "could not be copied", settleLink(c));
+          if (result === "transient" || result === "network") {
+            const why = "could not be copied";
+            await countFailure(failures, key, "copy", why, settleLink(c), result === "network");
           }
           return result === "unavailable";
         } catch (error) {
@@ -300,6 +319,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     if (signal.aborted) return;
     const verdict = judgeImage(outcome);
     if ("abandon" in verdict) return;
+    sawFetch(outcome);
     if ("store" in verdict && outcome.kind === "ok") {
       const { contentType, bytes } = outcome;
       const image = { contentType, bytes };
@@ -316,7 +336,15 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
       );
       return;
     }
-    await countFailure(imageFailures, key, "copy image", outcome.kind, settleImage(p));
+    const settle = settleImage(p);
+    await countFailure(
+      imageFailures,
+      key,
+      "copy image",
+      outcome.kind,
+      settle,
+      isNetworkClass(outcome),
+    );
   }
 
   /** The image phase, one image at a time. True when the sweep must end. */

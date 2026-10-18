@@ -93,6 +93,15 @@ export function isGone(check: LinkCheck | null): boolean {
   return check !== null && check.flaggedAt !== null;
 }
 
+/** When a gone link was flagged, and when it was last checked. */
+export type GoneView = { since: Date; checkedAt: Date };
+
+export function goneView(check: LinkCheck | null): GoneView | null {
+  return check !== null && check.flaggedAt !== null
+    ? { since: check.flaggedAt, checkedAt: check.checkedAt }
+    : null;
+}
+
 export type LinkCheckDeps = { store: LinkStore; checks: LinkCheckStore; now: () => Date };
 
 /** What It still works did: the row it wrote, and the row it replaced. */

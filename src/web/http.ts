@@ -432,7 +432,7 @@ export function webApp({
   app.get("/", session, async (c) => {
     const { owner } = c.get("caller");
     const suggestions = await listSuggestions(deps, owner);
-    const links = await worthALook(deps, owner, suggestions);
+    const { links } = await worthALook(deps, owner, suggestions);
     const images = await deps.images.imageVersions(
       owner,
       links.map((d) => d.link.id),

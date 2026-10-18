@@ -1,5 +1,5 @@
 import { CoreError } from "./errors.js";
-import { isGone } from "./link-check.js";
+import { type GoneView, goneView, isGone } from "./link-check.js";
 import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import { notFound } from "./links.js";
 import type { LinkStore } from "./store.js";
@@ -248,29 +248,55 @@ export function handyView(
   return tool && { status: tool.status, source: tool.source, due: isDue(link, tool, check, now) };
 }
 
-/** One link's view. Another owner's link has no row for `owner`, so it gets null. */
+/** A link's Keep handy state and its gone state, as the doors show them. */
+export type LinkView = { handy: HandyView | null; gone: GoneView | null };
+
+type ViewDeps = Pick<ToolsDeps, "tools" | "checks" | "now">;
+
+const viewOf = (
+  link: Link,
+  tool: ToolRecord | null,
+  check: LinkCheck | null,
+  now: Date,
+): LinkView => ({ handy: handyView(link, tool, check, now), gone: goneView(check) });
+
+/** One link's view, from one read of its tool row and one of its check row. Another owner's link has no rows for `owner`, so it gets nulls. */
+export async function linkView(deps: ViewDeps, owner: OwnerId, link: Link): Promise<LinkView> {
+  const tool = await deps.tools.getTool(owner, link.id);
+  return viewOf(link, tool, await deps.checks.getCheck(owner, link.id), deps.now());
+}
+
+/** One link's Keep handy state. */
 export async function handyOf(
-  deps: Pick<ToolsDeps, "tools" | "checks" | "now">,
+  deps: ViewDeps,
   owner: OwnerId,
   link: Link,
 ): Promise<HandyView | null> {
-  const tool = await deps.tools.getTool(owner, link.id);
-  if (!tool) return null;
-  return handyView(link, tool, await deps.checks.getCheck(owner, link.id), deps.now());
+  return (await linkView(deps, owner, link)).handy;
 }
 
 /** Each link's view by id, from one read of the owner's tool rows and one of their check rows. */
-export async function handyOfLinks(
-  deps: Pick<ToolsDeps, "tools" | "checks" | "now">,
+export async function linkViews(
+  deps: ViewDeps,
   owner: OwnerId,
-  links: Link[],
-): Promise<Map<string, HandyView | null>> {
+  links: readonly Link[],
+): Promise<Map<string, LinkView>> {
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
   const now = deps.now();
   return new Map(
-    links.map((l) => [l.id, handyView(l, tools.get(l.id) ?? null, checks.get(l.id) ?? null, now)]),
+    links.map((l) => [l.id, viewOf(l, tools.get(l.id) ?? null, checks.get(l.id) ?? null, now)]),
   );
+}
+
+/** Each link's Keep handy state by id. */
+export async function handyOfLinks(
+  deps: ViewDeps,
+  owner: OwnerId,
+  links: Link[],
+): Promise<Map<string, HandyView | null>> {
+  const views = await linkViews(deps, owner, links);
+  return new Map([...views].map(([id, v]) => [id, v.handy]));
 }
 
 /** A tool row with its link. */
@@ -301,8 +327,8 @@ function shelfOrder(a: ToolItem, b: ToolItem): number {
 
 /**
  * The Handy shelf: every kept tool on an active link, each with its due and gone flags. Due
- * tools come first (owner ruling 2026-10-16; #128), so a tile asking something is never cut
- * from view; within each group, shelf order.
+ * and gone tools come first (owner ruling 2026-10-16; #128), so the tiles asking something lead
+ * the shelf; within each group, shelf order.
  */
 export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfItem[]> {
   const now = deps.now();
@@ -311,7 +337,8 @@ export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfI
     const check = checks.get(i.link.id) ?? null;
     return { ...i, due: isDue(i.link, i.tool, check, now), gone: isGone(check) };
   });
-  return items.sort((a, b) => Number(b.due) - Number(a.due) || shelfOrder(a, b));
+  const asking = (i: ShelfItem) => Number(i.due || i.gone);
+  return items.sort((a, b) => asking(b) - asking(a) || shelfOrder(a, b));
 }
 
 export const SUGGESTION_SIZE = 2;

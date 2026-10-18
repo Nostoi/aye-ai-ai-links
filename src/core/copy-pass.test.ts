@@ -1044,3 +1044,160 @@ describe("copy pass usage", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe("copy pass timeout backoff, stop and unavailable paths", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** An image fetch that waits for the abort. */
+  const hangingImage = (_url: string, signal?: AbortSignal) =>
+    new Promise<ImageOutcome>((resolve) => {
+      signal?.addEventListener("abort", () => resolve({ kind: "aborted" }));
+    });
+
+  it("does not call a timed-out finishCopy again before its backoff has passed", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const t = setup();
+    await settled(t, 1);
+    const finish = vi
+      .spyOn(t.copies, "finishCopy")
+      .mockImplementation(() => new Promise<boolean>(() => {}));
+    const first = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await first;
+    t.advance(15_000);
+    const second = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await second;
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches no image after stop during the backfill", async () => {
+    let stopping: Promise<void> | undefined;
+    const t = setup({
+      page: () => {
+        stopping = t.pass.stop();
+        return { kind: "http_error", status: 503 };
+      },
+      image: () => okImage(),
+    });
+    await t.link(1);
+    await t.copyWith(10, [IMG(10)]);
+    const pending = vi.spyOn(t.copies, "pendingCopyImages");
+    await t.pass.sweep();
+    await stopping;
+    expect(pending).not.toHaveBeenCalled();
+    expect(t.imageCalls).toHaveLength(0);
+  });
+
+  it("finishes nothing after stop during an image fetch", async () => {
+    const t = setup({ image: hangingImage });
+    await t.copyWith(1, [IMG(1)]);
+    await settled(t, 2);
+    const finish = vi.spyOn(t.copies, "finishCopy");
+    const unfinished = vi.spyOn(t.copies, "unfinishedCopies");
+    const sweeping = t.pass.sweep();
+    await vi.waitFor(() => expect(t.imageCalls).toHaveLength(1));
+    await t.pass.stop();
+    await sweeping;
+    expect(unfinished).not.toHaveBeenCalled();
+    expect(finish).not.toHaveBeenCalled();
+  });
+
+  it("fetches no second image after stop during the first", async () => {
+    const t = setup({ image: hangingImage });
+    await t.copyWith(1, [IMG(1), IMG(2)]);
+    const sweeping = t.pass.sweep();
+    await vi.waitFor(() => expect(t.imageCalls).toHaveLength(1));
+    await t.pass.stop();
+    await sweeping;
+    expect(t.imageCalls).toHaveLength(1);
+  });
+
+  it("finishes no second copy after stop during the first", async () => {
+    const t = setup();
+    const a = await settled(t, 1);
+    const b = await settled(t, 2);
+    const real = t.copies.finishCopy.bind(t.copies);
+    let stopping: Promise<void> | undefined;
+    const finish = vi.spyOn(t.copies, "finishCopy").mockImplementation((owner, id, f, at) => {
+      const done = real(owner, id, f, at);
+      // Stop once the call has settled but before the sweep sees it, so the call wins the race.
+      if (id === a) void done.then(() => (stopping = t.pass.stop()));
+      return done;
+    });
+    await t.pass.sweep();
+    await stopping;
+    expect(finish.mock.calls.map((c) => c[1])).toEqual([a]);
+    expect(await isFinished(t, b)).toBe(false);
+  });
+
+  it("makes no orphan sweep after stop during finishing", async () => {
+    const t = setup();
+    await settled(t, 1);
+    const finish = vi
+      .spyOn(t.copies, "finishCopy")
+      .mockImplementation(() => new Promise<boolean>(() => {}));
+    const orphans = vi.spyOn(t.copies, "sweep");
+    const sweeping = t.pass.sweep();
+    await vi.waitFor(() => expect(finish).toHaveBeenCalled());
+    await t.pass.stop();
+    await sweeping;
+    expect(orphans).not.toHaveBeenCalled();
+  });
+
+  it("reads no usage after stop during the orphan sweep", async () => {
+    const t = setup();
+    const used = vi.spyOn(t.copies, "usedBytes");
+    let stopping: Promise<void> | undefined;
+    vi.spyOn(t.copies, "sweep").mockImplementation(async () => {
+      stopping = t.pass.stop();
+      return unreported;
+    });
+    await t.pass.sweep();
+    await stopping;
+    expect(used).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends the sweep when saveCopyImage answers unavailable", async () => {
+    const t = setup({ image: () => okImage() });
+    await t.copyWith(1, [IMG(1), IMG(2)]);
+    await settled(t, 3);
+    vi.spyOn(t.copies, "saveCopyImage").mockResolvedValue("unavailable");
+    const finish = vi.spyOn(t.copies, "finishCopy");
+    const orphans = vi.spyOn(t.copies, "sweep");
+    await t.pass.sweep();
+    expect(t.imageCalls).toEqual([IMG(1)]);
+    expect(finish).not.toHaveBeenCalled();
+    expect(orphans).not.toHaveBeenCalled();
+  });
+
+  it("fetches no image when the backfill finds the folder unavailable", async () => {
+    const t = setup({ image: () => okImage() });
+    await t.link(1);
+    await t.copyWith(10, [IMG(10)]);
+    vi.spyOn(t.copies, "saveCopy").mockResolvedValue("unavailable");
+    await t.pass.sweep();
+    expect(t.pageCalls).toHaveLength(1);
+    expect(t.imageCalls).toHaveLength(0);
+  });
+
+  it("logs high at exactly 80% of the limit", async () => {
+    const t = setup({ limitBytes: 200 * MiB });
+    vi.spyOn(t.copies, "usedBytes").mockResolvedValue(160 * MiB);
+    await t.pass.sweep();
+    expect(t.logged.filter((m) => m.startsWith("[saved"))).toEqual([
+      "[saved copies] use 0.2 of 0.2 GiB",
+    ]);
+  });
+
+  it("is not full with exactly MAX_COPY_BYTES free", async () => {
+    const t = setup({ limitBytes: 200 * MiB });
+    vi.spyOn(t.copies, "usedBytes").mockResolvedValue(200 * MiB - MAX_COPY_BYTES);
+    await t.pass.sweep();
+    expect(t.logged.filter((m) => m.startsWith("[saved"))).toEqual([
+      "[saved copies] use 0.2 of 0.2 GiB",
+    ]);
+  });
+});

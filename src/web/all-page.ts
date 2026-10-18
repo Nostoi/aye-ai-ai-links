@@ -1,6 +1,7 @@
 import type { PictureInfo } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace } from "../core/link-space.js";
+import type { CopyInfo } from "../core/saved-copy.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
@@ -52,6 +53,8 @@ type Input = {
   later?: boolean;
   /** Each card's picture info, for the edit dialog; read on the active pages only. */
   pictures?: Map<string, PictureInfo>;
+  /** The links that have a saved copy. */
+  copies?: Map<string, CopyInfo>;
 };
 
 /** The time a card is grouped by: when it was opened in opened order, else when it was saved. */
@@ -72,15 +75,23 @@ const monthName = (d: Date, now: Date) =>
 /** One card: the picture or a tint, the title, the space and site, and Keep handy. No why. */
 function card(
   link: Link,
-  { catalog, images, handy, gone = new Map(), done, pictures = new Map() }: Input,
+  {
+    catalog,
+    images,
+    handy,
+    gone = new Map(),
+    done,
+    pictures = new Map(),
+    copies = new Map(),
+  }: Input,
 ): string {
   const space = linkSpace(link, catalog);
   const version = images.get(link.id);
   return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
 ${tile(link, version, "card-image")}
-${done ? "" : `${editMenu(link)}\n`}<div class="card-body">
+${done ? "" : `${editMenu(link, copies.get(link.id))}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
-${siteLine(link, space)}${goneLine(link, gone.get(link.id))}${handyControl(link, handy.get(link.id))}</div>
+${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}${handyControl(link, handy.get(link.id))}</div>
 </li>`;
 }
 

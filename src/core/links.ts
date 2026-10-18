@@ -1,4 +1,5 @@
 import { CoreError } from "./errors.js";
+import type { CopyInfo, SavedCopyReader } from "./saved-copy.js";
 import { logOpen, type SearchLog } from "./search-log.js";
 import type { SnapshotRunner } from "./snapshot-runner.js";
 import {
@@ -173,14 +174,16 @@ export async function getLink({ store }: Deps, owner: OwnerId, id: string): Prom
  * the open is paired with that agent's latest search.
  */
 export async function getLinkWithText(
-  deps: Deps,
+  deps: Deps & { savedCopies: Pick<SavedCopyReader, "copyInfo"> },
   owner: OwnerId,
   id: string,
   by: string,
-): Promise<{ link: Link; snapshotText: SnapshotText | null }> {
+): Promise<{ link: Link; snapshotText: SnapshotText | null; savedCopy: CopyInfo | null }> {
   const link = await getLink(deps, owner, id);
   await logOpen(deps.searchLog, owner, by, link, deps.now());
-  return { link, snapshotText: await readSnapshotText(deps.pages, owner, link, TEXT_CHARS) };
+  const snapshotText = await readSnapshotText(deps.pages, owner, link, TEXT_CHARS);
+  const savedCopy = (await deps.savedCopies.copyInfo(owner, [link.id])).get(link.id) ?? null;
+  return { link, snapshotText, savedCopy };
 }
 
 export async function updateLink(

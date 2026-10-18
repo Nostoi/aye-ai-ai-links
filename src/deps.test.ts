@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Database } from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getDigest } from "./core/digest.js";
@@ -17,6 +20,31 @@ const OWNER = "o";
 
 describe("createDeps", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it("without a saved-copy folder, copies are paused and none are written", async () => {
+    const deps = createDeps(openDatabase(":memory:"), new FakeEmbedder(DIMS));
+    deps.store.ensureUser(OWNER, OWNER);
+    const { link } = await saveLink(deps, OWNER, { url: "https://ex.com/a", savedBy: "t" });
+    expect(await deps.savedCopies.checkFolder()).toEqual({
+      state: "unwritable",
+      detail: "No saved-copy folder is set",
+    });
+    const draft = { markdown: "x", imageUrls: [], nonce: "a".repeat(32) };
+    const limits = { copyBytes: 1024, totalBytes: 4096 };
+    expect(await deps.savedCopies.saveCopy(OWNER, link.id, draft, limits, new Date())).toBe(
+      "unavailable",
+    );
+  });
+
+  it("with a saved-copy folder, the store's check is ready", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "deps-copies-"));
+    try {
+      const deps = createDeps(openDatabase(":memory:"), new FakeEmbedder(DIMS), dir);
+      expect(await deps.savedCopies.checkFolder()).toEqual({ state: "ready" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 
   it("wires meaning search: a link matching only by meaning is found without the keyword fallback", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);

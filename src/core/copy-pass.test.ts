@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCopyPass } from "./copy-pass.js";
+import { createCopyReader, createReadGate, type ReadGate } from "./copy-reading.js";
 import type { ExtractOutcome, PageExtractor } from "./extract.js";
 import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
@@ -75,6 +76,7 @@ function setup(
     extract?: (options: { copy?: boolean } | undefined) => Promise<ExtractOutcome> | ExtractOutcome;
     store?: FakeStore;
     copies?: FakeSavedCopies;
+    gate?: ReadGate;
   } = {},
 ) {
   const store = o.store ?? new FakeStore();
@@ -120,6 +122,7 @@ function setup(
     now,
     log: (message) => logged.push(message),
     sweepEveryMs: o.sweepEveryMs,
+    gate: o.gate ?? createReadGate(),
     canResolve: async (signal) => {
       canResolveCalls.push(1);
       return (o.canResolve ?? (() => true))(signal);
@@ -886,30 +889,111 @@ describe("copy pass finishing", () => {
     expect(finish).toHaveBeenCalledTimes(k + 1);
   });
 
-  it("moves on after 10 s from a finishCopy that never settles, and stop does not wait for it", async () => {
+  it("starts no second finish while one that never settles holds the gate, and stop does not wait for it", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const t = setup();
     const a = await settled(t, 1);
     const b = await settled(t, 2);
     const real = t.copies.finishCopy.bind(t.copies);
     let late!: (error: Error) => void;
-    vi.spyOn(t.copies, "finishCopy").mockImplementation((owner, id, f, at) =>
-      id === a
-        ? new Promise<boolean>((_resolve, reject) => {
-            late = reject;
+    let hung = false;
+    const finish = vi.spyOn(t.copies, "finishCopy").mockImplementation((owner, id, f, at) => {
+      if (id !== a || hung) return real(owner, id, f, at);
+      hung = true;
+      return new Promise<boolean>((_resolve, reject) => {
+        late = reject;
+      });
+    });
+    const sweeping = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(20_000);
+    await sweeping;
+    expect(finish.mock.calls.map((c) => c[1])).toEqual([a]);
+    expect(t.logged).toContain(`copy ${ID(a)}: finishing timed out`);
+    expect(t.logged).not.toContain(`copy ${ID(b)}: finishing timed out`);
+    late(new Error("closed"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.logged).toContain(`copy ${ID(a)}: the abandoned finish failed`);
+    t.wait();
+    await t.pass.sweep();
+    expect(await isFinished(t, a)).toBe(true);
+    expect(await isFinished(t, b)).toBe(true);
+    await t.pass.stop();
+  });
+
+  it("shares its gate with the copy reader: a stuck finish leaves a view unread and starts no second finish", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const gate = createReadGate();
+    const t = setup({ gate });
+    await settled(t, 1);
+    const viewed = await t.copyWith(5, []);
+    const finish = vi
+      .spyOn(t.copies, "finishCopy")
+      .mockImplementation(() => new Promise<boolean>(() => {}));
+    const read = vi.spyOn(t.copies, "readCopy");
+    const reader = createCopyReader({ store: t.store, copies: t.copies, gate, log: () => {} });
+    const sweeping = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(finish).toHaveBeenCalledTimes(1);
+    let answer: unknown;
+    void reader.view(OWNER, viewed).then((v) => (answer = v?.copy));
+    await vi.advanceTimersByTimeAsync(9_999);
+    await sweeping;
+    expect(answer).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(answer).toBe("unreadable");
+    expect(read).not.toHaveBeenCalled();
+    t.wait();
+    const again = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await again;
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends finishing at the first stuck read, leaving the next copy untouched for the next sweep", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const t = setup();
+    const a = await settled(t, 1);
+    const b = await settled(t, 2);
+    const real = t.copies.finishCopy.bind(t.copies);
+    let free!: (done: boolean) => void;
+    const finish = vi.spyOn(t.copies, "finishCopy").mockImplementation((owner, id, f, at) =>
+      id === a && !free
+        ? new Promise<boolean>((resolve) => {
+            free = resolve;
           })
         : real(owner, id, f, at),
     );
     const sweeping = t.pass.sweep();
     await vi.advanceTimersByTimeAsync(10_000);
     await sweeping;
-    expect(await isFinished(t, b)).toBe(true);
-    expect(await isFinished(t, a)).toBe(false);
-    expect(t.logged).toContain(`copy ${ID(a)}: finishing timed out`);
-    late(new Error("closed"));
+    expect(finish.mock.calls.map((c) => c[1])).toEqual([a]);
+    expect(t.logged.filter((m) => m.includes("finishing timed out"))).toEqual([
+      `copy ${ID(a)}: finishing timed out`,
+    ]);
+    free(false);
     await vi.advanceTimersByTimeAsync(0);
-    expect(t.logged).toContain(`copy ${ID(a)}: the abandoned finish failed`);
+    await t.pass.sweep();
+    expect(finish.mock.calls.map((c) => c[1])).toEqual([a, b]);
+    expect(await isFinished(t, b)).toBe(true);
+  });
+
+  it("never starts a finish still waiting for the gate when stop is called", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const gate = createReadGate();
+    let free!: () => void;
+    void gate.run(() => new Promise<void>((resolve) => (free = resolve)), 60_000);
+    const t = setup({ gate });
+    await settled(t, 1);
+    const finish = vi.spyOn(t.copies, "finishCopy");
+    const unfinished = vi.spyOn(t.copies, "unfinishedCopies");
+    const sweeping = t.pass.sweep();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(unfinished).toHaveBeenCalled();
     await t.pass.stop();
+    await sweeping;
+    free();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(finish).not.toHaveBeenCalled();
   });
 
   it("clears the timer when the call wins", async () => {

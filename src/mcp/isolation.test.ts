@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { createAgentKey } from "../auth/agent-keys.js";
 import {
   addSecondUser,
@@ -22,6 +25,7 @@ import {
 import { png } from "../core/image-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
+import { copyLimits, imageRef } from "../core/saved-copy.js";
 import { setTagPinned } from "../core/tag-space.js";
 import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
@@ -466,12 +470,16 @@ describe("owner isolation coverage", () => {
   const ELSEWHERE = /^\/(api\/auth|\.well-known|mcp)(\/|$)/;
   const webRoutes = (world: World) => world.app.routes.filter((r) => !ELSEWHERE.test(r.path));
 
-  /** A path a request can name: `:id{[0-9]+}` gets a value its pattern accepts, `*` any segment. */
+  /**
+   * A path a request can name: `:id{[0-9]+}` gets a value its pattern accepts, `*` any segment.
+   * Any other parameter tries `1` first, so a copy picture's `:n` is picture 1.
+   */
   const fillPath = (path: string, linkId: string) =>
     path
-      .replace(/:\w+(?:\{((?:[^{}]|\{[^}]*\})*)\})?/g, (_, pattern?: string) => {
+      .replace(/:(\w+)(?:\{((?:[^{}]|\{[^}]*\})*)\})?/g, (_, name: string, pattern?: string) => {
         if (pattern === undefined) return linkId;
-        const fits = [linkId, "1", "a"].find((v) => new RegExp(`^(?:${pattern})$`).test(v));
+        const samples = name === "id" ? [linkId, "1", "a"] : ["1", linkId, "a"];
+        const fits = samples.find((v) => new RegExp(`^(?:${pattern})$`).test(v));
         if (fits === undefined) throw new Error(`no sample fits the path parameter {${pattern}}`);
         return fits;
       })
@@ -479,6 +487,35 @@ describe("owner isolation coverage", () => {
 
   /** A's stored image: a PNG header with bytes no other response holds. */
   const A_IMAGE = png(321, 123, Buffer.from("A's own image bytes for the route guard"));
+  /** A's saved-copy picture: distinct bytes from A_IMAGE. */
+  const A_COPY_IMAGE = png(322, 124, Buffer.from("A's saved copy picture for the route guard"));
+  /** A line only A's saved copy holds. */
+  const A_COPY_TEXT = "Quokkas shelter in A's saved copy for the route guard";
+  const COPY_NONCE = "0123456789abcdef0123456789abcdef";
+  const copyDirs: string[] = [];
+  afterEach(() => {
+    for (const dir of copyDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+  /** Gives A's link a copy whose picture 1 is stored. */
+  const storeCopyImage = async (world: World, linkId: string, bytes: Buffer) => {
+    const url = "https://a.example/copy-picture.png";
+    const draft = {
+      markdown: `${A_COPY_TEXT}\n\n![pic](${imageRef(1, COPY_NONCE)})\n\n![remote](https://images.example/x.png)\n\n[elsewhere](https://a.example/elsewhere)`,
+      imageUrls: [url],
+      nonce: COPY_NONCE,
+    };
+    const limits = copyLimits(1_000_000);
+    expect(await world.savedCopies.saveCopy(A, linkId, draft, limits, new Date())).toBe("saved");
+    const saved = await world.savedCopies.saveCopyImage(
+      A,
+      linkId,
+      1,
+      url,
+      { contentType: "image/png", bytes },
+      limits,
+    );
+    expect(saved).not.toBe(false);
+  };
 
   /** Records the link's snapshot as fetched with `imageUrl`, so its image is pending. */
   const recordImageUrl = async (world: World, linkId: string, imageUrl: string) => {
@@ -533,6 +570,11 @@ describe("owner isolation coverage", () => {
     "GET /save": { noOwnerData: "the save form, filled only from its own query" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
+    "GET /links/:id{[0-9]+}/copy": { request: "/links/:id/copy", marker: () => A_COPY_TEXT },
+    "GET /links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}": {
+      request: "/links/:id/copy/images/1",
+      marker: () => A_COPY_IMAGE,
+    },
   };
   const readKey = (path: string) => `GET ${path}`;
   const readablePaths = (world: World) => {
@@ -569,7 +611,9 @@ describe("owner isolation coverage", () => {
       : sent.bytes.includes(marker);
 
   it("a signed-in B reaches none of A's data through any web path", async () => {
-    const world = await oauthWorld();
+    const copyDir = mkdtempSync(join(tmpdir(), "aye-isolation-"));
+    copyDirs.push(copyDir);
+    const world = await oauthWorld({ savedCopyDir: copyDir });
     const a = await connectClaude(world);
     await saveLinkWith(world, a.access, A_URL);
     createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: A_KEY_NAME });
@@ -585,6 +629,7 @@ describe("owner isolation coverage", () => {
       tags: [{ name: A_TAG_NAME, source: "stated" }],
     });
     await storeImage(world, aLinkId, A_IMAGE);
+    await storeCopyImage(world, String(aLinkId), A_COPY_IMAGE);
     // A second link whose page named a remote image and has none stored: its card must not
     // fall back to the remote URL, or A's search page makes an outside request.
     const { link: remote } = await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, {

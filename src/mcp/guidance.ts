@@ -69,6 +69,8 @@ ${GONE_NOTE}`;
 export const GET_LINK = `Get one saved link by its id, with its why, tags, state and page snapshot. Use search_links to find an id.
 
 snapshotText is the page's text, up to ${TEXT_CHARS.toLocaleString("en-US")} characters, with truncated: true when it was cut. It is null until the page has been fetched successfully, and for a page with no readable text.
+
+savedCopy is {madeAt} when the server keeps a saved copy of the page, which the owner can read from the link's ⋯ menu on the web page, and null when it keeps none. The copy itself is not available to you.
 ${GONE_NOTE}`;
 
 export const GET_PROFILE = `Get what is known about the owner: their notes, the projects still active, and what they have been working on lately. Call it before you infer a why or tags.

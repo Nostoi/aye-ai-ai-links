@@ -16,6 +16,9 @@ export const savedOn = (savedAt: Date, now: Date) =>
     timeZone: "UTC",
   });
 
+/** The page's one `<style>` content; the copy page's CSP hashes exactly this. */
+export const PAGE_STYLE = `\n${themeCss}\n`;
+
 const NAME = "Aye-AI-AI Links";
 const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</span>`;
 
@@ -144,9 +147,7 @@ export const page = (
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/svg+xml" href="${faviconHref}">
-<style>
-${themeCss}
-</style>
+<style>${PAGE_STYLE}</style>
 </head>
 <body>
 <header class="column site">${home || menu ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}${menu ? MENU : ""}</header>

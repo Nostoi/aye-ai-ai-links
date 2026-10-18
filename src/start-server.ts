@@ -28,7 +28,6 @@ import { MODEL_KEY, revisionDir } from "./search/model.js";
 import { loadTransformersEmbedder } from "./search/transformers-embedder.js";
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
-import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 
 const DRAIN_MS = 10_000;
 /** The drain, this wait and the closes must end inside launchd's 20 s `ExitTimeOut`. */
@@ -157,9 +156,9 @@ export async function startServer(
   let server: Server;
   try {
     db = openDatabase(config.dbPath);
-    const deps = decorateDeps(createDeps(db, model));
+    const deps = decorateDeps(createDeps(db, model, config.savedCopies.dir));
     // Before anything can listen or save: an unready folder pauses copies, it never refuses the start.
-    const savedCopies = new SqliteSavedCopyStore(db, config.savedCopies.dir);
+    const savedCopies = deps.savedCopies;
     const folder = await savedCopies.checkFolder();
     if (folder.state !== "ready") console.error(pausedMessage(config.savedCopies.dir, folder));
     const undone = await savedCopies.undoUnconfirmed();
@@ -204,6 +203,7 @@ export async function startServer(
       dir: config.savedCopies.dir,
       initialCheck: folder,
       now: deps.now,
+      gate: deps.readGate,
       canResolve: (signal) => linkChecker.canResolve(signal),
       ...(copyPollMs !== undefined && { pollMs: copyPollMs }),
     });

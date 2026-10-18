@@ -1,10 +1,12 @@
 import type { Database } from "better-sqlite3";
+import { createReadGate } from "./core/copy-reading.js";
 import type { Embedder } from "./search/embedder.js";
 import { FtsSearch } from "./search/fts-search.js";
 import { HybridSearch } from "./search/hybrid-search.js";
 import { DIMS, MODEL_KEY } from "./search/model.js";
 import { loadVectorFunctions, VectorSearch } from "./search/vector-search.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
+import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 import { SqliteSearchLog } from "./store/search-log.js";
 import { SqliteImageStore } from "./store/sqlite-image-store.js";
 import { SqliteLinkCheckStore } from "./store/sqlite-link-checks.js";
@@ -13,11 +15,11 @@ import { SqliteStore } from "./store/sqlite-store.js";
 import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
 
 /**
- * Builds the store, search, search log, vector index, image store, edit store, check store, profile and page-text reader from ONE database handle.
+ * Builds the store, search, search log, vector index, image store, edit store, check store, profile, saved-copy store (which owns the folder) and page-text reader from ONE database handle.
  * They must share it: ids ranked or saved in one database and read through another come back as the
  * wrong links, or with another link's page text.
  */
-export function createDeps(db: Database, embedder: Embedder) {
+export function createDeps(db: Database, embedder: Embedder, savedCopyDir: string | null = null) {
   const store = new SqliteStore(db);
   const keywordSearch = new FtsSearch(db);
   loadVectorFunctions(db);
@@ -40,6 +42,10 @@ export function createDeps(db: Database, embedder: Embedder) {
     tools: store,
     /** Dead-link checks (#128): the check runner writes them; the digest and Keep handy read them. */
     checks: new SqliteLinkCheckStore(db),
+    /** Saved copies: one instance per process, so it owns the folder and its checked state. Without a folder (tests) copies read as missing and none are written. */
+    savedCopies: new SqliteSavedCopyStore(db, savedCopyDir),
+    /** The one saved-copy read gate: the copy pass and the copy pages share it. */
+    readGate: createReadGate(),
     now: () => new Date(),
   };
 }

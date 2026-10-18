@@ -14,6 +14,7 @@ import { getLinkWithText, normalizeTitle, saveLink, updateLink } from "../core/l
 import { listLinks } from "../core/list-links.js";
 import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
+import type { SavedCopyReader } from "../core/saved-copy.js";
 import { LINK_ORDERS, type LinkCount, type LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { SnapshotRunner } from "../core/snapshot-runner.js";
@@ -58,6 +59,8 @@ export type McpDeps = {
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
   pages: PageTextReader;
+  /** Whether a saved copy exists, for get_link; an agent never gets the copy itself. */
+  savedCopies: Pick<SavedCopyReader, "copyInfo">;
   saveWaitMs?: number | undefined;
   /** What `serverInfo` reports; `dev` when left out. */
   version?: string | undefined;

@@ -2,7 +2,9 @@ import fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CopyFolder, MARKER, TMP } from "./copy-folder.js";
+import { MAX_IMAGE_BYTES } from "../core/image-type.js";
+import { MAX_COPY_MARKDOWN_BYTES } from "../core/saved-copy.js";
+import { CopyFileTooLarge, CopyFolder, MARKER, TMP } from "./copy-folder.js";
 
 const HEX = "0123456789abcdef0123456789abcdef";
 const stage = `tmp-${HEX}`;
@@ -22,6 +24,16 @@ const tmpNames = () => {
   return fs.existsSync(p) ? fs.readdirSync(p) : [];
 };
 const text = (p: string) => fs.readFileSync(p, "utf8");
+
+describe("CopyFolder without a root", () => {
+  it("refuses to prepare", () => {
+    expect(() => new CopyFolder(null).prepare()).toThrow("No saved-copy folder is set");
+  });
+
+  it("still refuses a relative root", () => {
+    expect(() => new CopyFolder("relative/dir")).toThrow("absolute");
+  });
+});
 
 beforeEach(() => {
   root = fresh();
@@ -194,6 +206,55 @@ describe("images", () => {
     expect(() => folder.writeImage("12", "01.png", new Uint8Array([1]))).toThrow();
     expect(fs.readdirSync(target)).toEqual([]);
     expect(await folder.readImage("12", "01.png")).toBeNull();
+  });
+});
+
+describe("reads", () => {
+  it("call no synchronous file function", async () => {
+    folder.writeCopy("12", "x");
+    folder.writeImage("12", "01.png", new Uint8Array([1]));
+    const sync = (["lstatSync", "openSync", "readFileSync", "statSync"] as const).map((name) =>
+      vi.spyOn(fs, name),
+    );
+    expect(await folder.readMarkdown("12")).toBe("x");
+    expect(await folder.readImage("12", "01.png")).toHaveLength(1);
+    expect(await folder.readMarkdown("13")).toBeNull();
+    for (const spy of sync) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("refuse a copy.md over its cap", async () => {
+    folder.writeCopy("12", "x");
+    fs.writeFileSync(join(root, "12", "copy.md"), Buffer.alloc(MAX_COPY_MARKDOWN_BYTES + 1, 97));
+    await expect(folder.readMarkdown("12")).rejects.toBeInstanceOf(CopyFileTooLarge);
+  });
+
+  it("read a copy.md of exactly its cap", async () => {
+    folder.writeCopy("12", "x");
+    fs.writeFileSync(join(root, "12", "copy.md"), Buffer.alloc(MAX_COPY_MARKDOWN_BYTES, 97));
+    expect(await folder.readMarkdown("12")).toHaveLength(MAX_COPY_MARKDOWN_BYTES);
+  });
+
+  it("refuse an image over its cap", async () => {
+    folder.writeCopy("12", "x");
+    folder.writeImage("12", "01.png", new Uint8Array(MAX_IMAGE_BYTES + 1));
+    await expect(folder.readImage("12", "01.png")).rejects.toBeInstanceOf(CopyFileTooLarge);
+  });
+
+  it("refuse a file that grows past its cap after the stat, asking for at most cap + 1 bytes", async () => {
+    folder.writeCopy("12", "x");
+    let asked = 0;
+    const handle = {
+      stat: async () => ({ isFile: () => true, size: 1 }),
+      read: async (_buffer: Buffer, _offset: number, length: number) => {
+        asked += length;
+        return { bytesRead: length };
+      },
+      readFile: async () => Buffer.alloc(MAX_COPY_MARKDOWN_BYTES + 1),
+      close: async () => {},
+    };
+    vi.spyOn(fs.promises, "open").mockResolvedValue(handle as unknown as fs.promises.FileHandle);
+    await expect(folder.readMarkdown("12")).rejects.toBeInstanceOf(CopyFileTooLarge);
+    expect(asked).toBeLessThanOrEqual(MAX_COPY_MARKDOWN_BYTES + 1);
   });
 });
 

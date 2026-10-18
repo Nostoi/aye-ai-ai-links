@@ -1,8 +1,10 @@
+import type { ReadGate } from "./copy-reading.js";
 import type { PageExtractor } from "./extract.js";
 import type { FetchOutcome, ImageFetcher, PageFetcher } from "./fetch.js";
 import { judgeImage, MAX_IMAGE_ATTEMPTS, RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
 import type { CopyKeeper } from "./keep-copy.js";
 import {
+  COPY_READ_TIMEOUT_MS,
   type CopyCandidate,
   type CopyRef,
   copyLimits,
@@ -30,6 +32,8 @@ export type CopyPassOptions = {
   initialCheck: FolderCheck;
   now: () => Date;
   canResolve: (signal?: AbortSignal) => Promise<boolean>;
+  /** The process's one saved-copy read gate: finishing reads copy.md through it. */
+  gate: ReadGate;
   log?: (message: string, error?: unknown) => void;
   /** Time between sweeps. Default 15 s. */
   pollMs?: number;
@@ -59,8 +63,6 @@ type Budget = Map<string, Failure>;
 /** What one attempt on a candidate came to. */
 type Attempt = "done" | "transient" | "network" | "abandon" | "unavailable";
 
-/** A finishing call that takes longer than this is left running and tried again later. */
-const FINISH_TIMEOUT_MS = 10_000;
 /** The orphan sweep leaves a folder or temporary file younger than this alone. */
 const ORPHAN_GRACE_MS = 60 * 60_000;
 
@@ -369,28 +371,32 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
   }
 
   /**
-   * Calls `finishCopy`, giving up after `FINISH_TIMEOUT_MS` or on `stop`. A call left running gets
-   * a `.catch` that logs, so its late failure is never unhandled.
+   * Calls `finishCopy` through the read gate, giving up after `COPY_READ_TIMEOUT_MS` or on `stop`.
+   * A call still waiting for the gate after `stop` never starts. A call left running gets a
+   * `.catch` that logs, so its late failure is never unhandled.
    */
   async function finishWithin(c: CopyRef, key: string): Promise<boolean | "timeout" | "aborted"> {
-    const call = copies.finishCopy(c.owner, c.linkId, finishedMarkdown, now());
     const { signal } = abort;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let call: Promise<boolean> | undefined;
+    const gated = o.gate.run(() => {
+      if (signal.aborted) return Promise.resolve(false);
+      call = copies.finishCopy(c.owner, c.linkId, finishedMarkdown, now());
+      return call;
+    }, COPY_READ_TIMEOUT_MS);
     let onAbort = () => {};
-    const cut = new Promise<"timeout" | "aborted">((resolve) => {
-      timer = setTimeout(() => resolve("timeout"), FINISH_TIMEOUT_MS);
+    const cut = new Promise<"aborted">((resolve) => {
       onAbort = () => resolve("aborted");
       if (signal.aborted) onAbort();
       else signal.addEventListener("abort", onAbort, { once: true });
     });
     try {
-      const result = await Promise.race([call, cut]);
+      const result = await Promise.race([gated, cut]);
       if (typeof result === "string") {
-        call.catch((error) => log(`copy ${key}: the abandoned finish failed`, error));
+        gated.catch(() => {}); // the call's own catch below logs it
+        call?.catch((error) => log(`copy ${key}: the abandoned finish failed`, error));
       }
       return result;
     } finally {
-      clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
     }
   }
@@ -402,7 +408,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     return attempts;
   }
 
-  /** The finishing phase: copies whose images have all settled. */
+  /**
+   * The finishing phase: copies whose images have all settled. The first timeout ends it, since
+   * the read gate is stuck; the copies after it wait for the next sweep, untouched.
+   */
   async function finishPages(): Promise<void> {
     const seen = new Set<string>();
     let after: string | null = null;
@@ -420,6 +429,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
           if (result === "timeout") {
             log(`copy ${key}: finishing timed out`);
             backOffFinishing(key);
+            return;
           } else if (result) {
             finishFailures.delete(key);
           } else {

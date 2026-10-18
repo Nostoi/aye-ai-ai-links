@@ -1,7 +1,9 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import { linkSpace } from "../core/link-space.js";
+import type { CopyInfo } from "../core/saved-copy.js";
 import type { Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
+import { copyHref } from "./copy-page.js";
 import { GONE_TEXT } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
@@ -12,7 +14,7 @@ import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 /**
  * What "Worth a look today" shows: the picks, the image version of each that has one, now, and
  * the owner's tags, which give each card its space (`linkSpace`), and the one link that seems gone
- * (#128), shown as its own card.
+ * (#128), shown as its own card, and that link's saved copy, if it has one.
  */
 export type WorthCards = {
   links: DigestLink[];
@@ -20,6 +22,7 @@ export type WorthCards = {
   now: Date;
   catalog: Tag[];
   gone: Link | null;
+  goneCopy: CopyInfo | null;
 };
 
 const quoted = (text: string) => `"${escapeHtml(text)}"`;
@@ -100,7 +103,7 @@ ${tile(link, cards.images.get(link.id), "worth-tile")}
 <h3>${linkTitle(link)}</h3>
 <p class="small">${GONE_TEXT}</p>
 <div class="actions small-actions">
-<button type="button" data-act="archive">I'm done with it</button>
+${cards.goneCopy ? `<a href="${copyHref(link.id)}">Read the saved copy</a>\n` : ""}<button type="button" data-act="archive">I'm done with it</button>
 <button type="button" data-act="still-works">It still works</button>
 </div>
 </div>

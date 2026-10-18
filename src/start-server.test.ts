@@ -1088,6 +1088,61 @@ describe("startServer", () => {
       }
     };
 
+    it("reads a copy through the deps' own store, checked at start and by the pass", async () => {
+      const id = await seedFetched();
+      let recorded: AppDeps["savedCopies"] | undefined;
+      const checks = vi.fn();
+      await startWith({
+        copyExtractor: copyExtractor(async () => WITH_IMAGE),
+        decorateDeps: (d) => {
+          recorded = d.savedCopies;
+          const real = d.savedCopies.checkFolder.bind(d.savedCopies);
+          vi.spyOn(d.savedCopies, "checkFolder").mockImplementation(async () => {
+            checks();
+            return real();
+          });
+          return d;
+        },
+      });
+      await until(() => copyRow()[0]?.status === "ok", "the finished copy");
+      expect(checks).toHaveBeenCalled();
+      const before = checks.mock.calls.length;
+      const copy = await recorded?.readCopy("owner", id);
+      expect(copy).toEqual(expect.objectContaining({ markdown: expect.any(String) }));
+      expect(checks.mock.calls.length).toBe(before);
+    });
+
+    it("serves the page of a copy the pass made, through the one checked store", async () => {
+      const id = await seedFetched();
+      const auth = openAuthDatabase(authPath());
+      const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
+      await migrateAuth(options);
+      await setOwnerLogin(createAuth(options).auth, {
+        id: "owner",
+        name: "Owner",
+        email: "you@example.com",
+        password: "Correct-horse-battery-1",
+      });
+      auth.close();
+      const { port } = await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });
+      await until(() => copyRow()[0]?.finished != null, "the finished copy");
+      const signIn = await fetch(`http://127.0.0.1:${port}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE },
+        body: JSON.stringify({ email: "you@example.com", password: "Correct-horse-battery-1" }),
+      });
+      expect(signIn.status).toBe(200);
+      const cookie = (signIn.headers.getSetCookie()[0] ?? "").split(";")[0] ?? "";
+      const res = await fetch(`http://127.0.0.1:${port}/links/${id}/copy`, {
+        headers: { cookie },
+        redirect: "manual",
+      });
+      const html = await res.text();
+      expect(res.status).toBe(200);
+      expect(html).toContain(`src="/links/${id}/copy/images/1"`);
+      expect(html).not.toContain("files are missing");
+    });
+
     it("makes the copy of a link saved before copies existed, then its pictures", async () => {
       const id = await seedFetched();
       await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });

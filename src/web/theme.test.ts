@@ -163,11 +163,23 @@ describe("the Handy postcards", () => {
 
   it("styles the menu as a card of full-width 44px rows, not a link", () => {
     expect(rule(".card-menu-list")).toMatch(/border-radius:14px;[^}]*box-shadow:/);
-    const item = rule(".card-menu-list button");
-    for (const part of ["min-height:44px", "width:100%", "background:none", "white-space:nowrap"]) {
+    // A menu row that links (Read saved copy) is an <a> and looks the same.
+    const item = rule(".card-menu-list button,.card-menu-list a");
+    for (const part of [
+      "min-height:44px",
+      "width:100%",
+      "background:none",
+      "white-space:nowrap",
+      "text-decoration:none",
+    ]) {
       expect(item).toContain(part);
     }
     expect(item).not.toContain("underline");
+    expect(themeCss).toContain(".card-menu-list a:hover");
+  });
+
+  it("gives a link in a small-actions row the buttons' 44px height", () => {
+    expect(rule(".small-actions button,.small-actions a")).toContain("min-height:44px");
   });
 
   it("puts dark text straight on a picture-less card, and a light fade with white text only on a photo", () => {

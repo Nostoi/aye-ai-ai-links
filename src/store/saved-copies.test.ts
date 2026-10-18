@@ -15,10 +15,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { copyLimits, finishedMarkdown, imageRef } from "../core/saved-copy.js";
+import { createCopyReader, createReadGate } from "../core/copy-reading.js";
+import {
+  copyLimits,
+  finishedMarkdown,
+  imageRef,
+  MAX_COPY_MARKDOWN_BYTES,
+} from "../core/saved-copy.js";
 import { describeSavedCopyStoreContract } from "../core/saved-copy-store-contract.js";
 import { at, newLink } from "../core/snapshot-store-contract.js";
-import { CopyFolder, MARKER } from "./copy-folder.js";
+import { CopyFileTooLarge, CopyFolder, MARKER } from "./copy-folder.js";
 import { openDatabase } from "./database.js";
 import { SqliteSavedCopyStore } from "./saved-copies.js";
 import { SqliteLinkCheckStore } from "./sqlite-link-checks.js";
@@ -179,6 +185,22 @@ describe("reads", () => {
     rmSync(join(root, id), { recursive: true });
     expect(await copies.readCopy("o", id)).toBe("missing");
     expect(db.prepare("SELECT status FROM saved_copies").pluck().get()).toBe("ok");
+  });
+
+  it("refuse a copy.md replaced by hand with an oversized file, which the copy reader shows as unreadable", async () => {
+    const { root, links, copies, id } = await ready();
+    await copies.saveCopy("o", id, draft("body"), LIMITS, at(1));
+    writeFileSync(join(root, id, "copy.md"), Buffer.alloc(MAX_COPY_MARKDOWN_BYTES + 1, 97));
+    await expect(copies.readCopy("o", id)).rejects.toBeInstanceOf(CopyFileTooLarge);
+    const logged: string[] = [];
+    const reader = createCopyReader({
+      store: links,
+      copies,
+      gate: createReadGate(),
+      log: (message) => logged.push(message),
+    });
+    expect((await reader.view("o", id))?.copy).toBe("unreadable");
+    expect(logged).toHaveLength(1);
   });
 });
 

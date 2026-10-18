@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { MAX_IMAGE_BYTES } from "../core/image-type.js";
+import { MAX_COPY_MARKDOWN_BYTES } from "../core/saved-copy.js";
 
 export const MARKER = ".aye-saved-copies";
 export const TMP = ".aye-tmp";
@@ -10,6 +12,9 @@ const LINK_DIR = /^[0-9]{1,20}$/;
 const IMAGE_FILE = /^[0-9]{2}\.(png|jpg|gif|webp)$/;
 const STAGE_DIR = /^tmp-[0-9a-f]{32}$/;
 const STAGE_FILE = /^(tmp-[0-9a-f]{32}|write-check-[0-9]+)$/;
+
+/** Thrown by a read whose file is over its cap, before its bytes are returned. */
+export class CopyFileTooLarge extends Error {}
 
 const refused = () => new Error("Refused saved-copy path");
 const code = (e: unknown) => (e as NodeJS.ErrnoException).code;
@@ -31,12 +36,14 @@ const gone = (e: unknown) => ["ENOENT", "ENOTDIR", "ELOOP"].includes(code(e) ?? 
 export class CopyFolder {
   private real: string | null = null;
 
-  constructor(private readonly root: string) {
-    if (!isAbsolute(root)) throw new Error("Saved-copy folder must be an absolute path");
+  constructor(private readonly root: string | null) {
+    if (root !== null && !isAbsolute(root))
+      throw new Error("Saved-copy folder must be an absolute path");
   }
 
   /** Creates the root if missing and returns its real path; throws on failure. */
   prepare(): void {
+    if (this.root === null) throw new Error("No saved-copy folder is set");
     fs.mkdirSync(this.root, { recursive: true });
     const real = fs.realpathSync(this.root);
     if (!fs.statSync(real).isDirectory()) throw new Error("Saved-copy folder is not a directory");
@@ -79,12 +86,34 @@ export class CopyFolder {
     return fs.openSync(path, flags | fs.constants.O_NOFOLLOW, 0o600);
   }
 
-  private async read(path: string): Promise<Buffer | null> {
+  /** `path` as a real directory, or null; asynchronous, for the read path. */
+  private async existingDir(path: string): Promise<string | null> {
+    try {
+      const st = await fs.promises.lstat(path);
+      return st.isDirectory() && !st.isSymbolicLink() ? path : null;
+    } catch (e) {
+      if (code(e) === "ENOENT") return null;
+      throw e;
+    }
+  }
+
+  /** At most `max` bytes of a regular file: the stat refuses a bigger one, and so does a read reaching `max + 1`. */
+  private async read(path: string, max: number): Promise<Buffer | null> {
     let handle: fs.promises.FileHandle | undefined;
     try {
       handle = await fs.promises.open(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-      if (!(await handle.stat()).isFile()) return null;
-      return await handle.readFile();
+      const st = await handle.stat();
+      if (!st.isFile()) return null;
+      if (st.size > max) throw new CopyFileTooLarge(`${path} is over ${max} bytes`);
+      const buffer = Buffer.alloc(max + 1);
+      let got = 0;
+      while (got < buffer.length) {
+        const { bytesRead } = await handle.read(buffer, got, buffer.length - got, null);
+        if (bytesRead === 0) break;
+        got += bytesRead;
+      }
+      if (got > max) throw new CopyFileTooLarge(`${path} grew over ${max} bytes`);
+      return Buffer.from(buffer.subarray(0, got));
     } catch (e) {
       if (gone(e)) return null;
       throw e;
@@ -219,16 +248,24 @@ export class CopyFolder {
     this.atomicWrite(join(link, "copy.md"), Buffer.from(markdown));
   }
 
+  private async existingLinkDir(linkId: string): Promise<string | null> {
+    if (!LINK_DIR.test(linkId)) throw refused();
+    return this.existingDir(join(this.base(), linkId));
+  }
+
+  /** copy.md, refused with CopyFileTooLarge over MAX_COPY_MARKDOWN_BYTES. */
   async readMarkdown(linkId: string): Promise<string | null> {
-    const link = this.linkDir(linkId, false);
-    const bytes = link && (await this.read(join(link, "copy.md")));
+    const link = await this.existingLinkDir(linkId);
+    const bytes = link && (await this.read(join(link, "copy.md"), MAX_COPY_MARKDOWN_BYTES));
     return bytes ? bytes.toString("utf8") : null;
   }
 
+  /** An image, refused with CopyFileTooLarge over MAX_IMAGE_BYTES. */
   async readImage(linkId: string, name: string): Promise<Uint8Array | null> {
     this.imageName(name);
-    const images = this.imagesDir(linkId, false);
-    return images ? await this.read(join(images, name)) : null;
+    const link = await this.existingLinkDir(linkId);
+    const images = link && (await this.existingDir(join(link, "images")));
+    return images ? await this.read(join(images, name), MAX_IMAGE_BYTES) : null;
   }
 
   /**

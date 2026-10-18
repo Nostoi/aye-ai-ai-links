@@ -7,6 +7,7 @@ import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
+import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
@@ -26,6 +27,7 @@ import {
 import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
+import type { SavedCopyReader } from "../core/saved-copy.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -66,6 +68,7 @@ import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allPage } from "./all-page.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
+import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -89,6 +92,12 @@ const SAVE_PAGE_HEADERS = { ...NO_STORE, "Content-Security-Policy": "frame-ances
 
 /** A link's stored preview image. The id must be digits; anything else is not this route. */
 export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
+
+/** The page for reading a link's saved copy. */
+export const COPY_ROUTE = "/links/:id{[0-9]+}/copy";
+
+/** A picture of a link's saved copy: `n` is one or two digits, as the copy numbers them. */
+export const COPY_IMAGE_ROUTE = "/links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}";
 
 /**
  * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
@@ -421,7 +430,13 @@ export function webApp({
 }: {
   deps: SearchLinksDeps &
     WorthDeps &
-    LinkCheckDeps & { images: LinkImageReader; edits: LinkEditStore; profile: ProfileStore };
+    LinkCheckDeps & {
+      images: LinkImageReader;
+      edits: LinkEditStore;
+      profile: ProfileStore;
+      savedCopies: SavedCopyReader;
+      readGate: ReadGate;
+    };
   auth: Auth;
   withAuthLock: WithAuthLock;
   /** What to show for a signed authorize query; without it there is no consent page. */
@@ -483,7 +498,10 @@ export function webApp({
       ...(gone ? [gone.id] : []),
     ]);
     const { spaces, catalog } = await homeSpaces(deps, owner);
-    const worth = { links, images, now: deps.now(), catalog, gone };
+    const goneCopy = gone
+      ? ((await deps.savedCopies.copyInfo(owner, [gone.id])).get(gone.id) ?? null)
+      : null;
+    const worth = { links, images, now: deps.now(), catalog, gone, goneCopy };
     const items = await listShelf(deps, owner);
     // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
     const shelfImages = await deps.images.imageVersions(
@@ -506,6 +524,10 @@ export function webApp({
       caller.owner,
       links.map((l) => l.id),
     );
+    const copies = await deps.savedCopies.copyInfo(
+      caller.owner,
+      links.map((l) => l.id),
+    );
     const pictures = await deps.images.pictureInfo(
       caller.owner,
       links.map((l) => l.id),
@@ -515,7 +537,18 @@ export function webApp({
     const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
     const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
     const now = (deps.now ?? (() => new Date()))();
-    const html = searchPage({ query, links, now, images, catalog, handy, gone, keep, pictures });
+    const html = searchPage({
+      query,
+      links,
+      now,
+      images,
+      catalog,
+      handy,
+      gone,
+      keep,
+      pictures,
+      copies,
+    });
     return c.html(html, 200, NO_STORE);
   });
 
@@ -538,6 +571,10 @@ export function webApp({
         owner,
         page.links.map((l) => l.id),
       );
+      const copies = await deps.savedCopies.copyInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
@@ -556,6 +593,7 @@ export function webApp({
         handy,
         gone,
         pictures,
+        copies,
         now: deps.now(),
         done,
         later,
@@ -589,6 +627,10 @@ export function webApp({
         page.links.map((l) => l.id),
       );
       const catalog = await deps.store.listTags(owner);
+      const copies = await deps.savedCopies.copyInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
@@ -607,6 +649,7 @@ export function webApp({
         handy,
         gone,
         pictures,
+        copies,
         now: deps.now(),
         done,
         later,
@@ -628,6 +671,30 @@ export function webApp({
     if (!image) return c.text("Not found.", 404, NO_STORE);
     const cached = c.req.query("v") === image.version;
     return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
+  });
+
+  // A picture that is not an `ok` image of the owner's copy answers the same 404 as `/images/:id`.
+  // Never cached: removing a copy must hide it at once.
+  const copies = createCopyReader({
+    store: deps.store,
+    copies: deps.savedCopies,
+    gate: deps.readGate,
+  });
+  app.get(COPY_ROUTE, session, async (c) => {
+    const view = await copies.view(c.get("caller").owner, c.req.param("id"));
+    if (view === null) return c.html(copyNotFoundPage(), 404, COPY_HEADERS);
+    const html = copyPage(view, (deps.now ?? (() => new Date()))());
+    return c.html(html, view.copy === "unreadable" ? 503 : 200, COPY_HEADERS);
+  });
+  app.get(COPY_IMAGE_ROUTE, session, async (c) => {
+    const image = await copies.image(
+      c.get("caller").owner,
+      c.req.param("id"),
+      Number(c.req.param("n")),
+    );
+    if (image === null) return c.text("Not found.", 404, NO_STORE);
+    if (image === "unreadable") return c.text("Unavailable.", 503, NO_STORE);
+    return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, false));
   });
 
   app.get("/connections", session, async (c) => {

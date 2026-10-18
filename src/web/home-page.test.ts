@@ -46,7 +46,12 @@ const render = (
   images = new Map<string, string>(),
   catalog: Tag[] = [],
   gone: Link | null = null,
-) => homePage({ worth: { links, images, now: NOW, catalog, gone }, shelf: "", spaces: "" });
+) =>
+  homePage({
+    worth: { links, images, now: NOW, catalog, gone, goneCopy: null },
+    shelf: "",
+    spaces: "",
+  });
 const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
@@ -512,7 +517,14 @@ describe("the home page's script", () => {
 
 it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
   const html = homePage({
-    worth: { links: [card([])], images: new Map(), now: NOW, catalog: [], gone: null },
+    worth: {
+      links: [card([])],
+      images: new Map(),
+      now: NOW,
+      catalog: [],
+      gone: null,
+      goneCopy: null,
+    },
     shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
     spaces: spacesSection([]),
   });
@@ -531,7 +543,7 @@ it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", 
 describe("Keep handy on a Worth a look card", () => {
   const withShelf = (links: DigestLink[]) =>
     homePage({
-      worth: { links, images: new Map(), now: NOW, catalog: [], gone: null },
+      worth: { links, images: new Map(), now: NOW, catalog: [], gone: null, goneCopy: null },
       shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
       spaces: "",
     });
@@ -547,7 +559,7 @@ describe("Keep handy on a Worth a look card", () => {
     const cards = [card([]), card([])];
     const id = cards[0]?.link.id as string;
     const onShelf = homePage({
-      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null },
+      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null, goneCopy: null },
       shelf: handyShelf({
         items: [
           {

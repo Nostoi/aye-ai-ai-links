@@ -14,9 +14,13 @@ function resolve(href: string, base: string): URL | null {
 
 /** The page's first `<base href>` when it resolves to http(s), else the final URL. */
 export function copyBase(doc: Document, finalUrl: string): string {
-  const href = doc.querySelector("base[href]")?.getAttribute("href");
-  const url = href ? resolve(href, finalUrl) : null;
-  return url && webUrl(url) ? url.href : finalUrl;
+  try {
+    const href = doc.querySelector("base[href]")?.getAttribute("href");
+    const url = href ? resolve(href, finalUrl) : null;
+    return url && webUrl(url) ? url.href : finalUrl;
+  } catch {
+    return finalUrl; // never throws: the child posts the metadata after this call
+  }
 }
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();

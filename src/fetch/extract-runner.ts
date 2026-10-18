@@ -1,5 +1,6 @@
 import { type ChildProcess, fork } from "node:child_process";
 import type { ExtractOutcome, PageExtractor, PageMetadata } from "../core/extract.js";
+import { type CopyDraft, isCopyDraft } from "../core/saved-copy.js";
 
 // Node runs the child from src/ under test and from dist/ in production.
 export const CHILD_ENTRY = new URL(
@@ -45,11 +46,17 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
   let tail: Promise<unknown> = Promise.resolve();
   const killers = new Set<() => void>();
 
-  function runOne(html: string, finalUrl: string, signal?: AbortSignal): Promise<ExtractOutcome> {
+  function runOne(
+    html: string,
+    finalUrl: string,
+    signal: AbortSignal | undefined,
+    wantCopy: boolean,
+  ): Promise<ExtractOutcome> {
     if (closed || signal?.aborted) return Promise.resolve({ kind: "aborted" });
     return new Promise((resolve) => {
       let metadata: PageMetadata | null = null;
       let text: string | null | undefined;
+      let copy: CopyDraft | null | undefined;
       let endedBy: EndedBy | undefined;
       let received = false;
       let stderr = "";
@@ -104,10 +111,12 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
       });
       spawned.on(
         "message",
-        (m: { type?: string; metadata?: PageMetadata; text?: string | null }) => {
+        (m: { type?: string; metadata?: PageMetadata; text?: string | null; copy?: unknown }) => {
           if (m.type === "received") received = true;
           if (m.type === "metadata" && m.metadata) metadata = m.metadata;
           if (m.type === "text") text = m.text ?? null;
+          if (m.type === "copy")
+            copy = m.copy === null ? null : isCopyDraft(m.copy) ? m.copy : undefined;
         },
       );
       spawned.on("disconnect", () => {
@@ -121,8 +130,11 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
         else stop("ipc");
       });
       spawned.on("close", (code, sig) => {
+        // Metadata and text in hand: any end, an abort or a lost channel included, is ok.
+        if (text !== undefined && metadata) {
+          return settle({ kind: "ok", metadata, text, ...(copy !== undefined && { copy }) });
+        }
         if (endedBy === "abort") return settle({ kind: "aborted" });
-        if (text !== undefined && metadata) return settle({ kind: "ok", metadata, text });
         if (!received) {
           // The page was never parsed, so this is the machine's fault, not the content's.
           const cause =
@@ -146,7 +158,7 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
         settle({ kind: "crashed", metadata, detail });
       });
       try {
-        spawned.send({ html, finalUrl }, (err) => {
+        spawned.send({ html, finalUrl, copy: wantCopy }, (err) => {
           if (err) stop("ipc");
         });
       } catch {
@@ -156,9 +168,9 @@ export function createChildExtractor(options: ChildExtractorOptions = {}): PageE
   }
 
   return {
-    extract(html, finalUrl, signal) {
+    extract(html, finalUrl, signal, options) {
       const ahead = tail;
-      const mine = ahead.then(() => runOne(html, finalUrl, signal));
+      const mine = ahead.then(() => runOne(html, finalUrl, signal, options?.copy === true));
       tail = mine;
       return mine;
     },

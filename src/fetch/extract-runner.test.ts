@@ -1,6 +1,8 @@
 import { execFileSync, fork } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PageExtractor } from "../core/extract.js";
+import { isCopyDraft } from "../core/saved-copy.js";
 import { CHILD_ENTRY, createChildExtractor } from "./extract-runner.js";
 
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url);
@@ -11,6 +13,7 @@ const SLOW_TEXT = `<title>Parsed fast</title><body>${"<div>".repeat(190)}<p>${"w
 // it fires is reported `spawn_failed`, not `timeout`. Idle start-up is 40-80 ms; this leaves room
 // for a machine under heavy load.
 const DEADLINE_MS = 2000;
+const ARTICLE_PAGE = readFileSync(fixture("nodejs-22-announcement.html"), "utf8");
 const DIV400K = `<title>Hostile</title><body>${"<div>".repeat(400_000)}`;
 
 function alive(pid: number): boolean {
@@ -312,4 +315,100 @@ describe("child extractor: process management", () => {
     expect(await extractor.extract(PAGE, URL0)).toEqual({ kind: "aborted" });
     expect(pids).toHaveLength(1);
   }, 20_000);
+});
+
+describe("child extractor: the saved copy", () => {
+  const median = (xs: number[]) =>
+    [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] as number;
+
+  it("sends a copy that isCopyDraft accepts when asked", async () => {
+    const out = await make().extract(ARTICLE_PAGE, "https://nodejs.org/en/blog/x", undefined, {
+      copy: true,
+    });
+    expect(out.kind).toBe("ok");
+    const copy = out.kind === "ok" ? out.copy : undefined;
+    expect(isCopyDraft(copy)).toBe(true);
+    expect(copy?.markdown).toMatch(/^#+ /m);
+  }, 30_000);
+
+  it("sends no copy key, and only received, metadata, text, when not asked", async () => {
+    const out = await make().extract(ARTICLE_PAGE, URL0);
+    expect(out.kind).toBe("ok");
+    expect("copy" in out).toBe(false);
+    const child = fork(CHILD_ENTRY, {
+      serialization: "advanced",
+      env: {},
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    });
+    const got: string[] = [];
+    const ended = new Promise((resolve) => child.on("exit", resolve));
+    child.on("message", (m: { type: string }) => got.push(m.type));
+    child.send({ html: PAGE, finalUrl: URL0 });
+    await ended;
+    expect(got).toEqual(["received", "metadata", "text"]);
+  }, 30_000);
+
+  it("gives copy null for a page with no article", async () => {
+    const out = await make().extract("<title>T</title><body></body>", URL0, undefined, {
+      copy: true,
+    });
+    expect(out).toMatchObject({ kind: "ok", text: null, copy: null });
+  }, 30_000);
+
+  it("is ok without a copy when the caller aborts after the text", async () => {
+    const controller = new AbortController();
+    const out = await make({
+      deadlineMs: 15_000,
+      childEntry: fixture("child-copy-hang.mjs"),
+      onStderr: (c) => c.toString().includes("text-sent") && controller.abort(),
+    }).extract(PAGE, URL0, controller.signal, { copy: true });
+    expect(out).toMatchObject({ kind: "ok", text: "Kept text" });
+    expect("copy" in out).toBe(false);
+  }, 20_000);
+
+  it("is ok without a copy when the deadline passes after the text", async () => {
+    const out = await make({
+      deadlineMs: 500,
+      childEntry: fixture("child-copy-hang.mjs"),
+    }).extract(PAGE, URL0, undefined, { copy: true });
+    expect(out).toMatchObject({ kind: "ok", text: "Kept text" });
+    expect("copy" in out).toBe(false);
+  }, 20_000);
+
+  it("is ok without a copy when close() comes after the text, and later work is aborted", async () => {
+    const extractor: PageExtractor = make({
+      deadlineMs: 15_000,
+      childEntry: fixture("child-copy-hang.mjs"),
+      onStderr: (c) => c.toString().includes("text-sent") && void extractor.close(),
+    });
+    const out = await extractor.extract(PAGE, URL0, undefined, { copy: true });
+    expect(out).toMatchObject({ kind: "ok", text: "Kept text" });
+    expect("copy" in out).toBe(false);
+    expect(await extractor.extract(PAGE, URL0)).toEqual({ kind: "aborted" });
+  }, 20_000);
+
+  it("drops a copy with a bad shape and stays ok", async () => {
+    const out = await make({ childEntry: fixture("child-copy-bad.mjs") }).extract(
+      PAGE,
+      URL0,
+      undefined,
+      { copy: true },
+    );
+    expect(out).toMatchObject({ kind: "ok", text: "Kept text" });
+    expect("copy" in out).toBe(false);
+  }, 20_000);
+
+  it("adds less than 2 s to a save (median of three, alternating)", async () => {
+    const extractor = make();
+    const times = { off: [] as number[], on: [] as number[] };
+    for (let i = 0; i < 3; i++) {
+      for (const copy of [false, true]) {
+        const t0 = performance.now();
+        const out = await extractor.extract(ARTICLE_PAGE, URL0, undefined, { copy });
+        expect(out.kind).toBe("ok");
+        times[copy ? "on" : "off"].push(performance.now() - t0);
+      }
+    }
+    expect(median(times.on) - median(times.off)).toBeLessThan(2000);
+  }, 120_000);
 });

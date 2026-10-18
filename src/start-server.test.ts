@@ -986,7 +986,9 @@ describe("startServer", () => {
         db.close();
       }
       vi.spyOn(console, "error").mockImplementation(() => {});
-      await expect(startWith(ON(), {})).rejects.toThrow(/saved_copy_images/);
+      const pipeline = fakePipeline();
+      await expect(startWith(ON(), pipeline)).rejects.toThrow(/saved_copy_images/);
+      expect(pipeline.closed).toEqual({ fetcher: 1, extractor: 1 });
       const back = openDatabase(dbPath);
       try {
         back.exec(ddl);

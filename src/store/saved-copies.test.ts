@@ -573,6 +573,26 @@ describe("sweep", () => {
     expect(existsSync(join(root, "12", "copy.md"))).toBe(true);
   });
 
+  it("stays fast with thousands of copies, since it looks rows up once", async () => {
+    const { db, root, copies } = await ready();
+    db.pragma("foreign_keys = OFF");
+    const ids = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3000)";
+    db.exec(
+      `${ids} INSERT INTO saved_copies (owner_id, link_id, status, made_at, md_bytes, bytes)
+         SELECT 'o', i + 1000, 'ok', 1, 1, 1 FROM n`,
+    );
+    db.exec(
+      `${ids}, k(j) AS (SELECT 1 UNION ALL SELECT j + 1 FROM k WHERE j < 10)
+         INSERT INTO saved_copy_images (owner_id, link_id, n, url, status, content_type, size, sha256)
+         SELECT 'o', i + 1000, j, 'u', 'ok', 'image/png', 1, 'x' FROM n, k`,
+    );
+    for (let i = 1001; i <= 4000; i++) mkdirSync(join(root, String(i)));
+    const started = performance.now();
+    const report = await copies.sweep(HOUR, new Date());
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(report.folders).toBe(0);
+  });
+
   it("does nothing, and does not throw, when the root is gone", async () => {
     const { root, copies } = await ready();
     rmSync(root, { recursive: true });

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Database, Statement } from "better-sqlite3";
+import type { Database } from "better-sqlite3";
 import type { ImageType } from "../core/fetch.js";
 import { type ImageBytes, imageVersion, type StoredImage } from "../core/image-store.js";
 import {
@@ -345,12 +345,25 @@ export class SqliteSavedCopyStore
       return report;
     }
     const idle = (mtimeMs: number) => now.getTime() - mtimeMs > graceMs;
-    const hasCopy = this.db.prepare(
-      "SELECT 1 FROM saved_copies WHERE link_id = ? AND status IN ('saving', 'ok', 'removed')",
+    const hasCopy = new Set(
+      this.db
+        .prepare(
+          "SELECT DISTINCT link_id FROM saved_copies WHERE status IN ('saving', 'ok', 'removed')",
+        )
+        .pluck()
+        .all() as number[],
     );
-    const keep = this.db.prepare(
-      "SELECT n, content_type FROM saved_copy_images WHERE link_id = ? AND status IN ('saving', 'ok')",
-    );
+    const keep = new Map<number, Set<string>>();
+    const kept = this.db
+      .prepare(
+        "SELECT link_id, n, content_type FROM saved_copy_images WHERE status IN ('saving', 'ok')",
+      )
+      .all() as { link_id: number; n: number; content_type: ImageType }[];
+    for (const i of kept) {
+      const names = keep.get(i.link_id) ?? new Set<string>();
+      names.add(imageName(i.n, i.content_type));
+      keep.set(i.link_id, names);
+    }
     for (const { name, mtimeMs } of listing.links) {
       // A name that is not a link id's canonical form (`007`) is never ours to delete.
       if (name !== String(Number(name))) {
@@ -358,8 +371,8 @@ export class SqliteSavedCopyStore
         continue;
       }
       try {
-        if (hasCopy.get(Number(name))) {
-          this.sweepFolder(name, keep, report);
+        if (hasCopy.has(Number(name))) {
+          this.sweepFolder(name, keep.get(Number(name)) ?? new Set(), report);
         } else if (idle(mtimeMs)) {
           const left = this.folder.removeCopy(name);
           report.folders++;
@@ -397,12 +410,7 @@ export class SqliteSavedCopyStore
   }
 
   /** A folder with a row: images the ledger does not hold are deleted, other names reported. */
-  private sweepFolder(name: string, keep: Statement, report: SweepReport): void {
-    const wanted = new Set(
-      (keep.all(Number(name)) as { n: number; content_type: ImageType }[]).map((i) =>
-        imageName(i.n, i.content_type),
-      ),
-    );
+  private sweepFolder(name: string, wanted: Set<string>, report: SweepReport): void {
     for (const file of this.folder.listImages(name)) {
       if (wanted.has(file)) continue;
       this.folder.removeImage(name, file);

@@ -556,6 +556,7 @@ describe("Keep handy on a Worth a look card", () => {
               waitDays: 30,
             },
             due: false,
+            gone: false,
           },
         ],
         suggestions: [],

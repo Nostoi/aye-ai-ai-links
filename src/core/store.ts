@@ -111,12 +111,19 @@ export interface LinkStore {
    * with the value it replaced. Core supplies the cutoffs, as with updateTag's `expectedKind`.
    * Foreign, unknown, malformed and no-longer-eligible ids are skipped, never an error; an id
    * given twice is claimed once. With `exceptKeptTools`, a link whose Keep handy row is `kept` is
-   * skipped too, judged in the same step; core says when (the digest's reading picks). On an error nothing is written.
+   * skipped too; with `exceptGone`, a link flagged as gone by its dead-link check (#128) is. Both
+   * are judged in the same step; core says when (the digest's picks). On an error nothing is written.
    */
   claimSurfaced(
     owner: OwnerId,
     ids: string[],
-    when: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
+    when: {
+      at: Date;
+      notSurfacedAfter: Date;
+      now: Date;
+      exceptKeptTools?: boolean;
+      exceptGone?: boolean;
+    },
   ): Promise<SurfacedClaim[]>;
 
   unclaimSurfaced(

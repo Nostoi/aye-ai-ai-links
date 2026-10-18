@@ -9,6 +9,14 @@ import {
   type PictureInfo,
   type StoredImage,
 } from "./image-store.js";
+import {
+  type CheckCutoffs,
+  type CheckWrite,
+  type DueCheck,
+  type LinkCheck,
+  type LinkCheckStore,
+  sameCheck,
+} from "./link-check-store.js";
 import type { LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js";
 import {
   hasConsistentSchedule,
@@ -51,7 +59,14 @@ const stored = (own: OwnRecord): StoredImage => ({
 
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
 export class FakeStore
-  implements LinkStore, SnapshotStore, ToolStore, ImageStore, LinkImageReader, LinkEditStore
+  implements
+    LinkStore,
+    SnapshotStore,
+    ToolStore,
+    LinkCheckStore,
+    ImageStore,
+    LinkImageReader,
+    LinkEditStore
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -65,6 +80,7 @@ export class FakeStore
   private ownerImages = new Map<string, OwnRecord>();
   private editRecords = new Map<string, EditRecord>();
   private toolRows = new Map<OwnerId, Map<string, ToolRecord>>();
+  private checkRows = new Map<OwnerId, Map<string, LinkCheck>>();
   private nextId = 1;
 
   private owned(owner: OwnerId): Map<string, Link> {
@@ -335,6 +351,59 @@ export class FakeStore
     return [...this.owned(owner).values()].map((l) => this.view(owner, l));
   }
 
+  async dueChecks(cutoffs: CheckCutoffs, limit: number): Promise<DueCheck[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const due: (DueCheck & { last: number })[] = [];
+    for (const [owner, mine] of this.links) {
+      for (const link of mine.values()) {
+        const last = (this.checkRows.get(owner)?.get(link.id)?.checkedAt ?? link.savedAt).getTime();
+        const cutoff = link.state === "active" ? cutoffs.active : cutoffs.archived;
+        if (last <= cutoff.getTime()) due.push({ owner, linkId: link.id, url: link.url, last });
+      }
+    }
+    due.sort((a, b) => a.last - b.last || order(a.linkId) - order(b.linkId));
+    return due.slice(0, limit).map(({ owner, linkId, url }) => ({ owner, linkId, url }));
+  }
+
+  async getCheck(owner: OwnerId, linkId: string) {
+    const check = this.checkRows.get(owner)?.get(linkId);
+    return check ? structuredClone(check) : null;
+  }
+
+  async listChecks(owner: OwnerId) {
+    const mine = this.checkRows.get(owner) ?? new Map<string, LinkCheck>();
+    return new Map<string, LinkCheck>([...mine].map(([id, c]) => [id, structuredClone(c)]));
+  }
+
+  async updateCheckIf(
+    owner: OwnerId,
+    linkId: string,
+    expected: LinkCheck | null,
+    next: LinkCheck,
+  ): Promise<CheckWrite | null> {
+    if (!this.owned(owner).has(linkId)) return null;
+    let mine = this.checkRows.get(owner);
+    if (!mine) {
+      mine = new Map();
+      this.checkRows.set(owner, mine);
+    }
+    const current = mine.get(linkId) ?? null;
+    if (!sameCheck(current, expected)) {
+      return { check: current && structuredClone(current), applied: false };
+    }
+    // What the table refuses (its CHECK, and `toMs` on an invalid date), refused before any write.
+    if (next.flaggedAt !== null && next.firstDeadAt === null) {
+      throw new Error("A check cannot be flagged without a first dead check.");
+    }
+    for (const d of [next.checkedAt, next.firstDeadAt, next.flaggedAt, next.stillWorksAt]) {
+      if (d !== null && !Number.isFinite(d.getTime())) {
+        throw new RangeError("Cannot store an invalid date.");
+      }
+    }
+    mine.set(linkId, structuredClone(next));
+    return { check: structuredClone(next), applied: true };
+  }
+
   async claimSurfaced(
     owner: OwnerId,
     ids: string[],
@@ -343,7 +412,14 @@ export class FakeStore
       notSurfacedAfter,
       now,
       exceptKeptTools,
-    }: { at: Date; notSurfacedAfter: Date; now: Date; exceptKeptTools?: boolean },
+      exceptGone,
+    }: {
+      at: Date;
+      notSurfacedAfter: Date;
+      now: Date;
+      exceptKeptTools?: boolean;
+      exceptGone?: boolean;
+    },
   ): Promise<SurfacedClaim[]> {
     const claimed: SurfacedClaim[] = [];
     for (const id of new Set(ids)) {
@@ -352,6 +428,7 @@ export class FakeStore
         found?.state !== "active" ||
         (found.snoozedUntil !== null && found.snoozedUntil > now) ||
         (exceptKeptTools === true && this.toolRows.get(owner)?.get(id)?.status === "kept") ||
+        (exceptGone === true && (this.checkRows.get(owner)?.get(id)?.flaggedAt ?? null) !== null) ||
         (found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
       ) {
         continue;

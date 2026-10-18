@@ -45,7 +45,7 @@ function legacy(): Db {
 
 describe("the owner_images and link_edits migration, from the version before it", () => {
   it("is migration 13, adds both tables empty and leaves link_images as it was", () => {
-    expect(MIGRATIONS).toHaveLength(EDIT_MIGRATION + 1);
+    expect(MIGRATIONS[EDIT_MIGRATION]).toContain("CREATE TABLE owner_images");
     const db = legacy();
     const fetched = db.prepare("SELECT * FROM link_images").all();
     migrate(db);

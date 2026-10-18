@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
 import { FakeStore } from "./fake-store.js";
+import type { LinkCheck } from "./link-check-store.js";
 import { recordOpening, updateLink } from "./links.js";
 import { A, B, newLink } from "./snapshot-store-contract.js";
 import type { ToolRecord, ToolStore } from "./tool-store.js";
@@ -68,60 +69,75 @@ describe("clockStart", () => {
 describe("isDue", () => {
   it("is due at 30 days and not at 29, nor a millisecond before 30", () => {
     const l = linkWith();
-    expect(isDue(l, tool(), day(29))).toBe(false);
-    expect(isDue(l, tool(), new Date(day(30).getTime() - 1))).toBe(false);
-    expect(isDue(l, tool(), day(30))).toBe(true);
+    expect(isDue(l, tool(), null, day(29))).toBe(false);
+    expect(isDue(l, tool(), null, new Date(day(30).getTime() - 1))).toBe(false);
+    expect(isDue(l, tool(), null, day(30))).toBe(true);
   });
 
   it("uses the stored wait from the last answer when nothing was opened since", () => {
     const t = tool({ answeredAt: day(30), waitDays: 60 });
-    expect(isDue(linkWith({ lastOpenedAt: day(10) }), t, day(89))).toBe(false);
-    expect(isDue(linkWith({ lastOpenedAt: day(10) }), t, day(90))).toBe(true);
+    expect(isDue(linkWith({ lastOpenedAt: day(10) }), t, null, day(89))).toBe(false);
+    expect(isDue(linkWith({ lastOpenedAt: day(10) }), t, null, day(90))).toBe(true);
   });
 
   it("an opening since the last check brings the wait back to 30 days from that opening", () => {
     const t = tool({ answeredAt: day(90), waitDays: 120 });
     const opened = linkWith({ lastOpenedAt: day(100) });
     expect(currentWaitDays(opened, t)).toBe(30);
-    expect(isDue(opened, t, day(129))).toBe(false);
-    expect(isDue(opened, t, day(130))).toBe(true);
+    expect(isDue(opened, t, null, day(129))).toBe(false);
+    expect(isDue(opened, t, null, day(130))).toBe(true);
   });
 
   it("an opening in the same millisecond as the last answer counts as since", () => {
     const t = tool({ answeredAt: day(30), waitDays: 60 });
     const opened = linkWith({ lastOpenedAt: day(30) });
     expect(currentWaitDays(opened, t)).toBe(30);
-    expect(isDue(opened, t, day(60))).toBe(true);
+    expect(isDue(opened, t, null, day(60))).toBe(true);
   });
 
   it("an opening in the same millisecond as a fresh keep leaves the first wait of 30", () => {
     const opened = linkWith({ lastOpenedAt: day(0) });
     expect(currentWaitDays(opened, tool())).toBe(30);
-    expect(isDue(opened, tool(), day(29))).toBe(false);
-    expect(isDue(opened, tool(), day(30))).toBe(true);
+    expect(isDue(opened, tool(), null, day(29))).toBe(false);
+    expect(isDue(opened, tool(), null, day(30))).toBe(true);
   });
 
   it("an opening before the last check leaves the stored wait", () => {
     const t = tool({ answeredAt: day(90), waitDays: 120 });
     const opened = linkWith({ lastOpenedAt: day(80) });
     expect(currentWaitDays(opened, t)).toBe(120);
-    expect(isDue(opened, t, day(209))).toBe(false);
-    expect(isDue(opened, t, day(210))).toBe(true);
+    expect(isDue(opened, t, null, day(209))).toBe(false);
+    expect(isDue(opened, t, null, day(210))).toBe(true);
   });
 
   it("is never due for an archived link, a suggestion, a declined link or a link with no row", () => {
     const late = day(1000);
-    expect(isDue(linkWith({ state: "archived" }), tool(), late)).toBe(false);
-    expect(isDue(linkWith(), tool({ status: "suggested", source: "inferred" }), late)).toBe(false);
-    expect(isDue(linkWith(), tool({ status: "declined" }), late)).toBe(false);
-    expect(isDue(linkWith(), null, late)).toBe(false);
+    expect(isDue(linkWith({ state: "archived" }), tool(), null, late)).toBe(false);
+    expect(isDue(linkWith(), tool({ status: "suggested", source: "inferred" }), null, late)).toBe(
+      false,
+    );
+    expect(isDue(linkWith(), tool({ status: "declined" }), null, late)).toBe(false);
+    expect(isDue(linkWith(), null, null, late)).toBe(false);
+  });
+
+  it("is never due for a gone link, however long its wait ran out; a dead link not yet flagged still is (#128)", () => {
+    const dead: LinkCheck = {
+      checkedAt: day(29),
+      result: "dead",
+      detail: "http:404",
+      firstDeadAt: day(29),
+      flaggedAt: null,
+      stillWorksAt: null,
+    };
+    expect(isDue(linkWith(), tool(), { ...dead, flaggedAt: day(36) }, day(1000))).toBe(false);
+    expect(isDue(linkWith(), tool(), dead, day(30))).toBe(true);
   });
 });
 
 let store: FakeStore;
 let clock: Date;
 let n = 0;
-const deps = () => ({ store, tools: store, now: () => clock });
+const deps = () => ({ store, tools: store, checks: store, now: () => clock });
 
 beforeEach(() => {
   store = new FakeStore();
@@ -133,6 +149,17 @@ const saved = async (owner = A): Promise<string> =>
 /** Puts a row in place directly, for a starting state the rules would take days to reach. */
 const put = async (id: string, row: ToolRecord) => {
   await store.updateToolIf(A, id, await store.getTool(A, id), row);
+};
+/** Flags the link as gone, as two dead checks a week apart would. */
+const flag = async (id: string, owner = A) => {
+  await store.updateCheckIf(owner, id, null, {
+    checkedAt: day(1),
+    result: "dead",
+    detail: "http:404",
+    firstDeadAt: day(-6),
+    flaggedAt: day(1),
+    stillWorksAt: null,
+  });
 };
 
 async function code(p: Promise<unknown>): Promise<string> {
@@ -181,7 +208,7 @@ describe("keepHandy", () => {
     expect((await keepHandy(deps(), A, declined, "stated")).tool).toEqual(tool({ since: day(40) }));
     for (const id of [suggested, declined]) {
       const link = (await store.get(A, id)) as Link;
-      expect(isDue(link, await store.getTool(A, id), day(40))).toBe(false);
+      expect(isDue(link, await store.getTool(A, id), null, day(40))).toBe(false);
     }
   });
 
@@ -193,7 +220,7 @@ describe("keepHandy", () => {
     expect((await keepHandy(deps(), A, id, "asked")).tool).toEqual(kept);
     expect(await store.getTool(A, id)).toEqual(kept);
     const link = (await store.get(A, id)) as Link;
-    expect(isDue(link, await store.getTool(A, id), day(70))).toBe(false);
+    expect(isDue(link, await store.getTool(A, id), null, day(70))).toBe(false);
   });
 
   it("an inferred keep suggests a link with no row, and never overrides kept or declined", async () => {
@@ -281,8 +308,15 @@ describe("stillUsing", () => {
     clock = day(d);
     return (await stillUsing(deps(), A, id, "stated")).tool;
   };
+  it("still doubles a wait that ran out on a gone tool: the wait is the tool's own (#128)", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    await flag(id);
+    expect(await answer(id, 30)).toEqual(tool({ answeredAt: day(30), waitDays: 60 }));
+  });
+
   const due = async (id: string, d: number) =>
-    isDue((await store.get(A, id)) as Link, await store.getTool(A, id), day(d));
+    isDue((await store.get(A, id)) as Link, await store.getTool(A, id), null, day(d));
 
   it("doubles the wait 30, 60, 120 and caps it, when nothing was opened", async () => {
     const id = await saved();
@@ -484,6 +518,22 @@ describe("handy views", () => {
   };
   const linkOf = async (id: string) => (await store.get(A, id)) as Link;
 
+  it("gives a gone kept tool due false, in one link's view and in the list (#128)", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    await flag(id);
+    clock = day(30);
+    const link = await linkOf(id);
+    expect(await handyOf(deps(), A, link)).toEqual({
+      status: "kept",
+      source: "stated",
+      due: false,
+    });
+    expect(await handyOfLinks(deps(), A, [link])).toEqual(
+      new Map([[id, { status: "kept", source: "stated", due: false }]]),
+    );
+  });
+
   it("gives each link its status, source and due flag in one read, and null without a row", async () => {
     const due = await saved();
     const fresh = await saved();
@@ -500,7 +550,7 @@ describe("handy views", () => {
     await notHandy(deps(), A, declined, "stated");
     const links = await Promise.all([due, fresh, suggested, declined, archived, none].map(linkOf));
     const { tools, calls } = counted();
-    expect(await handyOfLinks({ tools, now: () => clock }, A, links)).toEqual(
+    expect(await handyOfLinks({ tools, checks: store, now: () => clock }, A, links)).toEqual(
       new Map([
         [due, { status: "kept", source: "stated", due: true }],
         [fresh, { status: "kept", source: "asked", due: false }],
@@ -511,6 +561,24 @@ describe("handy views", () => {
       ]),
     );
     expect(calls).toEqual(["listTools"]);
+  });
+
+  it("reads the check for a link with a tool row, and not for one without", async () => {
+    const withTool = await saved();
+    const ordinary = await saved();
+    await keepHandy(deps(), A, withTool, "stated");
+    const reads: string[] = [];
+    const checks = Object.assign(Object.create(store) as FakeStore, {
+      getCheck: async (...a: Parameters<FakeStore["getCheck"]>) => {
+        reads.push(a[1]);
+        return store.getCheck(...a);
+      },
+    });
+    const spied = { ...deps(), checks };
+    expect(await handyOf(spied, A, await linkOf(ordinary))).toBeNull();
+    expect(reads).toEqual([]);
+    expect(await handyOf(spied, A, await linkOf(withTool))).not.toBeNull();
+    expect(reads).toEqual([withTool]);
   });
 
   it("gives one link's view, and null for another owner's link", async () => {
@@ -524,6 +592,32 @@ describe("handy views", () => {
 });
 
 describe("listShelf", () => {
+  it("marks a gone tool gone and not due, and keeps its normal place on the shelf (#128)", async () => {
+    const plain = await saved();
+    const due = await saved();
+    const gone = await saved();
+    for (const id of [plain, due, gone]) await keepHandy(deps(), A, id, "stated");
+    await store.update(A, plain, { lastOpenedAt: day(20) });
+    await store.update(A, gone, { lastOpenedAt: day(25) });
+    await flag(gone);
+    clock = day(31);
+    const shelf = await listShelf(deps(), A);
+    expect(shelf.map((s) => [s.link.id, s.due, s.gone])).toEqual([
+      [due, true, false],
+      [gone, false, true],
+      [plain, false, false],
+    ]);
+  });
+
+  it("does not mark a gone tool due when its wait has run out (#128)", async () => {
+    const gone = await saved();
+    await keepHandy(deps(), A, gone, "stated");
+    await flag(gone);
+    clock = day(31);
+    const shelf = await listShelf(deps(), A);
+    expect(shelf.map((s) => [s.link.id, s.due, s.gone])).toEqual([[gone, false, true]]);
+  });
+
   it("lists kept tools on active links: due tools first, then opened newest first, then never-opened by since, newest first", async () => {
     const [opened5, opened9, never2, never7, archived, suggested, declined] = [
       await saved(),

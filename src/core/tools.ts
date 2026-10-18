@@ -1,4 +1,6 @@
 import { CoreError } from "./errors.js";
+import { isGone } from "./link-check.js";
+import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import { notFound } from "./links.js";
 import type { LinkStore } from "./store.js";
 import type { ToolRecord, ToolStore, WaitDays } from "./tool-store.js";
@@ -37,13 +39,32 @@ export function currentWaitDays(link: Link, tool: ToolRecord): WaitDays {
   return openedSinceCheck(link, tool) ? FIRST_WAIT_DAYS : tool.waitDays;
 }
 
-/** A kept tool on an active link whose current wait has run out since its clock start. */
-export function isDue(link: Link, tool: ToolRecord | null, now: Date): boolean {
+/**
+ * A kept tool on an active link whose current wait has run out since its clock start. The wait
+ * alone: `stillUsing` doubles on it, gone or not. Readers asking whether to show "Still using it?"
+ * use `isDue`.
+ */
+export function waitRanOut(link: Link, tool: ToolRecord | null, now: Date): boolean {
   if (tool?.status !== "kept" || link.state !== "active") return false;
   return now.getTime() - clockStart(link, tool).getTime() >= currentWaitDays(link, tool) * DAY_MS;
 }
 
-export type ToolsDeps = { store: LinkStore; tools: ToolStore; now: () => Date };
+/** Due for "Still using it?": its wait ran out and the link isn't gone, since the dead check replaces that question (#128). */
+export function isDue(
+  link: Link,
+  tool: ToolRecord | null,
+  check: LinkCheck | null,
+  now: Date,
+): boolean {
+  return !isGone(check) && waitRanOut(link, tool, now);
+}
+
+export type ToolsDeps = {
+  store: LinkStore;
+  tools: ToolStore;
+  checks: LinkCheckStore;
+  now: () => Date;
+};
 
 /** What a tool action did: the row it wrote, and the row it replaced (null: there was none). */
 export type ToolChange = { tool: ToolRecord; previous: ToolRecord | null };
@@ -163,7 +184,7 @@ export async function stillUsing(
     }
     const waitDays = openedSinceCheck(link, current)
       ? FIRST_WAIT_DAYS
-      : isDue(link, current, now)
+      : waitRanOut(link, current, now)
         ? DOUBLED[current.waitDays]
         : current.waitDays;
     return { ...current, answeredAt: now, waitDays };
@@ -218,34 +239,44 @@ export async function restoreTool(
 /** A link's Keep handy state as the doors show it; null for an ordinary link. */
 export type HandyView = { status: ToolStatus; source: Source; due: boolean };
 
-export function handyView(link: Link, tool: ToolRecord | null, now: Date): HandyView | null {
-  return tool && { status: tool.status, source: tool.source, due: isDue(link, tool, now) };
+export function handyView(
+  link: Link,
+  tool: ToolRecord | null,
+  check: LinkCheck | null,
+  now: Date,
+): HandyView | null {
+  return tool && { status: tool.status, source: tool.source, due: isDue(link, tool, check, now) };
 }
 
 /** One link's view. Another owner's link has no row for `owner`, so it gets null. */
 export async function handyOf(
-  deps: Pick<ToolsDeps, "tools" | "now">,
+  deps: Pick<ToolsDeps, "tools" | "checks" | "now">,
   owner: OwnerId,
   link: Link,
 ): Promise<HandyView | null> {
-  return handyView(link, await deps.tools.getTool(owner, link.id), deps.now());
+  const tool = await deps.tools.getTool(owner, link.id);
+  if (!tool) return null;
+  return handyView(link, tool, await deps.checks.getCheck(owner, link.id), deps.now());
 }
 
-/** Each link's view by id, from one read of the owner's rows. */
+/** Each link's view by id, from one read of the owner's tool rows and one of their check rows. */
 export async function handyOfLinks(
-  deps: Pick<ToolsDeps, "tools" | "now">,
+  deps: Pick<ToolsDeps, "tools" | "checks" | "now">,
   owner: OwnerId,
   links: Link[],
 ): Promise<Map<string, HandyView | null>> {
   const tools = await deps.tools.listTools(owner);
+  const checks = await deps.checks.listChecks(owner);
   const now = deps.now();
-  return new Map(links.map((l) => [l.id, handyView(l, tools.get(l.id) ?? null, now)]));
+  return new Map(
+    links.map((l) => [l.id, handyView(l, tools.get(l.id) ?? null, checks.get(l.id) ?? null, now)]),
+  );
 }
 
 /** A tool row with its link. */
 export type ToolItem = { link: Link; tool: ToolRecord };
-/** A tile on the Handy shelf. */
-export type ShelfItem = ToolItem & { due: boolean };
+/** A tile on the Handy shelf. `gone`: its link seems gone, so it is asked about as gone, never as due. */
+export type ShelfItem = ToolItem & { due: boolean; gone: boolean };
 
 /** The owner's active links whose row has `status`, in the store's link order. */
 async function toolItems(deps: ToolsDeps, owner: OwnerId, status: ToolStatus): Promise<ToolItem[]> {
@@ -269,16 +300,17 @@ function shelfOrder(a: ToolItem, b: ToolItem): number {
 }
 
 /**
- * The Handy shelf: every kept tool on an active link, each with its due flag. Due tools come
- * first (owner ruling 2026-10-16), so a tool asking "Still using?" is never cut from view; within
- * each group, shelf order.
+ * The Handy shelf: every kept tool on an active link, each with its due and gone flags. Due
+ * tools come first (owner ruling 2026-10-16; #128), so a tile asking something is never cut
+ * from view; within each group, shelf order.
  */
 export async function listShelf(deps: ToolsDeps, owner: OwnerId): Promise<ShelfItem[]> {
   const now = deps.now();
-  const items = (await toolItems(deps, owner, "kept")).map((i) => ({
-    ...i,
-    due: isDue(i.link, i.tool, now),
-  }));
+  const checks = await deps.checks.listChecks(owner);
+  const items = (await toolItems(deps, owner, "kept")).map((i) => {
+    const check = checks.get(i.link.id) ?? null;
+    return { ...i, due: isDue(i.link, i.tool, check, now), gone: isGone(check) };
+  });
   return items.sort((a, b) => Number(b.due) - Number(a.due) || shelfOrder(a, b));
 }
 

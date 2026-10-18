@@ -1,8 +1,6 @@
 import type { Link } from "../core/types.js";
+import { isWebUrl } from "../core/url-key.js";
 import { escapeHtml } from "./page.js";
-
-/** Only web links are made clickable; anything else is shown as text. */
-export const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * A saved web link, opening in a new tab. `data-open` lets the page's `openedScript` record the

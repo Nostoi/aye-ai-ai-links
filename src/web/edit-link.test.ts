@@ -195,7 +195,7 @@ describe("the card menu and the card data", () => {
       waitDays: 30,
     } as const;
     const html = handyShelf({
-      items: [{ link: link("1"), tool, due: false }],
+      items: [{ link: link("1"), tool, due: false, gone: false }],
       suggestions: [],
       catalog: [KITCHEN],
       images: new Map(),

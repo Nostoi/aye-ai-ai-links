@@ -39,6 +39,7 @@ const kept = (over: Partial<Link> = {}, due = false): ShelfItem => ({
   link: link(over),
   tool: row("kept"),
   due,
+  gone: false,
 });
 const suggested = (over: Partial<Link> = {}): ToolItem => ({
   link: link(over),

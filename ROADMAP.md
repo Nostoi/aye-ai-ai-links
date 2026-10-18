@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-17:** Dead-link checks (#128). Owner rulings, 2026-10-17, recorded in #128 comment 6241000784, which is binding.
+  - **The design** is `docs/specs/2026-10-17-dead-link-checks-design.md`. It implements those rulings by reference and lands in two PRs: first the store, rules, runner and checker, then the doors (MCP, the web page and the routes). PR 1 updates the README for what it ships: the checks, gone pages leaving the digest and Worth a look, and gone tools not asked "Still using it?".
+  - **Its assumptions are settled.** A3 (It still works clears the streak as well as the flag) and the amber tile for a gone tool on the Handy shelf are owner rulings. A1, A2 and A4 to A7 are controller rulings, accepted as written. All are dated 2026-10-17.
+  - **Undo of It still works refuses a row no check could have written** (controller ruling): besides the spec's three refusals, an unflagged row, or any date that is invalid or later than now. **After a store error the runner waits an hour** before its next sweep (controller ruling).
+
 - **2026-10-17:** The bookmarklet and the Save page (#129). Owner rulings, 2026-10-17 (#129 comment 6241001472); controller answers the same day. The design is `docs/specs/2026-10-17-bookmarklet-design.md`.
   - **One tap opens the Save page,** `/save?url=&title=`, with the page's address and title filled in. The title is cut to 200 code points; an address over 3,000 encoded characters opens `/save?long=1` instead. An optional why, then **Save**, then "Saved" with Close. The address is the stable one a phone Shortcut will open later.
   - **The limit is 3,000, not the design's 4,000** (controller ruling). Signed out, the Save address travels through `/login?next=` and back, and `returnAfterLogin` re-encodes `( ) ! ' ~`. At 4,000, an address of `(` came back as a 14,371-character URL, too near Node's 16 KiB header limit. At 3,000, with `'` counted as the three characters it is sent as, the worst case measured across `(`, `/`, `é` and `'` is 11,371, the return URL for `(` (`src/web/save-size.test.ts`). The sign-in page also sends `Referrer-Policy: no-referrer`, so its own long address is not sent again as the Referer.

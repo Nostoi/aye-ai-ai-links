@@ -15,6 +15,7 @@ import {
 } from "./digest.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
+import type { LinkCheck } from "./link-check-store.js";
 import { recordOpening } from "./links.js";
 import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
 import type { LinkStore } from "./store.js";
@@ -51,6 +52,7 @@ let clock: Date;
 const deps = (over: { store?: LinkStore } = {}) => ({
   store,
   tools: store,
+  checks: store,
   profile,
   keywordSearch: keyword,
   now: () => clock,
@@ -102,6 +104,19 @@ const digestIds = async () => (await getDigest(deps(), OWNER)).links.map((l) => 
 const reasonsOf = async (id: string) =>
   (await getDigest(deps(), OWNER)).links.find((l) => l.link.id === id)?.reasons;
 const focusWords = (entry: FocusEntry): DigestReason => ({ kind: "focus_words", focus: entry });
+
+/** A row as two dead checks a week apart leave it: flagged as gone a day ago. */
+const goneCheck = (): LinkCheck => ({
+  checkedAt: at(-DAY),
+  result: "dead",
+  detail: "http:404",
+  firstDeadAt: at(-8 * DAY),
+  flaggedAt: at(-DAY),
+  stillWorksAt: null,
+});
+const flag = async (id: string) => {
+  await store.updateCheckIf(OWNER, id, await store.getCheck(OWNER, id), goneCheck());
+};
 
 describe("getDigest reasons", () => {
   it("gives no_why to a link without a why, surfaced exactly at the cooldown cutoff", async () => {
@@ -427,6 +442,30 @@ describe("getDigest claim", () => {
   });
 });
 
+describe("gone links (#128)", () => {
+  it("leaves a gone link out of previewDigest and getDigest, unmarked, while a dead link not yet flagged keeps its reason", async () => {
+    const gone = await link({ why: null });
+    const dead = await link({ why: null });
+    await flag(gone.id);
+    await store.updateCheckIf(OWNER, dead.id, null, {
+      ...goneCheck(),
+      firstDeadAt: at(-DAY),
+      flaggedAt: null,
+    });
+    expect((await previewDigest(deps(), OWNER)).links.map((d) => d.link.id)).toEqual([dead.id]);
+    expect(await digestIds()).toEqual([dead.id]);
+    expect((await store.get(OWNER, gone.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("leaves out a link flagged between selection and the claim, without marking it", async () => {
+    const goneLater = await link({ why: null });
+    const other = await link({ why: null });
+    const digest = await getDigest(deps({ store: racing(() => flag(goneLater.id)) }), OWNER);
+    expect(digest.links.map((l) => l.link.id)).toEqual([other.id]);
+    expect((await store.get(OWNER, goneLater.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+});
+
 describe("previewDigest", () => {
   /** A mix of focus, no-why, old and never-shown links, more than one digest holds. */
   async function library() {
@@ -513,6 +552,32 @@ describe("dueTool", () => {
     expect(await dueTool(deps(), OWNER)).toBeNull();
   });
 
+  it("skips a gone tool, writing nothing (#128)", async () => {
+    const tool = await dueLink();
+    await flag(tool.id);
+    expect(await dueTool(deps(), OWNER)).toBeNull();
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("claimDueTool drops a tool flagged between selection and claim, leaving it unmarked (#128)", async () => {
+    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
+    expect(await claimDueTool(deps({ store: racing(() => flag(tool.id)) }), OWNER)).toBeNull();
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
+  it("claimDueTool drops a tool flagged gone after its claim succeeded, leaving it marked (#128)", async () => {
+    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
+    const flaggedAfterClaim = Object.assign(Object.create(store) as FakeStore, {
+      claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
+        const claimed = await store.claimSurfaced(...args);
+        await flag(tool.id);
+        return claimed;
+      },
+    });
+    expect(await claimDueTool(deps({ store: flaggedAfterClaim }), OWNER)).toBeNull();
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
   it("returns one due tool, first in the digest's rotation, with whole days since its opening", async () => {
     await dueLink({ lastSurfacedAt: null });
     const first = await dueLink({ lastOpenedAt: at(-45 * DAY - HOUR) });
@@ -590,6 +655,13 @@ describe("getDigest's still_using_check", () => {
       [tool.id, [check(45)]],
     ]);
     expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
+  it("asks nothing about a gone tool, and the reading link keeps its slot (#128)", async () => {
+    const reading = await link({ why: null });
+    const tool = await due();
+    await flag(tool.id);
+    expect(await shown()).toEqual([[reading.id, [{ kind: "no_why" }]]]);
   });
 
   it("gives null days for a tool never opened", async () => {

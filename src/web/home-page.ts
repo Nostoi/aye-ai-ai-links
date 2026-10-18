@@ -1,8 +1,9 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import { linkSpace } from "../core/link-space.js";
 import type { Link, Tag } from "../core/types.js";
+import { isWebUrl } from "../core/url-key.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
-import { isWebUrl, linkTitle, openedScript, openLink } from "./open-link.js";
+import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";

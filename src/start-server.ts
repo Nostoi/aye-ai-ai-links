@@ -8,12 +8,13 @@ import { buildAuth } from "./auth/build-auth.js";
 import type { MetadataRefresher } from "./auth/metadata-refresher.js";
 import type { JsonFetch } from "./auth/metadata-stash.js";
 import { modelRoot, type ServerConfig } from "./config.js";
+import { type CopyPass, createCopyPass } from "./core/copy-pass.js";
 import type { PageExtractor } from "./core/extract.js";
 import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
 import { createCopyKeeper } from "./core/keep-copy.js";
 import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-runner.js";
-import type { FolderCheck } from "./core/saved-copy.js";
+import { pausedMessage } from "./core/saved-copy.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
@@ -33,21 +34,13 @@ const DRAIN_MS = 10_000;
 /** The drain, this wait and the closes must end inside launchd's 20 s `ExitTimeOut`. */
 const SETTLE_MS = 5_000;
 
-function folderMessage(folder: Exclude<FolderCheck, { state: "ready" }>): string {
-  const advice = /EPERM|EACCES/.test(folder.detail)
-    ? " Grant the Node binary access to this folder in System Settings → Privacy & Security, then restart the service."
-    : folder.state === "mismatch"
-      ? " To start a new, empty folder, move this one aside and restart."
-      : "";
-  return `[saved copies] paused: ${folder.detail}${advice}`;
-}
-
 /**
  * Seams for tests: `decorateDeps` wraps the deps (the snapshot runner uses the wrapped store),
  * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
  * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
  * fetcher (5 MiB cap) and the child extractor. `imageFetcher` replaces the guarded image fetcher
- * the image pass uses. `linkChecker` replaces the guarded link checker the check runner uses.
+ * the image pass uses. `copyExtractor` replaces the copy pass's own child extractor, and
+ * `copyPollMs` its sweep interval. `linkChecker` replaces the guarded link checker the check runner uses.
  * `wrapAuthMigrations` runs around the auth migrations, so a test can hold
  * them. `jsonFetcher` replaces the guarded JSON fetcher that fetches OAuth client metadata.
  */
@@ -68,6 +61,10 @@ export type StartOptions = {
   linkChecker?: LinkChecker;
   /** Time between check sweeps; its 60 s default when left out. */
   checkPollMs?: number;
+  /** The copy pass's own extractor; a second child extractor when left out. */
+  copyExtractor?: PageExtractor;
+  /** Time between copy pass sweeps; its 15 s default when left out. */
+  copyPollMs?: number;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
   jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
   refresherIntervalMs?: number;
@@ -83,21 +80,23 @@ export type StartOptions = {
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
- * The snapshot runner, the vector indexer, the image pass, the check runner and the metadata
- * refresher start once the server is listening. Any failure before that closes what was already opened.
+ * The snapshot runner, the vector indexer, the image pass, the copy pass, the check runner and the
+ * metadata refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
- * 1. The runner, the indexer, the image pass and the check runner take no new work; running jobs,
- *    an embedding, an image fetch and a link check in flight carry on.
+ * 1. The runner, the indexer, the image pass, the copy pass and the check runner take no new work;
+ *    running jobs, an embedding, an image fetch, a copy in the making and a link check in flight
+ *    carry on.
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
  * 3. The runner aborts its jobs, which give their attempts back, the image pass aborts its fetch,
- *    leaving that image pending, and the check runner aborts its check, recording nothing, so the
+ *    leaving that image pending, the copy pass aborts its fetch or extraction, leaving the copy for
+ *    the next sweep, and the check runner aborts its check, recording nothing, so the
  *    link stays due. Stop waits for them, for the indexer's sweep and for any tool call still
  *    running, up to the settle limit.
  * 4. The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
- *    The image pass's and the check runner's stops are awaited again. Then the JSON fetcher
- *    closes, the image fetcher, the link checker, the page fetcher, and the extractor (killing
- *    any child).
+ *    The image pass's, the copy pass's and the check runner's stops are awaited again. Then the
+ *    JSON fetcher closes, the image fetcher, the link checker, the page fetcher, and the two
+ *    extractors (killing any child).
  * 5. The MCP handler closes, then the database, then the auth database.
  * A call or job still running after step 3 fails on the closed database; the error is caught
  * and logged.
@@ -116,6 +115,8 @@ export async function startServer(
     imagePollMs,
     linkChecker = createLinkChecker({ version: config.version }),
     checkPollMs,
+    copyExtractor = createChildExtractor(),
+    copyPollMs,
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher({ version: config.version }),
     refresherIntervalMs,
@@ -130,11 +131,13 @@ export async function startServer(
   let closeApp: (() => Promise<void>) | undefined;
   let refresher: MetadataRefresher | undefined;
   let images: ImageIndexer | undefined;
+  let copyPass: CopyPass | undefined;
   let checks: LinkCheckRunner | undefined;
   const closeAll = async () => {
     await refresher?.stop();
     // Its fetch must end before the fetcher closes, or a closed fetcher would end it as a failure.
     await images?.stop();
+    await copyPass?.stop();
     // The same for the check in flight and its checker.
     await checks?.stop();
     await jsonFetcher.close();
@@ -142,6 +145,7 @@ export async function startServer(
     await linkChecker.close();
     await fetcher.close();
     await extractor.close();
+    await copyExtractor.close();
     await closeApp?.();
     db?.close();
     authDb?.close();
@@ -157,24 +161,25 @@ export async function startServer(
     // Before anything can listen or save: an unready folder pauses copies, it never refuses the start.
     const savedCopies = new SqliteSavedCopyStore(db, config.savedCopies.dir);
     const folder = await savedCopies.checkFolder();
-    if (folder.state !== "ready") console.error(folderMessage(folder));
+    if (folder.state !== "ready") console.error(pausedMessage(config.savedCopies.dir, folder));
     const undone = await savedCopies.undoUnconfirmed();
     if (undone.copies + undone.images > 0) {
       console.error(
         `[saved copies] undid ${undone.copies} copies and ${undone.images} images left mid-write`,
       );
     }
+    const keeper = createCopyKeeper({
+      copies: savedCopies,
+      tools: deps.tools,
+      limitBytes: config.savedCopies.limitBytes,
+      now: deps.now,
+    });
     runner = createSnapshotRunner({
       store: deps.store,
       fetcher,
       extractor,
       now: deps.now,
-      copies: createCopyKeeper({
-        copies: savedCopies,
-        tools: deps.tools,
-        limitBytes: config.savedCopies.limitBytes,
-        now: deps.now,
-      }),
+      copies: keeper,
     });
     // The same embedder as search, so documents and queries share its one queue.
     indexer = createVectorIndexer({
@@ -188,6 +193,19 @@ export async function startServer(
       fetcher: imageFetcher,
       now: deps.now,
       ...(imagePollMs !== undefined && { pollMs: imagePollMs }),
+    });
+    copyPass = createCopyPass({
+      copies: savedCopies,
+      keeper,
+      pages: fetcher,
+      extractor: copyExtractor,
+      images: imageFetcher,
+      limitBytes: config.savedCopies.limitBytes,
+      dir: config.savedCopies.dir,
+      initialCheck: folder,
+      now: deps.now,
+      canResolve: (signal) => linkChecker.canResolve(signal),
+      ...(copyPollMs !== undefined && { pollMs: copyPollMs }),
     });
     checks = createLinkCheckRunner({
       checks: deps.checks,
@@ -232,6 +250,7 @@ export async function startServer(
   runner.start();
   indexer.start();
   images?.start();
+  copyPass?.start();
   checks?.start();
   refresher.start();
 
@@ -265,6 +284,10 @@ export async function startServer(
     const imagesStopped = (images?.stop() ?? Promise.resolve()).then(() => {
       imagesEnded = true;
     });
+    let copiesEnded = false;
+    const copiesStopped = (copyPass?.stop() ?? Promise.resolve()).then(() => {
+      copiesEnded = true;
+    });
     let checksEnded = false;
     const checksStopped = (checks?.stop() ?? Promise.resolve()).then(() => {
       checksEnded = true;
@@ -277,13 +300,14 @@ export async function startServer(
       stopped,
       indexStopped,
       imagesStopped,
+      copiesStopped,
       checksStopped,
       calls().ended,
     ]).then(() => false as const);
     try {
       if (await Promise.race([ended, timedOut])) {
         console.error(
-          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
+          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
         );
       }
     } finally {
@@ -295,6 +319,7 @@ export async function startServer(
     runner.quiesce();
     indexer.quiesce();
     images?.quiesce();
+    copyPass?.quiesce();
     checks?.quiesce();
     await drain();
     await settle();

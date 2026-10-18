@@ -66,6 +66,16 @@ export class FakeSavedCopies
     this.broken = state;
   }
 
+  /** Make the folder check report ready again. */
+  heal(): void {
+    this.broken = null;
+  }
+
+  /** A link's row status, or null when it has none. */
+  rowStatus(owner: OwnerId, linkId: string): CopyStatus | null {
+    return this.rowOf(owner, linkId)?.status ?? null;
+  }
+
   /** Make the next copy or image file write throw this error. */
   failNextWrite(error: Error): void {
     this.nextFailure = error;

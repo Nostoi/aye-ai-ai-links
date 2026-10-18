@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import TurndownService from "turndown";
 import type { CopyDraft } from "../core/saved-copy.ts";
 import { imageRef, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
@@ -20,6 +21,16 @@ export function copyBase(doc: Document, finalUrl: string): string {
     return url && webUrl(url) ? url.href : finalUrl;
   } catch {
     return finalUrl; // never throws: the child posts the metadata after this call
+  }
+}
+
+/** null: no article; undefined: making the copy threw (not received, the save goes on without one). */
+export function makeCopy(article: Element | null, base: string): CopyDraft | null | undefined {
+  if (!article) return null;
+  try {
+    return articleMarkdown(article, base, randomBytes(16).toString("hex"));
+  } catch {
+    return undefined;
   }
 }
 

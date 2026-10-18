@@ -559,6 +559,7 @@ describe("snapshot runner saved copies", () => {
   const keeper = (wanted = true) => ({
     wanted,
     keep: vi.fn<CopyKeeper["keep"]>(async () => "saved"),
+    refuse: vi.fn<CopyKeeper["refuse"]>(async () => false),
   });
 
   it("asks the extractor for a copy only when the keeper wants one", async () => {

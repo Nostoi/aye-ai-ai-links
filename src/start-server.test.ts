@@ -30,6 +30,8 @@ import type {
   PageFetcher,
 } from "./core/fetch.js";
 import { saveLink } from "./core/links.js";
+import { imageRef } from "./core/saved-copy.js";
+import { at, record } from "./core/snapshot-store-contract.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
 import { DIMS } from "./search/model.js";
@@ -941,7 +943,7 @@ describe("startServer", () => {
       expect(readdirSync(copiesDir())).toEqual(["notes.txt"]);
       expect(readFileSync(join(copiesDir(), "notes.txt"), "utf8")).toBe("mine");
       const logs = errors.mock.calls.flat().join("\n");
-      expect(logs).toContain("[saved copies] paused");
+      expect(logs).toContain(`[saved copies] paused (${copiesDir()})`);
       expect(logs).toContain("move this one aside and restart");
     });
 
@@ -970,6 +972,34 @@ describe("startServer", () => {
       },
     );
 
+    it("refuses the start when start-up recovery hits a database error, and closes what it opened", async () => {
+      const s = await startWith(ON(), {});
+      await s.stop();
+      started.pop();
+      const db = openDatabase(dbPath);
+      let ddl: string;
+      try {
+        ddl = db
+          .prepare("SELECT sql FROM sqlite_master WHERE name = 'saved_copy_images'")
+          .pluck()
+          .get() as string;
+        db.exec("DROP TABLE saved_copy_images");
+      } finally {
+        db.close();
+      }
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const pipeline = fakePipeline();
+      await expect(startWith(ON(), pipeline)).rejects.toThrow(/saved_copy_images/);
+      expect(pipeline.closed).toEqual({ fetcher: 1, extractor: 1 });
+      const back = openDatabase(dbPath);
+      try {
+        back.exec(ddl);
+      } finally {
+        back.close();
+      }
+      await startWith(ON(), {});
+    });
+
     it("undoes a copy left mid-write before the start resolves", async () => {
       const db = openDatabase(dbPath);
       let id: number;
@@ -991,6 +1021,128 @@ describe("startServer", () => {
       await startWith(ON(), {});
       expect(copyRows()).toEqual([]);
       expect(existsSync(join(copiesDir(), String(id)))).toBe(false);
+    });
+  });
+
+  describe("the copy pass", () => {
+    const copiesDir = () => join(dir, "copies");
+    const ON = () => ({ dir: copiesDir(), limitBytes: 1024 ** 3 });
+    const NONCE = "b".repeat(32);
+    const IMG = "https://example.com/pic.png";
+    const WITH_IMAGE: ExtractOutcome = {
+      ...PAGE,
+      copy: { markdown: `![pic](${imageRef(1, NONCE)})`, imageUrls: [IMG], nonce: NONCE },
+    };
+    const copyRow = () =>
+      read<{ status: string; finished: number | null; image: string | null }>(
+        `SELECT c.status, c.finished_at AS finished,
+           (SELECT status FROM saved_copy_images i WHERE i.link_id = c.link_id AND i.n = 1) AS image
+         FROM saved_copies c`,
+      );
+    const startWith = async (options: StartOptions) => {
+      const s = await startServer(
+        { ...cfg(dbPath, 0), savedCopies: ON() },
+        {
+          ...fakePipeline(),
+          settleMs: 200,
+          requestLog: (l) => logged.push(l),
+          copyPollMs: 20,
+          ...options,
+        },
+      );
+      started.push(s);
+      return s;
+    };
+
+    /** A link saved before saved copies existed: its snapshot is done and it has no copy row. */
+    const seedFetched = async () => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        await saveLink(deps, "owner", { url: "https://example.com/old", savedBy: "seed" });
+        const id = String(db.prepare("SELECT id FROM links").pluck().get());
+        const lease = await deps.store.leaseSnapshot("owner", id, at(1), at(100));
+        await deps.store.recordSnapshot(
+          "owner",
+          id,
+          lease?.claim ?? -1,
+          record({ imageUrl: null, text: "body" }),
+        );
+        return id;
+      } finally {
+        db.close();
+      }
+    };
+    const copyExtractor = (extract: () => Promise<ExtractOutcome>): PageExtractor => ({
+      extract,
+      close: async () => {},
+    });
+    const readyFolder = async () => {
+      const db = openDatabase(dbPath);
+      try {
+        expect(await new SqliteSavedCopyStore(db, copiesDir()).checkFolder()).toEqual({
+          state: "ready",
+        });
+      } finally {
+        db.close();
+      }
+    };
+
+    it("makes the copy of a link saved before copies existed, then its pictures", async () => {
+      const id = await seedFetched();
+      await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });
+      await until(() => copyRow()[0]?.finished != null, "the finished copy");
+      expect(copyRow()).toEqual([{ status: "ok", finished: expect.any(Number), image: "ok" }]);
+      expect(readFileSync(join(copiesDir(), String(id), "copy.md"), "utf8")).toContain(
+        "images/01.png",
+      );
+    });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "makes the copy once its folder can be written again, with no restart",
+      async () => {
+        await readyFolder();
+        await seedFetched();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        chmodSync(copiesDir(), 0o555);
+        try {
+          await startWith({ copyExtractor: copyExtractor(async () => WITH_IMAGE) });
+          await sleep(300);
+          expect(copyRow()).toEqual([]);
+        } finally {
+          chmodSync(copiesDir(), 0o755);
+        }
+        await until(() => copyRow()[0]?.image === "ok", "the copy after the folder opened");
+      },
+    );
+
+    it("on stop, ends with the copy extractor pending and closes it", async () => {
+      await seedFetched();
+      let asked = false;
+      const events: string[] = [];
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const pending: PageExtractor = {
+        extract: (_html, _url, signal) => {
+          asked = true;
+          return new Promise<ExtractOutcome>((resolve) => {
+            signal?.addEventListener(
+              "abort",
+              () => {
+                events.push("aborted");
+                resolve({ kind: "aborted" });
+              },
+              { once: true },
+            );
+          });
+        },
+        close: async () => void events.push("closed"),
+      };
+      const { stop } = await startWith({ copyExtractor: pending });
+      await until(() => asked, "the copy extraction");
+      await stop();
+      expect(events).toEqual(["aborted", "closed"]);
+      expect(errors.mock.calls.flat().join("\n")).not.toContain("copy pass still running");
+      expect(copyRow()).toEqual([]);
     });
   });
 

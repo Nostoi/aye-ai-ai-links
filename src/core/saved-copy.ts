@@ -9,6 +9,8 @@ export const MAX_COPY_BYTES = 20 * MiB;
 /** copy.md's cap (controller ruling, 2026-10-17); finishing only shrinks the file. */
 export const MAX_COPY_MARKDOWN_BYTES = 2 * MiB;
 export const COPY_UNDO_WINDOW_MS = 60_000;
+/** How long a saved-copy file read may take, waiting for the read gate included. */
+export const COPY_READ_TIMEOUT_MS = 10_000;
 /** A draft's image nonce: 32 lowercase hex characters. */
 export const COPY_NONCE = /^[0-9a-f]{32}$/;
 

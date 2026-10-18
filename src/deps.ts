@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import { createReadGate } from "./core/copy-reading.js";
 import type { Embedder } from "./search/embedder.js";
 import { FtsSearch } from "./search/fts-search.js";
 import { HybridSearch } from "./search/hybrid-search.js";
@@ -43,6 +44,8 @@ export function createDeps(db: Database, embedder: Embedder, savedCopyDir: strin
     checks: new SqliteLinkCheckStore(db),
     /** Saved copies: one instance per process, so it owns the folder and its checked state. Without a folder (tests) copies read as missing and none are written. */
     savedCopies: new SqliteSavedCopyStore(db, savedCopyDir),
+    /** The one saved-copy read gate: the copy pass and the copy pages share it. */
+    readGate: createReadGate(),
     now: () => new Date(),
   };
 }

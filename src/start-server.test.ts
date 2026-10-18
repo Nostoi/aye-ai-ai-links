@@ -125,6 +125,7 @@ function fakePipeline(
     close: async () => {},
   };
   const linkChecker: LinkChecker = {
+    canResolve: async () => true,
     check: async (url): Promise<LinkCheckOutcome> => ({ kind: "ok", finalUrl: url }),
     close: async () => {},
   };
@@ -955,6 +956,7 @@ describe("startServer", () => {
     it("checks a link saved over a week ago in the background and records what it found", async () => {
       await seedWeekOld("https://example.com/old");
       const linkChecker: LinkChecker = {
+        canResolve: async () => true,
         check: async () => ({ kind: "http_error", status: 404 }),
         close: async () => {},
       };
@@ -972,6 +974,7 @@ describe("startServer", () => {
       const port = (taken.address() as net.AddressInfo).port;
       const calls = { check: 0, close: 0 };
       const linkChecker: LinkChecker = {
+        canResolve: async () => true,
         check: async (url) => {
           calls.check++;
           return { kind: "ok", finalUrl: url };
@@ -994,6 +997,7 @@ describe("startServer", () => {
       await seedWeekOld("https://example.com/old");
       const events: string[] = [];
       const linkChecker: LinkChecker = {
+        canResolve: async () => true,
         check: (_url, signal) =>
           new Promise<LinkCheckOutcome>((resolve) => {
             events.push("checking");

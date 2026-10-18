@@ -63,5 +63,7 @@ export type LinkCheckOutcome = { kind: "ok"; finalUrl: string } | FetchFailure;
  */
 export interface LinkChecker {
   check(url: string, signal?: AbortSignal): Promise<LinkCheckOutcome>;
+  /** Whether the server can resolve a known name right now, asking the DNS servers directly rather than the system's cache. False on any failure, past its deadline, or once `signal` fires. Never throws. */
+  canResolve(signal?: AbortSignal): Promise<boolean>;
   close(): Promise<void>;
 }

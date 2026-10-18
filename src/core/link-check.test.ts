@@ -3,8 +3,6 @@ import type { CoreError } from "./errors.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkCheckOutcome } from "./fetch.js";
 import {
-  ANSWER_WINDOW_MS,
-  answeredElsewhere,
   applyCheck,
   type CheckVerdict,
   checkCutoffs,
@@ -57,20 +55,13 @@ describe("judgeCheck", () => {
     ["a 2xx answer after a redirect", ok("https://ex.com/moved"), true, "alive", null],
     ["a 404", http(404), true, "dead", "http:404"],
     ["a 410", http(410), true, "dead", "http:410"],
+    ["ENOTFOUND while the resolver is up", net("ENOTFOUND"), true, "dead", "network:ENOTFOUND"],
     [
-      "a 404 with no other answer lately: the guard is for names only",
-      http(404),
-      false,
-      "dead",
-      "http:404",
-    ],
-    ["ENOTFOUND after another host answered", net("ENOTFOUND"), true, "dead", "network:ENOTFOUND"],
-    [
-      "ENOTFOUND with no other answer in 24 h",
+      "ENOTFOUND while the resolver is down",
       net("ENOTFOUND"),
       false,
       "unknown",
-      "network:ENOTFOUND:unconfirmed",
+      "network:ENOTFOUND:offline",
     ],
     ["a 401 login wall", http(401), true, "unknown", "http:401"],
     ["a 403 login wall", http(403), true, "unknown", "http:403"],
@@ -110,37 +101,28 @@ describe("judgeCheck", () => {
     ],
   ] as [string, LinkCheckOutcome, boolean, string, string | null][])(
     "judges %s",
-    (_, outcome, answered, result, detail) => {
-      expect(judgeCheck(outcome, answered)).toEqual({ result, detail });
+    (_, outcome, resolverUp, result, detail) => {
+      expect(judgeCheck(outcome, resolverUp)).toEqual({ result, detail });
     },
   );
 
+  it.each([
+    ok(),
+    http(404),
+    http(410),
+    http(500),
+    { kind: "timeout" },
+    net("EAI_AGAIN"),
+    net("ECONNREFUSED"),
+    { kind: "refused", reason: "address" },
+    { kind: "too_large" },
+    { kind: "aborted" },
+  ] as LinkCheckOutcome[])("judges %j the same whether or not the resolver is up", (outcome) => {
+    expect(judgeCheck(outcome, true)).toEqual(judgeCheck(outcome, false));
+  });
+
   it("records nothing for a check aborted by shutdown", () => {
     expect(judgeCheck({ kind: "aborted" }, true)).toBeNull();
-  });
-});
-
-describe("answeredElsewhere", () => {
-  it("counts another host's answer up to ANSWER_WINDOW_MS (24 h) before, not a millisecond older", () => {
-    expect(ANSWER_WINDOW_MS).toBe(DAY);
-    const at = t(10 * DAY);
-    expect(answeredElsewhere(new Map([["up.test", t(9 * DAY)]]), "gone.test", at)).toBe(true);
-    expect(answeredElsewhere(new Map([["up.test", t(9 * DAY - 1)]]), "gone.test", at)).toBe(false);
-  });
-
-  it("never counts the same host's own answer, and is false with no answers at all", () => {
-    const at = t(10 * DAY);
-    expect(answeredElsewhere(new Map([["gone.test", at]]), "gone.test", at)).toBe(false);
-    expect(answeredElsewhere(new Map(), "gone.test", at)).toBe(false);
-    expect(answeredElsewhere(new Map([["up.test", at]]), null, at)).toBe(true);
-  });
-});
-
-describe("answeredElsewhere, time order", () => {
-  it("counts only answers from ANSWER_WINDOW_MS before up to at, never one stamped after", () => {
-    const at = t(10 * DAY);
-    expect(answeredElsewhere(new Map([["up.test", t(15 * DAY)]]), "gone.test", at)).toBe(false);
-    expect(answeredElsewhere(new Map([["up.test", at]]), "gone.test", at)).toBe(true);
   });
 });
 

@@ -1,7 +1,7 @@
 import type { LookupAddress } from "node:dns";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LinkChecker } from "../core/fetch.js";
 import { isPublicAddress } from "./address-policy.js";
 import type { Resolve } from "./guarded-lookup.js";
@@ -207,5 +207,89 @@ describe("addresses that must never be requested", () => {
       kind: "refused",
       reason: "credentials",
     });
+  });
+});
+
+describe("canResolve", () => {
+  type Query = () => Promise<string[]>;
+  const answers =
+    (list: string[]): Query =>
+    async () =>
+      list;
+  const rejects: Query = async () => {
+    throw new Error("SERVFAIL");
+  };
+  const hangs: Query = () => new Promise<string[]>(() => {});
+
+  function probe(resolve4: Query, resolve6: Query) {
+    const calls = { resolve4: 0, resolve6: 0, cancel: 0 };
+    const c = createLinkChecker({
+      version: VERSION,
+      dnsResolver: () => ({
+        resolve4: (() => {
+          calls.resolve4++;
+          return resolve4();
+        }) as never,
+        resolve6: (() => {
+          calls.resolve6++;
+          return resolve6();
+        }) as never,
+        cancel: () => {
+          calls.cancel++;
+        },
+      }),
+    });
+    open.push(c);
+    return { c, calls };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is true when the IPv4 lookup answers", async () => {
+    const { c } = probe(answers(["93.184.216.34"]), rejects);
+    expect(await c.canResolve()).toBe(true);
+  });
+
+  it("is true when only the IPv6 lookup answers", async () => {
+    const { c } = probe(rejects, answers(["2606:2800:21f:cb07:6820:80da:af6b:8b2c"]));
+    expect(await c.canResolve()).toBe(true);
+  });
+
+  it("is false when both lookups fail", async () => {
+    const { c } = probe(rejects, rejects);
+    expect(await c.canResolve()).toBe(false);
+  });
+
+  it("is false when both lookups answer with no addresses", async () => {
+    const { c } = probe(answers([]), answers([]));
+    expect(await c.canResolve()).toBe(false);
+  });
+
+  it("is false, and cancels the queries, when the signal aborts mid-query", async () => {
+    const { c, calls } = probe(hangs, hangs);
+    const abort = new AbortController();
+    const pending = c.canResolve(abort.signal);
+    abort.abort();
+    expect(await pending).toBe(false);
+    expect(calls.cancel).toBe(1);
+  });
+
+  it("is false without querying when the signal is already aborted", async () => {
+    const { c, calls } = probe(answers(["93.184.216.34"]), answers(["93.184.216.34"]));
+    expect(await c.canResolve(AbortSignal.abort())).toBe(false);
+    expect(calls).toEqual({ resolve4: 0, resolve6: 0, cancel: 0 });
+  });
+
+  it("is false, and cancels the queries, once 5 s have passed", async () => {
+    vi.useFakeTimers();
+    const { c, calls } = probe(hangs, hangs);
+    const pending = c.canResolve();
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(calls.cancel).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toBe(false);
+    expect(calls.cancel).toBe(1);
   });
 });

@@ -36,13 +36,18 @@ function setup(
     pollMs?: number;
     errorBackoffMs?: number;
     wrap?: (store: FakeStore) => LinkCheckStore;
+    /** Whether the checker can resolve a known name. Default: a fixed answer from `resolverUp`. */
+    canResolve?: (signal?: AbortSignal) => Promise<boolean>;
+    resolverUp?: boolean;
   } = {},
 ) {
   const store = new FakeStore();
   const calls: { url: string; wall: number }[] = [];
   let inFlight = 0;
   let most = 0;
+  const canResolve = vi.fn(o.canResolve ?? (async () => o.resolverUp ?? true));
   const checker: LinkChecker = {
+    canResolve,
     check: async (url, signal) => {
       calls.push({ url, wall: performance.now() });
       inFlight++;
@@ -72,6 +77,7 @@ function setup(
     store,
     runner,
     logged,
+    canResolve,
     urls: () => calls.map((c) => c.url),
     starts: () => calls.map((c) => c.wall),
     most: () => most,
@@ -285,106 +291,81 @@ describe("the check runner", () => {
     expect(t.logged).toEqual([]);
   });
 
-  it("records a name that doesn't resolve as dead after another host answered in this sweep", async () => {
-    const t = setup(async (url) =>
-      url.startsWith("https://up.test") ? okFor(url) : { kind: "network_error", code: "ENOTFOUND" },
-    );
-    await save(t.store, "https://up.test/");
-    const gone = await save(t.store, "https://gone.test/");
+  it("asks canResolve once for an ENOTFOUND, and never for a 404, a 200, a timeout or EAI_AGAIN", async () => {
+    const outcomes: Record<string, LinkCheckOutcome> = {
+      "https://nx.test/": { kind: "network_error", code: "ENOTFOUND" },
+      "https://nf.test/": NOT_FOUND,
+      "https://ok.test/": okFor("https://ok.test/"),
+      "https://slow.test/": { kind: "timeout" },
+      "https://again.test/": { kind: "network_error", code: "EAI_AGAIN" },
+    };
+    const t = setup(async (url) => outcomes[url] as LinkCheckOutcome);
+    for (const url of Object.keys(outcomes)) await save(t.store, url);
     await t.runner.sweep();
-    expect(await t.store.getCheck(OWNER, gone)).toMatchObject({
-      result: "dead",
-      detail: "network:ENOTFOUND",
-      firstDeadAt: t.now(),
-    });
+    expect(t.urls()).toHaveLength(5);
+    expect(t.canResolve).toHaveBeenCalledTimes(1);
   });
 
-  it("records it as unconfirmed, starting no streak, when no other host has answered", async () => {
+  it("records a name that doesn't resolve as dead while the resolver is up, flagged by a second dead check a week later", async () => {
     const t = setup(async () => ({ kind: "network_error", code: "ENOTFOUND" }));
     const gone = await save(t.store, "https://gone.test/");
-    const also = await save(t.store, "https://also-gone.test/");
-    await t.runner.sweep();
-    for (const id of [gone, also]) {
-      expect(await t.store.getCheck(OWNER, id)).toMatchObject({
-        result: "unknown",
-        detail: "network:ENOTFOUND:unconfirmed",
-        firstDeadAt: null,
-      });
-    }
-  });
-
-  it("judges an unconfirmed dead name again when its sweep ends: a lapsed name checked first in each weekly sweep is flagged at the second", async () => {
-    const t = setup(async (url) =>
-      url.includes("lapsed") ? { kind: "network_error", code: "ENOTFOUND" } : okFor(url),
-    );
-    const dead = await save(t.store, "https://lapsed.test/");
-    await save(t.store, "https://up.test/");
     await t.runner.sweep();
     const first = t.now();
-    expect(await t.store.getCheck(OWNER, dead)).toMatchObject({
+    expect(await t.store.getCheck(OWNER, gone)).toMatchObject({
+      checkedAt: first,
       result: "dead",
       detail: "network:ENOTFOUND",
       firstDeadAt: first,
       flaggedAt: null,
     });
-    t.advance(7 * DAY + 60_000);
+    t.advance(7 * DAY);
     await t.runner.sweep();
-    expect(await t.store.getCheck(OWNER, dead)).toMatchObject({
+    expect(await t.store.getCheck(OWNER, gone)).toMatchObject({
       result: "dead",
       firstDeadAt: first,
       flaggedAt: t.now(),
     });
   });
 
-  it("records a held name with its own check's start, not the sweep's end, and unconfirmed when no other host answered in the whole sweep", async () => {
-    const t = setup(async (url) => {
-      t.advance(5_000);
-      return url.includes("lapsed") ? { kind: "network_error", code: "ENOTFOUND" } : okFor(url);
+  it("records it as unknown offline, starting no streak, while the resolver is down", async () => {
+    const t = setup(async () => ({ kind: "network_error", code: "ENOTFOUND" }), {
+      resolverUp: false,
     });
-    const confirmed = await save(t.store, "https://lapsed.test/");
-    await save(t.store, "https://up.test/");
-    const start = t.now();
+    const gone = await save(t.store, "https://gone.test/");
     await t.runner.sweep();
-    expect(await t.store.getCheck(OWNER, confirmed)).toMatchObject({
-      checkedAt: start,
-      result: "dead",
-      firstDeadAt: start,
-    });
-    const alone = setup(async () => {
-      return { kind: "network_error", code: "ENOTFOUND" };
-    });
-    const lone = await save(alone.store, "https://lone.test/");
-    const begun = alone.now();
-    await alone.runner.sweep();
-    expect(await alone.store.getCheck(OWNER, lone)).toMatchObject({
-      checkedAt: begun,
+    expect(await t.store.getCheck(OWNER, gone)).toMatchObject({
       result: "unknown",
-      detail: "network:ENOTFOUND:unconfirmed",
+      detail: "network:ENOTFOUND:offline",
       firstDeadAt: null,
     });
   });
 
-  it("records a held name when stop ends its sweep, and nothing for the check stop aborted", async () => {
-    const t = setup((url, signal) => {
-      if (url.includes("lapsed"))
-        return Promise.resolve({ kind: "network_error", code: "ENOTFOUND" });
-      if (url.includes("up")) return Promise.resolve(okFor(url));
-      return new Promise<LinkCheckOutcome>((resolve) =>
-        signal?.addEventListener("abort", () => resolve({ kind: "aborted" })),
-      );
-    });
-    const lapsed = await save(t.store, "https://lapsed.test/");
-    await save(t.store, "https://up.test/");
-    const hanging = await save(t.store, "https://hang.test/");
-    const sweeping = t.runner.sweep();
-    await waitFor(() => t.urls().length === 3);
-    await t.runner.stop();
-    await sweeping;
-    expect(await t.store.getCheck(OWNER, lapsed)).toMatchObject({
+  it("records a lone name that doesn't resolve as dead, though no other host ever answered", async () => {
+    const t = setup(async () => ({ kind: "network_error", code: "ENOTFOUND" }));
+    const lone = await save(t.store, "https://lone.test/");
+    await t.runner.sweep();
+    expect(t.urls()).toEqual(["https://lone.test/"]);
+    expect(await t.store.getCheck(OWNER, lone)).toMatchObject({
       result: "dead",
       detail: "network:ENOTFOUND",
     });
-    expect(await t.store.getCheck(OWNER, hanging)).toBeNull();
+  });
+
+  it("on stop while canResolve is pending, writes nothing for that link and stop resolves", async () => {
+    const lookup = gate();
+    const t = setup(async () => ({ kind: "network_error", code: "ENOTFOUND" }), {
+      canResolve: (signal) =>
+        new Promise<boolean>((resolve) => {
+          signal?.addEventListener("abort", () => resolve(false));
+          void lookup.opened.then(() => resolve(true));
+        }),
+    });
+    const id = await save(t.store, "https://gone.test/");
+    t.runner.start();
+    await waitFor(() => t.canResolve.mock.calls.length === 1);
+    await t.runner.stop();
+    expect(await t.store.getCheck(OWNER, id)).toBeNull();
+    expect((await t.store.dueChecks(checkCutoffs(t.now()), 20)).map((d) => d.linkId)).toEqual([id]);
   });
 
   it("moves on when a link is deleted during its check, writing nothing and logging nothing", async () => {

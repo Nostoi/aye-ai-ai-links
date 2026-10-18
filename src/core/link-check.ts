@@ -17,8 +17,6 @@ export const CHECK_ACTIVE_DAYS = 7;
 export const CHECK_ARCHIVED_DAYS = 30;
 /** A dead check at least this long after the streak's first dead one flags the link (ruling). */
 export const FLAG_AFTER_MS = 7 * DAY_MS;
-/** A name that doesn't resolve is dead only after another host answered within this long (A2). */
-export const ANSWER_WINDOW_MS = DAY_MS;
 
 /** What one check found. `detail` is null for alive. */
 export type CheckVerdict = { result: CheckResult; detail: string | null };
@@ -32,29 +30,11 @@ export function checkCutoffs(now: Date): CheckCutoffs {
 }
 
 /**
- * Whether a host other than `host` gave an HTTP answer (any status) from
- * `at` − ANSWER_WINDOW_MS up to `at`. `answers` holds each host's last answer time. It is the offline guard's
- * question (A2): with no network, every name can fail as ENOTFOUND.
- */
-export function answeredElsewhere(
-  answers: ReadonlyMap<string, Date>,
-  host: string | null,
-  at: Date,
-  until: Date = at,
-): boolean {
-  const since = at.getTime() - ANSWER_WINDOW_MS;
-  for (const [h, when] of answers) {
-    if (h !== host && when.getTime() >= since && when.getTime() <= until.getTime()) return true;
-  }
-  return false;
-}
-
-/**
  * The verdict of one check, or null for one aborted by shutdown, which records nothing. Only clear
- * signals are dead: a 404 or 410 as the final answer, and ENOTFOUND when `answered` (another host
- * answered lately). Anything else is unknown: couldn't check is never dead.
+ * signals are dead: a 404 or 410 as the final answer, and ENOTFOUND when `resolverUp` (the
+ * checker could resolve a known name just after). Anything else is unknown: couldn't check is never dead.
  */
-export function judgeCheck(outcome: LinkCheckOutcome, answered: boolean): CheckVerdict | null {
+export function judgeCheck(outcome: LinkCheckOutcome, resolverUp: boolean): CheckVerdict | null {
   switch (outcome.kind) {
     case "ok":
       return { result: "alive", detail: null };
@@ -66,9 +46,9 @@ export function judgeCheck(outcome: LinkCheckOutcome, answered: boolean): CheckV
       if (outcome.code !== "ENOTFOUND") {
         return { result: "unknown", detail: `network:${outcome.code}` };
       }
-      return answered
+      return resolverUp
         ? { result: "dead", detail: "network:ENOTFOUND" }
-        : { result: "unknown", detail: "network:ENOTFOUND:unconfirmed" };
+        : { result: "unknown", detail: "network:ENOTFOUND:offline" };
     case "timeout":
       return { result: "unknown", detail: "timeout" };
     case "refused":

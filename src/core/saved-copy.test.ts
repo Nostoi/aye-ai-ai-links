@@ -79,6 +79,10 @@ describe("isCopyDraft", () => {
       "a hole after a valid URL",
       { ...ok, imageUrls: Object.assign([...ok.imageUrls], { length: 2 }) },
     ],
+    [
+      "a hole hidden by a named property",
+      { ...ok, imageUrls: Object.assign(new Array(1), { foo: "x" }) },
+    ],
     ["a duplicate pair", { ...ok, imageUrls: ["https://ex.com/a.png", "https://ex.com/a.png"] }],
     ["a string imageUrls", { ...ok, imageUrls: "https://ex.com/a.png" }],
     ["an object with length", { ...ok, imageUrls: { length: 0 } }],

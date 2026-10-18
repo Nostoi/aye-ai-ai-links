@@ -130,15 +130,14 @@ export const copyLimits = (totalBytes: number): CopyLimits => ({
 export function isCopyDraft(value: unknown): value is CopyDraft {
   if (typeof value !== "object" || value === null) return false;
   const { markdown, imageUrls, nonce } = value as Record<string, unknown>;
+  if (typeof markdown !== "string" || typeof nonce !== "string" || !COPY_NONCE.test(nonce)) {
+    return false;
+  }
+  if (!Array.isArray(imageUrls) || imageUrls.length > MAX_COPY_IMAGES) return false;
+  const urls: unknown[] = Array.from(imageUrls); // holes become undefined, which fail below
   return (
-    typeof markdown === "string" &&
-    typeof nonce === "string" &&
-    COPY_NONCE.test(nonce) &&
-    Array.isArray(imageUrls) &&
-    imageUrls.length <= MAX_COPY_IMAGES &&
-    Object.keys(imageUrls).length === imageUrls.length && // no holes: every() skips them
-    new Set(imageUrls).size === imageUrls.length &&
-    imageUrls.every((u) => typeof u === "string" && /^https?:\/\//.test(u) && URL.canParse(u))
+    new Set(urls).size === urls.length &&
+    urls.every((u) => typeof u === "string" && /^https?:\/\//.test(u) && URL.canParse(u))
   );
 }
 

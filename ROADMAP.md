@@ -24,7 +24,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 
 - **2026-10-18:** Saved copies (#135). Owner rulings, 2026-10-17 (#135 comment 6241001150, binding); the naming ruling is the comment before it (comment 6240109297). The design is `docs/specs/2026-10-17-saved-copy-design.md`.
   - **Overrides the 2026-10-10 spec's "Not stored now: full-page archives"** (owner ruling). That spec stays as written; this entry is the override.
-  - **Lands in three PRs:** the ledger and folder store (no callers), then making copies (the snapshot pass, the one-time backfill, the image pass, the settings), then reading and removing them (the copy page, the ⋯ menu rows, the gone line's link, the All links line, `get_link`'s `savedCopy`).
+  - **Lands in four PRs:** the ledger and folder store (no callers), then copies of new links with the settings, then the copy pass (the one-time backfill, the image pass, finishing, the sweep), then reading and removing them (the copy page, the ⋯ menu rows, the gone line's link, the All links line, `get_link`'s `savedCopy`).
   - **Where the spec misread the code** (controller rulings):
     - the gone flag is #128's `gone` (`isGone`, `GoneView`), not "dead";
     - the copy reaches cards through a web-only per-page map, not `LinkView`, which is spread into strict MCP outputs;
@@ -35,6 +35,8 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - the copy page records no opening (it runs no script), an exception to `src/web/AGENTS.md`'s opening rule.
   - **Store rulings** (controller): a marker-less folder holding only `.DS_Store`, `.localized`, `Icon\r` or `.aye-tmp` counts as empty and gets a marker; the library id is written to the database before the marker; a write that fails in a running server releases its reservation at once, and any file it can't remove is left for the sweep; only a `no_room` row is ever replaced; an orphan folder at a new copy's path loses only the files the app names, and other files in it stay; every file read, write and deletion needs a passing folder check; finishing is recorded in its own column; request-time usage is its own interface; the settings land with the PR that uses them.
   - **Image references carry a random per-copy nonce** (`images/NN-<nonce>`, controller ruling after an independent challenge). The spec's `images/NN` placeholder is replaced. Finishing then never rewrites page text that looks like a reference, such as a Markdown tutorial's code. It also only shortens the file, so no finishing reserve is needed.
+  - **Turndown is given the article element directly:** checked 2026-10-18 to give the same Markdown as the HTML string. Images are numbered only once their reference has survived the conversion, so an image the Markdown never shows is never fetched. A copy the extraction child fails to make counts as not received, and the backfill retries it; only a page with no article gets none.
+  - **A save straight onto the Handy shelf can miss its copy** when its page takes longer than the save's 4-second wait, since the link is a kept tool by then. The kept-tool ruling allows this.
   - **One server per saved-copy folder.** The marker keeps a fresh database off the live folder. It cannot tell a copied database apart.
 
 - **2026-10-17:** Dead-link checks (#128). Owner rulings, 2026-10-17, recorded in #128 comment 6241000784, which is binding.

@@ -70,7 +70,18 @@ describe("isCopyDraft", () => {
     ["a non-string markdown", { ...ok, markdown: 1 }],
     ["a nonce of 31 hex", { ...ok, nonce: nonce.slice(1) }],
     ["an uppercase nonce", { ...ok, nonce: "0123456789ABCDEF0123456789ABCDEF" }],
-    ["31 URLs", { ...ok, imageUrls: Array.from({ length: 31 }, () => "https://ex.com/a.png") }],
+    [
+      "31 URLs",
+      { ...ok, imageUrls: Array.from({ length: 31 }, (_, i) => `https://ex.com/${i}.png`) },
+    ],
+    ["a sparse imageUrls", { ...ok, imageUrls: new Array(1) }],
+    [
+      "a hole after a valid URL",
+      { ...ok, imageUrls: Object.assign([...ok.imageUrls], { length: 2 }) },
+    ],
+    ["a duplicate pair", { ...ok, imageUrls: ["https://ex.com/a.png", "https://ex.com/a.png"] }],
+    ["a string imageUrls", { ...ok, imageUrls: "https://ex.com/a.png" }],
+    ["an object with length", { ...ok, imageUrls: { length: 0 } }],
     ["a javascript: URL", { ...ok, imageUrls: ["javascript:alert(1)"] }],
     ["a non-URL string", { ...ok, imageUrls: ["not a url"] }],
   ])("rejects %s", (_name, value) => {

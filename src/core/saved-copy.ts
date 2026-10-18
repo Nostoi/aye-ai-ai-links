@@ -136,6 +136,8 @@ export function isCopyDraft(value: unknown): value is CopyDraft {
     COPY_NONCE.test(nonce) &&
     Array.isArray(imageUrls) &&
     imageUrls.length <= MAX_COPY_IMAGES &&
+    Object.keys(imageUrls).length === imageUrls.length && // no holes: every() skips them
+    new Set(imageUrls).size === imageUrls.length &&
     imageUrls.every((u) => typeof u === "string" && /^https?:\/\//.test(u) && URL.canParse(u))
   );
 }

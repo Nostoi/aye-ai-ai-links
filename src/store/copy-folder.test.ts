@@ -319,3 +319,27 @@ describe("list and removeTemp", () => {
     expect(text(join(target, "copy.md"))).toBe("theirs");
   });
 });
+
+describe("unknownIn", () => {
+  it("names what the store did not make, and nothing it did", () => {
+    folder.writeCopy("12", "body");
+    folder.writeImage("12", "01.png", new Uint8Array([1]));
+    expect(folder.unknownIn("12")).toEqual([]);
+    fs.writeFileSync(join(root, "12", "copy.md (conflicted copy)"), "x");
+    fs.writeFileSync(join(root, "12", "images", "notes.txt"), "x");
+    expect(folder.unknownIn("12").sort()).toEqual([
+      "copy.md (conflicted copy)",
+      "images/notes.txt",
+    ]);
+    expect(fs.existsSync(join(root, "12", "images", "01.png"))).toBe(true);
+  });
+
+  it("is empty for an absent folder and refuses a symlinked one and a bad id", () => {
+    expect(folder.unknownIn("12")).toEqual([]);
+    const outside = fresh("outside-");
+    fs.writeFileSync(join(outside, "secret"), "x");
+    fs.symlinkSync(outside, join(root, "13"));
+    expect(folder.unknownIn("13")).toEqual([]);
+    expect(() => folder.unknownIn("../x")).toThrow();
+  });
+});

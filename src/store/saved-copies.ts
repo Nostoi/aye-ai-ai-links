@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Database } from "better-sqlite3";
+import type { Database, Statement } from "better-sqlite3";
 import type { ImageType } from "../core/fetch.js";
 import { type ImageBytes, imageVersion, type StoredImage } from "../core/image-store.js";
 import {
@@ -23,24 +23,24 @@ import {
   type SavedCopyReader,
   type SavedCopyUsage,
   type SavedCopyWriter,
+  type SweepReport,
 } from "../core/saved-copy.js";
 import type { OwnerId } from "../core/types.js";
-import { CopyFolder } from "./copy-folder.js";
+import { CopyFolder, TMP } from "./copy-folder.js";
 import { parseId, toMs } from "./sqlite-store.js";
 
 const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-
-type Maintained = Pick<
-  SavedCopyMaintenance,
-  "checkFolder" | "backfillCandidates" | "pendingCopyImages" | "unfinishedCopies"
->;
 
 const imageName = (n: number, type: ImageType) =>
   `${String(n).padStart(2, "0")}.${IMAGE_EXT[type]}`;
 
 /** Saved copies (#135): the `saved_copies*` rows and the folder holding their files. */
 export class SqliteSavedCopyStore
-  implements SavedCopyReader, SavedCopyUsage, SavedCopyWriter, Maintained
+  implements
+    SavedCopyReader,
+    SavedCopyUsage,
+    SavedCopyWriter,
+    Omit<SavedCopyMaintenance, "purgeRemoved">
 {
   private readonly folder: CopyFolder;
   private check: FolderCheck = {
@@ -292,6 +292,99 @@ export class SqliteSavedCopyStore
       throw e;
     }
     return "saved";
+  }
+
+  /** Undoes what a crash left `saving`; files go only when the folder check is `ready` (R7). */
+  async undoUnconfirmed(): Promise<{ copies: number; images: number }> {
+    const files = this.check.state === "ready";
+    const attempt = (remove: () => void) => {
+      if (!files) return;
+      try {
+        remove();
+      } catch {
+        // a file that stays is the sweep's
+      }
+    };
+    const copies = this.db
+      .prepare("SELECT owner_id, link_id FROM saved_copies WHERE status = 'saving'")
+      .all() as { owner_id: string; link_id: number }[];
+    for (const c of copies) {
+      this.releaseCopy(c.owner_id, c.link_id);
+      attempt(() => this.folder.removeCopy(String(c.link_id)));
+    }
+    const images = this.db
+      .prepare(
+        "SELECT owner_id, link_id, n, size, content_type FROM saved_copy_images WHERE status = 'saving'",
+      )
+      .all() as {
+      owner_id: string;
+      link_id: number;
+      n: number;
+      size: number;
+      content_type: ImageType;
+    }[];
+    for (const i of images) {
+      this.releaseImage(i.owner_id, i.link_id, i.n, i.size);
+      attempt(() => this.folder.removeImage(String(i.link_id), imageName(i.n, i.content_type)));
+    }
+    return { copies: copies.length, images: images.length };
+  }
+
+  /**
+   * Deletes what the store left behind that is older than `graceMs` and has no row, and reports
+   * what it will not touch. Nothing is awaited, so a row check and its deletion never straddle
+   * another save (R12).
+   */
+  async sweep(graceMs: number, now: Date): Promise<SweepReport> {
+    const report: SweepReport = { folders: 0, temp: 0, images: 0, unknown: [] };
+    if (this.check.state !== "ready") return report;
+    let listing: ReturnType<CopyFolder["list"]>;
+    try {
+      const library = this.db.prepare("SELECT id FROM saved_copy_library WHERE only = 1").get() as
+        | { id: string }
+        | undefined;
+      if (!library || this.folder.readMarker() !== library.id) return report;
+      listing = this.folder.list();
+    } catch {
+      return report;
+    }
+    const idle = (mtimeMs: number) => now.getTime() - mtimeMs > graceMs;
+    const hasRow = this.db.prepare("SELECT 1 FROM saved_copies WHERE link_id = ?");
+    const keep = this.db.prepare(
+      "SELECT n, content_type FROM saved_copy_images WHERE link_id = ? AND status IN ('saving', 'ok')",
+    );
+    for (const { name, mtimeMs } of listing.links) {
+      if (hasRow.get(Number(name))) {
+        this.sweepFolder(name, keep, report);
+      } else if (idle(mtimeMs)) {
+        const left = this.folder.removeCopy(name);
+        report.folders++;
+        report.unknown.push(...left.map((n) => `${name}/${n}`));
+      }
+    }
+    for (const { name, mtimeMs } of listing.temp) {
+      if (!idle(mtimeMs)) continue;
+      const left = this.folder.removeTemp(name);
+      report.temp++;
+      report.unknown.push(...left.map((n) => `${TMP}/${n}`));
+    }
+    report.unknown.push(...listing.other);
+    return report;
+  }
+
+  /** A folder with a row: images the ledger does not hold are deleted, other names reported. */
+  private sweepFolder(name: string, keep: Statement, report: SweepReport): void {
+    const wanted = new Set(
+      (keep.all(Number(name)) as { n: number; content_type: ImageType }[]).map((i) =>
+        imageName(i.n, i.content_type),
+      ),
+    );
+    for (const file of this.folder.listImages(name)) {
+      if (wanted.has(file)) continue;
+      this.folder.removeImage(name, file);
+      report.images++;
+    }
+    report.unknown.push(...this.folder.unknownIn(name).map((n) => `${name}/${n}`));
   }
 
   private usedNow(): number {

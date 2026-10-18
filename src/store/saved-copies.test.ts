@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -356,5 +357,177 @@ describe("images", () => {
     await expect(s.copies.finishCopy("o", s.id, (m) => m, at(2))).rejects.toThrow();
     expect(readFileSync(md)).toEqual(before);
     expect(s.db.prepare("SELECT finished_at FROM saved_copies").pluck().get()).toBeNull();
+  });
+});
+
+const walk = (dir: string, prefix = ""): Record<string, string> =>
+  Object.assign(
+    {},
+    ...readdirSync(dir, { withFileTypes: true }).map((e) =>
+      e.isDirectory()
+        ? walk(join(dir, e.name), `${prefix}${e.name}/`)
+        : { [`${prefix}${e.name}`]: readFileSync(join(dir, e.name), "utf8") },
+    ),
+  );
+const ZERO = { folders: 0, temp: 0, images: 0, unknown: [] };
+const HOUR = 3_600_000;
+
+describe("undoUnconfirmed", () => {
+  /** A crash left link `id` as a `saving` copy and link `b` (ok) with a `saving` 100-byte image. */
+  async function crashed() {
+    const s = await ready();
+    const b = (await s.links.insertIfAbsent("o", newLink(2, at(0)))).link.id;
+    const folder = new CopyFolder(s.root);
+    folder.prepare();
+    folder.writeCopy(s.id, "first");
+    folder.writeCopy(b, "second");
+    folder.writeImage(b, "01.png", new Uint8Array(100));
+    const copy = s.db.prepare(
+      "INSERT INTO saved_copies (owner_id, link_id, status, made_at, image_nonce, md_bytes, bytes) VALUES ('o', ?, ?, 1, ?, ?, ?)",
+    );
+    copy.run(s.id, "saving", null, 5, 5);
+    copy.run(b, "ok", N, 6, 106);
+    s.db
+      .prepare(
+        "INSERT INTO saved_copy_images (owner_id, link_id, n, url, status, content_type, size, sha256) VALUES ('o', ?, 1, 'https://i.example/1.png', 'saving', 'image/png', 100, 'x')",
+      )
+      .run(b);
+    return { ...s, b };
+  }
+  const saving = (db: Db) =>
+    db
+      .prepare(
+        "SELECT (SELECT count(*) FROM saved_copies WHERE status = 'saving') + (SELECT count(*) FROM saved_copy_images WHERE status = 'saving')",
+      )
+      .pluck()
+      .get();
+
+  it("drops a saving copy with its folder and puts a saving image back to pending", async () => {
+    const s = await crashed();
+    expect(await s.copies.undoUnconfirmed()).toEqual({ copies: 1, images: 1 });
+    expect(rows(s.db)).toBe(1);
+    expect(existsSync(join(s.root, s.id))).toBe(false);
+    expect(
+      s.db.prepare("SELECT status, content_type, size, sha256 FROM saved_copy_images").get(),
+    ).toEqual({ status: "pending", content_type: null, size: null, sha256: null });
+    expect(s.db.prepare("SELECT bytes FROM saved_copies").pluck().get()).toBe(6);
+    expect(existsSync(join(s.root, s.b, "images", "01.png"))).toBe(false);
+    expect(existsSync(join(s.root, s.b, "copy.md"))).toBe(true);
+    expect(saving(s.db)).toBe(0);
+  });
+
+  it("undoes the rows but deletes no file after a mismatch", async () => {
+    const s = await crashed();
+    rmSync(join(s.root, MARKER));
+    writeFileSync(join(s.root, "stray.txt"), "x");
+    expect(await s.copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    const before = walk(s.root);
+    expect(await s.copies.undoUnconfirmed()).toEqual({ copies: 1, images: 1 });
+    expect(saving(s.db)).toBe(0);
+    expect(walk(s.root)).toEqual(before);
+  });
+});
+
+describe("sweep", () => {
+  const old = (path: string, now: Date, ageMs = 2 * HOUR) => {
+    const t = (now.getTime() - ageMs) / 1000;
+    utimesSync(path, t, t);
+  };
+  const orphan = (root: string, name: string, now: Date, ageMs?: number) => {
+    const folder = new CopyFolder(root);
+    folder.prepare();
+    folder.writeCopy(name, "orphan");
+    old(join(root, name), now, ageMs);
+  };
+
+  it("deletes old orphans and staging, and reports and keeps what it does not know", async () => {
+    const s = await ready();
+    const now = new Date();
+    const second = (await s.links.insertIfAbsent("o", newLink(2, at(0)))).link.id;
+    const third = (await s.links.insertIfAbsent("o", newLink(3, at(0)))).link.id;
+    const urls = ["https://i.example/1.png", "https://i.example/2.png"];
+    await s.copies.saveCopy("o", s.id, draft("body", urls), LIMITS, at(1));
+    const png = { contentType: "image/png" as const, bytes: new Uint8Array([1]) };
+    await s.copies.saveCopyImage("o", s.id, 1, urls[0] as string, png, LIMITS);
+    await s.copies.saveCopy("o", second, draft("two"), LIMITS, at(1));
+    rmSync(join(s.root, second), { recursive: true });
+    const folder = new CopyFolder(s.root);
+    folder.prepare();
+    folder.writeImage(s.id, "03.png", new Uint8Array([3]));
+    writeFileSync(join(s.root, s.id, "copy.md (conflicted copy)"), "x");
+    orphan(s.root, "50", now);
+    orphan(s.root, "60", now, 10 * 60_000);
+    failConfirm(s.copies);
+    vi.spyOn(CopyFolder.prototype, "removeCopy").mockImplementationOnce(() => {
+      throw new Error("cleanup");
+    });
+    await expect(s.copies.saveCopy("o", third, draft("three"), LIMITS, at(1))).rejects.toThrow();
+    vi.restoreAllMocks();
+    old(join(s.root, third), now);
+    const tmp = join(s.root, ".aye-tmp");
+    for (const name of [`tmp-${N}`, "other-name"]) {
+      writeFileSync(join(tmp, name), "x");
+      old(join(tmp, name), now);
+    }
+    mkdirSync(join(s.root, "notes"));
+    writeFileSync(join(s.root, ".DS_Store"), "");
+
+    const report = await s.copies.sweep(HOUR, now);
+
+    expect({ ...report, unknown: report.unknown.sort() }).toEqual({
+      folders: 2,
+      temp: 1,
+      images: 1,
+      unknown: [".aye-tmp/other-name", `${s.id}/copy.md (conflicted copy)`, "notes"].sort(),
+    });
+    expect(existsSync(join(s.root, "50"))).toBe(false);
+    expect(existsSync(join(s.root, third))).toBe(false);
+    expect(existsSync(join(tmp, `tmp-${N}`))).toBe(false);
+    for (const kept of ["60", "notes", ".DS_Store", `${s.id}/images/01.png`, `${s.id}/copy.md`]) {
+      expect(existsSync(join(s.root, kept))).toBe(true);
+    }
+    expect(existsSync(join(s.root, s.id, "images", "03.png"))).toBe(false);
+    expect(existsSync(join(tmp, "other-name"))).toBe(true);
+    const row = s.db.prepare("SELECT status FROM saved_copies WHERE link_id = ?");
+    expect(row.pluck().get(Number(second))).toBe("ok");
+  });
+
+  it("does nothing after a mismatch", async () => {
+    const { root, copies } = setup();
+    const now = new Date();
+    mkdirSync(join(root, "12"));
+    old(join(root, "12"), now);
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(await copies.sweep(HOUR, now)).toEqual(ZERO);
+    expect(existsSync(join(root, "12"))).toBe(true);
+  });
+
+  it("does nothing when the marker has gone or changed since the check", async () => {
+    const { root, copies } = await ready();
+    const now = new Date();
+    orphan(root, "12", now);
+    rmSync(join(root, MARKER));
+    expect(await copies.sweep(HOUR, now)).toEqual(ZERO);
+    writeFileSync(join(root, MARKER), "another-library");
+    expect(await copies.sweep(HOUR, now)).toEqual(ZERO);
+    expect(existsSync(join(root, "12"))).toBe(true);
+  });
+
+  it("does nothing, and does not throw, when the root is gone", async () => {
+    const { root, copies } = await ready();
+    rmSync(root, { recursive: true });
+    expect(await copies.sweep(HOUR, new Date())).toEqual(ZERO);
+  });
+
+  it("leaves a folder that a new copy was just written into, and reports what stays", async () => {
+    const { root, copies, id } = await ready();
+    const now = new Date();
+    orphan(root, id, now);
+    writeFileSync(join(root, id, "notes.txt"), "mine");
+    expect(await copies.saveCopy("o", id, draft("new"), LIMITS, at(1))).toBe("saved");
+    old(join(root, id), now);
+    expect(await copies.sweep(HOUR, now)).toEqual({ ...ZERO, unknown: [`${id}/notes.txt`] });
+    expect(readFileSync(join(root, id, "copy.md"), "utf8")).toBe("new");
+    expect(readFileSync(join(root, id, "notes.txt"), "utf8")).toBe("mine");
   });
 });

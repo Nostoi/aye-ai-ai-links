@@ -324,6 +324,20 @@ export class CopyFolder {
     return fs.readdirSync(images).filter((n) => IMAGE_FILE.test(n));
   }
 
+  /** Names in a link folder the store did not make, relative to it. Nothing is deleted. */
+  unknownIn(linkId: string): string[] {
+    const link = this.linkDir(linkId, false);
+    if (!link) return [];
+    const unknown = fs.readdirSync(link).filter((n) => n !== "copy.md" && n !== "images");
+    const images = join(link, "images");
+    const st = lstat(images);
+    if (st && !(st.isDirectory() && !st.isSymbolicLink())) unknown.push("images");
+    else if (st) {
+      for (const n of fs.readdirSync(images)) if (!IMAGE_FILE.test(n)) unknown.push(`images/${n}`);
+    }
+    return unknown;
+  }
+
   /**
    * Deletes a staging entry named tmp-<32 hex> or write-check-<digits>: a file, or a folder
    * holding only copy.md and images/<IMAGE_FILE>. Leaves anything else; returns the names left,

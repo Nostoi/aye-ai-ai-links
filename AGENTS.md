@@ -66,7 +66,7 @@ aye-ai-ai-links/
 ├─ deploy/        LaunchAgent plist, `deploy.sh`, and `release.sh` (names and publishes deploys; run where `gh` is signed in)
 └─ src/
    ├─ core/       rules and use cases
-   ├─ store/      SQLite persistence (swappable)
+   ├─ store/      SQLite persistence (swappable) and the saved-copy folder
    ├─ search/     keyword + meaning search
    ├─ fetch/      page snapshots, preview images and link checks, through one guarded request (has its own `AGENTS.md`)
    ├─ auth/       agent keys, the caller identity, the web login and OAuth: better-auth, its lock, routes and client admission

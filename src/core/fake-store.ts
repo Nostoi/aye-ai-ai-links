@@ -32,6 +32,7 @@ import type {
   LinkPatch,
   NewLink,
   OwnerId,
+  SnapshotStatus,
   Tag,
   TagKind,
   TagPatch,
@@ -242,6 +243,28 @@ export class FakeStore
 
   async getSnapshotText(owner: OwnerId, linkId: string) {
     return this.snapshots.get(owner)?.get(linkId)?.text ?? null;
+  }
+
+  /** Maintenance read across owners: each link with its snapshot's status and text. */
+  allLinkSnapshots(): {
+    owner: OwnerId;
+    linkId: string;
+    url: string;
+    snapshotStatus: SnapshotStatus | null;
+    snapshotText: string | null;
+  }[] {
+    return [...this.links].flatMap(([owner, mine]) =>
+      [...mine.values()].map((l) => {
+        const s = this.snapshots.get(owner)?.get(l.id);
+        return {
+          owner,
+          linkId: l.id,
+          url: l.url,
+          snapshotStatus: s?.status ?? null,
+          snapshotText: s?.text ?? null,
+        };
+      }),
+    );
   }
 
   async getTool(owner: OwnerId, linkId: string) {

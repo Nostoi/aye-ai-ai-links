@@ -16,11 +16,26 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a readable copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-18:** Saved copies (#135). Owner rulings, 2026-10-17 (#135 comment 6241001150, binding); the naming ruling is the comment before it (comment 6240109297). The design is `docs/specs/2026-10-17-saved-copy-design.md`.
+  - **Overrides the 2026-10-10 spec's "Not stored now: full-page archives"** (owner ruling). That spec stays as written; this entry is the override.
+  - **Lands in three PRs:** the ledger and folder store (no callers), then making copies (the snapshot pass, the one-time backfill, the image pass, the settings), then reading and removing them (the copy page, the ⋯ menu rows, the gone line's link, the All links line, `get_link`'s `savedCopy`).
+  - **Where the spec misread the code** (controller rulings):
+    - the gone flag is #128's `gone` (`isGone`, `GoneView`), not "dead";
+    - the copy reaches cards through a web-only per-page map, not `LinkView`, which is spread into strict MCP outputs;
+    - a shutdown during the Markdown step must still give an `ok` snapshot, which needs a change to the extraction runner, and the backfill treats a copy asked for but not received as transient, never `none`;
+    - the stored-image route is in `CHECKED_PAGES`, so both copy routes join it;
+    - start-up recovery runs before the server listens, since a save can start as soon as it does;
+    - the spec's `copyFetcher` seam is dropped: copies reuse the process's page and image fetchers;
+    - the copy page records no opening (it runs no script), an exception to `src/web/AGENTS.md`'s opening rule.
+  - **Store rulings** (controller): a marker-less folder holding only `.DS_Store`, `.localized`, `Icon\r` or `.aye-tmp` counts as empty and gets a marker; the library id is written to the database before the marker; a write that fails in a running server releases its reservation at once, and any file it can't remove is left for the sweep; only a `no_room` row is ever replaced; an orphan folder at a new copy's path loses only the files the app names, and other files in it stay; every file read, write and deletion needs a passing folder check; finishing is recorded in its own column; request-time usage is its own interface; the settings land with the PR that uses them.
+  - **Image references carry a random per-copy nonce** (`images/NN-<nonce>`, controller ruling after an independent challenge). The spec's `images/NN` placeholder is replaced. Finishing then never rewrites page text that looks like a reference, such as a Markdown tutorial's code. It also only shortens the file, so no finishing reserve is needed.
+  - **One server per saved-copy folder.** The marker keeps a fresh database off the live folder. It cannot tell a copied database apart.
 
 - **2026-10-17:** Dead-link checks (#128). Owner rulings, 2026-10-17, recorded in #128 comment 6241000784, which is binding.
   - **The design** is `docs/specs/2026-10-17-dead-link-checks-design.md`. It implements those rulings by reference and lands in two PRs: first the store, rules, runner and checker, then the doors (MCP, the web page and the routes). PR 1 updates the README for what it ships: the checks, gone pages leaving the digest and Worth a look, and gone tools not asked "Still using it?".

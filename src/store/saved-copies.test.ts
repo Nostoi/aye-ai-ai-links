@@ -426,6 +426,15 @@ describe("undoUnconfirmed", () => {
     expect(saving(s.db)).toBe(0);
     expect(walk(s.root)).toEqual(before);
   });
+
+  it("undoes the rows but deletes no file once the marker differs", async () => {
+    const s = await crashed();
+    writeFileSync(join(s.root, MARKER), "another-library");
+    const before = walk(s.root);
+    expect(await s.copies.undoUnconfirmed()).toEqual({ copies: 1, images: 1 });
+    expect(saving(s.db)).toBe(0);
+    expect(walk(s.root)).toEqual(before);
+  });
 });
 
 describe("sweep", () => {
@@ -511,6 +520,57 @@ describe("sweep", () => {
     writeFileSync(join(root, MARKER), "another-library");
     expect(await copies.sweep(HOUR, now)).toEqual(ZERO);
     expect(existsSync(join(root, "12"))).toBe(true);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "reports an unreadable folder and still clears stale staging",
+    async () => {
+      const { root, copies } = await ready();
+      const now = new Date();
+      orphan(root, "12", now);
+      const stale = join(root, ".aye-tmp", `tmp-${N}`);
+      writeFileSync(stale, "x");
+      old(stale, now);
+      chmodSync(join(root, "12"), 0o000);
+      try {
+        const report = await copies.sweep(HOUR, now);
+        expect(report).toMatchObject({ temp: 1, folders: 0, unknown: ["12"] });
+        expect(existsSync(stale)).toBe(false);
+      } finally {
+        chmodSync(join(root, "12"), 0o700);
+      }
+    },
+  );
+
+  it("sweeps a leftover folder whose link later got a row that holds no copy", async () => {
+    const { root, copies, id } = await ready();
+    const now = new Date();
+    orphan(root, id, now);
+    expect(await copies.recordNoCopy("o", id, "failed")).toBe(true);
+    expect(await copies.sweep(HOUR, now)).toEqual({ ...ZERO, folders: 1 });
+    expect(existsSync(join(root, id))).toBe(false);
+  });
+
+  it("never deletes a folder named with leading zeros, and reports it", async () => {
+    const { root, copies, id } = await ready();
+    const now = new Date();
+    await copies.saveCopy("o", id, draft("body"), LIMITS, at(1));
+    const padded = `00${id}`;
+    orphan(root, padded, now);
+    expect(await copies.sweep(HOUR, now)).toEqual({ ...ZERO, unknown: [padded] });
+    expect(existsSync(join(root, padded, "copy.md"))).toBe(true);
+  });
+
+  it("does nothing when the last check was only unwritable", async () => {
+    const { root, copies } = await ready();
+    const now = new Date();
+    orphan(root, "12", now);
+    vi.spyOn(CopyFolder.prototype, "probe").mockImplementationOnce(() => {
+      throw new Error("read-only");
+    });
+    expect(await copies.checkFolder()).toMatchObject({ state: "unwritable" });
+    expect(await copies.sweep(HOUR, now)).toEqual(ZERO);
+    expect(existsSync(join(root, "12", "copy.md"))).toBe(true);
   });
 
   it("does nothing, and does not throw, when the root is gone", async () => {

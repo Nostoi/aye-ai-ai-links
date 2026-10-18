@@ -296,7 +296,7 @@ export class SqliteSavedCopyStore
 
   /** Undoes what a crash left `saving`; files go only when the folder check is `ready` (R7). */
   async undoUnconfirmed(): Promise<{ copies: number; images: number }> {
-    const files = this.check.state === "ready";
+    const files = this.owned();
     const attempt = (remove: () => void) => {
       if (!files) return;
       try {
@@ -337,39 +337,63 @@ export class SqliteSavedCopyStore
    */
   async sweep(graceMs: number, now: Date): Promise<SweepReport> {
     const report: SweepReport = { folders: 0, temp: 0, images: 0, unknown: [] };
-    if (this.check.state !== "ready") return report;
     let listing: ReturnType<CopyFolder["list"]>;
     try {
-      const library = this.db.prepare("SELECT id FROM saved_copy_library WHERE only = 1").get() as
-        | { id: string }
-        | undefined;
-      if (!library || this.folder.readMarker() !== library.id) return report;
+      if (!this.owned()) return report;
       listing = this.folder.list();
     } catch {
       return report;
     }
     const idle = (mtimeMs: number) => now.getTime() - mtimeMs > graceMs;
-    const hasRow = this.db.prepare("SELECT 1 FROM saved_copies WHERE link_id = ?");
+    const hasCopy = this.db.prepare(
+      "SELECT 1 FROM saved_copies WHERE link_id = ? AND status IN ('saving', 'ok', 'removed')",
+    );
     const keep = this.db.prepare(
       "SELECT n, content_type FROM saved_copy_images WHERE link_id = ? AND status IN ('saving', 'ok')",
     );
     for (const { name, mtimeMs } of listing.links) {
-      if (hasRow.get(Number(name))) {
-        this.sweepFolder(name, keep, report);
-      } else if (idle(mtimeMs)) {
-        const left = this.folder.removeCopy(name);
-        report.folders++;
-        report.unknown.push(...left.map((n) => `${name}/${n}`));
+      // A name that is not a link id's canonical form (`007`) is never ours to delete.
+      if (name !== String(Number(name))) {
+        report.unknown.push(name);
+        continue;
+      }
+      try {
+        if (hasCopy.get(Number(name))) {
+          this.sweepFolder(name, keep, report);
+        } else if (idle(mtimeMs)) {
+          const left = this.folder.removeCopy(name);
+          report.folders++;
+          report.unknown.push(...left.map((n) => `${name}/${n}`));
+        }
+      } catch {
+        report.unknown.push(name);
       }
     }
     for (const { name, mtimeMs } of listing.temp) {
       if (!idle(mtimeMs)) continue;
-      const left = this.folder.removeTemp(name);
-      report.temp++;
-      report.unknown.push(...left.map((n) => `${TMP}/${n}`));
+      try {
+        const left = this.folder.removeTemp(name);
+        report.temp++;
+        report.unknown.push(...left.map((n) => `${TMP}/${n}`));
+      } catch {
+        report.unknown.push(`${TMP}/${name}`);
+      }
     }
     report.unknown.push(...listing.other);
     return report;
+  }
+
+  /** The last check was `ready` and the marker still holds this database's library id (R7). */
+  private owned(): boolean {
+    if (this.check.state !== "ready") return false;
+    try {
+      const library = this.db.prepare("SELECT id FROM saved_copy_library WHERE only = 1").get() as
+        | { id: string }
+        | undefined;
+      return library !== undefined && this.folder.readMarker() === library.id;
+    } catch {
+      return false;
+    }
   }
 
   /** A folder with a row: images the ledger does not hold are deleted, other names reported. */

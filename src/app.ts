@@ -28,7 +28,7 @@ import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import type { SqliteKeyStore } from "./store/key-store.js";
-import { COPY_IMAGE_ROUTE, IMAGE_ROUTE, webApp } from "./web/http.js";
+import { COPY_IMAGE_ROUTE, COPY_ROUTE, IMAGE_ROUTE, webApp } from "./web/http.js";
 
 /**
  * better-auth, the lock every call into it goes through, the OAuth state around it, and the
@@ -88,6 +88,7 @@ const CHECKED_PAGES = [
   SAVE_PATH,
   OAUTH_ERROR_PATH,
   IMAGE_ROUTE,
+  COPY_ROUTE,
   COPY_IMAGE_ROUTE,
 ];
 

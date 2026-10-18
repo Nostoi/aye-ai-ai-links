@@ -326,6 +326,16 @@ img.handy-image{background:#fff}
 .edit-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .edit-foot button{min-height:44px}
 ${spaceClasses}
+.copy{max-width:720px}
+.copy h1,.copy p{overflow-wrap:anywhere}
+.copy-article{margin-top:24px;font-size:17px;line-height:1.65;overflow-wrap:anywhere}
+.copy-article>*{max-width:68ch}
+.copy-article h1,.copy-article h2,.copy-article h3,.copy-article h4{margin:28px 0 12px}
+.copy-article img{display:block;max-width:100%;height:auto;margin:16px 0;border-radius:8px}
+.copy-article pre{max-width:100%;overflow-x:auto;padding:12px 16px;border-radius:8px;background:var(--surface);border:1px solid var(--line);font-size:14.5px}
+.copy-article code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+.copy-article blockquote{margin:16px 0;padding:0 0 0 16px;border-left:3px solid var(--line);color:var(--soft)}
+.copy-article hr{border:0;border-top:1px solid var(--line);margin:24px 0}
 .save{max-width:620px}
 .save p{overflow-wrap:anywhere}
 .save-form label{margin-top:18px}

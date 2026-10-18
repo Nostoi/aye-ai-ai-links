@@ -489,6 +489,8 @@ describe("owner isolation coverage", () => {
   const A_IMAGE = png(321, 123, Buffer.from("A's own image bytes for the route guard"));
   /** A's saved-copy picture: distinct bytes from A_IMAGE. */
   const A_COPY_IMAGE = png(322, 124, Buffer.from("A's saved copy picture for the route guard"));
+  /** A line only A's saved copy holds. */
+  const A_COPY_TEXT = "Quokkas shelter in A's saved copy for the route guard";
   const COPY_NONCE = "0123456789abcdef0123456789abcdef";
   const copyDirs: string[] = [];
   afterEach(() => {
@@ -498,7 +500,7 @@ describe("owner isolation coverage", () => {
   const storeCopyImage = async (world: World, linkId: string, bytes: Buffer) => {
     const url = "https://a.example/copy-picture.png";
     const draft = {
-      markdown: `![pic](${imageRef(1, COPY_NONCE)})`,
+      markdown: `${A_COPY_TEXT}\n\n![pic](${imageRef(1, COPY_NONCE)})\n\n![remote](https://images.example/x.png)\n\n[elsewhere](https://a.example/elsewhere)`,
       imageUrls: [url],
       nonce: COPY_NONCE,
     };
@@ -568,6 +570,7 @@ describe("owner isolation coverage", () => {
     "GET /save": { noOwnerData: "the save form, filled only from its own query" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
+    "GET /links/:id{[0-9]+}/copy": { request: "/links/:id/copy", marker: () => A_COPY_TEXT },
     "GET /links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}": {
       request: "/links/:id/copy/images/1",
       marker: () => A_COPY_IMAGE,

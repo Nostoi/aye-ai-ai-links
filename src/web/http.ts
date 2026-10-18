@@ -68,6 +68,7 @@ import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allPage } from "./all-page.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
+import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -91,6 +92,9 @@ const SAVE_PAGE_HEADERS = { ...NO_STORE, "Content-Security-Policy": "frame-ances
 
 /** A link's stored preview image. The id must be digits; anything else is not this route. */
 export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
+
+/** The page for reading a link's saved copy. */
+export const COPY_ROUTE = "/links/:id{[0-9]+}/copy";
 
 /** A picture of a link's saved copy: `n` is one or two digits, as the copy numbers them. */
 export const COPY_IMAGE_ROUTE = "/links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}";
@@ -647,6 +651,12 @@ export function webApp({
     store: deps.store,
     copies: deps.savedCopies,
     gate: deps.readGate,
+  });
+  app.get(COPY_ROUTE, session, async (c) => {
+    const view = await copies.view(c.get("caller").owner, c.req.param("id"));
+    if (view === null) return c.html(copyNotFoundPage(), 404, COPY_HEADERS);
+    const html = copyPage(view, (deps.now ?? (() => new Date()))());
+    return c.html(html, view.copy === "unreadable" ? 503 : 200, COPY_HEADERS);
   });
   app.get(COPY_IMAGE_ROUTE, session, async (c) => {
     const image = await copies.image(

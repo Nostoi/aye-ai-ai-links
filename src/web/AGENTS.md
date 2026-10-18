@@ -24,6 +24,8 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 - Controls are at least 44px tall. Fields are outlined with `--field`.
 - Removing or turning something off shows an Undo bar instead of asking first. The action is done at once, and Undo reverses it with a second request; nothing waits for the bar to close. The bar is `page()`'s `undo` option and its `showUndo`.
 - A saved link opens in a new tab: `target="_blank" rel="noopener noreferrer"`. Render it with `openLink` or `linkTitle` (`open-link.ts`) inside a card carrying the link's `data-id`, and add `openedScript` for its list, so the opening is recorded (#124).
+- Exception: the saved-copy page runs no script, so its link to the page records no opening (ROADMAP 2026-10-18).
+- Markdown from a saved page renders only through `copy-markdown.ts`. The copy page is the one page with a full CSP (`COPY_HEADERS`); its style hash comes from `PAGE_STYLE`, so styles live in `theme.ts` and it carries no `style=` attribute.
 - Page designs: #12 comment 6158134489.
 
 ## New routes

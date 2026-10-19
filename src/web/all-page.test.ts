@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { MAX_COPY_BYTES } from "../core/saved-copy.js";
 import type { LinkOrder } from "../core/search.js";
 import type { Link, Tag } from "../core/types.js";
 import { allHref, allPage } from "./all-page.js";
@@ -333,9 +334,23 @@ describe("the saved-copy usage line", () => {
 
   it("shows exact tenths as set, such as a 1.3 GiB limit", () => {
     const el = notice(
-      all({ notice: { kind: "high", usedBytes: Math.floor(1.2 * GIB), limitBytes: Math.floor(1.3 * GIB) } }),
+      all({
+        notice: {
+          kind: "high",
+          usedBytes: Math.floor(1.2 * GIB),
+          limitBytes: Math.floor(1.3 * GIB),
+        },
+      }),
     );
     expect(el?.textContent?.trim()).toBe("Saved copies use 1.2 of 1.3 GiB.");
+  });
+
+  it("shows a limit that isn't a tenth to two decimals, so the most a high level uses still reads below it", () => {
+    const limitBytes = Math.floor(1.25 * GIB);
+    const el = notice(
+      all({ notice: { kind: "high", usedBytes: limitBytes - MAX_COPY_BYTES, limitBytes } }),
+    );
+    expect(el?.textContent?.trim()).toBe("Saved copies use 1.23 of 1.25 GiB.");
   });
 
   it("says full and paused in amber", () => {

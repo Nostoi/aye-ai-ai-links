@@ -61,12 +61,20 @@ type Input = {
   notice?: CopyNotice | null;
 };
 
-/** GiB rounded down to one decimal, so a used amount below the limit never reads as all of it. */
-const gib = (bytes: number) => String(Math.floor((bytes * 10) / 1024 ** 3 + 1e-6) / 10);
+/** GiB rounded down to `places` decimals; the tolerance keeps a configured tenth from reading one lower. */
+const gib = (bytes: number, places: number) =>
+  String(Math.floor((bytes * 10 ** places) / 1024 ** 3 + 1e-6) / 10 ** places);
+
+const limitPlaces = (limitBytes: number) => (gib(limitBytes, 1) === gib(limitBytes, 2) ? 1 : 2);
+
+const usageText = (usedBytes: number, limitBytes: number) => {
+  const places = limitPlaces(limitBytes);
+  return `Saved copies use ${gib(usedBytes, places)} of ${gib(limitBytes, places)} GiB.`;
+};
 
 const noticeText = (n: CopyNotice): string =>
   n.kind === "high"
-    ? `Saved copies use ${gib(n.usedBytes)} of ${gib(n.limitBytes)} GiB.`
+    ? usageText(n.usedBytes, n.limitBytes)
     : n.kind === "full"
       ? "Saved copies are almost full, so new links may not get one. Raise AYE_SAVED_COPY_LIMIT_GB or remove some copies."
       : "Saved copies are paused: the server can't write to its folder.";

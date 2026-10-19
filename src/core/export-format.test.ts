@@ -76,6 +76,7 @@ const reads = (): ManifestReads => ({
       summary: "Compares batteries",
       why: { text: "Sizing the cabin battery", source: "stated" },
       lastOpenedAt: T(20),
+      lastSurfacedAt: T(21),
       tags: [tag("Cabin", "stated", "project", "stated"), tag("energy", "inferred")],
       snapshot: {
         status: "ok",
@@ -272,6 +273,10 @@ describe("toNewLink", () => {
       ...stored,
       urlKey: urlKey(stored.url),
     });
+  });
+  it("restores the surfaced and snooze dates exactly", () => {
+    expect(toNewLink(m.links[0] as ManifestLink, m.tags).lastSurfacedAt).toEqual(T(21));
+    expect(toNewLink(m.links[2] as ManifestLink, m.tags).snoozedUntil).toEqual(T(5000));
   });
   it("makes a tag missing from the catalog an inferred topic (R5)", () => {
     expect(

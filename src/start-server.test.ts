@@ -1102,7 +1102,14 @@ describe("startServer", () => {
         const deps = createDeps(db, new FakeEmbedder(DIMS));
         await saveLink(deps, "owner", { url: "https://example.com/old", savedBy: "seed" });
         const id = String(db.prepare("SELECT id FROM links").pluck().get());
-        const lease = await deps.store.leaseSnapshot("owner", id, at(1), at(100));
+        const now = deps.now();
+        const lease = await deps.store.leaseSnapshot(
+          "owner",
+          id,
+          now,
+          new Date(now.getTime() + 100_000),
+        );
+        expect(lease).not.toBeNull();
         await deps.store.recordSnapshot(
           "owner",
           id,

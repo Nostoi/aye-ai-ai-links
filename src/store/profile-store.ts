@@ -68,6 +68,16 @@ export class SqliteProfileStore implements ProfileStore {
     return this.focus(owner, limit);
   }
 
+  async listFocus(owner: OwnerId) {
+    const rows = this.db
+      .prepare(
+        `SELECT id, text, source, written_by, created_at FROM focus_log
+         WHERE owner_id = ? ORDER BY created_at, id`,
+      )
+      .all(owner) as FocusRow[];
+    return rows.map(toFocus);
+  }
+
   async restoreNote(owner: OwnerId, id: string, removedSince: Date) {
     const since = ms(removedSince);
     const noteId = parseId(id);

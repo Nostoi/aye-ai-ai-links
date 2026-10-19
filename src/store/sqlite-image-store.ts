@@ -95,21 +95,32 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     );
   }
 
-  async image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null> {
+  async image(
+    owner: OwnerId,
+    linkId: string,
+    which?: "page" | "own",
+  ): Promise<(StoredImage & { role?: ImageRole }) | null> {
     const n = parseId(linkId);
     if (n === null) return null;
     const read = (table: "owner_images" | "link_images") =>
       this.db
         .prepare(
-          `SELECT content_type, bytes, sha256 FROM ${table} WHERE owner_id = ? AND link_id = ?`,
+          `SELECT content_type, bytes, sha256${table === "link_images" ? ", role" : ""}
+           FROM ${table} WHERE owner_id = ? AND link_id = ?`,
         )
-        .get(owner, n) as { content_type: ImageType; bytes: Buffer; sha256: string } | undefined;
-    const row = (which === "page" ? undefined : read("owner_images")) ?? read("link_images");
+        .get(owner, n) as
+        | { content_type: ImageType; bytes: Buffer; sha256: string; role?: ImageRole }
+        | undefined;
+    const row =
+      which === "own"
+        ? read("owner_images")
+        : ((which === "page" ? undefined : read("owner_images")) ?? read("link_images"));
     if (!row) return null;
     return {
       contentType: row.content_type,
       bytes: new Uint8Array(row.bytes),
       version: imageVersion(row.sha256),
+      ...(which === "page" && row.role ? { role: row.role } : {}),
     };
   }
 

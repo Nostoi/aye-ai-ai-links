@@ -169,7 +169,8 @@ export async function runChatTurn(input: {
         messages.push({ role: "user", text: EMPTY_REPLY_NUDGE });
         continue;
       }
-      messages.push({ role: "assistant", text: reply.text, toolCalls: reply.toolCalls });
+      const { text, toolCalls, raw } = reply;
+      messages.push({ role: "assistant", text, toolCalls, ...(raw === undefined ? {} : { raw }) });
       for (const call of reply.toolCalls) {
         if (signal?.aborted) return fail(STOPPING);
         if (deadline - now() < TOOL_CALL_MS) return fail(TOO_LONG);

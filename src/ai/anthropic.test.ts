@@ -65,7 +65,8 @@ describe("anthropicModel", () => {
     const body = sentBody(seen);
     expect(body.model).toBe("m1");
     expect(body.system).toBe("S");
-    expect(body.max_tokens).toBeGreaterThan(0);
+    // Thinking counts toward max_tokens, and above 21,333 the docs ask for streaming.
+    expect(body.max_tokens).toBe(16_000);
     expect(body.messages).toEqual([{ role: "user", content: "hi" }]);
     expect(body.tools[0]).toEqual({
       name: "find",

@@ -6,6 +6,7 @@ import type { Change } from "../mcp/changes.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
+import { anthropicModel } from "./anthropic.js";
 import {
   EMPTY_REPLY_NUDGE,
   IN_APP_INSTRUCTIONS,
@@ -19,7 +20,7 @@ import {
   TURN_MS,
   takeTurn,
 } from "./chat-turn.js";
-import { AiUnavailable, type ModelReply, type ToolCall } from "./model.js";
+import { AiUnavailable, type Fetch, type ModelReply, type ToolCall } from "./model.js";
 import { scriptedModel } from "./model-test-kit.js";
 import { openToolSession, type ToolResult, type ToolSession } from "./tool-session.js";
 
@@ -423,6 +424,63 @@ describe("runChatTurn", () => {
 
     expect(result).toMatchObject({ ok: true, changes: [] });
     expect(result).toHaveProperty("reply", expect.stringMatching(/Fake gave no answer/));
+  });
+
+  describe("with Claude's thinking", () => {
+    /** The Anthropic connector over a fake API that answers each request with the next content. */
+    function claude(contents: Record<string, unknown>[][]) {
+      const sent: { messages: { role: string; content: unknown }[] }[] = [];
+      const fetchImpl = (async (_url: string, init: RequestInit) => {
+        sent.push(JSON.parse(String(init.body)));
+        const content = contents[sent.length - 1];
+        if (!content) throw new Error(`no reply ${sent.length}`);
+        return Response.json({ content, stop_reason: "end_turn" });
+      }) as unknown as Fetch;
+      const model = anthropicModel(
+        { url: "https://ai.example", key: "k", model: "m", name: "C" },
+        fetchImpl,
+      );
+      return { model, sent };
+    }
+
+    it("sends a reply's thinking back unchanged and in order with its tool calls", async () => {
+      const first = [
+        { type: "thinking", thinking: "", signature: "sig-1" },
+        { type: "text", text: "Saving." },
+        { type: "tool_use", id: "t1", name: "save_link", input: { url: "https://ex.com/a" } },
+        { type: "redacted_thinking", data: "opaque" },
+        { type: "tool_use", id: "t2", name: "search_links", input: { query: "a" } },
+      ];
+      const { model, sent } = claude([first, [{ type: "text", text: "Done." }]]);
+      const { session } = fakeSession();
+
+      const result = await runChatTurn({ model, session, history: [], text: "save it" });
+
+      expect(result).toMatchObject({ ok: true, reply: "Done." });
+      expect(sent[1]?.messages[1]).toEqual({ role: "assistant", content: first });
+      expect(sent[1]?.messages[2]?.content).toMatchObject([
+        { type: "tool_result", tool_use_id: "t1" },
+        { type: "tool_result", tool_use_id: "t2" },
+      ]);
+      // The provider's own content stays inside the turn.
+      expect(JSON.stringify(result)).not.toContain("sig-1");
+    });
+
+    it("treats a reply with only thinking as empty, and asks once more", async () => {
+      const { model, sent } = claude([
+        [{ type: "thinking", thinking: "", signature: "sig-1" }],
+        [{ type: "text", text: "Here it is." }],
+      ]);
+      const { session } = fakeSession();
+
+      const result = await runChatTurn({ model, session, history: [], text: "s" });
+
+      expect(result).toMatchObject({ ok: true, reply: "Here it is." });
+      expect(sent[1]?.messages).toEqual([
+        { role: "user", content: "s" },
+        { role: "user", content: EMPTY_REPLY_NUDGE },
+      ]);
+    });
   });
 
   it("works the real tools as the owner", async () => {

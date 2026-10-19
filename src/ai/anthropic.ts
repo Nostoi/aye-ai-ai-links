@@ -11,8 +11,9 @@ import {
 type AnthropicConfig = { url: string; key: string | undefined; model: string; name: string };
 
 const UNREADABLE = "its reply couldn't be read";
-// The Messages API requires `max_tokens` on every request.
-const MAX_TOKENS = 4096;
+// The Messages API requires `max_tokens` on every request. Claude's thinking counts toward it, and
+// the docs ask for streaming above 21,333, which this connector doesn't do.
+const MAX_TOKENS = 16_000;
 const API_VERSION = "2023-06-01";
 
 type WireMessage = { role: "user" | "assistant"; content: string | Record<string, unknown>[] };
@@ -37,6 +38,10 @@ function wireMessages(messages: ChatMessage[]): WireMessage[] {
         last.content.every((block) => block.type === "tool_result");
       if (open && Array.isArray(last.content)) last.content.push(result);
       else wire.push({ role: "user", content: [result] });
+    } else if (Array.isArray(message.raw)) {
+      // A reply from this turn goes back exactly as Claude sent it: its thinking blocks must stay
+      // unchanged and in their places among its text and tool calls.
+      wire.push({ role: "assistant", content: message.raw });
     } else {
       const blocks: Record<string, unknown>[] = [];
       if (message.text) blocks.push({ type: "text", text: message.text });
@@ -73,7 +78,7 @@ function readReply(data: unknown): ModelReply {
       toolCalls.push({ id: block.id, name: block.name, arguments: block.input ?? {} });
     }
   }
-  const reply: ModelReply = { text, toolCalls };
+  const reply: ModelReply = { text, toolCalls, raw: root.content };
   const { input_tokens: input, output_tokens: output } = root.usage ?? {};
   if (typeof input === "number" && typeof output === "number") reply.usage = { input, output };
   if (root.stop_reason === "max_tokens") reply.truncated = true;

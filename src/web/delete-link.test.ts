@@ -305,6 +305,77 @@ describe("Delete link beside other scripts", () => {
     await p.settle();
     expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
   });
+
+  describe("a late edit answer on card 8", () => {
+    const edited = {
+      title: "Edited",
+      url: "https://ex.com/8",
+      initials: "E",
+      version: "v",
+      fit: "cover",
+      picture: { own: false, pageVersion: "v", pageFit: "cover" },
+      editId: "e1",
+    };
+    /** Card 8's Save is sent and held; its dialog is then closed. */
+    const lateEdit = async () => {
+      let release: () => void = () => {};
+      const wait = new Promise<void>((r) => {
+        release = r;
+      });
+      const p = runPage(
+        searchPage({
+          query: "",
+          links: [link("7"), link("8")],
+          now: NOW,
+          copies: new Map([["7", { madeAt: NOW }]]),
+        }),
+        (s) => (s.url === "/links/edit" ? { status: 200, wait, body: edited } : { status: 204 }),
+      );
+      const dialog = stubDialog(p);
+      p.dispatch(p.$("[data-id='8'] button[data-act=edit]"), "click");
+      (p.$("#edit-title") as HTMLInputElement).value = "Edited";
+      p.dispatch(p.$("#edit-link form"), "submit");
+      await p.settle();
+      dialog.close();
+      return { p, release };
+    };
+
+    it("leaves the bar of a delete on another card, and Undo restores that card", async () => {
+      const { p, release } = await lateEdit();
+      await click(p, DELETE);
+      release();
+      await p.settle();
+      expect(p.$("[data-id='8'] h2 a").textContent).toBe("Edited");
+      expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+      await click(p, "#undo-bar button");
+      expect(p.sent.map((s) => s.url)).toEqual(["/links/edit", "/links/delete", "/links/restore"]);
+      expect(p.sent[2]?.body).toEqual({ id: "7" });
+    });
+
+    it("leaves the bar of a saved copy removed on another card", async () => {
+      const { p, release } = await lateEdit();
+      await click(p, "[data-id='7'] button[data-act=remove-copy]");
+      release();
+      await p.settle();
+      expect(p.$("#undo-bar span").textContent).toBe("Saved copy removed.");
+      await click(p, "#undo-bar button");
+      expect(p.sent.map((s) => s.url)).toEqual([
+        "/links/edit",
+        "/links/copy/remove",
+        "/links/copy/restore",
+      ]);
+    });
+
+    it("still offers Link updated when no bar is showing", async () => {
+      const { p, release } = await lateEdit();
+      release();
+      await p.settle();
+      expect(p.$("#undo-bar").hidden).toBe(false);
+      expect(p.$("#undo-bar span").textContent).toBe("Link updated");
+      await click(p, "#undo-bar button");
+      expect(p.sent[1]).toMatchObject({ url: "/links/edit/undo", body: { id: "8", editId: "e1" } });
+    });
+  });
 });
 
 describe("the menu's Delete link row", () => {

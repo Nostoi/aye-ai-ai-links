@@ -87,6 +87,7 @@ describe("a card menu row with an href", () => {
       "Edit title and picture…",
       "Read saved copy",
       "Remove saved copy",
+      "Delete link",
     ]);
     const a = d.querySelector("a");
     expect(a?.getAttribute("href")).toBe(copyHref("7"));
@@ -176,9 +177,9 @@ describe("the page builders", () => {
   it.each([
     ["all links", all],
     ["a space", space],
-  ])("%s done page: no menu, but the gone line still links", (_, build) => {
+  ])("%s done page: the menu and the gone line both link", (_, build) => {
     const html = build({ links: [link("1", { state: "archived" })], copies, gone, done: true });
-    expect(dom(html).querySelector(".card-menu")).toBeNull();
+    expect(dom(html).querySelector(".card-menu")).not.toBeNull();
     expect(goneLinks(html, "1")).toEqual(["/links/1/copy"]);
   });
 
@@ -293,14 +294,14 @@ describe("the pages' routes", () => {
     expect(rows(html, oldest)).toEqual(ROW(oldest));
   });
 
-  it("all links: a gone archived link shows the gone line's link and no menu on /all/done", async () => {
+  it("all links: a gone archived link shows the gone line's link and the menu on /all/done", async () => {
     const { deps, save, flag, get } = await world();
     const id = await save("owner", "Gone and done", { copy: true });
     await flag(id);
     await deps.store.update("owner", id, { state: "archived" });
     const html = await get("/all/done");
     expect(goneLinks(html, id)).toEqual([`/links/${id}/copy`]);
-    expect(dom(html).querySelector(".card-menu")).toBeNull();
+    expect(dom(html).querySelector(".card-menu")).not.toBeNull();
   });
 
   it("spaces: the row shows on /spaces?tag=, from one read", async () => {

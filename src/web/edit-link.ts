@@ -6,6 +6,7 @@ import type { Link } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
 import { removeCopyItem } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
+import { deleteLinkItem } from "./delete-link.js";
 import { initialsText } from "./initials.js";
 import { escapeHtml } from "./page.js";
 
@@ -29,6 +30,7 @@ export const editMenu = (link: Link, copy?: CopyInfo) =>
   cardMenu(`More for ${link.title ?? link.url}`, [
     EDIT_ITEM,
     ...(copy ? [readCopyItem(link.id), removeCopyItem] : []),
+    deleteLinkItem,
   ]);
 
 /**
@@ -62,7 +64,8 @@ const PICTURE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="tr
 /**
  * The edit dialog, once per page with the card menu. It is filled from the card it opens on, by
  * `editLinkScript`. On a phone the theme makes it a bottom sheet: Cancel and Save move to the top
- * bar, and the close button and the paste hint are hidden.
+ * bar, and the close button and the paste hint are hidden. Delete link sits outside the foot, so
+ * it shows at every width.
  */
 export const editDialog =
   () => `<dialog class="edit-link" id="edit-link" aria-labelledby="edit-link-title">
@@ -92,6 +95,7 @@ export const editDialog =
 <p class="edit-types">PNG, JPEG, GIF or WebP. Big pictures are shrunk to fit.</p>
 </fieldset>
 <p class="edit-error" id="edit-error" role="alert"></p>
+<p class="edit-delete-row"><button type="button" class="edit-delete" data-edit="delete">Delete link</button></p>
 <div class="edit-foot">
 <button type="button" data-edit="cancel">Cancel</button>
 <button type="submit" class="primary" data-edit="save">Save</button>
@@ -115,9 +119,12 @@ export const SHRINK_SIDE = 1600;
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
  *   Save stays off until its answer comes. An answer that comes after the dialog closed or reopened
- *   still updates its own card and offers Undo, but leaves the dialog alone; a refusal that comes then
+ *   still updates its own card and offers Undo, unless another action offered its own Undo while the
+ *   Save was out (`showUndo.offers()`); it leaves the dialog alone, and a refusal that comes then
  *   shows in the page's alert.
  * - Focus goes back to the card's ⋯ when the dialog closes.
+ * - Delete link drops the unsaved change, closes the dialog and calls `deleteLinkScript`'s
+ *   `deleteCard`, so the page's script includes that too. It is off while a Save is answered.
  */
 export const editLinkScript = (root: string, error: string) => `{
 const editRoot = document.getElementById(${JSON.stringify(root)});
@@ -135,6 +142,7 @@ const chooseButton = dialog.querySelector("[data-edit=choose]");
 const fileField = dialog.querySelector("[data-edit=file]");
 const removeButton = dialog.querySelector("[data-edit=remove]");
 const useTitle = dialog.querySelector("[data-edit=use-title]");
+const deleteButton = dialog.querySelector("[data-edit=delete]");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 let card = null;
@@ -153,7 +161,7 @@ let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   titleField.toggleAttribute("readonly", saving);
-  for (const c of [chooseButton, removeButton, useTitle]) c.disabled = saving;
+  for (const c of [chooseButton, removeButton, useTitle, deleteButton]) c.disabled = saving;
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
@@ -339,6 +347,14 @@ dialog.addEventListener("close", () => {
   if (held) held();
 });
 for (const b of dialog.querySelectorAll("[data-edit=cancel]")) b.addEventListener("click", finish);
+// Delete drops any unsaved change; deleteCard moves focus on from the card.
+deleteButton.addEventListener("click", () => {
+  if (deleteButton.disabled) return;
+  const target = card;
+  dropPick();
+  dialog.close();
+  deleteCard(target);
+});
 useTitle.addEventListener("click", () => {
   titleField.value = pageTitle.textContent;
   titleField.focus();
@@ -414,6 +430,7 @@ form.addEventListener("submit", async (event) => {
   editAlert.textContent = "";
   const target = card;
   const turn = ++saveTurn;
+  const offersAtSave = showUndo.offers();
   saving = true;
   syncBusy();
   const res = await fetch("/links/edit", { method: "POST", body, redirect: "manual" }).catch(() => null);
@@ -433,7 +450,7 @@ form.addEventListener("submit", async (event) => {
   showCard(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => showUndo(${JSON.stringify("Link updated")}, async () => {
+  const offer = () => target.isConnected && showUndo.offers() === offersAtSave && showUndo(${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
     if (undone) showCard(target, undone);

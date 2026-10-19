@@ -32,6 +32,7 @@ if (older && list) {
     const month = (el) => (el ? el.getAttribute("data-month") : null);
     const last = list.lastElementChild;
     if (added[0] && month(added[0]) && month(added[0]) === month(last)) {
+      last.hidden = false;
       last.querySelector("ul").append(...added.shift().querySelector("ul").children);
     }
     list.append(...added);

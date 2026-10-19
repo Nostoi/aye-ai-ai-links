@@ -11,6 +11,7 @@ export type Answer = {
   text?: string;
   wait?: Promise<unknown>;
   textFails?: boolean;
+  redirected?: boolean;
 };
 
 /**
@@ -50,7 +51,7 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
       status: a.status,
       ok: a.status >= 200 && a.status < 300,
       type: a.type ?? "basic",
-      redirected: false,
+      redirected: a.redirected ?? false,
       json: async () => {
         if (a.body === undefined) throw new SyntaxError("no body");
         return a.body;
@@ -91,7 +92,28 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  return { document, sent, dispatch, settle, $, focused: () => focusLog };
+  return { document, sent, dispatch, settle, $, location, focused: () => focusLog };
+}
+
+/**
+ * The page's edit dialog, with `showModal` and `close` standing in for the browser's: linkedom
+ * has neither, and `close` fires the dialog's close event as a browser does.
+ */
+export function stubDialog(page: ReturnType<typeof runPage>) {
+  const dialog = page.$("#edit-link") as HTMLElement & {
+    open?: boolean;
+    showModal(): void;
+    close(): void;
+  };
+  dialog.showModal = () => {
+    dialog.open = true;
+  };
+  dialog.close = () => {
+    if (!dialog.open) return;
+    dialog.open = false;
+    page.dispatch(dialog, "close");
+  };
+  return dialog;
 }
 
 /**

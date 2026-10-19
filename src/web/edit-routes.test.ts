@@ -326,7 +326,7 @@ describe("the owner's picture on every page", () => {
 
 describe("the done pages", () => {
   it.each(["/all/done", "/spaces/done?tag=Kitchen"])(
-    "%s reads no picture info and has no edit dialog, even for a link with an owner picture",
+    "%s reads the picture info and has the edit dialog, for a link with an owner picture",
     async (path) => {
       const { world, browser, id } = await edited();
       const deps = linkDeps(world);
@@ -336,11 +336,8 @@ describe("the done pages", () => {
       const info = vi.spyOn(SqliteImageStore.prototype, "pictureInfo");
       try {
         const { document } = parseHTML(String((await browser.send(path)).body));
-        expect(document.querySelector(`li[data-id="${id}"]`)).not.toBeNull();
-        expect(document.querySelector("#edit-link")).toBeNull();
-        expect(info).not.toHaveBeenCalled();
-        // The spy sees calls: an active page reads the info.
-        await browser.send("/all");
+        expect(document.querySelector(`li[data-id="${id}"]`)?.getAttribute("data-own")).toBe("1");
+        expect(document.querySelector("#edit-link")).not.toBeNull();
         expect(info).toHaveBeenCalled();
       } finally {
         info.mockRestore();

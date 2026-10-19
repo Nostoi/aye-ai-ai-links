@@ -110,7 +110,9 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  return (message, undo) => {
+  let offers = 0;
+  const show = (message, undo) => {
+    offers++;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -125,6 +127,8 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
+  show.offers = () => offers;
+  return show;
 })();
 </script>`;
 

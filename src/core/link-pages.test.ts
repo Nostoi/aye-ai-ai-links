@@ -9,7 +9,7 @@ import { checkedOrder, linkPage } from "./link-pages.js";
 import { saveLink } from "./links.js";
 import { listLinks } from "./list-links.js";
 import { LINK_ORDERS, type LinkCount, type LinkOrder, type LinkSearch } from "./search.js";
-import type { LinkStore } from "./store.js";
+import type { LinkRemover, LinkStore } from "./store.js";
 import type { TagKind } from "./types.js";
 
 const closers: (() => void)[] = [];
@@ -17,7 +17,7 @@ afterEach(() => {
   for (const close of closers.splice(0)) close();
 });
 
-type World = { store: LinkStore; search: LinkSearch; count: LinkCount };
+type World = { store: LinkStore & LinkRemover; search: LinkSearch; count: LinkCount };
 
 const ENGINES: [string, () => World][] = [
   [
@@ -125,27 +125,33 @@ describe.each(ENGINES)("linkPage on %s", (_, make) => {
     expect(await ids("archived")).toEqual([done]);
   });
 
-  it("refuses a malformed cursor, or one that names no link of this owner at that time", async () => {
+  it("refuses a malformed cursor, or one that does not fit the link it names", async () => {
     const w = setup(make);
     const mine = await w.save("a", 1_000, ["kitchen"]);
     await w.save("a", 1_001, ["kitchen"]);
-    const theirs = await w.save("b", 1_000, ["kitchen"]);
     const good = (await linkPage(w, "a", { tagKey: "kitchen", limit: 1 })).older as string;
     expect(good).not.toBeNull();
-    const bad = [
-      "",
-      "garbage",
-      "1000",
-      "abc.1",
-      "1000.",
-      "-5.x",
-      `1000.${theirs}`,
-      `1001.${mine}`,
-      "1000.999999",
-      `${good}x`,
-    ];
+    const bad = ["", "garbage", "1000", "abc.1", "1000.", "-5.x", `1001.${mine}`];
     for (const before of bad) {
       await expectInvalid(linkPage(w, "a", { tagKey: "kitchen", limit: 1, before }), before);
+    }
+  });
+
+  it("answers not_found, with the restart message, for a well-formed cursor naming no live link of this owner", async () => {
+    const w = setup(make);
+    await w.save("a", 1_000, ["kitchen"]);
+    const gone = await w.save("a", 1_001, ["kitchen"]);
+    const theirs = await w.save("b", 1_000, ["kitchen"]);
+    const deleted = (await linkPage(w, "a", { tagKey: "kitchen", limit: 1 })).older as string;
+    expect(deleted).toBe(`1001.${gone}`);
+    expect(await w.store.markDeleted("a", gone, new Date(5_000))).toBe(true);
+    for (const before of [`1000.${theirs}`, "1000.999999", `${deleted}x`, deleted]) {
+      const error = await refusal(linkPage(w, "a", { tagKey: "kitchen", limit: 1, before }));
+      expect(error, before).toBeInstanceOf(CoreError);
+      expect((error as CoreError).code, before).toBe("not_found");
+      expect((error as CoreError).message, before).toBe(
+        "That page of older links is not valid. Start again from the newest links.",
+      );
     }
   });
 
@@ -367,7 +373,8 @@ describe.each(ENGINES)("listLinks on %s", (_, make) => {
       "savedFrom after savedTo",
     );
     await expectInvalid(listLinks(w, "a", { savedFrom: new Date(Number.NaN) }), "invalid date");
-    await expectInvalid(listLinks(w, "a", { cursor: theirs }), "B's cursor sent by A");
+    const error = await refusal(listLinks(w, "a", { cursor: theirs }));
+    expect((error as CoreError).code, "B's cursor sent by A").toBe("not_found");
   });
 });
 

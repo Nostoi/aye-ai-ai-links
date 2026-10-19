@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { SPACE_COLORS } from "../core/tag-space.js";
+import { editDialog } from "./edit-link.js";
 import { themeCss, tokens } from "./theme.js";
 
 const channel = (n: number) => {
@@ -332,7 +333,13 @@ describe("the edit dialog's look", () => {
   });
 
   it("keeps every dialog control at least 44px tall", () => {
-    for (const sel of [".edit-use", ".edit-choose", ".edit-remove", ".edit-foot button"]) {
+    for (const sel of [
+      ".edit-use",
+      ".edit-choose",
+      ".edit-remove",
+      ".edit-foot button",
+      ".edit-delete",
+    ]) {
       expect(rule(sel), sel).toContain("min-height:44px");
     }
   });
@@ -464,5 +471,18 @@ describe("icons and initials", () => {
     expect(tokens.dark.plate).toBe("#E9E6E0");
     expect(computed(mosaic, "background", "desktop")).toBe("var(--plate)");
     expect(themeCss).not.toContain("handy-initials");
+  });
+});
+
+describe("the edit dialog's Delete", () => {
+  it("the phone rule does not hide the dialog's Delete", () => {
+    const dialog = parseHTML(`<html><body>${editDialog()}</body></html>`).document;
+    const button = dialog.querySelector("[data-edit=delete]");
+    expect(button).not.toBeNull();
+    for (let at = button; at && at.tagName !== "BODY"; at = at.parentElement) {
+      for (const width of ["desktop", "phone"] as const) {
+        expect(computed(at, "display", width), `${at.className} on ${width}`).not.toBe("none");
+      }
+    }
   });
 });

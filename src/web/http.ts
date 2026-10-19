@@ -20,6 +20,7 @@ import { CHECK_RESULTS, type LinkCheck } from "../core/link-check-store.js";
 import { editLink, undoEdit } from "../core/link-edit.js";
 import type { LinkEditStore } from "../core/link-edit-store.js";
 import { checkedOrder, linkPage } from "../core/link-pages.js";
+import { deleteLink, restoreLink } from "../core/link-removal.js";
 import { getLink, recordOpening } from "../core/links.js";
 import {
   addOwnerNote,
@@ -32,8 +33,10 @@ import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/saved-copy.js";
+import type { LinkOrder } from "../core/search.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
+import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
@@ -69,7 +72,7 @@ import {
   worthALook,
 } from "../core/worth-a-look.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
-import { ALL_RESTART, allPage } from "./all-page.js";
+import { ALL_RESTART, allHref, allPage } from "./all-page.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
@@ -82,7 +85,7 @@ import { profilePage } from "./profile-page.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
-import { SPACE_RESTART, spaceMissingPage, spacePage } from "./space-page.js";
+import { SPACE_RESTART, spaceHref, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
 
@@ -397,10 +400,10 @@ async function noteAction(c: Context, act: () => Promise<void>): Promise<Respons
 }
 
 /**
- * Runs a copy action and answers 204. A refusal is core's own 404 wording, which is the owner's;
- * `homeAction` would say the link is gone.
+ * Runs a removal or its Undo (of a saved copy or a link) and answers 204. A refusal is core's own
+ * 404 wording, which is the owner's; `homeAction` would say the link is gone.
  */
-async function copyAction(c: Context, act: () => Promise<void>): Promise<Response> {
+async function removalAction(c: Context, act: () => Promise<void>): Promise<Response> {
   try {
     await act();
     return c.body(null, 204, NO_STORE);
@@ -458,6 +461,7 @@ export function webApp({
   deps: SearchLinksDeps &
     WorthDeps &
     LinkCheckDeps & {
+      store: LinkRemover;
       images: LinkImageReader;
       edits: LinkEditStore;
       profile: ProfileStore;
@@ -591,7 +595,8 @@ export function webApp({
   });
 
   // A space names its tag in the query (`spaceHref`). A blank one goes home; a tag the owner does
-  // not have, whoever else has it, gets one 404; a changed cursor gets a 400.
+  // not have, whoever else has it, gets one 404; a changed cursor gets a 400, and one naming a link
+  // that is gone restarts at the first page.
   const space = (state: LinkState) => async (c: Context<SessionEnv>) => {
     const name = c.req.query("tag") ?? "";
     if (name.trim() === "") return c.redirect("/", 303);
@@ -616,12 +621,10 @@ export function webApp({
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
-      const pictures = done
-        ? new Map()
-        : await deps.images.pictureInfo(
-            owner,
-            page.links.map((l) => l.id),
-          );
+      const pictures = await deps.images.pictureInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const later = before !== undefined;
       const html = spacePage({
         tag,
@@ -639,6 +642,9 @@ export function webApp({
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
+      if (error.code === "not_found" && before !== undefined) {
+        return c.redirect(spaceHref(name, { done }), 303);
+      }
       if (error.code === "not_found") return c.html(spaceMissingPage(), 404, NO_STORE);
       return c.html(olderInvalidPage(SPACE_RESTART), 400, NO_STORE);
     }
@@ -647,13 +653,15 @@ export function webApp({
   app.get("/spaces/done", session, space("archived"));
 
   // All links names its order in the query (`allHref`); an unknown order or a changed cursor gets
-  // a 400. It reads a page and never a count.
+  // a 400, and one naming a link that is gone restarts at the first page. It reads a page and never
+  // a count.
   const all = (state: LinkState) => async (c: Context<SessionEnv>) => {
     const { owner } = c.get("caller");
     const before = c.req.query("before");
     const done = state === "archived";
+    let order: LinkOrder = "newest";
     try {
-      const order = checkedOrder(c.req.query("order"));
+      order = checkedOrder(c.req.query("order"));
       const page = await linkPage(deps, owner, {
         order,
         state,
@@ -672,12 +680,10 @@ export function webApp({
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
-      const pictures = done
-        ? new Map()
-        : await deps.images.pictureInfo(
-            owner,
-            page.links.map((l) => l.id),
-          );
+      const pictures = await deps.images.pictureInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const later = before !== undefined;
       const notice =
         done || later ? null : await readCopyNotice(deps.savedCopies, deps.copyLimitBytes ?? 0);
@@ -698,6 +704,7 @@ export function webApp({
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
+      if (error.code === "not_found") return c.redirect(allHref(order, { done }), 303);
       return c.html(olderInvalidPage(ALL_RESTART), 400, NO_STORE);
     }
   };
@@ -825,12 +832,21 @@ export function webApp({
   const done = (c: Context) => c.body(null, 204, NO_STORE);
 
   app.post("/links/copy/remove", jsonBody(linkId), session, (c) =>
-    copyAction(c, () => removeSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+    removalAction(c, () => removeSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
   );
 
   // The Undo of a remove.
   app.post("/links/copy/restore", jsonBody(linkId), session, (c) =>
-    copyAction(c, () => restoreSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+    removalAction(c, () => restoreSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+  );
+
+  app.post("/links/delete", jsonBody(linkId), session, (c) =>
+    removalAction(c, () => deleteLink(deps, c.get("caller").owner, c.get("body").id)),
+  );
+
+  // The Undo of a delete.
+  app.post("/links/restore", jsonBody(linkId), session, (c) =>
+    removalAction(c, () => restoreLink(deps, c.get("caller").owner, c.get("body").id)),
   );
 
   app.post("/home/opened", jsonBody(linkId), session, (c) =>

@@ -45,7 +45,7 @@ export function checkedOrder(order: string | undefined): LinkOrder {
 
 /**
  * The position a cursor names, as `before`. A cursor is only valid for the order that made it
- * and when it names one of the owner's links, so a hand-made one cannot reach the engine with an
+ * and when it names one of the owner's live links, so a hand-made one cannot reach the engine with an
  * id the store never issued. Its time must be the link's save time, or for opened at most its
  * last opening: openings only move forward, so a link opened again keeps the walk going.
  */
@@ -56,17 +56,18 @@ async function decode(store: LinkStore, owner: OwnerId, order: LinkOrder, cursor
   if (!match || match[1] !== prefix) throw bad();
   const [, , ms, id] = match as unknown as [string, string, string, string];
   const link = await store.get(owner, id);
-  const at = link ? key(link)?.getTime() : undefined;
+  if (!link) throw new CoreError("not_found", restart);
+  const at = key(link)?.getTime();
   const fits = order === "opened" ? Number(ms) <= (at ?? -1) : Number(ms) === at;
-  if (!link || at === undefined || !fits) throw bad();
+  if (at === undefined || !fits) throw bad();
   return { at: new Date(Number(ms)), id: link.id };
 }
 
 /**
  * A page of the owner's links in `order` (newest when left out) that pass the filters.
  * `before` is the `older` cursor of the previous page; it is opaque to callers, and one that is
- * malformed, made for another order or names no link of this owner is refused with
- * `invalid_input`.
+ * malformed, made for another order or not fitting the link it names is refused with
+ * `invalid_input`, and one naming no live link of this owner with `not_found`.
  */
 export async function linkPage(
   { store, search }: { store: LinkStore; search: LinkSearch },

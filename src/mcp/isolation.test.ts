@@ -797,6 +797,9 @@ describe("owner isolation coverage", () => {
       "the two-owner tests of POST /links/copy/remove in web/copy-routes.test.ts",
     "POST /links/copy/restore":
       "the two-owner tests of POST /links/copy/restore in web/copy-routes.test.ts",
+    "POST /links/delete": "the two-owner tests of POST /links/delete in web/delete-routes.test.ts",
+    "POST /links/restore":
+      "the two-owner tests of POST /links/restore in web/delete-routes.test.ts",
     "POST /export/prepare":
       "the two-owner test of POST /export/prepare in web/export-zip-routes.test.ts",
   };

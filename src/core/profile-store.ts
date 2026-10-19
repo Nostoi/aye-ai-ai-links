@@ -54,6 +54,9 @@ export interface ProfileStore {
   /** The owner's newest focus entries, newest first (created_at, then id), at most `limit`. */
   recentFocus(owner: OwnerId, limit: number): Promise<FocusEntry[]>;
 
+  /** The owner's whole focus log, oldest first (created_at, then id). [] for an unknown owner. */
+  listFocus(owner: OwnerId): Promise<FocusEntry[]>;
+
   /**
    * Apply every change in one atomic step: purge, then edits, then removes, then adds.
    * The purge deletes the owner's notes removed before `purgeBefore`. An edit replaces the

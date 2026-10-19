@@ -485,14 +485,19 @@ export function webApp({
   /** What a card shows after an edit or its Undo, read after the write. */
   const cardState = async (owner: OwnerId, id: string) => {
     const link = await getLink(deps, owner, id);
-    const version = (await deps.images.imageVersions(owner, [id])).get(id) ?? null;
+    const shown = (await deps.images.imageVersions(owner, [id])).get(id);
     const info = (await deps.images.pictureInfo(owner, [id])).get(id);
     return {
       title: link.title,
       url: link.url,
       initials: initialsText(link),
-      version,
-      picture: { own: info?.own ?? false, pageVersion: info?.pageVersion ?? null },
+      version: shown?.version ?? null,
+      fit: shown?.fit ?? null,
+      picture: {
+        own: info?.own ?? false,
+        pageVersion: info?.pageVersion ?? null,
+        pageFit: info?.pageFit ?? null,
+      },
     };
   };
 

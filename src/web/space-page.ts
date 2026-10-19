@@ -1,4 +1,4 @@
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
@@ -53,7 +53,7 @@ type Input = {
   catalog: Tag[];
   links: Link[];
   older: string | null;
-  images: Map<string, string>;
+  images: Map<string, ShownPicture>;
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
@@ -92,9 +92,9 @@ function card(
       ? `<p class="card-why">${whyLine(link.why)}</p>`
       : `${whyAnswer("p", "Why: ", "card-why")}\n${askWhy(link)}`;
   const space = linkSpace(link, catalog, { within: tag.key });
-  const version = images.get(link.id);
-  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
-${tile(link, version, "card-image")}
+  const picture = images.get(link.id);
+  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, picture, pictures.get(link.id))}>
+${tile(link, picture, "card-image")}
 ${done ? "" : `${editMenu(link, copies.get(link.id))}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>

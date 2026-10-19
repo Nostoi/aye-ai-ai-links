@@ -17,7 +17,11 @@ const deps = () => ({
   search: new FakeSearch(store),
   images: {
     imageVersions: async (_owner: string, ids: string[]) =>
-      new Map(ids.filter((id) => withImage.has(id)).map((id) => [id, `v-${id}`])),
+      new Map(
+        ids
+          .filter((id) => withImage.has(id))
+          .map((id) => [id, { version: `v-${id}`, fit: "cover" as const }]),
+      ),
   },
 });
 
@@ -72,9 +76,9 @@ describe("homeSpaces", () => {
     await pin("a", "kitchen", "clay");
     const [kitchen] = (await homeSpaces(deps(), "a")).spaces;
     expect(kitchen?.mosaic).toEqual([
-      { linkId: newest, version: `v-${newest}` },
-      { linkId: third, version: `v-${third}` },
-      { linkId: second, version: `v-${second}` },
+      { linkId: newest, version: `v-${newest}`, fit: "cover" },
+      { linkId: third, version: `v-${third}`, fit: "cover" },
+      { linkId: second, version: `v-${second}`, fit: "cover" },
     ]);
     expect(kitchen?.mosaic.map((m) => m.linkId)).not.toContain(oldest);
   });

@@ -50,7 +50,7 @@ async function world() {
 }
 
 const versionOf = async (w: World, id: string) =>
-  (await new SqliteImageStore(w.links).imageVersions("owner", [id])).get(id) as string;
+  (await new SqliteImageStore(w.links).imageVersions("owner", [id])).get(id)?.version as string;
 
 describe("the image route", () => {
   it("serves the owner's stored image with its sniffed type, safe headers and a year of private caching", async () => {

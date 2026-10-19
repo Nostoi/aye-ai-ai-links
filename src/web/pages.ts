@@ -1,4 +1,4 @@
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
@@ -132,10 +132,10 @@ export function whyLine(why: Link["why"]): string {
  * The link's stored image, served by this site, or the plain tile; never the page's own image URL.
  * `className` styles both.
  */
-export const tile = (link: Link, version: string | undefined, className = "tile") =>
-  version === undefined
+export const tile = (link: Link, picture: ShownPicture | undefined, className = "tile") =>
+  picture === undefined
     ? `<div class="${className}" aria-hidden="true"></div>`
-    : `<img class="${className}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(version)}" alt="" loading="lazy">`;
+    : `<img class="${className}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(picture.version)}" alt="" loading="lazy">`;
 
 /** The ` space-<color>` class of a space, or nothing for neutral. */
 export const spaceClass = (space: Pick<Space, "color"> | null) =>
@@ -157,7 +157,7 @@ const spaceName = (space: Space | null) =>
 function resultItem(
   link: Link,
   now: Date,
-  version: string | undefined,
+  picture: ShownPicture | undefined,
   space: Space | null,
   view: HandyView | null | undefined,
   gone: GoneView | null | undefined,
@@ -166,8 +166,8 @@ function resultItem(
 ): string {
   const host = hostOf(link.url);
   const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
-  return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, version, info)}>
-${tile(link, version)}
+  return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
+${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, copy)}
 <h2>${linkTitle(link)}</h2>
@@ -199,7 +199,7 @@ export const searchPage = ({
   query: string;
   links: Link[];
   now: Date;
-  images?: Map<string, string>;
+  images?: Map<string, ShownPicture>;
   catalog?: Tag[];
   handy?: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;

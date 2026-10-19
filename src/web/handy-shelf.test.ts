@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import type { ShownPicture } from "../core/image-store.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { handyShelf, SHELF_SIZE, SHELF_STALE } from "./handy-shelf.js";
@@ -49,7 +50,7 @@ const render = (
   items: ShelfItem[],
   suggestions: ToolItem[] = [],
   catalog: Tag[] = [],
-  images = new Map<string, string>(),
+  images = new Map<string, ShownPicture>(),
 ) => handyShelf({ items, suggestions, catalog, images });
 const dom = (html: string) => parseHTML(html).document;
 const tiles = (html: string) =>
@@ -108,7 +109,9 @@ describe("the Handy shelf", () => {
 
   it("fills a tile with the link's stored image, from this site, with no alt text", () => {
     const item = kept({ title: "Attendance" });
-    const [tile] = tiles(render([item], [], [], new Map([[item.link.id, "v7"]])));
+    const [tile] = tiles(
+      render([item], [], [], new Map([[item.link.id, { version: "v7", fit: "cover" }]])),
+    );
     const img = tile?.querySelector("img.handy-image") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(`/images/${item.link.id}?v=v7`);
     expect(img.getAttribute("alt")).toBe("");

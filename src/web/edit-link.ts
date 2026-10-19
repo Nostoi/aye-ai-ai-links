@@ -1,4 +1,4 @@
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { titleFits } from "../core/links.js";
 import type { CopyInfo } from "../core/saved-copy.js";
@@ -39,14 +39,14 @@ export const editMenu = (link: Link, copy?: CopyInfo) =>
  */
 export function editData(
   link: Link,
-  version: string | undefined,
+  picture: ShownPicture | undefined,
   info: PictureInfo | undefined,
 ): string {
   const page = link.snapshot?.title ?? "";
   const data: [string, string][] = [
     ["title", link.title ?? ""],
     ["page-title", titleFits(page) ? page : ""],
-    ["version", version ?? ""],
+    ["version", picture?.version ?? ""],
     ["own", info?.own ? "1" : "0"],
     ["page-version", info?.pageVersion ?? ""],
     ["initials", initialsText(link)],

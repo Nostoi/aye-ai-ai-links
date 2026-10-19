@@ -1,3 +1,4 @@
+import type { ShownPicture } from "../core/image-store.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
@@ -16,7 +17,7 @@ export type Shelf = {
   items: ShelfItem[];
   suggestions: ToolItem[];
   catalog: Tag[];
-  images: Map<string, string>;
+  images: Map<string, ShownPicture>;
 };
 
 const PLUS = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
@@ -85,10 +86,10 @@ function card(
   attrs = "",
 ): string {
   const space = linkSpace(link, catalog);
-  const version = images.get(link.id);
-  return `<article class="handy-tile${version === undefined ? "" : " photo"}${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
-${tile(link, version, "handy-image")}
-${version === undefined ? initials(link) : ""}<div class="handy-caption">
+  const picture = images.get(link.id);
+  return `<article class="handy-tile${picture === undefined ? "" : " photo"}${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
+${tile(link, picture, "handy-image")}
+${picture === undefined ? initials(link) : ""}<div class="handy-caption">
 <h3>${linkTitle(link)}</h3>
 ${hostLine(link, space)}</div>
 ${after}

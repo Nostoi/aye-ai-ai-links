@@ -7,7 +7,9 @@ import {
   imageVersion,
   type LinkImageReader,
   type PendingImage,
+  type PictureFit,
   type PictureInfo,
+  type ShownPicture,
   type StoredImage,
 } from "./image-store.js";
 import {
@@ -42,6 +44,8 @@ import type {
 
 type ImageStatus = "pending" | "ok" | ImageEnd;
 const imageKey = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
+/** How a fetched picture of this role fits its box. */
+const roleFit = (role: ImageRole): PictureFit => (role === "icon" ? "contain" : "cover");
 
 type OwnRecord = ImageBytes & { sha256: string; setAt: Date };
 type EditRecord = {
@@ -520,13 +524,12 @@ export class FakeStore
   }
 
   async imageVersions(owner: OwnerId, linkIds: string[]) {
-    const versions = new Map<string, string>();
+    const versions = new Map<string, ShownPicture>();
     for (const id of linkIds) {
       const own = this.ownerImages.get(imageKey(owner, id));
-      const version = own
-        ? imageVersion(own.sha256)
-        : this.storedImages.get(imageKey(owner, id))?.version;
-      if (version !== undefined) versions.set(id, version);
+      const page = this.storedImages.get(imageKey(owner, id));
+      if (own) versions.set(id, { version: imageVersion(own.sha256), fit: "cover" });
+      else if (page) versions.set(id, { version: page.version, fit: roleFit(page.role) });
     }
     return versions;
   }
@@ -549,8 +552,13 @@ export class FakeStore
     const info = new Map<string, PictureInfo>();
     for (const id of linkIds) {
       const own = this.ownerImages.has(imageKey(owner, id));
-      const page = this.storedImages.get(imageKey(owner, id))?.version ?? null;
-      if (own || page !== null) info.set(id, { own, pageVersion: page });
+      const page = this.storedImages.get(imageKey(owner, id));
+      if (own || page)
+        info.set(id, {
+          own,
+          pageVersion: page?.version ?? null,
+          pageFit: page ? roleFit(page.role) : null,
+        });
     }
     return info;
   }

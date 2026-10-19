@@ -9,7 +9,9 @@ import {
   imageVersion,
   type LinkImageReader,
   type PendingImage,
+  type PictureFit,
   type PictureInfo,
+  type ShownPicture,
   type StoredImage,
 } from "../core/image-store.js";
 import type { OwnerId } from "../core/types.js";
@@ -73,16 +75,24 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     return JSON.stringify(linkIds.map(parseId).filter((n): n is number => n !== null));
   }
 
-  async imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, string>> {
+  async imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, ShownPicture>> {
     const rows = this.db
       .prepare(
-        `SELECT j.value AS link_id, coalesce(o.sha256, f.sha256) AS sha256 FROM json_each(?) j
+        `SELECT j.value AS link_id, coalesce(o.sha256, f.sha256) AS sha256,
+           CASE WHEN o.sha256 IS NULL AND f.role = 'icon' THEN 'contain' ELSE 'cover' END AS fit
+         FROM json_each(?) j
          LEFT JOIN owner_images o ON o.owner_id = ? AND o.link_id = j.value
          LEFT JOIN link_images f ON f.owner_id = ? AND f.link_id = j.value
          WHERE coalesce(o.sha256, f.sha256) IS NOT NULL`,
       )
-      .all(SqliteImageStore.ids(linkIds), owner, owner) as { link_id: number; sha256: string }[];
-    return new Map(rows.map((r) => [String(r.link_id), imageVersion(r.sha256)]));
+      .all(SqliteImageStore.ids(linkIds), owner, owner) as {
+      link_id: number;
+      sha256: string;
+      fit: PictureFit;
+    }[];
+    return new Map(
+      rows.map((r) => [String(r.link_id), { version: imageVersion(r.sha256), fit: r.fit }]),
+    );
   }
 
   async image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null> {
@@ -106,7 +116,9 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
   async pictureInfo(owner: OwnerId, linkIds: string[]): Promise<Map<string, PictureInfo>> {
     const rows = this.db
       .prepare(
-        `SELECT j.value AS link_id, o.link_id IS NOT NULL AS own, f.sha256 AS page FROM json_each(?) j
+        `SELECT j.value AS link_id, o.link_id IS NOT NULL AS own, f.sha256 AS page,
+           CASE WHEN f.link_id IS NULL THEN NULL WHEN f.role = 'icon' THEN 'contain' ELSE 'cover' END AS page_fit
+         FROM json_each(?) j
          LEFT JOIN owner_images o ON o.owner_id = ? AND o.link_id = j.value
          LEFT JOIN link_images f ON f.owner_id = ? AND f.link_id = j.value
          WHERE o.link_id IS NOT NULL OR f.link_id IS NOT NULL`,
@@ -115,11 +127,16 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
       link_id: number;
       own: number;
       page: string | null;
+      page_fit: PictureFit | null;
     }[];
     return new Map(
       rows.map((r) => [
         String(r.link_id),
-        { own: r.own === 1, pageVersion: r.page === null ? null : imageVersion(r.page) },
+        {
+          own: r.own === 1,
+          pageVersion: r.page === null ? null : imageVersion(r.page),
+          pageFit: r.page_fit,
+        },
       ]),
     );
   }

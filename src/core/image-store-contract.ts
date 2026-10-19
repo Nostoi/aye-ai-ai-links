@@ -104,7 +104,9 @@ export function describeImageStoreContract(
       expect(await pending()).toEqual([]);
       const version = sha256(image.bytes).slice(0, 16);
       expect(await h.images.image(A, id)).toEqual({ ...image, version });
-      expect(await h.images.imageVersions(A, [id, "999"])).toEqual(new Map([[id, version]]));
+      expect(await h.images.imageVersions(A, [id, "999"])).toEqual(
+        new Map([[id, { version, fit: "cover" }]]),
+      );
     });
 
     it("never shows A's image to B, and B cannot write or end A's", async () => {
@@ -178,6 +180,15 @@ export function describeImageStoreContract(
       ]);
       expect(await h.images.writeImage(A, link.id, ICON, "icon", pngBytes(1), at(5))).toBe(true);
       expect(await pending()).toEqual([]);
+      const version = sha256(pngBytes(1).bytes).slice(0, 16);
+      expect(await h.images.imageVersions(A, [link.id])).toEqual(
+        new Map([[link.id, { version, fit: "contain" }]]),
+      );
+      expect((await h.images.pictureInfo(A, [link.id])).get(link.id)).toEqual({
+        own: false,
+        pageVersion: version,
+        pageFit: "contain",
+      });
     });
 
     it.each(["pending", "none", "refused"] as const)(

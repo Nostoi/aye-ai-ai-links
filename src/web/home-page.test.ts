@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { DigestLink, DigestReason } from "../core/digest.js";
+import type { ShownPicture } from "../core/image-store.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
@@ -43,7 +44,7 @@ const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => 
 });
 const render = (
   links: DigestLink[],
-  images = new Map<string, string>(),
+  images = new Map<string, ShownPicture>(),
   catalog: Tag[] = [],
   gone: Link | null = null,
 ) =>
@@ -247,7 +248,10 @@ describe("Worth a look today", () => {
     };
     const withImage = card([], { snapshot: remote });
     const without = card([], { snapshot: remote });
-    const html = render([withImage, without], new Map([[withImage.link.id, "v1"]]));
+    const html = render(
+      [withImage, without],
+      new Map([[withImage.link.id, { version: "v1", fit: "cover" }]]),
+    );
     expect(outsideRefs(html)).toEqual([]);
     expect(html).not.toContain("images.example");
     const d = dom(html);

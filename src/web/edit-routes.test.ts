@@ -76,7 +76,8 @@ type Answer = {
   url: string;
   initials: string;
   version: string | null;
-  picture: { own: boolean; pageVersion: string | null };
+  fit: "cover" | "contain" | null;
+  picture: { own: boolean; pageVersion: string | null; pageFit: "cover" | "contain" | null };
   editId?: string | null;
 };
 
@@ -91,7 +92,8 @@ describe("POST /links/edit", () => {
       url: URL,
       initials: "QH",
       version: v(MINE),
-      picture: { own: true, pageVersion: v(PAGE) },
+      fit: "cover",
+      picture: { own: true, pageVersion: v(PAGE), pageFit: "cover" },
       editId: expect.any(String),
     });
     // The type stored is the one the header names, not the part's.
@@ -108,6 +110,7 @@ describe("POST /links/edit", () => {
     expect(trimmed).toMatchObject({
       title: "Quokka burrows",
       version: v(PAGE),
+      fit: "cover",
       picture: { own: false },
     });
     const blank = (await edit(browser, { id, title: " " })).body as Answer;
@@ -118,7 +121,11 @@ describe("POST /links/edit", () => {
     const { browser, id } = await edited();
     await edit(browser, { id, picture: file(MINE) });
     const res = (await edit(browser, { id, picture: "page" })).body as Answer;
-    expect(res).toMatchObject({ version: v(PAGE), picture: { own: false, pageVersion: v(PAGE) } });
+    expect(res).toMatchObject({
+      version: v(PAGE),
+      fit: "cover",
+      picture: { own: false, pageVersion: v(PAGE), pageFit: "cover" },
+    });
     expect(res.editId).toEqual(expect.any(String));
   });
 
@@ -168,7 +175,8 @@ describe("POST /links/edit/undo", () => {
       url: URL,
       initials: "QH",
       version: v(PAGE),
-      picture: { own: false, pageVersion: v(PAGE) },
+      fit: "cover",
+      picture: { own: false, pageVersion: v(PAGE), pageFit: "cover" },
     });
     const before = allRows(world);
     const again = await undo(browser, { id, editId: done.editId });

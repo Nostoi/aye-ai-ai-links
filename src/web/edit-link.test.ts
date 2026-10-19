@@ -1,6 +1,6 @@
 import { parseHTML } from "linkedom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import { png } from "../core/image-test-kit.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
@@ -53,12 +53,16 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
 const OWN = "own0000000000000";
 const PAGE = "page000000000000";
 
-type Pages = { links: Link[]; pictures?: Map<string, PictureInfo>; images?: Map<string, string> };
+type Pages = {
+  links: Link[];
+  pictures?: Map<string, PictureInfo>;
+  images?: Map<string, ShownPicture>;
+};
 /** The three pages with the edit menu, each showing `links`. */
 const pages = ({
   links,
-  pictures = new Map([["1", { own: true, pageVersion: PAGE }]]),
-  images = new Map([["1", OWN]]),
+  pictures = new Map([["1", { own: true, pageVersion: PAGE, pageFit: "cover" }]]),
+  images = new Map([["1", { version: OWN, fit: "cover" }]]),
 }: Pages) => ({
   search: searchPage({ query: "", links, now: NOW, images, catalog: [KITCHEN], pictures }),
   all: allPage({
@@ -304,15 +308,17 @@ const answer = (over: Record<string, unknown> = {}) => ({
   url: "https://ex.com/1",
   initials: "L1",
   version: PAGE,
-  picture: { own: false, pageVersion: PAGE },
+  picture: { own: false, pageVersion: PAGE, pageFit: "cover" },
   editId: null,
   ...over,
 });
 /** The search page with the dialog, `<dialog>`'s two methods stood in for (linkedom has neither). */
 function opened(
   reply: (sent: Post) => Answer = () => ({ status: 200, body: answer() }),
-  pictures: Map<string, PictureInfo> = new Map([["1", { own: false, pageVersion: PAGE }]]),
-  images: Map<string, string> = new Map([["1", PAGE]]),
+  pictures: Map<string, PictureInfo> = new Map([
+    ["1", { own: false, pageVersion: PAGE, pageFit: "cover" }],
+  ]),
+  images: Map<string, ShownPicture> = new Map([["1", { version: PAGE, fit: "cover" }]]),
   links: Link[] = [link("1")],
 ) {
   const html = searchPage({
@@ -577,8 +583,8 @@ describe("the edit dialog's script", () => {
   it("with the owner's picture over a page picture, offers Use the page's picture, previews it and sends page", async () => {
     const p = opened(
       undefined,
-      new Map([["1", { own: true, pageVersion: PAGE }]]),
-      new Map([["1", OWN]]),
+      new Map([["1", { own: true, pageVersion: PAGE, pageFit: "cover" }]]),
+      new Map([["1", { version: OWN, fit: "cover" }]]),
     );
     p.open();
     const remove = p.$("[data-edit=remove]");
@@ -595,8 +601,8 @@ describe("the edit dialog's script", () => {
   it("with the owner's picture and no page picture, offers Remove picture, and the preview falls back to the initials", () => {
     const p = opened(
       undefined,
-      new Map([["1", { own: true, pageVersion: null }]]),
-      new Map([["1", OWN]]),
+      new Map([["1", { own: true, pageVersion: null, pageFit: null }]]),
+      new Map([["1", { version: OWN, fit: "cover" }]]),
     );
     p.open();
     expect(p.$("[data-edit=remove]").textContent).toBe("Remove picture");
@@ -613,7 +619,7 @@ describe("the edit dialog's script", () => {
             body: answer({
               title: HOSTILE,
               version: OWN,
-              picture: { own: true, pageVersion: PAGE },
+              picture: { own: true, pageVersion: PAGE, pageFit: "cover" },
               editId: "e1",
             }),
           }
@@ -883,8 +889,8 @@ describe("the edit dialog's script", () => {
     const refused = { code: "invalid_input", message: "A title can be at most 200 characters." };
     const p = opened(
       () => ({ status: 400, wait: waits.shift(), body: refused }),
-      new Map([["1", { own: true, pageVersion: PAGE }]]),
-      new Map([["1", OWN]]),
+      new Map([["1", { own: true, pageVersion: PAGE, pageFit: "cover" }]]),
+      new Map([["1", { version: OWN, fit: "cover" }]]),
     );
     const fields = () => [
       p.title.hasAttribute("readonly"),

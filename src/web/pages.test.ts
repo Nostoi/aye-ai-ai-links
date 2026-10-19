@@ -192,7 +192,12 @@ const PAGES: [string, string][] = [
     homePage({
       ...EMPTY_HOME,
       spaces: spacesSection([
-        { key: "kitchen", name: "Kitchen", color: "clay", mosaic: [{ linkId: "1", version: "v" }] },
+        {
+          key: "kitchen",
+          name: "Kitchen",
+          color: "clay",
+          mosaic: [{ linkId: "1", version: "v", fit: "cover" }],
+        },
       ]),
     }),
   ],
@@ -442,7 +447,7 @@ describe("the search page's cards", () => {
         link({ id: "8", snapshot: { ...remote, imageUrl: "https://cdn.example/8.png" } }),
       ],
       now: NOW,
-      images: new Map([["7", "abc123"]]),
+      images: new Map([["7", { version: "abc123", fit: "cover" }]]),
     });
     expect(html).toContain('<img class="tile" src="/images/7?v=abc123" alt="" loading="lazy">');
     expect(html.match(/<div class="tile" aria-hidden="true"><\/div>/g)).toHaveLength(1);

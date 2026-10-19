@@ -58,8 +58,18 @@ export interface ImageStore {
   ): Promise<boolean>;
 }
 
-/** For the edit dialog: whether the owner set a picture, and the fetched picture's version. */
-export type PictureInfo = { own: boolean; pageVersion: string | null };
+/** How a picture sits in its box: a page image fills it (`cover`); a site icon shows whole (`contain`). */
+export type PictureFit = "cover" | "contain";
+
+/** The picture that shows for a link: its version and how it fits. */
+export type ShownPicture = { version: string; fit: PictureFit };
+
+/** For the edit dialog: whether the owner set a picture, and the fetched picture's version and fit. */
+export type PictureInfo = {
+  own: boolean;
+  pageVersion: string | null;
+  pageFit: PictureFit | null;
+};
 
 /**
  * The web door's reads of stored pictures. The picture that shows is the owner's when there is
@@ -67,8 +77,11 @@ export type PictureInfo = { own: boolean; pageVersion: string | null };
  * Owner-scoped: another owner's link reads as no picture.
  */
 export interface LinkImageReader {
-  /** The version of the picture that shows, for each of these links; links with none are absent. */
-  imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, string>>;
+  /**
+   * The picture that shows, for each of these links; links with none are absent. The fit is
+   * `contain` only when no owner picture shows and the fetched picture is an icon.
+   */
+  imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, ShownPicture>>;
 
   /** The picture that shows, or with `which` "page" the fetched one; null when there is none. */
   image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null>;

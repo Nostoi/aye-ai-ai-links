@@ -139,7 +139,10 @@ describe("the All links page", () => {
   });
 
   it("shows a stored image from this site, and a plain tile otherwise", () => {
-    const html = all({ links: [link("1"), link("2")], images: new Map([["1", "v9"]]) });
+    const html = all({
+      links: [link("1"), link("2")],
+      images: new Map([["1", { version: "v9", fit: "cover" }]]),
+    });
     const [withImage, without] = [...dom(html).querySelectorAll(".link-card")];
     expect(withImage?.querySelector("img")?.getAttribute("src")).toBe("/images/1?v=v9");
     expect(without?.querySelector("img")).toBeNull();

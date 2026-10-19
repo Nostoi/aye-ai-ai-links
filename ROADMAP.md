@@ -47,6 +47,10 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - `/export.json` keeps tags, notes and focus;
     - a ready zip is kept 24 hours.
   - **Lands in two PRs:** the manifest and the JSON download, then builds and the zip, which closes #130.
+- **2026-10-19:** Backfilling icons for older links (#149, PR C). Controller rulings:
+  - **The child's `iconUrls` are checked once, by `boundedIconUrls` in `core/snapshot-store.ts`,** which both `snapshotRecord` and the backfill call (PR B's architecture nit N1).
+  - **A link that keeps failing is bounded** (R3): a child that can't start, an abort nobody asked for, or a store write that fails counts as a failure. After five, the link is left alone until the next restart, and nothing is written for it. This departs from spec §8's unbounded backoff for `spawn_failed`.
+  - **Spec §10's "a snapshot recorded between read and write" test can't be built,** since an `ok` snapshot is never leased again. One refusal per clause of the write takes its place (R8).
 - **2026-10-19:** Finding icons on new saves (#149, PR B). Controller rulings:
   - **`MAX_ICON_URLS` is shared with the extraction child** (R1). This departs from spec §2's "no new import enters the child"; `src/fetch/AGENTS.md` lists the file.
   - **A duplicate icon URL keeps its best-ranked occurrence** (R3), so Photopea gives one candidate.

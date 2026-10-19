@@ -1,6 +1,6 @@
 import type { ExtractOutcome, PageMetadata } from "./extract.js";
 import type { FetchOutcome } from "./fetch.js";
-import { MAX_ICON_URLS, type SnapshotRecord } from "./snapshot-store.js";
+import { boundedIconUrls, type SnapshotRecord } from "./snapshot-store.js";
 import type { SnapshotStatus } from "./types.js";
 
 /** Attempts a snapshot gets, counting the first. */
@@ -147,10 +147,7 @@ export function snapshotRecord(input: {
     title: v.metadata?.title ?? null,
     description: v.metadata?.description ?? null,
     imageUrl: v.metadata?.imageUrl ?? null,
-    // The child's message is not validated, and a store refuses more than MAX_ICON_URLS (R2).
-    iconUrls: Array.isArray(v.metadata?.iconUrls)
-      ? v.metadata.iconUrls.filter((u) => typeof u === "string").slice(0, MAX_ICON_URLS)
-      : [],
+    iconUrls: boundedIconUrls(v.metadata?.iconUrls),
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,
   };

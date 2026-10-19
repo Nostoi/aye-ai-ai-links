@@ -142,9 +142,15 @@ function fakePipeline(
     check: async (url): Promise<LinkCheckOutcome> => ({ kind: "ok", finalUrl: url }),
     close: async () => {},
   };
+  // The icon backfill's own extractor: a fake, so no test forks a real child for it.
+  const iconExtractor: PageExtractor = {
+    extract: () => Promise.resolve(PAGE),
+    close: async () => {},
+  };
   return {
     fetcher,
     extractor,
+    iconExtractor,
     imageFetcher,
     linkChecker,
     embedder: new FakeEmbedder(DIMS),
@@ -1389,6 +1395,134 @@ describe("startServer", () => {
       await stop();
       expect(events).toEqual(["fetching", "aborted", "image fetcher closed"]);
       expect(images()).toEqual([{ status: "pending", stored: 0 }]);
+    });
+  });
+
+  describe("the icon backfill", () => {
+    const OLD = "https://example.com/old";
+    const OLD_ICON = "https://example.com/old-icon.png";
+    /** A link saved before icons were looked for: its snapshot is ok, names no preview, and its image status is NULL. */
+    const seedLegacy = async (text: string | null = "old text") => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        await saveLink(deps, "owner", { url: OLD, savedBy: "seed" });
+        const id = String(db.prepare("SELECT id FROM links").pluck().get());
+        const now = deps.now();
+        const lease = await deps.store.leaseSnapshot(
+          "owner",
+          id,
+          now,
+          new Date(now.getTime() + 100_000),
+        );
+        expect(lease).not.toBeNull();
+        await deps.store.recordSnapshot(
+          "owner",
+          id,
+          lease?.claim ?? -1,
+          record({ imageUrl: null, text }),
+        );
+        db.prepare("UPDATE snapshots SET image_status = NULL").run();
+        return id;
+      } finally {
+        db.close();
+      }
+    };
+    const iconRow = () =>
+      read<{
+        status: string | null;
+        title: string | null;
+        text: string | null;
+        role: string | null;
+      }>(
+        `SELECT s.image_status AS status, s.title, s.text,
+           (SELECT role FROM link_images WHERE link_id = s.link_id) AS role
+         FROM snapshots s`,
+      );
+
+    it("gives a link saved before icons its site icon, through the page fetcher and the image pass", async () => {
+      await seedLegacy();
+      const pagesRead: string[] = [];
+      const iconExtractor: PageExtractor = {
+        extract: async (_html, finalUrl) => {
+          pagesRead.push(finalUrl);
+          return {
+            kind: "ok",
+            metadata: {
+              title: "New title",
+              description: null,
+              imageUrl: null,
+              iconUrls: [OLD_ICON],
+            },
+            text: "new text",
+          };
+        },
+        close: async () => {},
+      };
+      const asked: string[] = [];
+      await start({
+        ...fakePipeline({
+          fetchImage: async (url) => {
+            asked.push(url);
+            return { kind: "ok", contentType: "image/png", bytes: new Uint8Array(png(128, 128)) };
+          },
+        }),
+        iconExtractor,
+        iconPollMs: 20,
+        imagePollMs: 20,
+      });
+      await until(() => iconRow()[0]?.role === "icon", "the backfilled icon");
+      expect(pagesRead).toEqual([OLD]);
+      expect(asked).toEqual([OLD_ICON]);
+      expect(iconRow()).toEqual([
+        { status: "ok", title: "Page title", text: "old text", role: "icon" },
+      ]);
+    });
+
+    it("on stop, aborts the icon extraction in flight, records nothing, then closes the icon extractor", async () => {
+      await seedLegacy();
+      const events: string[] = [];
+      let asked = false;
+      const iconExtractor: PageExtractor = {
+        extract: (_html, _url, signal) =>
+          new Promise<ExtractOutcome>((resolve) => {
+            asked = true;
+            signal?.addEventListener(
+              "abort",
+              () => {
+                events.push("aborted");
+                resolve({ kind: "aborted" });
+              },
+              { once: true },
+            );
+          }),
+        close: async () => void events.push("closed"),
+      };
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { stop } = await start({ iconExtractor, iconPollMs: 20 });
+      await until(() => asked, "the icon extraction");
+      await stop();
+      expect(events).toEqual(["aborted", "closed"]);
+      expect(errors.mock.calls.flat().join("\n")).not.toContain("icon backfill still running");
+      expect(iconRow()).toEqual([
+        { status: null, title: "Page title", text: "old text", role: null },
+      ]);
+    });
+
+    it("★ on stop, ends the backfill's page fetch before the fetcher closes, recording nothing", async () => {
+      // No text, so the copy pass has no candidate: the backfill is the only one to fetch OLD.
+      await seedLegacy(null);
+      let asked = false;
+      const pipeline = fakePipeline({
+        fetch: (url, signal) => {
+          if (url === OLD) asked = true;
+          return hangUntilAborted(url, signal);
+        },
+      });
+      const { stop } = await start({ ...pipeline, iconPollMs: 20 });
+      await until(() => asked, "the backfill's page fetch");
+      await stop();
+      expect(iconRow()).toEqual([{ status: null, title: "Page title", text: null, role: null }]);
     });
   });
 

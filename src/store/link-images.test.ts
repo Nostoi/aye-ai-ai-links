@@ -17,7 +17,16 @@ describeImageStoreContract("SqliteImageStore", () => {
   const db = openDatabase(":memory:");
   open.push(db);
   const links = new SqliteStore(db);
-  return { links, images: new SqliteImageStore(db), addOwner: (o) => links.ensureUser(o, o) };
+  return {
+    links,
+    images: new SqliteImageStore(db),
+    addOwner: (o) => links.ensureUser(o, o),
+    imageStatus: (o, id) =>
+      (db
+        .prepare("SELECT image_status FROM snapshots WHERE owner_id = ? AND link_id = ?")
+        .pluck()
+        .get(o, Number(id)) as string | null | undefined) ?? null,
+  };
 });
 
 /** The migration that adds `link_images`; everything before it is the schema it starts from. */

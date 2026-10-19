@@ -272,6 +272,7 @@ describe("manifestSchema", () => {
   it("accepts a zip manifest whose every link names its pictures", () => {
     const m = json();
     m.includesFiles = true;
+    m.links[0].copy.file = "copies/1/copy.md";
     m.links.forEach((l: ManifestLink, i: number) => {
       l.picture = { own: null, page: `pictures/${i + 1}-page.jpg`, pageRole: "preview" };
     });
@@ -514,6 +515,28 @@ describe("N1: one path pattern per field", () => {
     mutate(m);
     expect(manifestSchema.safeParse(m).success).toBe(false);
   });
+  it("a zip manifest's ok copy names its file; a links-only one needs none", () => {
+    const m = zipJson();
+    m.links[0].copy.file = null;
+    expect(manifestSchema.safeParse(m).success).toBe(false);
+    const linksOnly = JSON.parse(JSON.stringify(buildManifest(reads())));
+    expect(manifestSchema.safeParse(linksOnly).success).toBe(true);
+  });
+  it.each([
+    ["the same path twice", ["copies/1/images/01.png", "copies/1/images/01.png"]],
+    ["one number with two extensions", ["copies/1/images/01.png", "copies/1/images/01.jpg"]],
+    ["number 00", ["copies/1/images/00.png"]],
+    ["02 before 01", ["copies/1/images/02.png", "copies/1/images/01.png"]],
+  ])("refuses images with %s", (_, images) => {
+    const m = zipJson();
+    m.links[0].copy.images = images;
+    expect(manifestSchema.safeParse(m).success).toBe(false);
+  });
+  it("accepts images that skip a number", () => {
+    const m = zipJson();
+    m.links[0].copy.images = ["copies/1/images/01.png", "copies/1/images/03.webp"];
+    expect(manifestSchema.safeParse(m).success).toBe(true);
+  });
   it("every image type the app stores has a v1 extension", () =>
     expect(V1_IMAGE_EXTS).toEqual(expect.arrayContaining(Object.values(IMAGE_EXT))));
 });
@@ -566,7 +589,7 @@ describe("path helpers", () => {
 });
 
 describe("copyWithFrontMatter", () => {
-  const title = 'He said "x": a\nb\r\n--- end\u2028\u2029\u0085\u007f';
+  const title = 'He said "x": a\nb\r\n--- end\u2028\u2029\u0085\u007f\ufffe\uffff';
   const fm = copyWithFrontMatter(
     link(1, {
       title,
@@ -580,7 +603,7 @@ describe("copyWithFrontMatter", () => {
     expect(fm).toBe(
       [
         "---",
-        'title: "He said \\"x\\": a\\nb\\r\\n--- end\\u2028\\u2029\\u0085\\u007f"',
+        'title: "He said \\"x\\": a\\nb\\r\\n--- end\\u2028\\u2029\\u0085\\u007f\\ufffe\\uffff"',
         'url: "https://ex.com/1"',
         `saved: "${T(1).toISOString()}"`,
         `copied: "${T(9).toISOString()}"`,

@@ -63,7 +63,11 @@ const copySchema = z
     (c) => c.status === "ok" || (c.file === null && c.images.length === 0),
     "only an ok copy names files",
   )
-  .refine((c) => c.status !== "ok" || c.madeAt !== null, "an ok copy has madeAt");
+  .refine((c) => c.status !== "ok" || c.madeAt !== null, "an ok copy has madeAt")
+  .refine((c) => {
+    const nn = c.images.map((p) => Number(/\/images\/([0-9]{2})\./.exec(p)?.[1]));
+    return nn.every((n, k) => n >= 1 && (k === 0 || n > (nn[k - 1] as number)));
+  }, "images are numbered 01 or more, each higher than the one before");
 const linkSchema = z.strictObject({
   url: z.string().refine(isSavedUrl, "only http and https"),
   title: z.string().nullable(),
@@ -166,6 +170,12 @@ export const manifestSchema = z
             message: "the path's number is the link's position",
           });
       }
+      if (m.includesFiles && c?.status === "ok" && c.file === null)
+        ctx.addIssue({
+          code: "custom",
+          path: ["links", i, "copy", "file"],
+          message: "a zip export's ok copy names its file",
+        });
       if (
         !m.includesFiles &&
         c &&
@@ -353,10 +363,10 @@ export async function exportManifest(deps: ManifestDeps, owner: OwnerId): Promis
   });
 }
 
-/** JSON leaves U+007F to U+009F, U+2028, U+2029 and U+FEFF raw, and YAML 1.1 reads some as line breaks. Writes them as \uXXXX. */
+/** JSON leaves U+007F to U+009F, U+2028, U+2029, U+FEFF, U+FFFE and U+FFFF raw, and YAML 1.1 reads some as line breaks. Writes them as \uXXXX. */
 const yamlSafe = (v: unknown) =>
   JSON.stringify(v).replace(
-    /[\u007f-\u009f\u2028\u2029\ufeff]/g,
+    /[\u007f-\u009f\u2028\u2029\ufeff\ufffe\uffff]/g,
     (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );
 

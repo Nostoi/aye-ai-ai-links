@@ -46,6 +46,16 @@ describe("createDeps", () => {
     }
   });
 
+  it("without an export folder, a build fails and logs why, with no message", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const deps = createDeps(openDatabase(":memory:"), new FakeEmbedder(DIMS));
+    deps.store.ensureUser(OWNER, OWNER);
+    expect(deps.exports.start(OWNER)).toBe("started");
+    await deps.exports.settled(OWNER);
+    expect(deps.exports.view(OWNER).state).toBe("failed");
+    expect(logged.mock.calls).toEqual([["[export] failed: Error"]]);
+  });
+
   it("wires meaning search: a link matching only by meaning is found without the keyword fallback", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const db = openDatabase(":memory:");

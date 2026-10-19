@@ -183,6 +183,7 @@ const PAGES: [string, string][] = [
       keys: [{ id: 1, name: "codex", createdAt: new Date(0), revokedAt: null }],
       now: new Date(0),
       bookmarklet: bookmarkletCode("https://links.example"),
+      exportView: { state: "idle" },
     }),
   ],
   ["error", oauthErrorPage("It failed.")],
@@ -286,6 +287,7 @@ describe("the header", () => {
         keys: [],
         now: new Date(0),
         bookmarklet: bookmarkletCode("https://links.example"),
+        exportView: { state: "idle" },
       }),
     ).toMatch(home);
     expect(consentPage({ clientName: "C", redirectHost: "h" })).toMatch(home);
@@ -310,6 +312,7 @@ describe("the menu", () => {
         keys: [],
         now: new Date(0),
         bookmarklet: bookmarkletCode("https://links.example"),
+        exportView: { state: "idle" },
       }),
       profilePage({ notes: [], focus: [], now: new Date(0) }),
       spacePage(SPACE),

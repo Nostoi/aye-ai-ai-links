@@ -492,6 +492,40 @@ describe("startServer", () => {
     await expect(stop()).resolves.toBeUndefined();
   });
 
+  it("deletes a stale export and its temporary file beside the database at start, and keeps other names", async () => {
+    const folder = join(dir, "exports");
+    mkdirSync(folder);
+    const names = [`${"a".repeat(32)}.zip`, `${"b".repeat(32)}.zip.tmp-${"c".repeat(16)}`];
+    for (const name of [...names, "notes.txt"]) writeFileSync(join(folder, name), "x");
+    await start();
+    expect(readdirSync(folder)).toEqual(["notes.txt"]);
+  });
+
+  it("on stop, tells export builds to stop before anything closes", async () => {
+    const events: string[] = [];
+    const close = Database.prototype.close;
+    vi.spyOn(Database.prototype, "close").mockImplementation(function (this: Database.Database) {
+      events.push("db.close");
+      return close.call(this);
+    });
+    const { stop } = await start({
+      decorateDeps: (deps) => {
+        const stopBuilds = deps.exports.stop;
+        deps.exports.stop = () => {
+          events.push("exports.stop");
+          stopBuilds();
+        };
+        return deps;
+      },
+      jsonFetcher: {
+        fetch: () => Promise.reject(new Error("no metadata fetch in this test")),
+        close: async () => void events.push("jsonFetcher.close"),
+      },
+    });
+    await stop();
+    expect(events).toEqual(["exports.stop", "jsonFetcher.close", "db.close", "db.close"]);
+  });
+
   describe("startup failures", () => {
     const freePort = () =>
       new Promise<number>((resolve) => {

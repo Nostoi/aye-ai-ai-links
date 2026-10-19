@@ -226,6 +226,7 @@ export async function oauthWorld({
   log,
   savedCopyDir,
   copyLimitBytes = 0,
+  exportDir,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -238,6 +239,8 @@ export async function oauthWorld({
   savedCopyDir?: string;
   /** The saved-copy limit the web door shows on All links; 0 shows no line. */
   copyLimitBytes?: number;
+  /** The export folder, made ready as at start-up; without it, every export build fails. */
+  exportDir?: string;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -247,12 +250,13 @@ export async function oauthWorld({
     ...(now && { now }),
     ...(authDb && { db: authDb }),
   });
-  const deps = createDeps(links, new FakeEmbedder(DIMS), savedCopyDir ?? null);
+  const deps = createDeps(links, new FakeEmbedder(DIMS), savedCopyDir ?? null, exportDir ?? null);
   if (savedCopyDir !== undefined) {
     const folder = await deps.savedCopies.checkFolder();
     if (folder.state !== "ready")
       throw new Error(`The saved-copy folder is not ready: ${folder.detail}`);
   }
+  if (exportDir !== undefined) await deps.exportFolder.reset();
   deps.store.ensureUser("owner", "Owner");
   const { app } = createApp({
     deps: { ...deps, copyLimitBytes },
@@ -273,6 +277,9 @@ export async function oauthWorld({
     links,
     keyStore,
     savedCopies: deps.savedCopies,
+    exports: deps.exports,
+    /** The one saved-copy read gate; holding it holds a build at its first copy read. */
+    readGate: deps.readGate,
     savedBy,
     agent: () => new Agent(app),
   };

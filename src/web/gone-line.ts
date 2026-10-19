@@ -13,7 +13,9 @@ export const GONE_TEXT = "This page seems gone";
  */
 export function goneLine(link: Link, view: GoneView | null | undefined, copy?: CopyInfo): string {
   if (!view) return "";
-  const read = copy ? `<a href="${copyHref(link.id)}">Read the saved copy</a>` : "";
+  const read = copy
+    ? `<a href="${copyHref(link.id)}" data-act="read-copy">Read the saved copy</a>`
+    : "";
   const answers =
     link.state === "active"
       ? `<button type="button" data-act="still-works">It still works</button><button type="button" data-act="gone-done">I'm done with it</button>`

@@ -77,10 +77,42 @@ export function describeLinkEditStoreContract(
         new Map([[id, { version: v(png(2)), fit: "cover" }]]),
       );
       expect(await h.images.image(A, id)).toEqual({ ...png(2), version: v(png(2)) });
-      expect(await h.images.image(A, id, "page")).toEqual({ ...png(1), version: v(png(1)) });
+      expect(await h.images.image(A, id, "page")).toEqual({
+        ...png(1),
+        version: v(png(1)),
+        role: "preview",
+      });
       expect(await h.images.pictureInfo(A, [id])).toEqual(
         new Map([[id, { own: true, pageVersion: v(png(1)), pageFit: "cover" }]]),
       );
+    });
+
+    it("image(…, 'own') reads only the owner's picture: null when only the page has one, never the page bytes", async () => {
+      const id = await linkWith(A, { page: png(1) });
+      expect(await h.images.image(A, id, "own")).toBeNull();
+      await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(10)));
+      expect(await h.images.image(A, id, "own")).toEqual({ ...png(2), version: v(png(2)) });
+      await editId(h.edits.applyEdit(A, id, { picture: "page" }, at(11)));
+      expect(await h.images.image(A, id, "own")).toBeNull();
+      expect(await h.images.image(B, id, "own")).toBeNull();
+    });
+
+    it("image(…, 'page') carries the role of the row it read: icon for a site icon, preview for a page image", async () => {
+      const ICON = "https://ex.com/icon.png";
+      const previewId = await linkWith(A, { page: png(1) });
+      const { link } = await h.links.insertIfAbsent(A, newLink(++n, at(0)));
+      const lease = await h.links.leaseSnapshot(A, link.id, at(1), at(100));
+      if (!lease) throw new Error("the new link's snapshot should be leasable");
+      await h.links.recordSnapshot(
+        A,
+        link.id,
+        lease.claim,
+        record({ status: "retrying", nextFetchAt: at(50), imageUrl: null, iconUrls: [ICON] }),
+      );
+      expect(await h.images.writeImage(A, link.id, ICON, "icon", png(3), at(5))).toBe(true);
+      expect(await h.images.image(A, link.id, "page")).toMatchObject({ role: "icon" });
+      expect(await h.images.image(A, previewId, "page")).toMatchObject({ role: "preview" });
+      expect(await h.images.image(A, previewId)).not.toHaveProperty("role");
     });
 
     it("keeps the owner's picture showing when a fetch lands after it", async () => {

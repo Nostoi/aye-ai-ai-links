@@ -11,6 +11,7 @@ import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
 import { removeSavedCopy, restoreSavedCopy } from "../core/copy-removal.js";
 import { readCopyNotice } from "../core/copy-usage.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
+import type { ExportBuilds } from "../core/export-builds.js";
 import { exportFilename, exportManifest } from "../core/export-format.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
@@ -104,6 +105,12 @@ export const COPY_IMAGE_ROUTE = "/links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}";
 
 /** The links-only export download (#130). */
 export const EXPORT_JSON_ROUTE = "/export.json";
+
+/** The whole export (#130): the zip a build prepared. */
+export const EXPORT_ZIP_ROUTE = "/export.zip";
+
+/** Starts building the owner's zip; takes no body. */
+export const EXPORT_PREPARE_ROUTE = "/export/prepare";
 
 /**
  * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
@@ -460,6 +467,8 @@ export function webApp({
       /** The saved-copy limit, for the usage line on All links; 0 or left out shows none. */
       copyLimitBytes?: number;
       readGate: ReadGate;
+      /** The owner's zip export: its state, starting a build, and the prepared file. */
+      exports: ExportBuilds;
     };
   auth: Auth;
   withAuthLock: WithAuthLock;
@@ -737,6 +746,7 @@ export function webApp({
       keys: keys.list(owner),
       now,
       bookmarklet,
+      exportView: deps.exports.view(owner),
     });
     return c.html(page, 200, NO_STORE);
   });
@@ -753,6 +763,30 @@ export function webApp({
       "X-Content-Type-Options": "nosniff",
       "Content-Disposition": `attachment; filename="${exportFilename(new Date(manifest.exportedAt), "json")}"`,
     });
+  });
+
+  // The whole export (#130): a build runs in the background; the page polls `/connections`.
+  app.post(EXPORT_PREPARE_ROUTE, session, (c) =>
+    deps.exports.start(c.get("caller").owner) === "started"
+      ? c.body(null, 202, NO_STORE)
+      : c.json({ code: "already_preparing" }, 409, NO_STORE),
+  );
+  // The prepared zip, whatever the current state, until it expires; streamed from its file.
+  app.get(EXPORT_ZIP_ROUTE, session, async (c) => {
+    const file = await deps.exports.download(c.get("caller").owner);
+    if (!file) return c.text("Not found.", 404, NO_STORE);
+    const headers = {
+      ...NO_STORE,
+      "Content-Type": "application/zip",
+      "Content-Length": String(file.size),
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": `attachment; filename="${exportFilename(file.exportedAt, "zip")}"`,
+    };
+    if (c.req.method === "HEAD") {
+      await file.body.cancel();
+      return c.body(null, 200, headers);
+    }
+    return c.body(file.body, 200, headers);
   });
 
   // The Save page (#129). Any site can open it, and the Lax cookie comes along, so it never

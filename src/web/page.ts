@@ -1,11 +1,8 @@
+import { escapeHtml } from "../core/escape-html.js";
 import { faviconHref, inlineLogo } from "./logo.js";
 import { themeCss } from "./theme.js";
 
-export const escapeHtml = (s: string) =>
-  s.replace(
-    /[&<>"']/g,
-    (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] as string,
-  );
+export { escapeHtml } from "../core/escape-html.js";
 
 /** "March 12"; the year is added when it is not the current one. Always read in UTC. */
 export const savedOn = (savedAt: Date, now: Date) =>

@@ -22,4 +22,6 @@ jobs:
           bin=node_modules/onnxruntime-node/bin/napi-v6/linux/x64
           test -e "$bin/onnxruntime_binding.node"
           test ! -e "$bin/libonnxruntime_providers_cuda.so"
+      - name: Zip validators with ZIP64
+        run: unzip -v | grep -q ZIP64_SUPPORT && python3 --version
       - run: npm run check

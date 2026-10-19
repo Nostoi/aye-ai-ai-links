@@ -1,5 +1,54 @@
+import type { ExportView } from "../core/export-types.js";
 import type { KeyInfo } from "../store/key-store.js";
 import { escapeHtml, page, savedOn } from "./page.js";
+
+/** Decimal MB or GB with one decimal, as phones show sizes; under 50,000 bytes would print 0.0 MB (#130). */
+const bytesText = (bytes: number) =>
+  bytes < 50_000
+    ? "under 0.1 MB"
+    : bytes >= 999_950_000
+      ? `${(bytes / 1e9).toFixed(1)} GB`
+      : `${(bytes / 1e6).toFixed(1)} MB`;
+
+const utcText = (at: Date) =>
+  `${at
+    .toLocaleString("en-GB", {
+      timeZone: "UTC",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replaceAll(",", "")} UTC`;
+
+const PREPARE = (label: string, primary: boolean) =>
+  `<button${primary ? ' class="primary"' : ""} type="button" data-export="prepare">${label}</button>`;
+
+const exportBody = (view: ExportView): string => {
+  switch (view.state) {
+    case "idle":
+      return `<p class="lead">Download everything you've saved: links, pictures, saved copies and a bookmarks file.</p>
+<p>${PREPARE("Prepare export", true)}</p>`;
+    case "preparing":
+      return `<p role="status">Preparing your export…</p>`;
+    case "ready":
+      return `<p><a class="button primary" href="/export.zip">Download</a> ${PREPARE("Prepare again", false)}</p>
+<p class="small">${bytesText(view.bytes)}, prepared ${utcText(view.exportedAt)}. Kept for 24 hours.</p>`;
+    case "failed":
+      return `<p>The last export didn't finish.</p>
+<p>${PREPARE("Try again", true)}</p>`;
+  }
+};
+
+/** "Your data": the zip's four states, and the links-only JSON under all of them. */
+const yourDataSection = (
+  view: ExportView,
+) => `<section id="your-data" data-state="${view.state}" aria-labelledby="your-data-heading">
+<h2 id="your-data-heading">Your data</h2>
+${exportBody(view)}
+<p><a class="button" href="/export.json">Links only (.json)</a></p>
+<p id="export-error" role="alert"></p>
+</section>`;
 
 export type ConnectionRow = { clientId: string; name: string | null; connectedAt: Date };
 
@@ -29,19 +78,26 @@ function keyItem(k: KeyInfo, now: Date): string {
  * Save from your browser offers the bookmarklet to drag, and its code to copy for a phone (#129).
  * The code is element text, never an attribute but the link's href.
  *
- * Your data links to the links-only JSON download (#130).
+ * Your data (#130) shows the export's state and links to the links-only JSON. Prepare posts
+ * `/export/prepare` (no body, `redirect: "manual"`); on 202 or 409 the script reads `/connections`
+ * again and swaps in only its `#your-data` (a half-typed key name survives), repeating every 5 s
+ * while the state is `preparing`. A redirect, a non-200 answer or a page with no `#your-data` is
+ * never swapped in; the owner is told to reload. Clicks are delegated on `main`, so the buttons
+ * of a swapped-in section work.
  */
 export const connectionsPage = ({
   connections,
   keys,
   now,
   bookmarklet,
+  exportView,
 }: {
   connections: ConnectionRow[];
   keys: KeyInfo[];
   now: Date;
   /** The bookmarklet's code (`bookmarkletCode`), for the Save from your browser section. */
   bookmarklet: string;
+  exportView: ExportView;
 }) =>
   page(
     "Apps and keys · Aye-AI-AI Links",
@@ -89,11 +145,7 @@ ${keys
 <li><strong>Android (Chrome):</strong> bookmark any page; edit the bookmark, rename it, and replace its URL with the copied code. To save a page, type the bookmark's name in the address bar and tap the bookmark in the suggestions.</li>
 </ul>
 </section>
-<section id="your-data" aria-labelledby="your-data-heading">
-<h2 id="your-data-heading">Your data</h2>
-<p class="lead">Download every link you've saved, with its why, tags and dates, plus your tags, profile notes and focus, as one JSON file.</p>
-<p><a class="button" href="/export.json">Links only (.json)</a></p>
-</section>
+${yourDataSection(exportView)}
 </main>
 <script>
 const error = document.getElementById("error");
@@ -229,6 +281,41 @@ document.getElementById("copied-key").addEventListener("click", () => {
       codeField.setSelectionRange(0, codeField.value.length);
     }
   });
+}
+
+{
+  const STALE = "That did not work. Reload the page and try again.";
+  let busy = false;
+  let timer = 0;
+  const refreshData = async () => {
+    clearTimeout(timer);
+    const res = await fetch("/connections", { headers: { accept: "text/html" }, redirect: "manual" }).catch(() => null);
+    const text = res && res.status === 200 ? await res.text().catch(() => null) : null;
+    const next = text === null ? null : new DOMParser().parseFromString(text, "text/html").getElementById("your-data");
+    const section = document.getElementById("your-data");
+    if (!next) {
+      section.querySelector("#export-error").textContent = STALE;
+      return false;
+    }
+    section.innerHTML = next.innerHTML;
+    section.dataset.state = next.dataset.state;
+    if (section.dataset.state === "preparing") timer = setTimeout(refreshData, 5000);
+    return true;
+  };
+  document.querySelector("main.apps").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-export=prepare]");
+    if (!button || busy) return;
+    busy = true;
+    button.disabled = true;
+    const errorText = document.getElementById("export-error");
+    errorText.textContent = "";
+    const res = await fetch("/export/prepare", { method: "POST", redirect: "manual" }).catch(() => null);
+    if (res && (res.status === 202 || res.status === 409)) await refreshData();
+    else errorText.textContent = STALE;
+    button.disabled = false;
+    busy = false;
+  });
+  if (document.getElementById("your-data").dataset.state === "preparing") timer = setTimeout(refreshData, 5000);
 }
 
 addEventListener("pageshow", (event) => {

@@ -1,4 +1,5 @@
 import type { Server } from "node:http";
+import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
 import { createApp } from "./app.js";
@@ -9,6 +10,7 @@ import type { MetadataRefresher } from "./auth/metadata-refresher.js";
 import type { JsonFetch } from "./auth/metadata-stash.js";
 import { modelRoot, type ServerConfig } from "./config.js";
 import { type CopyPass, createCopyPass } from "./core/copy-pass.js";
+import type { ExportBuilds } from "./core/export-builds.js";
 import type { PageExtractor } from "./core/extract.js";
 import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createIconBackfill, type IconBackfill } from "./core/icon-backfill.js";
@@ -79,7 +81,9 @@ export type StartOptions = {
 
 /**
  * Loads the model, opens the database, checks the saved-copy folder and undoes any copy left
- * mid-write (before anything listens; an unready folder only pauses copies), opens the auth
+ * mid-write (before anything listens; an unready folder only pauses copies), readies the export
+ * folder beside the database and deletes the exports and temporary files builds left there (a
+ * symlink or non-directory refuses the start), opens the auth
  * database, builds the auth side (migrations,
  * internal client, and the client metadata of every connected OAuth client) and serves on
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
@@ -99,7 +103,9 @@ export type StartOptions = {
  *    stays a candidate, and the check runner aborts its check, recording nothing, so the
  *    link stays due. Stop waits for them, for the indexer's sweep and for any tool call still
  *    running, up to the settle limit.
- * 4. The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
+ * 4. Export builds are told to stop, before any wait: a running build stops at its next read and
+ *    discards its temporary file, or the next start deletes it.
+ *    The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
  *    The image pass's, the copy pass's, the icon backfill's and the check runner's stops are awaited again. Then the
  *    JSON fetcher closes, the image fetcher, the link checker, the page fetcher, and the three
  *    extractors (killing any child).
@@ -142,7 +148,10 @@ export async function startServer(
   let copyPass: CopyPass | undefined;
   let iconBackfill: IconBackfill | undefined;
   let checks: LinkCheckRunner | undefined;
+  let exports: ExportBuilds | undefined;
   const closeAll = async () => {
+    // Before any await: a running build stops at its next read instead of reading a closed database.
+    exports?.stop();
     await refresher?.stop();
     // Its fetch must end before the fetcher closes, or a closed fetcher would end it as a failure.
     await images?.stop();
@@ -168,7 +177,10 @@ export async function startServer(
   let server: Server;
   try {
     db = openDatabase(config.dbPath);
-    const deps = decorateDeps(createDeps(db, model, config.savedCopies.dir));
+    const deps = decorateDeps(
+      createDeps(db, model, config.savedCopies.dir, join(dirname(config.dbPath), "exports")),
+    );
+    exports = deps.exports;
     // Before anything can listen or save: an unready folder pauses copies, it never refuses the start.
     const savedCopies = deps.savedCopies;
     const folder = await savedCopies.checkFolder();
@@ -179,6 +191,8 @@ export async function startServer(
         `[saved copies] undid ${undone.copies} copies and ${undone.images} images left mid-write`,
       );
     }
+    // A build in progress when the server last stopped left at most a temporary file; no export survives a restart.
+    await deps.exportFolder.reset();
     const keeper = createCopyKeeper({
       copies: savedCopies,
       tools: deps.tools,

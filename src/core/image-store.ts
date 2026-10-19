@@ -88,8 +88,15 @@ export interface LinkImageReader {
    */
   imageVersions(owner: OwnerId, linkIds: string[]): Promise<Map<string, ShownPicture>>;
 
-  /** The picture that shows, or with `which` "page" the fetched one; null when there is none. */
-  image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null>;
+  /**
+   * The picture that shows; with `which` "page", the fetched one, carrying its `role`; with
+   * `which` "own", the owner's picture only. Null when there is none.
+   */
+  image(
+    owner: OwnerId,
+    linkId: string,
+    which?: "page" | "own",
+  ): Promise<(StoredImage & { role?: ImageRole }) | null>;
 
   /** For each of these links with an owner or fetched picture, what the dialog needs; others are absent. */
   pictureInfo(owner: OwnerId, linkIds: string[]): Promise<Map<string, PictureInfo>>;

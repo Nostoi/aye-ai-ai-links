@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { centralRecord, createZipWriter } from "./zip.js";
 import {
   fileSink,
@@ -58,15 +58,111 @@ it("the validators each examine the file: a flipped local CRC and a flipped cent
   expect(() => validateZip(join(dir, "c.zip"))).toThrow(/python/);
 });
 
-it("stamps the modified time in DOS form, in UTC", async () => {
-  const p = join(dir, "time.zip");
-  await build(p, [["a.txt", Buffer.from("x")]]);
-  const b = readFileSync(p);
-  const time = (8 << 11) | (0 << 5) | 0;
-  const date = ((2026 - 1980) << 9) | (10 << 5) | 19;
-  expect([b.readUInt16LE(10), b.readUInt16LE(12)]).toEqual([time, date]);
-  const at = b.indexOf(Buffer.from("PK\x01\x02"));
-  expect([b.readUInt16LE(at + 12), b.readUInt16LE(at + 14)]).toEqual([time, date]);
+/** Records every array written; the first write waits for `release` when `hold` is set, and write number `failAt` rejects. */
+function testSink({ hold = false, failAt = 0 } = {}) {
+  const writes: Uint8Array[] = [];
+  let release = () => {};
+  return {
+    writes,
+    release: () => release(),
+    write(bytes: Uint8Array): Promise<void> {
+      writes.push(bytes);
+      if (writes.length === failAt) return Promise.reject(new Error("disk full"));
+      if (hold && writes.length === 1)
+        return new Promise<void>((r) => {
+          release = r;
+        });
+      return Promise.resolve();
+    },
+  };
+}
+
+describe("the DOS stamp, with a non-UTC zone in effect", () => {
+  const oldTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = "America/Chicago";
+  });
+  afterAll(() => {
+    if (oldTz === undefined) delete process.env.TZ;
+    else process.env.TZ = oldTz;
+  });
+
+  it("stamps the modified time in DOS form, in UTC, seconds halved", async () => {
+    const at = new Date("2026-10-19T23:59:59Z");
+    expect(at.getHours()).not.toBe(at.getUTCHours()); // the zone is really in effect
+    const sink = testSink();
+    const zip = createZipWriter(sink, at);
+    await zip.add("a.txt", Buffer.from("x"));
+    await zip.finish();
+    const b = Buffer.concat(sink.writes);
+    const time = (23 << 11) | (59 << 5) | 29;
+    const date = ((2026 - 1980) << 9) | (10 << 5) | 19;
+    expect([b.readUInt16LE(10), b.readUInt16LE(12)]).toEqual([time, date]);
+    const c = b.indexOf(Buffer.from("PK\x01\x02"));
+    expect([b.readUInt16LE(c + 12), b.readUInt16LE(c + 14)]).toEqual([time, date]);
+  });
+});
+
+describe("misuse is refused, and nothing further reaches the sink", () => {
+  it("an add or finish while an add is pending", async () => {
+    const sink = testSink({ hold: true });
+    const zip = createZipWriter(sink, T);
+    const first = zip.add("a", Buffer.from("x"));
+    await expect(zip.add("b", Buffer.from("y"))).rejects.toThrow(/pending/);
+    await expect(zip.finish()).rejects.toThrow(/pending/);
+    expect(sink.writes).toHaveLength(1);
+    sink.release();
+    await first;
+    expect(sink.writes).toHaveLength(2);
+    expect(Buffer.from(sink.writes[0] ?? []).toString("latin1", 30)).toBe("a");
+  });
+
+  it("an add while finish is pending", async () => {
+    const sink = testSink({ hold: true });
+    const zip = createZipWriter(sink, T);
+    const done = zip.finish();
+    await expect(zip.add("b", Buffer.from("y"))).rejects.toThrow(/pending/);
+    sink.release();
+    await done;
+    expect(sink.writes).toHaveLength(2);
+  });
+
+  it("an add or finish after finish", async () => {
+    const sink = testSink();
+    const zip = createZipWriter(sink, T);
+    await zip.add("a", Buffer.from("x"));
+    await zip.finish();
+    const count = sink.writes.length;
+    await expect(zip.add("b", Buffer.from("y"))).rejects.toThrow(/finished/);
+    await expect(zip.finish()).rejects.toThrow(/finished/);
+    expect(sink.writes).toHaveLength(count);
+  });
+
+  it.each([1, 2])("every call after sink write %i rejects", async (failAt) => {
+    const sink = testSink({ failAt });
+    const zip = createZipWriter(sink, T);
+    await expect(zip.add("a", Buffer.from("x"))).rejects.toThrow(/disk full/);
+    await expect(zip.add("b", Buffer.from("y"))).rejects.toThrow(/failed/);
+    await expect(zip.finish()).rejects.toThrow(/failed/);
+    expect(sink.writes).toHaveLength(failAt);
+  });
+
+  it("a write failing in finish", async () => {
+    const sink = testSink({ failAt: 3 });
+    const zip = createZipWriter(sink, T);
+    await zip.add("a", Buffer.from("x"));
+    await expect(zip.finish()).rejects.toThrow(/disk full/);
+    await expect(zip.finish()).rejects.toThrow(/failed/);
+    expect(sink.writes).toHaveLength(3);
+  });
+
+  it("a refused name is not a failure: the writer goes on", async () => {
+    const sink = testSink();
+    const zip = createZipWriter(sink, T);
+    await expect(zip.add("", Buffer.from("x"))).rejects.toThrow(/name/);
+    await zip.add("a", Buffer.from("x"));
+    expect(sink.writes).toHaveLength(2);
+  });
 });
 
 it.each(["", "café.txt"])("refuses the name %j", async (name) => {

@@ -97,7 +97,11 @@ function endRecords(count: number, cdSize: number, cdStart: number): Buffer {
   return Buffer.concat(parts);
 }
 
-/** Writes stored entries to `sink`, each header then the caller's array unchanged, in order. */
+/**
+ * Writes stored entries to `sink`, each header then the caller's array unchanged, in order.
+ * Each call must be awaited before the next; a call while one is pending, any call after
+ * `finish`, and any call after a sink write rejected all throw without writing.
+ */
 export function createZipWriter(
   sink: ZipSink,
   modified: Date,
@@ -105,24 +109,45 @@ export function createZipWriter(
   const stamp = dosStamp(modified);
   const records: Rec[] = [];
   let offset = 0;
+  let state: "open" | "pending" | "finished" | "failed" = "open";
+
+  /** Runs `step` alone; a rejected write leaves the archive unusable. */
+  async function exclusive<T>(step: () => Promise<T>, next: "open" | "finished"): Promise<T> {
+    if (state !== "open") throw new Error(`zip writer is ${state}`);
+    state = "pending";
+    try {
+      const result = await step();
+      state = next;
+      return result;
+    } catch (err) {
+      state = "failed";
+      throw err;
+    }
+  }
+
   return {
     async add(name, data) {
+      if (state !== "open") throw new Error(`zip writer is ${state}`);
       // biome-ignore lint/suspicious/noControlCharactersInRegex: the ASCII range is the rule
       if (!/^[\x00-\x7f]+$/.test(name)) throw new Error(`zip entry name must be ASCII: ${name}`);
       if (data.length >= MAX32) throw new Error(`zip entry ${name} is too large`);
-      const crc = crc32(data);
-      const nameBytes = Buffer.from(name, "ascii");
-      await sink.write(localHeader(nameBytes, crc, data.length, stamp));
-      await sink.write(data);
-      records.push({ name, crc, size: data.length, offset });
-      offset += 30 + nameBytes.length + data.length;
+      return exclusive(async () => {
+        const crc = crc32(data);
+        const nameBytes = Buffer.from(name, "ascii");
+        await sink.write(localHeader(nameBytes, crc, data.length, stamp));
+        await sink.write(data);
+        records.push({ name, crc, size: data.length, offset });
+        offset += 30 + nameBytes.length + data.length;
+      }, "open");
     },
-    async finish() {
-      const central = Buffer.concat(records.map((r) => centralRecord(r, stamp)));
-      await sink.write(central);
-      const end = endRecords(records.length, central.length, offset);
-      await sink.write(end);
-      return offset + central.length + end.length;
+    finish() {
+      return exclusive(async () => {
+        const central = Buffer.concat(records.map((r) => centralRecord(r, stamp)));
+        await sink.write(central);
+        const end = endRecords(records.length, central.length, offset);
+        await sink.write(end);
+        return offset + central.length + end.length;
+      }, "finished");
     },
   };
 }

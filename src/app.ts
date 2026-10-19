@@ -227,7 +227,14 @@ export function createApp(options: AppOptions) {
           turnOff: (owner, id) => turnOffAgentKey(keys, owner, id),
           turnOn: (owner, id) => turnOnAgentKey(keys, owner, id),
         },
-        ai: web.deps.ai && { model: web.deps.ai, track: tracker.track, signal: turns.signal },
+        // The in-app AI is an agent, so its searches are logged as through `/mcp`; the web
+        // door's own searches above are not (#134).
+        ai: web.deps.ai && {
+          model: web.deps.ai,
+          deps: web.deps,
+          track: tracker.track,
+          signal: turns.signal,
+        },
       }),
     );
   }

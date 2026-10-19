@@ -503,8 +503,7 @@ export function webApp({
   baseUrl,
   ai,
 }: {
-  deps: McpDeps &
-    SearchLinksDeps &
+  deps: SearchLinksDeps &
     WorthDeps &
     LinkCheckDeps & {
       store: LinkRemover;
@@ -539,10 +538,11 @@ export function webApp({
   /** The server's public origin (`AYE_BASE_URL`), which the bookmarklet opens. */
   baseUrl: string;
   /**
-   * The in-app AI, when one is set up: its model, the call tracker shutdown waits on, and the
-   * signal that stops every turn when the server stops.
+   * The in-app AI, when one is set up: its model, the MCP door's deps (with the search log, so
+   * its searches are logged like any agent's), the call tracker shutdown waits on, and the signal
+   * that stops every turn when the server stops.
    */
-  ai?: { model: ChatModel; track: TrackCall; signal: AbortSignal } | undefined;
+  ai?: { model: ChatModel; deps: McpDeps; track: TrackCall; signal: AbortSignal } | undefined;
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
@@ -1194,7 +1194,7 @@ export function webApp({
       };
       let tools: ToolSession;
       try {
-        tools = await openToolSession(deps, inAppCaller(c.get("caller"), name), ai.track);
+        tools = await openToolSession(ai.deps, inAppCaller(c.get("caller"), name), ai.track);
       } catch (error) {
         console.error("[ai-chat] the tool session didn't open:", error);
         return answer({ ok: false, reason: SERVER_FAULT, changes: [], seen: [] });

@@ -102,6 +102,20 @@ describe("POST /ai/chat", () => {
     });
   });
 
+  it("logs the AI's search as an agent's, by the in-app AI", async () => {
+    const { world, browser } = await chatting([
+      calls(["search_links", { query: "home batteries" }]),
+      says("Found nothing."),
+    ]);
+    const res = await browser.send("/ai/chat", ask("Find the battery article"));
+    expect((res.body as Answer).ok).toBe(true);
+    expect(
+      world.links
+        .prepare("SELECT owner_id AS owner, searched_by AS searchedBy, query FROM search_log")
+        .all(),
+    ).toEqual([{ owner: A, searchedBy: "In-app AI (Fake)", query: "home batteries" }]);
+  });
+
   describe("a handy change's receipt undoes through /tools/undo", () => {
     const keptByAi = async () => {
       const keep = (id: string) =>

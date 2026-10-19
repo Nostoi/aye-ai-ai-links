@@ -160,6 +160,19 @@ describe("migrate", () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'ok'").all()).toEqual([]);
   });
 
+  it("rolls back earlier entries when a function migration throws", () => {
+    const db = track(new Database(":memory:"));
+    const migrations = [
+      "CREATE TABLE ok (x)",
+      () => {
+        throw new Error("x");
+      },
+    ];
+    expect(() => migrate(db, migrations)).toThrow("x");
+    expect(db.pragma("user_version", { simple: true })).toBe(0);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'ok'").all()).toEqual([]);
+  });
+
   it("sets the version to the number of migrations applied", () => {
     const db = track(new Database(":memory:"));
     migrate(db, ["CREATE TABLE a (x)", "CREATE TABLE b (x)"]);
@@ -205,7 +218,7 @@ describe("migrate", () => {
       };
       return `
         ${triggers.map((t) => `DROP TRIGGER ${t.name};`).join("\n")}
-        ${sql.replace(`CREATE TABLE ${table}`, `CREATE TABLE ${table}_new`)};
+        ${sql.replace(/^CREATE TABLE "?\w+"?/, `CREATE TABLE ${table}_new`)};
         INSERT INTO ${table}_new SELECT * FROM ${table};
         DROP TABLE ${table};
         ALTER TABLE ${table}_new RENAME TO ${table};

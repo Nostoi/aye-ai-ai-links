@@ -192,8 +192,8 @@ describe("SqliteSearchLog.pairOpen", () => {
   });
 });
 
-describe("a deleted link's reused id", () => {
-  it("C2-T6: the logged url key tells the old link from the one that took its id", async () => {
+describe("a deleted link's id", () => {
+  it("C2-T6: the next link does not take the id, and the log keeps the old link's url key", async () => {
     const { db, log } = fresh();
     const store = new SqliteStore(db);
     const deps = { store, now: () => T(0) };
@@ -222,10 +222,10 @@ describe("a deleted link's reused id", () => {
     db.prepare("DELETE FROM links WHERE id = ?").run(Number(first.id));
     const second = (await saveLink(deps, "a", { url: "https://ex.com/new", savedBy: "t" })).link;
 
-    expect(second.id).toBe(first.id);
+    expect(second.id).not.toBe(first.id);
     const row = db.prepare("SELECT results FROM search_log").get() as { results: string };
     const [logged] = JSON.parse(row.results) as { id: string; urlKey: string }[];
-    expect(logged?.id).toBe(second.id);
+    expect(logged?.id).toBe(first.id);
     expect(logged?.urlKey).toBe(first.urlKey);
     expect(logged?.urlKey).not.toBe(second.urlKey);
   });

@@ -29,6 +29,7 @@ function setup() {
   const calls: Call[] = [];
   let commitError: Error | null = null;
   let buildThrows: Error | null = null;
+  let openGate: Promise<void> | null = null;
   const files: ExportFiles = {
     async create(owner) {
       fileCalls.push(`create ${owner}`);
@@ -46,7 +47,11 @@ function setup() {
     },
     async open(owner) {
       fileCalls.push(`open ${owner}`);
-      return { size: 42, body: new ReadableStream() } satisfies ExportDownload;
+      if (openGate) await openGate;
+      return {
+        size: 42,
+        body: new ReadableStream({ cancel: () => void fileCalls.push(`cancel ${owner}`) }),
+      } satisfies ExportDownload;
     },
     async remove(owner) {
       fileCalls.push(`remove ${owner}`);
@@ -80,6 +85,16 @@ function setup() {
     finish: (owner: string, links = 3, filesCount = 5) =>
       last(owner).resolve({ exportedAt: t, links, files: filesCount }),
     fail: (owner: string, e: unknown) => last(owner).reject(e),
+    holdOpen: () => {
+      let release = () => {};
+      openGate = new Promise<void>((r) => {
+        release = r;
+      });
+      return () => {
+        openGate = null;
+        release();
+      };
+    },
     breakCommit: (e: Error) => {
       commitError = e;
     },
@@ -211,14 +226,53 @@ describe("export builds", () => {
     b.builds.start(A);
     await flush();
     vi.advanceTimersByTime(EXPORT_KEEP_MS);
-    expect(b.count("remove")).toBe(1);
+    b.setNow(new Date(T0.getTime() + EXPORT_KEEP_MS));
+    expect(b.count("remove")).toBe(0); // the rebuild's rename may replace it
     expect(b.builds.view(A).state).toBe("preparing");
     expect(await b.builds.download(A)).toBeNull();
     expect(b.count("open")).toBe(0);
-    b.setNow(new Date(T0.getTime() + EXPORT_KEEP_MS));
     b.finish(A);
     await b.builds.settled(A);
     expect(b.builds.view(A)).toMatchObject({ state: "ready" });
+    expect(await b.builds.download(A)).not.toBeNull();
+    expect(b.count("remove")).toBe(0);
+  });
+
+  it("the old file's expiry during a rebuild that fails deletes the old file once", async () => {
+    const b = setup();
+    await ready(b, A);
+    b.builds.start(A);
+    await flush();
+    vi.advanceTimersByTime(EXPORT_KEEP_MS);
+    expect(b.count("remove")).toBe(0);
+    b.fail(A, new Error("x"));
+    await b.builds.settled(A);
+    expect(b.count("remove")).toBe(1);
+    expect(b.builds.view(A).state).toBe("failed");
+    b.builds.start(A);
+    await flush();
+    b.finish(A);
+    await b.builds.settled(A);
+    expect(b.count("remove")).toBe(1); // the flag was cleared
+  });
+
+  it("a download answers with the date of the bytes it opened, even if a rebuild commits meanwhile", async () => {
+    const b = setup();
+    await ready(b, A);
+    const release = b.holdOpen();
+    const pending = b.builds.download(A);
+    await flush();
+    const later = new Date(T0.getTime() + HOUR);
+    b.setNow(later);
+    b.builds.start(A);
+    await flush();
+    b.finish(A);
+    await b.builds.settled(A);
+    release();
+    const d = await pending;
+    expect(d?.exportedAt).toEqual(later);
+    expect(b.count("cancel")).toBe(1);
+    expect(b.count("open")).toBe(2);
   });
 
   it("stop() sets the flag the running build sees, clears timers, and a later start fails at once", async () => {

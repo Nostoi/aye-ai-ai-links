@@ -29,6 +29,8 @@ type Entry = {
   ready: Ready | null;
   timer?: NodeJS.Timeout;
   running?: Promise<void>;
+  /** The old file expired during a rebuild; delete it if the rebuild does not replace it. */
+  removeAfter?: boolean;
 };
 
 /** A reason safe to log: never the message, which can hold a path or URL. */
@@ -72,7 +74,9 @@ export function createExportBuilds(o: {
     e.timer = undefined;
     e.ready = null;
     if (e.state.state === "ready") e.state = { state: "idle" };
-    removeFile(owner);
+    // During a rebuild the new file's rename replaces the old one; delete only if the build fails.
+    if (e.state.state === "preparing") e.removeAfter = true;
+    else removeFile(owner);
   };
 
   const setReady = (owner: OwnerId, e: Entry, ready: Ready) => {
@@ -94,6 +98,7 @@ export function createExportBuilds(o: {
       const summary = await o.build(owner, file, flag);
       if (flag.stopped) throw new ExportStopped();
       const bytes = await file.commit();
+      e.removeAfter = false;
       setReady(owner, e, { exportedAt: summary.exportedAt, bytes });
       const ms = Math.max(0, o.now().getTime() - startedAt.getTime());
       log(
@@ -101,6 +106,8 @@ export function createExportBuilds(o: {
       );
     } catch (error) {
       await file?.discard().catch(() => {});
+      if (e.removeAfter) removeFile(owner);
+      e.removeAfter = false;
       e.state = { state: "failed", at: o.now() };
       log(`[export] failed: ${reason(error)}`);
     }
@@ -128,14 +135,21 @@ export function createExportBuilds(o: {
     },
     async download(owner) {
       const e = entries.get(owner);
-      if (!e?.ready) return null;
-      const { exportedAt } = e.ready;
-      if (expired(e.ready)) {
-        expire(owner, e);
-        return null;
+      if (!e) return null;
+      // One retry: a rebuild may commit while the file opens, and then the bytes are the new ones.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const ready = e.ready;
+        if (!ready) return null;
+        if (expired(ready)) {
+          expire(owner, e);
+          return null;
+        }
+        const file = await o.files.open(owner);
+        if (!file) return null;
+        if (e.ready === ready) return { ...file, exportedAt: ready.exportedAt };
+        await file.body.cancel().catch(() => {});
       }
-      const file = await o.files.open(owner);
-      return file ? { ...file, exportedAt } : null;
+      return null;
     },
     settled(owner) {
       return entries.get(owner)?.running ?? Promise.resolve();

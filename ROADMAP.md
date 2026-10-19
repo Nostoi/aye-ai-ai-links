@@ -22,6 +22,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-19:** The server may call one configured AI (#159). Design: `docs/specs/2026-10-19-in-app-ai-design.md`. Owner rulings, 2026-10-19 (#159 comments).
+  - **The principle changes on purpose.** AGENTS.md's "The calling agent does the AI work" becomes "One AI connection, and only when set up". This overrides the 2026-10-10 spec's "never calls an AI model API" row, which stays as a dated record. It settles the #159 half of the 2026-10-18 open conflict; #160 is not yet designed.
+  - **`get_digest` calls by the in-app AI are listed as changes.**
+  - **The AI's why and tag edits get Undo,** in their own PR before the panel.
+  - **The in-app AI's searches are logged in `search_log`** like other agents'. Web-page searches still are not (#134).
+  - **One behaviour change for connected agents:** an `edit_profile` removal of a note edited since the call read it is now refused with the existing conflict answer (it passes `expectedUpdatedAt`). The 2026-10-11 entry describing the source-only guard stays as written.
 - **2026-10-19:** Deleting a link, with Undo (#126).
   - **Design:** `docs/specs/2026-10-19-delete-link-design.md`, revised after the solution challenge. Two PRs: (1) migration, store, core and purge; (2) web controls, done pages, cursors and README.
   - **Later order** (owner, 2026-10-19, #126 comment 6268810403): #126, #159, #160, #161, then #133, then #131 and #132. The owner confirmed that moving import and digests after the AI group is intended.
@@ -97,7 +103,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **#160:** the server keeps an AI-made summary of each link.
   - **#161:** stats over a chosen window (saved, read, saved but not read, put aside), plus an AI reading of what they say about the owner.
   - **Open conflicts, to settle at design with the owner:**
-    - #159 and #160 reverse AGENTS.md's "the server never calls an AI model API and needs no API keys", so building them changes that principle on purpose;
+    - #159 and #160 reverse AGENTS.md's "the server never calls an AI model API and needs no API keys", so building them changes that principle on purpose (settled for #159 by the 2026-10-19 entry "The server may call one configured AI");
     - #161's "saved but not read" count meets src/web/AGENTS.md's "No guilt counters".
 - **2026-10-18:** Saved copies (#135). Owner rulings, 2026-10-17 (#135 comment 6241001150, binding); the naming ruling is the comment before it (comment 6240109297). The design is `docs/specs/2026-10-17-saved-copy-design.md`.
   - **Overrides the 2026-10-10 spec's "Not stored now: full-page archives"** (owner ruling). That spec stays as written; this entry is the override.

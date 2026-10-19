@@ -31,7 +31,7 @@ import type {
 } from "./core/fetch.js";
 import { png } from "./core/image-test-kit.js";
 import { saveLink } from "./core/links.js";
-import { imageRef } from "./core/saved-copy.js";
+import { copyLimits, imageRef } from "./core/saved-copy.js";
 import { at, record } from "./core/snapshot-store-contract.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
@@ -1616,6 +1616,72 @@ describe("startServer", () => {
       await stop();
       expect(events).toEqual(["checking", "aborted", "checker closed"]);
       expect(checkRows()).toEqual([]);
+    });
+  });
+
+  describe("the link purge", () => {
+    const linkIds = () => read<{ id: number }>("SELECT id FROM links ORDER BY id").map((r) => r.id);
+    const DELETED_AGO = 120_000;
+
+    /** Saves links before the server starts and hides each one DELETED_AGO ms ago; the first keeps a copy. */
+    const seedDeleted = async (urls: string[], withCopy = false) => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS), join(dir, "copies"));
+        expect(await deps.savedCopies.checkFolder()).toEqual({ state: "ready" });
+        const ids: string[] = [];
+        for (const url of urls) {
+          ids.push((await saveLink(deps, "owner", { url, savedBy: "seed" })).link.id);
+        }
+        const [first] = ids;
+        if (withCopy && first !== undefined) {
+          const draft = { markdown: "# body", imageUrls: [], nonce: "c".repeat(32) };
+          expect(
+            await deps.savedCopies.saveCopy("owner", first, draft, copyLimits(10_000), deps.now()),
+          ).toBe("saved");
+        }
+        for (const id of ids) {
+          expect(
+            await deps.store.markDeleted("owner", id, new Date(Date.now() - DELETED_AGO)),
+          ).toBe(true);
+        }
+        return ids;
+      } finally {
+        db.close();
+      }
+    };
+
+    it("purges a link deleted over a minute before start, at start-up", async () => {
+      await seedDeleted(["https://example.com/gone"]);
+      expect(linkIds()).toHaveLength(1);
+      await start();
+      await until(() => linkIds().length === 0, "the purge");
+    });
+
+    it("purges a copy-less link on the timer while another waits on its copy", async () => {
+      const [withCopy, bare] = await seedDeleted(
+        ["https://example.com/with-copy", "https://example.com/bare"],
+        true,
+      );
+      // The copy pass's first sweep retires the copy at once, so hold that back to keep the copy's files.
+      await start({
+        linkPurgeMs: 50,
+        decorateDeps: (deps) => {
+          vi.spyOn(deps.savedCopies, "purgeRemoved").mockResolvedValue(0);
+          return deps;
+        },
+      });
+      await until(() => !linkIds().includes(Number(bare)), "the copy-less link's purge");
+      await sleep(500);
+      expect(linkIds()).toEqual([Number(withCopy)]);
+    });
+
+    it("stops the purge timer before closing the database", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { stop } = await start({ linkPurgeMs: 10 });
+      await stop();
+      await sleep(50);
+      expect(errors.mock.calls.flat().join(" ")).not.toMatch(/link purge failed/);
     });
   });
 

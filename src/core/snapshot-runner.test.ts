@@ -548,6 +548,31 @@ describe("snapshot runner", () => {
       spy.mockRestore();
     }
   });
+
+  it("survives its link being purged mid-fetch, and still handles the next link", async () => {
+    const s = setup();
+    const gone = await s.save(A, 1);
+    const next = await s.save(A, 2);
+    const realRun = s.fetch.run.bind(s.fetch);
+    s.fetch.run = async (url, signal) => {
+      if (url === gone.url) {
+        await s.store.markDeleted(A, gone.id, at(0));
+        await s.store.purgeDeleted(at(1));
+      }
+      return realRun(url, signal);
+    };
+
+    await s.runner.sweep();
+    await vi.waitFor(() => expect(s.records.map((r) => r.linkId)).toContain(next.id));
+    await s.runner.sweep();
+    await s.runner.stop();
+
+    expect(s.fetch.calls.filter((c) => c.arg === gone.url)).toHaveLength(1);
+    expect(s.records.find((r) => r.linkId === next.id)?.rec.status).toBe("ok");
+    const lines = s.log.mock.calls.map((c) => String(c[0]));
+    expect(lines.filter((l) => l.includes("record refused")).length).toBeLessThanOrEqual(1);
+    expect(lines.filter((l) => l.includes("job failed"))).toEqual([]);
+  });
 });
 
 describe("snapshot runner saved copies", () => {

@@ -405,6 +405,38 @@ describe("writeExport", () => {
     expect(copyFiles(next.files, 1)).toEqual([]);
   });
 
+  it("a link purged during a build is written without pictures and with copy removed", async () => {
+    const h = setup();
+    const KEPT = pic("image/png", "own-2");
+    const id1 = await h.save(A, 1);
+    await h.ownPicture(A, id1, pic("image/png", "own-1"));
+    await h.pagePicture(A, id1, pic("image/jpeg", "page-1"));
+    await h.finishedCopy(A, id1, [pic("image/png", "c1")]);
+    const id2 = await h.save(A, 2);
+    await h.ownPicture(A, id2, KEPT);
+    const real = h.store.image.bind(h.store);
+    let purged = false;
+    vi.spyOn(h.store, "image").mockImplementation(async (o, id, which) => {
+      if (!purged) {
+        purged = true;
+        expect(await h.store.markDeleted(A, id1, at(0))).toBe(true);
+        await h.savedCopies.purgeRemoved(at(1));
+        expect(await h.store.purgeDeleted(at(1))).toBe(1);
+      }
+      return real(o, id, which);
+    });
+
+    const { files, manifest } = await built(h.deps, A);
+
+    expect(purged).toBe(true);
+    expect(manifest.links.map((l) => [l.picture, l.copy?.status])).toEqual([
+      [{ own: null, page: null, pageRole: null }, "removed"],
+      [{ own: "pictures/2-own.png", page: null, pageRole: null }, undefined],
+    ]);
+    expect(files.get("pictures/2-own.png")).toEqual(KEPT.bytes);
+    expect(copyFiles(files, 1)).toEqual([]);
+  });
+
   it("a copy removed and undone during an image read is re-read once and exports ok with every image", async () => {
     const h = setup();
     const IMG1 = pic("image/png", "c1");

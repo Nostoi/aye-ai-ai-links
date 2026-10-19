@@ -9,8 +9,15 @@ import type { Database } from "better-sqlite3";
  *   their child rows itself, or the foreign-key check refuses it.
  * - A rebuild of a table must drop every trigger whose SQL names it before the DROP and
  *   recreate them after the RENAME, copied from `sqlite_master` at the previous version
+ * - A rebuild builds the new table beside the old one and renames it into place; it never
+ *   renames the old table first. It reads the triggers and indexes from `sqlite_master`
+ *   while it runs, so none that an earlier migration added is lost.
+ * - A function migration carries its own SQL and calls no current app code, so databases upgraded
+ *   at different times end with the same schema.
  */
-export const MIGRATIONS: string[] = [
+export type Migration = string | ((db: Database) => void);
+
+export const MIGRATIONS: Migration[] = [
   `
   CREATE TABLE users (
     id TEXT PRIMARY KEY,
@@ -312,7 +319,53 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE snapshots ADD COLUMN icon_next_url TEXT;
   ALTER TABLE link_images ADD COLUMN role TEXT NOT NULL DEFAULT 'preview' CHECK (role IN ('preview', 'icon'));
   `,
+  rebuildLinks,
 ];
+
+/** Links rebuild (#126): AUTOINCREMENT ids, so a deleted link's id is never reused, and `deleted_at`. */
+function rebuildLinks(db: Database): void {
+  const triggers = (
+    db
+      .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY rowid")
+      .all() as { name: string; sql: string }[]
+  ).filter((t) => /\blinks\b/.test(t.sql));
+  const indexes = db
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'links' AND sql IS NOT NULL",
+    )
+    .all() as { sql: string }[];
+  const cols =
+    "id, owner_id, url, url_key, title, summary, why_text, why_source, saved_at, saved_by, last_opened_at, last_surfaced_at, snoozed_until, state";
+  db.exec(`
+    CREATE TABLE links_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      url TEXT NOT NULL,
+      url_key TEXT NOT NULL,
+      title TEXT,
+      summary TEXT,
+      why_text TEXT,
+      why_source TEXT,
+      saved_at INTEGER NOT NULL,
+      saved_by TEXT NOT NULL,
+      last_opened_at INTEGER,
+      last_surfaced_at INTEGER,
+      snoozed_until INTEGER,
+      state TEXT NOT NULL,
+      deleted_at INTEGER,
+      UNIQUE (owner_id, url_key),
+      UNIQUE (owner_id, id),
+      CHECK ((why_text IS NULL) = (why_source IS NULL)),
+      CHECK (why_source IN ('stated', 'asked', 'inferred')),
+      CHECK (state IN ('active', 'archived'))
+    );
+    INSERT INTO links_new (${cols}) SELECT ${cols} FROM links;`);
+  for (const t of triggers) db.exec(`DROP TRIGGER ${t.name}`);
+  db.exec("DROP TABLE links; ALTER TABLE links_new RENAME TO links;");
+  for (const t of triggers) db.exec(t.sql);
+  for (const i of indexes) db.exec(i.sql);
+  db.exec("CREATE INDEX links_deleted ON links (deleted_at) WHERE deleted_at IS NOT NULL");
+}
 
 /**
  * Keyword index: one `link_search` row per link (rowid = links.id), rebuilt by
@@ -401,7 +454,7 @@ export const LATEST_VERSION = MIGRATIONS.length;
  * Foreign keys must be on when called and are on again afterwards; they are off while
  * migrations run, and any violation left at the end rolls the whole upgrade back.
  */
-export function migrate(db: Database, migrations: string[] = MIGRATIONS): void {
+export function migrate(db: Database, migrations: Migration[] = MIGRATIONS): void {
   if (db.inTransaction) {
     throw new Error(
       "migrate() cannot run inside a transaction: foreign keys cannot be turned off there. Call it outside any transaction.",
@@ -425,7 +478,10 @@ export function migrate(db: Database, migrations: string[] = MIGRATIONS): void {
         );
       }
       if (current === migrations.length) return;
-      for (const sql of migrations.slice(current)) db.exec(sql);
+      for (const m of migrations.slice(current)) {
+        if (typeof m === "string") db.exec(m);
+        else m(db);
+      }
       if (!db.inTransaction) {
         throw new Error(
           "A migration ended the transaction itself, so its later statements were committed with foreign keys off and cannot be rolled back. Migrations must not contain BEGIN, COMMIT or ROLLBACK.",

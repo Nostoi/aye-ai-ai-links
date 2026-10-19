@@ -17,6 +17,7 @@ import { createIconBackfill, type IconBackfill } from "./core/icon-backfill.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
 import { createCopyKeeper } from "./core/keep-copy.js";
 import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-runner.js";
+import { createLinkPurger } from "./core/link-removal.js";
 import { pausedMessage } from "./core/saved-copy.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
@@ -64,6 +65,8 @@ export type StartOptions = {
   linkChecker?: LinkChecker;
   /** Time between check sweeps; its 60 s default when left out. */
   checkPollMs?: number;
+  /** Time between purges of links deleted over a minute ago; its 60 s default when left out. */
+  linkPurgeMs?: number;
   /** The copy pass's own extractor; a second child extractor when left out. */
   copyExtractor?: PageExtractor;
   /** Time between copy pass sweeps; its 15 s default when left out. */
@@ -89,7 +92,7 @@ export type StartOptions = {
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
- * The snapshot runner, the vector indexer, the image pass, the copy pass, the icon backfill, the check runner and the
+ * The snapshot runner, the vector indexer, the image pass, the copy pass, the icon backfill, the check runner, the link purger and the
  * metadata refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
@@ -110,6 +113,7 @@ export type StartOptions = {
  *    JSON fetcher closes, the image fetcher, the link checker, the page fetcher, and the three
  *    extractors (killing any child).
  * 5. The MCP handler closes, then the database, then the auth database.
+ * The link purger runs through steps 1-3 and stops as the closes begin, so no purge meets a closed database.
  * A call or job still running after step 3 fails on the closed database; the error is caught
  * and logged.
  */
@@ -127,6 +131,7 @@ export async function startServer(
     imagePollMs,
     linkChecker = createLinkChecker({ version: config.version }),
     checkPollMs,
+    linkPurgeMs,
     copyExtractor = createChildExtractor(),
     copyPollMs,
     iconExtractor = createChildExtractor(),
@@ -148,8 +153,10 @@ export async function startServer(
   let copyPass: CopyPass | undefined;
   let iconBackfill: IconBackfill | undefined;
   let checks: LinkCheckRunner | undefined;
+  let purger: ReturnType<typeof createLinkPurger> | undefined;
   let exports: ExportBuilds | undefined;
   const closeAll = async () => {
+    purger?.stop();
     // Before any await: a running build stops at its next read instead of reading a closed database.
     exports?.stop();
     await refresher?.stop();
@@ -246,6 +253,11 @@ export async function startServer(
       now: deps.now,
       ...(checkPollMs !== undefined && { pollMs: checkPollMs }),
     });
+    purger = createLinkPurger({
+      store: deps.store,
+      now: deps.now,
+      ...(linkPurgeMs !== undefined && { everyMs: linkPurgeMs }),
+    });
     authDb = openAuthDatabase(config.auth.dbPath);
     const keys = new SqliteKeyStore(db);
     const auth = await buildAuth({
@@ -292,6 +304,7 @@ export async function startServer(
   copyPass?.start();
   iconBackfill?.start();
   checks?.start();
+  purger?.start();
   refresher.start();
 
   const address = server.address();

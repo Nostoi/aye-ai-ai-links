@@ -428,4 +428,31 @@ describe("icon backfill", () => {
     expect(t.status(id)).toBeNull();
     expect(t.logged).toEqual([]);
   });
+
+  it("survives its link being purged mid-fetch, and still handles the next link", async () => {
+    let doomed = "";
+    let doomedUrl = "";
+    const t: ReturnType<typeof setup> = setup({
+      page: async (url) => {
+        if (url === doomedUrl) {
+          await t.store.markDeleted(OWNER, doomed, at(0));
+          await t.store.purgeDeleted(at(1));
+        }
+        return okPage(url);
+      },
+    });
+    doomed = await t.legacy(1);
+    doomedUrl = (await t.store.get(OWNER, doomed))?.url ?? "";
+    const next = await t.legacy(2);
+    expect(doomedUrl).not.toBe("");
+
+    await expect(t.pass.sweep()).resolves.toBeUndefined();
+    t.wait();
+    await expect(t.pass.sweep()).resolves.toBeUndefined();
+
+    expect(t.pageCalls.filter((u) => u === doomedUrl)).toHaveLength(1);
+    expect(t.status(next)).not.toBeNull();
+    expect(t.status(doomed)).toBeNull();
+    expect(t.logged.length).toBeLessThanOrEqual(1);
+  });
 });

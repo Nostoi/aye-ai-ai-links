@@ -2,12 +2,12 @@ import type { SearchFilters } from "../core/search.js";
 import type { OwnerId } from "../core/types.js";
 
 /**
- * The owner, tag, project, date and state conditions every query shares; `ownerCol` is its owner
+ * The owner, live-link, tag, project, date and state conditions every query shares; `ownerCol` is its owner
  * column. Callers must alias `links` as `l`. `order` and `before` are not: only a blank listing
  * orders and pages.
  */
 export function scope(ownerCol: string, owner: OwnerId, filters: SearchFilters) {
-  const where = [`${ownerCol} = ?`];
+  const where = [`${ownerCol} = ?`, "l.deleted_at IS NULL"];
   const params: (string | number)[] = [owner];
   const tagFilter = (key: string, project: boolean) => {
     where.push(

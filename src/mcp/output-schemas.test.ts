@@ -217,7 +217,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(get("1"));
     await run(save({ url: "https://example.com/a" }));
     await run(save({ url: "https://example.com/c" })); // its filingContext holds the seeded tags
-    db.prepare("DELETE FROM snapshots WHERE link_id = 3").run();
+    db.prepare("DELETE FROM snapshots WHERE link_id = 5").run();
     await run(update({ id: "1", why: null, summary: null }));
     await run(search(""));
     await run(search("zzzznomatch"));
@@ -228,9 +228,9 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     expect(lastPage).toMatchObject({ total: 3, nextCursor: null });
     // Timestamps whose JSON form is outside the four-digit ISO range stay readable.
     await run(update({ id: "2", snoozedUntil: UPPER }));
-    await run(update({ id: "3", snoozedUntil: LOWER }));
+    await run(update({ id: "5", snoozedUntil: LOWER }));
     await run(get("2"));
-    await run(get("3"));
+    await run(get("5"));
     await run(search(""));
     await run(save({ url: "https://example.com/b" }));
     await run(retag("Reading", "project"));
@@ -252,28 +252,28 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(editProfileStep({ removeNotes: ["2"] }));
     await run(getProfileStep);
     await run(save({ url: "https://example.com/d" })); // its profile holds notes and focus
-    // A digest reaching every reason: link 5 matches the inferred focus entry, link 3 is old
-    // with no why, and link 4 is new with no why.
+    // A digest reaching every reason: link 8 matches the inferred focus entry, link 5 is old
+    // with no why, and link 7 is new with no why.
     await run(
       save({ url: "https://example.com/e", title: "Quokka", why: { text: "w", source: "stated" } }),
     );
     await run(addToProfile({ addFocus: [{ text: "quokka", source: "inferred" }] }));
-    db.prepare("UPDATE links SET saved_at = ? WHERE id = 3").run(NOW.getTime() - 60 * 86_400_000);
-    // Keep handy rows: 6 kept and due (never opened), 7 suggested, 8 declined, 9 kept and due (opened
-    // 45 days ago). 7 and 8 are ordinary links, so they are shown recently enough to stay out.
+    db.prepare("UPDATE links SET saved_at = ? WHERE id = 5").run(NOW.getTime() - 60 * 86_400_000);
+    // Keep handy rows: 9 kept and due (never opened), 10 suggested, 11 declined, 12 kept and due (opened
+    // 45 days ago). 10 and 11 are ordinary links, so they are shown recently enough to stay out.
     const w = { text: "w", source: "stated" };
     for (const path of ["f", "g", "h", "i"]) {
       await run(save({ url: `https://example.com/${path}`, why: w }));
     }
-    await keepHandy(deps, A.owner, "6", "stated");
-    await keepHandy(deps, A.owner, "7", "inferred");
-    await notHandy(deps, A.owner, "8", "asked");
-    await keepHandy(deps, A.owner, "9", "asked");
-    db.prepare("UPDATE link_tools SET since = ? WHERE link_id IN (6, 9)").run(
+    await keepHandy(deps, A.owner, "9", "stated");
+    await keepHandy(deps, A.owner, "10", "inferred");
+    await notHandy(deps, A.owner, "11", "asked");
+    await keepHandy(deps, A.owner, "12", "asked");
+    db.prepare("UPDATE link_tools SET since = ? WHERE link_id IN (9, 12)").run(
       NOW.getTime() - 40 * DAY,
     );
-    db.prepare("UPDATE links SET last_opened_at = ? WHERE id = 9").run(NOW.getTime() - 45 * DAY);
-    db.prepare("UPDATE links SET last_surfaced_at = ? WHERE id IN (7, 8)").run(NOW.getTime());
+    db.prepare("UPDATE links SET last_opened_at = ? WHERE id = 12").run(NOW.getTime() - 45 * DAY);
+    db.prepare("UPDATE links SET last_surfaced_at = ? WHERE id IN (10, 11)").run(NOW.getTime());
     await run(list({ limit: 50 }));
     const digest = await run(digestStep); // the reading picks, then one check
     const secondDigest = await run(digestStep); // only the other due tool's check
@@ -283,17 +283,17 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
 
     expect(emptyDigest).toEqual({ links: [] });
     expect(digest.links.map((d: Json) => [d.link.id, d.reasons.map((r: Json) => r.kind)])).toEqual([
-      ["5", ["focus_words", "never_surfaced"]],
-      ["3", ["no_why", "not_opened_recently", "never_surfaced"]],
-      ["4", ["no_why", "never_surfaced"]],
-      ["6", ["still_using_check"]],
+      ["8", ["focus_words", "never_surfaced"]],
+      ["5", ["no_why", "not_opened_recently", "never_surfaced"]],
+      ["7", ["no_why", "never_surfaced"]],
+      ["9", ["still_using_check"]],
     ]);
     expect(digest.links[3].reasons[0]).toEqual({
       kind: "still_using_check",
       daysSinceOpened: null,
     });
     expect(secondDigest.links.map((d: Json) => [d.link.id, d.reasons])).toEqual([
-      ["9", [{ kind: "still_using_check", daysSinceOpened: 45 }]],
+      ["12", [{ kind: "still_using_check", daysSinceOpened: 45 }]],
     ]);
     expect(digest.links[0].reasons[0].focus).toMatchObject({ text: "quokka", source: "inferred" });
 

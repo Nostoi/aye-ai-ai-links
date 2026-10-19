@@ -3,7 +3,7 @@ import type { Database } from "better-sqlite3";
 import type { ImageType } from "../core/fetch.js";
 import type { LinkEdit, LinkEditStore, UndoOutcome } from "../core/link-edit-store.js";
 import type { OwnerId } from "../core/types.js";
-import { parseId } from "./sqlite-store.js";
+import { parseId } from "./sql-values.js";
 
 type OwnPicture = { content_type: ImageType; bytes: Buffer; sha256: string; set_at: number };
 type EditRow = {
@@ -113,9 +113,9 @@ export class SqliteLinkEditStore implements LinkEditStore {
   }
 
   private link(owner: OwnerId, n: number) {
-    return this.db.prepare("SELECT title FROM links WHERE owner_id = ? AND id = ?").get(owner, n) as
-      | { title: string | null }
-      | undefined;
+    return this.db
+      .prepare("SELECT title FROM links WHERE owner_id = ? AND id = ? AND deleted_at IS NULL")
+      .get(owner, n) as { title: string | null } | undefined;
   }
 
   private own(owner: OwnerId, n: number) {

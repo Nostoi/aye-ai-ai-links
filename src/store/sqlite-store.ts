@@ -6,7 +6,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "../core/snapshot-store.js";
-import type { LinkExpectation, LinkStore, SurfacedClaim } from "../core/store.js";
+import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "../core/store.js";
 import {
   sameTool,
   type ToolRecord,
@@ -28,6 +28,8 @@ import type {
   TagPatch,
   ToolStatus,
 } from "../core/types.js";
+import { COPY_MAY_HOLD_FILES, removeCopyWithLink, restoreCopyWithLink } from "./saved-copies.js";
+import { fromMs, parseId, toMs } from "./sql-values.js";
 
 export class StoreError extends Error {
   constructor(
@@ -60,22 +62,6 @@ type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
   project_status AS projectStatus`;
 
-export function toMs(d: Date | null): number | null {
-  if (d === null) return null;
-  const ms = d.getTime();
-  if (!Number.isFinite(ms)) throw new RangeError("Cannot store an invalid date.");
-  return ms;
-}
-
-export const fromMs = (ms: number | null): Date | null => (ms === null ? null : new Date(ms));
-
-/** Canonical decimal ids in 1..MAX_SAFE_INTEGER; anything else was never issued. */
-export function parseId(id: string): number | null {
-  if (!/^[1-9][0-9]*$/.test(id)) return null;
-  const n = Number(id);
-  return Number.isSafeInteger(n) ? n : null;
-}
-
 type SnapshotRow = {
   fetch_status: SnapshotStatus;
   fetched_at: number | null;
@@ -84,7 +70,7 @@ type SnapshotRow = {
   image_url: string | null;
 };
 
-export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
+export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolStore {
   constructor(private readonly db: Database) {}
 
   /** Idempotent. Owners are created here, outside LinkStore. */
@@ -115,6 +101,60 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const n = parseId(id);
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();
+  }
+
+  async markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean> {
+    const n = parseId(id);
+    if (n === null) return false;
+    const ms = toMs(at);
+    return this.db
+      .transaction(() => {
+        const hidden = this.db
+          .prepare(
+            "UPDATE links SET deleted_at = ? WHERE id = ? AND owner_id = ? AND deleted_at IS NULL",
+          )
+          .run(ms, n, owner).changes;
+        if (hidden !== 1) return false;
+        removeCopyWithLink(this.db, owner, n, ms);
+        return true;
+      })
+      .immediate();
+  }
+
+  async unmarkDeleted(owner: OwnerId, id: string, since: Date): Promise<boolean> {
+    const n = parseId(id);
+    if (n === null) return false;
+    const from = toMs(since);
+    return this.db
+      .transaction(() => {
+        const deletedAt = this.db
+          .prepare("SELECT deleted_at FROM links WHERE id = ? AND owner_id = ? AND deleted_at >= ?")
+          .pluck()
+          .get(n, owner, from) as number | undefined;
+        if (deletedAt === undefined) return false;
+        this.db
+          .prepare("UPDATE links SET deleted_at = NULL WHERE id = ? AND owner_id = ?")
+          .run(n, owner);
+        restoreCopyWithLink(this.db, owner, n, deletedAt);
+        return true;
+      })
+      .immediate();
+  }
+
+  async purgeDeleted(before: Date): Promise<number> {
+    const cutoff = toMs(before);
+    return this.db
+      .transaction(
+        () =>
+          this.db
+            .prepare(
+              `DELETE FROM links WHERE deleted_at IS NOT NULL AND deleted_at < ?
+                 AND NOT EXISTS (SELECT 1 FROM saved_copies c WHERE c.owner_id = links.owner_id
+                   AND c.link_id = links.id AND ${COPY_MAY_HOLD_FILES})`,
+            )
+            .run(cutoff).changes,
+      )
+      .immediate();
   }
 
   async listTags(owner: OwnerId) {
@@ -216,7 +256,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
     const { changes } = this.db
       .prepare(
         `UPDATE links SET last_surfaced_at = ?
-         WHERE id = ? AND owner_id = ? AND last_surfaced_at = ?`,
+         WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND last_surfaced_at = ?`,
       )
       .run(toMs(claim.previous), n, owner, toMs(claim.at));
     return changes === 1;
@@ -320,7 +360,11 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
     const n = parseId(linkId);
     if (n === null) return null;
     const row = this.db
-      .prepare("SELECT text FROM snapshots WHERE link_id = ? AND owner_id = ?")
+      .prepare(
+        `SELECT s.text FROM snapshots s
+         JOIN links l ON l.id = s.link_id AND l.owner_id = s.owner_id AND l.deleted_at IS NULL
+         WHERE s.link_id = ? AND s.owner_id = ?`,
+      )
       .get(n, owner) as { text: string | null } | undefined;
     return row?.text ?? null;
   }
@@ -348,7 +392,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
     return this.db
       .transaction((): ToolWrite | null => {
         const link = this.db
-          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?")
+          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
           .get(n, owner);
         if (!link) return null;
         const current = this.readTool(owner, n);
@@ -382,6 +426,9 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   }
 
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {
+    this.db
+      .prepare("DELETE FROM links WHERE owner_id = ? AND url_key = ? AND deleted_at IS NOT NULL")
+      .run(owner, link.urlKey);
     let row: { id: number } | undefined;
     try {
       row = this.db
@@ -453,7 +500,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
       set("why_source", patch.why?.source ?? null);
     }
     if (sets.length === 0) sets.push("id = id");
-    const where = ["id = ?", "owner_id = ?"];
+    const where = ["id = ?", "owner_id = ?", "deleted_at IS NULL"];
     const whereValues: unknown[] = [id, owner];
     if (expected.state !== undefined) {
       where.push("state = ?");
@@ -484,7 +531,8 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   private fillSync(owner: OwnerId, id: number, why: Labelled): Link | null {
     this.db
       .prepare(
-        "UPDATE links SET why_text = ?, why_source = ? WHERE id = ? AND owner_id = ? AND why_text IS NULL",
+        `UPDATE links SET why_text = ?, why_source = ?
+         WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND why_text IS NULL`,
       )
       .run(why.text, why.source, id, owner);
     return this.read(owner, id);
@@ -509,7 +557,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   ): SurfacedClaim[] {
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
-       WHERE id = ? AND owner_id = ? AND state = 'active'
+       WHERE id = ? AND owner_id = ? AND state = 'active' AND deleted_at IS NULL
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
          AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
@@ -518,7 +566,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
            WHERE c.owner_id = links.owner_id AND c.link_id = links.id AND c.flagged_at IS NOT NULL))`,
     );
     const mark = this.db.prepare(
-      "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ?",
+      "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ? AND deleted_at IS NULL",
     );
     const claimed: SurfacedClaim[] = [];
     for (const id of ids) {
@@ -570,7 +618,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
 
   private read(owner: OwnerId, id: number): Link | null {
     const row = this.db
-      .prepare("SELECT * FROM links WHERE id = ? AND owner_id = ?")
+      .prepare("SELECT * FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
       .get(id, owner) as LinkRow | undefined;
     if (!row) return null;
     const tags = this.db
@@ -585,7 +633,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   /** The owner's links in three queries, not three per link. */
   private readAll(owner: OwnerId): Link[] {
     const rows = this.db
-      .prepare("SELECT * FROM links WHERE owner_id = ? ORDER BY id")
+      .prepare("SELECT * FROM links WHERE owner_id = ? AND deleted_at IS NULL ORDER BY id")
       .all(owner) as LinkRow[];
     const tags = new Map<number, LinkTag[]>();
     const tagRows = this.db

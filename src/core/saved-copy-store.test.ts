@@ -22,7 +22,7 @@ describe("FakeSavedCopies fault injection", () => {
     const store = new FakeStore();
     const copies = new FakeSavedCopies(store);
     const { link } = await store.insertIfAbsent(A, newLink(1, at(0)));
-    return { copies, id: link.id };
+    return { store, copies, id: link.id };
   };
   const draft = (n: number) => ({
     markdown: "body",
@@ -66,6 +66,19 @@ describe("FakeSavedCopies fault injection", () => {
     copies.heal();
     await copies.checkFolder();
     expect(copies.lastCheck()).toEqual({ state: "ready" });
+  });
+
+  it("refuses to remove or restore the copy of a hidden link", async () => {
+    const { store, copies, id } = await setup();
+    await copies.saveCopy(A, id, draft(0), limits, at(5));
+    await store.markDeleted(A, id, at(6));
+    expect(await copies.removeCopy(A, id, at(7))).toBe(false);
+    await store.unmarkDeleted(A, id, at(0));
+    expect(await copies.removeCopy(A, id, at(8))).toBe(true);
+    await store.markDeleted(A, id, at(9));
+    expect(await copies.restoreCopy(A, id, at(0))).toBe(false);
+    await store.unmarkDeleted(A, id, at(0));
+    expect(await copies.restoreCopy(A, id, at(0))).toBe(true);
   });
 
   it("loses a copy's files: the copy reads as missing and gets no more pictures", async () => {

@@ -30,7 +30,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
-import type { LinkExpectation, LinkStore, SurfacedClaim } from "./store.js";
+import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "./store.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
@@ -59,6 +59,14 @@ type EditRecord = {
   prior: OwnRecord | null;
   writtenSha: string | null;
 };
+/** What a delete, Undo and purge do to the link's saved copy, as SQLite does in the same step. */
+type CopyHooks = {
+  removeForDelete(owner: OwnerId, id: string, at: Date): void;
+  restoreForUndo(owner: OwnerId, id: string, deletedAt: Date): void;
+  /** The copy is not absent and not a 0-byte tombstone, so its files may still exist. */
+  holdsFiles(owner: OwnerId, id: string): boolean;
+  purged(owner: OwnerId, id: string): void;
+};
 const sha256Hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const stored = (own: OwnRecord): StoredImage => ({
   contentType: own.contentType,
@@ -70,6 +78,7 @@ const stored = (own: OwnRecord): StoredImage => ({
 export class FakeStore
   implements
     LinkStore,
+    LinkRemover,
     SnapshotStore,
     ToolStore,
     LinkCheckStore,
@@ -82,6 +91,7 @@ export class FakeStore
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
   private tokens = new Map<OwnerId, Map<string, number>>();
   private links = new Map<OwnerId, Map<string, Link>>();
+  private hidden = new Map<OwnerId, Map<string, { link: Link; at: Date }>>();
   private tags = new Map<OwnerId, Map<string, Tag>>();
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
@@ -91,6 +101,7 @@ export class FakeStore
   private editRecords = new Map<string, EditRecord>();
   private toolRows = new Map<OwnerId, Map<string, ToolRecord>>();
   private checkRows = new Map<OwnerId, Map<string, LinkCheck>>();
+  private copies: CopyHooks | null = null;
   private nextId = 1;
 
   private owned(owner: OwnerId): Map<string, Link> {
@@ -151,7 +162,30 @@ export class FakeStore
     return out;
   }
 
+  /** Removes the link, hidden or not, and everything the store keeps for it, as the table's ON DELETE CASCADE does. */
+  private cascade(owner: OwnerId, id: string): void {
+    const key = imageKey(owner, id);
+    this.owned(owner).delete(id);
+    this.hidden.get(owner)?.delete(id);
+    this.snapshots.get(owner)?.delete(id);
+    this.tokens.get(owner)?.delete(id);
+    this.toolRows.get(owner)?.delete(id);
+    this.checkRows.get(owner)?.delete(id);
+    for (const perLink of [
+      this.imageStates,
+      this.storedImages,
+      this.ownerImages,
+      this.editRecords,
+    ]) {
+      perLink.delete(key);
+    }
+    this.copies?.purged(owner, id);
+  }
+
   async insertIfAbsent(owner: OwnerId, link: NewLink) {
+    for (const [id, entry] of this.hidden.get(owner) ?? []) {
+      if (entry.link.urlKey === link.urlKey) this.cascade(owner, id);
+    }
     const mine = this.owned(owner);
     for (const existing of mine.values()) {
       if (existing.urlKey === link.urlKey) {
@@ -211,7 +245,8 @@ export class FakeStore
     if (!s || !due || !["pending", "retrying"].includes(s.status)) return null;
     s.nextFetchAt = new Date(until);
     s.attempts += 1;
-    const url = (this.owned(owner).get(linkId) as Link).url;
+    const url = (this.owned(owner).get(linkId) ?? this.hidden.get(owner)?.get(linkId)?.link)?.url;
+    if (url === undefined) throw new Error(`Snapshot ${linkId} has no link`);
     return { url, attempts: s.attempts, claim: this.bumpToken(owner, linkId) };
   }
 
@@ -260,7 +295,54 @@ export class FakeStore
     return next;
   }
 
+  /** Called by the saved copies built on this store, so a delete, restore and purge reach them. */
+  attachCopies(copies: CopyHooks): void {
+    this.copies = copies;
+  }
+
+  /** A deleted link moves out of `links`, so it is out of every read. */
+  async markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean> {
+    const link = this.owned(owner).get(id);
+    if (!link) return false;
+    this.owned(owner).delete(id);
+    let mine = this.hidden.get(owner);
+    if (!mine) {
+      mine = new Map();
+      this.hidden.set(owner, mine);
+    }
+    mine.set(id, { link, at: new Date(at) });
+    this.copies?.removeForDelete(owner, id, at);
+    return true;
+  }
+
+  async unmarkDeleted(owner: OwnerId, id: string, since: Date): Promise<boolean> {
+    const entry = this.hidden.get(owner)?.get(id);
+    if (!entry || entry.at.getTime() < since.getTime()) return false;
+    this.hidden.get(owner)?.delete(id);
+    this.owned(owner).set(id, entry.link);
+    this.copies?.restoreForUndo(owner, id, entry.at);
+    return true;
+  }
+
+  async purgeDeleted(before: Date): Promise<number> {
+    let purged = 0;
+    for (const [owner, mine] of this.hidden) {
+      for (const [id, entry] of mine) {
+        if (entry.at.getTime() >= before.getTime()) continue;
+        if (this.copies?.holdsFiles(owner, id)) continue;
+        this.cascade(owner, id);
+        purged++;
+      }
+    }
+    return purged;
+  }
+
+  private isHidden(owner: OwnerId, id: string): boolean {
+    return this.hidden.get(owner)?.has(id) === true;
+  }
+
   async getSnapshotText(owner: OwnerId, linkId: string) {
+    if (this.isHidden(owner, linkId)) return null;
     return this.snapshots.get(owner)?.get(linkId)?.text ?? null;
   }
 
@@ -541,6 +623,7 @@ export class FakeStore
   async imageVersions(owner: OwnerId, linkIds: string[]) {
     const versions = new Map<string, ShownPicture>();
     for (const id of linkIds) {
+      if (this.isHidden(owner, id)) continue;
       const own = this.ownerImages.get(imageKey(owner, id));
       const page = this.storedImages.get(imageKey(owner, id));
       if (own) versions.set(id, { version: imageVersion(own.sha256), fit: "cover" });
@@ -554,6 +637,7 @@ export class FakeStore
     linkId: string,
     which?: "page" | "own",
   ): Promise<(StoredImage & { role?: ImageRole }) | null> {
+    if (this.isHidden(owner, linkId)) return null;
     const key = imageKey(owner, linkId);
     const own = which === "page" ? undefined : this.ownerImages.get(key);
     if (own) return stored(own);
@@ -572,6 +656,7 @@ export class FakeStore
   async pictureInfo(owner: OwnerId, linkIds: string[]) {
     const info = new Map<string, PictureInfo>();
     for (const id of linkIds) {
+      if (this.isHidden(owner, id)) continue;
       const own = this.ownerImages.has(imageKey(owner, id));
       const page = this.storedImages.get(imageKey(owner, id));
       if (own || page)
@@ -676,7 +761,7 @@ export class FakeStore
     const found: IconCandidate[] = [];
     for (const [owner, mine] of this.snapshots) {
       for (const [linkId, s] of mine) {
-        if (!this.iconOpen(owner, linkId, s)) continue;
+        if (this.isHidden(owner, linkId) || !this.iconOpen(owner, linkId, s)) continue;
         if (afterId !== null && order(linkId) <= order(afterId)) continue;
         found.push({ owner, linkId, url: (this.owned(owner).get(linkId) as Link).url });
       }

@@ -64,7 +64,35 @@ export class FakeSavedCopies
   private nextFailure: Error | null = null;
   private last: FolderCheck = { state: "ready" };
 
-  constructor(private readonly store: FakeStore) {}
+  constructor(private readonly store: FakeStore) {
+    store.attachCopies({
+      removeForDelete: (owner, id, at) => {
+        const row = this.rowOf(owner, id);
+        if (row?.status !== "ok") return;
+        row.status = "removed";
+        row.removedAt = new Date(at);
+      },
+      restoreForUndo: (owner, id, deletedAt) => {
+        const row = this.rowOf(owner, id);
+        if (row?.status !== "removed" || row.removedAt?.getTime() !== deletedAt.getTime()) return;
+        if (this.tombstone(row)) return;
+        row.status = "ok";
+        row.removedAt = null;
+      },
+      holdsFiles: (owner, id) => {
+        const row = this.rowOf(owner, id);
+        return (
+          row !== undefined &&
+          ["saving", "ok", "removed"].includes(row.status) &&
+          !(this.tombstone(row) && row.bytes === 0)
+        );
+      },
+      purged: (owner, id) => {
+        this.rows.delete(key(owner, id));
+        this.files.delete(key(owner, id));
+      },
+    });
+  }
 
   /** Make the folder check report this state from now on. */
   fail(state: "unwritable" | "mismatch"): void {
@@ -415,7 +443,7 @@ export class FakeSavedCopies
 
   async removeCopy(owner: OwnerId, linkId: string, at: Date): Promise<boolean> {
     const row = this.rowOf(owner, linkId);
-    if (row?.status !== "ok") return false;
+    if (row?.status !== "ok" || !(await this.owns(owner, linkId))) return false;
     row.status = "removed";
     row.removedAt = at;
     return true;
@@ -424,7 +452,7 @@ export class FakeSavedCopies
   async restoreCopy(owner: OwnerId, linkId: string, since: Date): Promise<boolean> {
     const row = this.rowOf(owner, linkId);
     if (row?.status !== "removed" || !row.removedAt || row.removedAt < since) return false;
-    if (this.tombstone(row)) return false;
+    if (this.tombstone(row) || !(await this.owns(owner, linkId))) return false;
     row.status = "ok";
     row.removedAt = null;
     return true;

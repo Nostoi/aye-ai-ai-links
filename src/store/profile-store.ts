@@ -6,7 +6,8 @@ import type {
   ProfileWrite,
 } from "../core/profile-store.js";
 import type { FocusEntry, OwnerId, ProfileNote, Source } from "../core/types.js";
-import { parseId, StoreError } from "./sqlite-store.js";
+import { parseId } from "./sql-values.js";
+import { StoreError } from "./sqlite-store.js";
 
 type NoteRow = { id: number; text: string; source: Source; written_by: string; updated_at: number };
 type FocusRow = {

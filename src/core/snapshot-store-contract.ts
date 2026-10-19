@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
-import type { LinkStore } from "./store.js";
+import type { LinkRemover, LinkStore } from "./store.js";
 import type { Link, NewLink } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. */
 export type SnapshotHarness = {
-  store: LinkStore & SnapshotStore;
+  store: LinkStore & LinkRemover & SnapshotStore;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
 };
@@ -52,7 +52,7 @@ export function describeSnapshotStoreContract(
   makeHarness: () => SnapshotHarness | Promise<SnapshotHarness>,
 ): void {
   describe(name, () => {
-    let store: LinkStore & SnapshotStore;
+    let store: LinkStore & LinkRemover & SnapshotStore;
     let n: number;
 
     const save = async (owner: string, savedAt: Date): Promise<Link> =>
@@ -160,6 +160,16 @@ export function describeSnapshotStoreContract(
         const l = await lease(A, link, at(1), at(100));
         await store.recordSnapshot(A, link.id, l.claim, record());
         expect(await store.leaseSnapshot(A, link.id, at(1000), at(1100))).toBeNull();
+      });
+    });
+
+    describe("leaseSnapshot on a hidden link", () => {
+      it("still leases and records, so runner work finishes inside the Undo window", async () => {
+        const link = await save(A, at(0));
+        expect(await store.markDeleted(A, link.id, at(1))).toBe(true);
+        const l = await lease(A, link, at(2), at(100));
+        expect(l).toEqual({ url: link.url, attempts: 1, claim: expect.any(Number) });
+        expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(true);
       });
     });
 

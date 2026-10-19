@@ -2,7 +2,7 @@ import type { Database } from "better-sqlite3";
 import { PAGE_CHARS } from "../core/link-document.js";
 import type { OwnerId } from "../core/types.js";
 import type { IndexRow, VectorIndexStore } from "../core/vector-index-store.js";
-import { parseId } from "./sqlite-store.js";
+import { parseId } from "./sql-values.js";
 
 /** Largest allowed distance of a stored vector's length from 1, as the model canary allows. */
 const NORM_TOLERANCE = 1e-3;
@@ -31,7 +31,7 @@ export class SqliteVectorIndex implements VectorIndexStore {
          FROM links l
          LEFT JOIN snapshots s ON s.link_id = l.id AND s.owner_id = l.owner_id
          LEFT JOIN link_vectors v ON v.link_id = l.id AND v.model_key = ?
-         WHERE l.id > ? ORDER BY l.id LIMIT ?`,
+         WHERE l.id > ? AND l.deleted_at IS NULL ORDER BY l.id LIMIT ?`,
       )
       .all(PAGE_CHARS, modelKey, after, limit) as PageRow[];
     return rows.map((r) => ({
@@ -55,7 +55,7 @@ export class SqliteVectorIndex implements VectorIndexStore {
     const { changes } = this.db
       .prepare(
         `INSERT INTO link_vectors (owner_id, link_id, model_key, dims, text_hash, embedding, embedded_at)
-         SELECT owner_id, id, ?, ?, ?, ?, ? FROM links WHERE id = ? AND owner_id = ?
+         SELECT owner_id, id, ?, ?, ?, ?, ? FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
          ON CONFLICT (link_id, model_key) DO UPDATE SET dims = excluded.dims,
            text_hash = excluded.text_hash, embedding = excluded.embedding,
            embedded_at = excluded.embedded_at`,

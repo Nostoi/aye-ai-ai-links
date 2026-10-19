@@ -9,7 +9,7 @@ import {
   sameCheck,
 } from "../core/link-check-store.js";
 import type { OwnerId } from "../core/types.js";
-import { fromMs, parseId, toMs } from "./sqlite-store.js";
+import { fromMs, parseId, toMs } from "./sql-values.js";
 
 type CheckRow = {
   link_id: number;
@@ -44,7 +44,8 @@ export class SqliteLinkCheckStore implements LinkCheckStore {
       .prepare(
         `SELECT l.owner_id, l.id, l.url FROM links l
          LEFT JOIN link_checks c ON c.owner_id = l.owner_id AND c.link_id = l.id
-         WHERE coalesce(c.checked_at, l.saved_at) <= CASE l.state WHEN 'active' THEN ? ELSE ? END
+         WHERE l.deleted_at IS NULL
+           AND coalesce(c.checked_at, l.saved_at) <= CASE l.state WHEN 'active' THEN ? ELSE ? END
          ORDER BY coalesce(c.checked_at, l.saved_at), l.id LIMIT ?`,
       )
       .all(toMs(cutoffs.active), toMs(cutoffs.archived), limit) as {
@@ -78,7 +79,7 @@ export class SqliteLinkCheckStore implements LinkCheckStore {
     return this.db
       .transaction((): CheckWrite | null => {
         const link = this.db
-          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?")
+          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
           .get(n, owner);
         if (!link) return null;
         const current = this.read(owner, n);

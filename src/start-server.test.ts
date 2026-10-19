@@ -1171,6 +1171,49 @@ describe("startServer", () => {
       },
     );
 
+    it("deletes a removed copy's files once the Undo window has passed, even at limit 0", async () => {
+      const id = await seedFetched();
+      const db = openDatabase(dbPath);
+      try {
+        const store = new SqliteSavedCopyStore(db, copiesDir());
+        expect(await store.checkFolder()).toEqual({ state: "ready" });
+        const draft = { markdown: "# Kept", imageUrls: [], nonce: NONCE };
+        const limits = { copyBytes: 1024 ** 2, totalBytes: 1024 ** 3 };
+        expect(await store.saveCopy("owner", id, draft, limits, at(2))).toBe("saved");
+      } finally {
+        db.close();
+      }
+      let time = Date.now();
+      const clock = () => new Date(time);
+      let captured: AppDeps | undefined;
+      const s = await startServer(
+        { ...cfg(dbPath, 0), savedCopies: { dir: copiesDir(), limitBytes: 0 } },
+        {
+          ...fakePipeline(),
+          settleMs: 200,
+          requestLog: (l) => logged.push(l),
+          copyPollMs: 20,
+          decorateDeps: (d) => {
+            captured = d;
+            return { ...d, now: clock };
+          },
+        },
+      );
+      started.push(s);
+      const folder = join(copiesDir(), id);
+      expect(await captured?.savedCopies.removeCopy("owner", id, clock())).toBe(true);
+      await sleep(100);
+      expect(existsSync(folder)).toBe(true);
+      time += 61_000;
+      await until(() => !existsSync(folder), "the removed copy's deletion");
+      expect(
+        read(`SELECT status, bytes, md_bytes AS mdBytes, image_nonce AS nonce,
+                finished_at AS finished FROM saved_copies`),
+      ).toEqual([{ status: "removed", bytes: 0, mdBytes: 0, nonce: null, finished: null }]);
+      expect(read("SELECT COUNT(*) AS n FROM saved_copy_images")).toEqual([{ n: 0 }]);
+      expect(await captured?.savedCopies.readCopy("owner", id)).toBeNull();
+    });
+
     it("on stop, ends with the copy extractor pending and closes it", async () => {
       await seedFetched();
       let asked = false;

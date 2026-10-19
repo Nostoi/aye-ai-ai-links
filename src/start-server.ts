@@ -201,7 +201,6 @@ export async function startServer(
       images: imageFetcher,
       limitBytes: config.savedCopies.limitBytes,
       dir: config.savedCopies.dir,
-      initialCheck: folder,
       now: deps.now,
       gate: deps.readGate,
       canResolve: (signal) => linkChecker.canResolve(signal),

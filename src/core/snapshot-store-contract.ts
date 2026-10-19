@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
-import type { LinkStore } from "./store.js";
+import type { LinkRemover, LinkStore } from "./store.js";
 import type { Link, NewLink } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. */
 export type SnapshotHarness = {
-  store: LinkStore & SnapshotStore;
+  store: LinkStore & LinkRemover & SnapshotStore;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
 };
@@ -52,7 +52,7 @@ export function describeSnapshotStoreContract(
   makeHarness: () => SnapshotHarness | Promise<SnapshotHarness>,
 ): void {
   describe(name, () => {
-    let store: LinkStore & SnapshotStore;
+    let store: LinkStore & LinkRemover & SnapshotStore;
     let n: number;
 
     const save = async (owner: string, savedAt: Date): Promise<Link> =>

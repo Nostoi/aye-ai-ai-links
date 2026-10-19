@@ -122,6 +122,9 @@ describe("hidden links in runner and byte reads", () => {
     await snapshot(pictured, { imageUrl: null, iconUrls: [ICON] });
     expect(await deps.images.writeImage(A, pictured, ICON, "icon", PNG, at(5))).toBe(true);
 
+    const owned = await save();
+    expect(await deps.edits.applyEdit(A, owned, { picture: { set: PNG } }, at(5))).not.toBeNull();
+
     const far = new Date(Date.UTC(2100, 0, 1));
     const seen = async () => ({
       index: (await deps.vectorIndex.indexPage(MODEL_KEY, null, 10)).map((r) => r.linkId).sort(),
@@ -134,23 +137,26 @@ describe("hidden links in runner and byte reads", () => {
       ),
       text: await deps.store.getSnapshotText(A, wanting),
       image: await deps.images.image(A, pictured),
-      versions: [...(await deps.images.imageVersions(A, [wanting, pictured])).keys()],
-      info: [...(await deps.images.pictureInfo(A, [wanting, pictured])).keys()],
+      ownImage: await deps.images.image(A, owned),
+      versions: [...(await deps.images.imageVersions(A, [wanting, pictured, owned])).keys()],
+      info: [...(await deps.images.pictureInfo(A, [wanting, pictured, owned])).keys()],
     });
-    const both = [wanting, pictured].sort();
+    const both = [wanting, pictured, owned].sort();
+    const withPicture = [pictured, owned].sort();
     const before = await seen();
     expect(before).toMatchObject({
       index: both,
       due: both,
       icons: [wanting],
       text: "page words",
-      versions: [pictured],
-      info: [pictured],
+      versions: withPicture,
+      info: withPicture,
     });
     expect(before.copies).toContain(wanting);
     expect(before.image).not.toBeNull();
+    expect(before.ownImage).not.toBeNull();
 
-    await hide(wanting, pictured);
+    await hide(wanting, pictured, owned);
 
     expect(await seen()).toEqual({
       index: [],
@@ -159,6 +165,7 @@ describe("hidden links in runner and byte reads", () => {
       copies: [],
       text: null,
       image: null,
+      ownImage: null,
       versions: [],
       info: [],
     });

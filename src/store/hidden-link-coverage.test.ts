@@ -12,10 +12,6 @@ const COPY_PAGE_READS = "copy page reads return nothing for a hidden link";
 
 type Coverage = { test: string } | { reason: string };
 
-/**
- * Every table with a foreign key to `links`, and what shows that a hidden link's rows cannot
- * be read through it (a test in `link-removal.test.ts`, by title) or why no such test is needed.
- */
 const HIDDEN_LINK_COVERAGE: Record<string, Coverage> = {
   link_checks: { test: RUNNER_AND_BYTE_READS },
   link_edits: { test: HIDDEN_WRITES },
@@ -27,16 +23,19 @@ const HIDDEN_LINK_COVERAGE: Record<string, Coverage> = {
   link_vectors: { test: RUNNER_AND_BYTE_READS },
   owner_images: { test: RUNNER_AND_BYTE_READS },
   saved_copies: { test: COPY_PAGE_READS },
+  saved_copy_images: { test: COPY_PAGE_READS },
   snapshots: { test: RUNNER_AND_BYTE_READS },
 };
 
 describe("hidden-link coverage", () => {
-  it("every table with a foreign key to links is registered", () => {
+  it("every table keyed by link id is registered", () => {
     const db = openDatabase(":memory:");
     const tables = db
       .prepare(
-        `SELECT DISTINCT m.name FROM sqlite_master m, pragma_foreign_key_list(m.name) f
-         WHERE m.type = 'table' AND f."table" = 'links' ORDER BY m.name`,
+        `SELECT m.name FROM sqlite_master m WHERE m.type = 'table'
+           AND (EXISTS (SELECT 1 FROM pragma_foreign_key_list(m.name) f WHERE f."table" = 'links')
+             OR EXISTS (SELECT 1 FROM pragma_table_info(m.name) c WHERE c.name = 'link_id'))
+         ORDER BY m.name`,
       )
       .pluck()
       .all();

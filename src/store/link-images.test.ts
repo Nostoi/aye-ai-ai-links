@@ -57,8 +57,8 @@ describe("the link_images migration, from the version before it, with data", () 
       { link_id: 4, image_status: null },
     ]);
     expect(await new SqliteImageStore(db).pendingImages(null, 10)).toEqual([
-      { owner: "a", linkId: "1", imageUrl: "https://ex.com/1.png" },
-      { owner: "b", linkId: "3", imageUrl: "https://ex.com/3.png" },
+      { owner: "a", linkId: "1", imageUrl: "https://ex.com/1.png", role: "preview" },
+      { owner: "b", linkId: "3", imageUrl: "https://ex.com/3.png", role: "preview" },
     ]);
   });
 
@@ -67,8 +67,8 @@ describe("the link_images migration, from the version before it, with data", () 
     migrate(db);
     const images = new SqliteImageStore(db);
     const png = { contentType: "image/png" as const, bytes: new Uint8Array([1, 2, 3]) };
-    await images.writeImage("a", "1", "https://ex.com/1.png", png, new Date(0));
-    await images.writeImage("b", "3", "https://ex.com/3.png", png, new Date(0));
+    await images.writeImage("a", "1", "https://ex.com/1.png", "preview", png, new Date(0));
+    await images.writeImage("b", "3", "https://ex.com/3.png", "preview", png, new Date(0));
     db.prepare("DELETE FROM links WHERE id = 1").run();
     expect(db.prepare("SELECT link_id FROM link_images").all()).toEqual([{ link_id: 3 }]);
   });
@@ -81,7 +81,9 @@ describe("the link_images migration, from the version before it, with data", () 
     type = "image/png",
   ) =>
     db
-      .prepare("INSERT INTO link_images VALUES (?, ?, ?, ?, 'h', 0)")
+      .prepare(
+        "INSERT INTO link_images (owner_id, link_id, content_type, bytes, sha256, fetched_at) VALUES (?, ?, ?, ?, 'h', 0)",
+      )
       .run(owner, linkId, type, bytes);
 
   it("refuses an image whose owner is not the link's owner", () => {
@@ -97,5 +99,28 @@ describe("the link_images migration, from the version before it, with data", () 
     expect(() => insert(db, "a", 1, "text")).toThrow(/CHECK/);
     expect(() => insert(db, "a", 1, Buffer.from([1]), "image/svg+xml")).toThrow(/CHECK/);
     insert(db, "a", 1, Buffer.alloc(2 * 1024 * 1024));
+  });
+});
+
+describe("migration 16, icons", () => {
+  it("adds the icon columns empty, gives existing images the preview role and refuses any other", () => {
+    const db = new Database(":memory:");
+    open.push(db);
+    db.pragma("foreign_keys = ON");
+    migrate(db, MIGRATIONS.slice(0, 15));
+    db.exec(`INSERT INTO users VALUES ('a', 'a', 0);
+      INSERT INTO links (id, owner_id, url, url_key, saved_at, saved_by, state)
+        VALUES (1, 'a', 'https://ex.com/1', 'ex.com/1', 5, 'x', 'active');
+      INSERT INTO snapshots (link_id, owner_id, fetch_status, next_fetch_at, image_url)
+        VALUES (1, 'a', 'ok', NULL, 'https://ex.com/1.png');
+      INSERT INTO link_images VALUES ('a', 1, 'image/png', x'89504e4701', 'h', 0);`);
+    migrate(db);
+    expect(db.prepare("SELECT icon_url, icon_next_url FROM snapshots").get()).toEqual({
+      icon_url: null,
+      icon_next_url: null,
+    });
+    expect(db.prepare("SELECT role FROM link_images").get()).toEqual({ role: "preview" });
+    expect(() => db.prepare("UPDATE link_images SET role = 'x'").run()).toThrow(/CHECK/);
+    db.prepare("UPDATE link_images SET role = 'icon'").run();
   });
 });

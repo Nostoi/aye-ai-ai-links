@@ -82,6 +82,7 @@ async function finishOk(store: FakeStore, owner: string, id: string, text: strin
     title: "Page title",
     description: "About the page",
     imageUrl: null,
+    iconUrls: [],
     text,
     lastError: null,
   });

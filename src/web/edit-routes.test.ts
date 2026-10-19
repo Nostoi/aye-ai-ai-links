@@ -44,6 +44,7 @@ async function edited() {
     A,
     link.id,
     "https://a.example/q.png",
+    "preview",
     page,
     new Date(),
   );

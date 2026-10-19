@@ -4,6 +4,7 @@ import type { ImageType } from "../core/fetch.js";
 import {
   type ImageBytes,
   type ImageEnd,
+  type ImageRole,
   type ImageStore,
   imageVersion,
   type LinkImageReader,
@@ -22,14 +23,15 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     const after = afterId === null ? 0 : (parseId(afterId) ?? 0);
     const rows = this.db
       .prepare(
-        `SELECT owner_id, link_id, image_url FROM snapshots
-         WHERE image_status = 'pending' AND link_id > ? ORDER BY link_id LIMIT ?`,
+        `SELECT owner_id, link_id, coalesce(image_url, icon_url) AS url, image_url IS NULL AS icon
+         FROM snapshots WHERE image_status = 'pending' AND link_id > ? ORDER BY link_id LIMIT ?`,
       )
-      .all(after, limit) as { owner_id: string; link_id: number; image_url: string }[];
+      .all(after, limit) as { owner_id: string; link_id: number; url: string; icon: number }[];
     return rows.map((r) => ({
       owner: r.owner_id,
       linkId: String(r.link_id),
-      imageUrl: r.image_url,
+      imageUrl: r.url,
+      role: r.icon === 1 ? "icon" : "preview",
     }));
   }
 
@@ -37,6 +39,7 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     owner: OwnerId,
     linkId: string,
     imageUrl: string,
+    role: ImageRole,
     image: ImageBytes,
     at: Date,
   ): Promise<boolean> {
@@ -45,23 +48,24 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     const sha256 = createHash("sha256").update(image.bytes).digest("hex");
     return this.db
       .transaction(() => {
-        if (!this.settle(owner, n, imageUrl, "ok")) return false;
+        if (!this.settle(owner, n, imageUrl, role, "ok")) return false;
         this.db
           .prepare(
-            `INSERT INTO link_images (owner_id, link_id, content_type, bytes, sha256, fetched_at)
-             VALUES (?, ?, ?, ?, ?, ?)
+            `INSERT INTO link_images (owner_id, link_id, content_type, bytes, sha256, fetched_at, role)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (owner_id, link_id) DO UPDATE SET content_type = excluded.content_type,
-               bytes = excluded.bytes, sha256 = excluded.sha256, fetched_at = excluded.fetched_at`,
+               bytes = excluded.bytes, sha256 = excluded.sha256, fetched_at = excluded.fetched_at,
+               role = excluded.role`,
           )
-          .run(owner, n, image.contentType, Buffer.from(image.bytes), sha256, at.getTime());
+          .run(owner, n, image.contentType, Buffer.from(image.bytes), sha256, at.getTime(), role);
         return true;
       })
       .immediate();
   }
 
-  async endImage(owner: OwnerId, linkId: string, imageUrl: string, end: ImageEnd) {
+  async endImage(owner: OwnerId, linkId: string, imageUrl: string, role: ImageRole, end: ImageEnd) {
     const n = parseId(linkId);
-    return n !== null && this.settle(owner, n, imageUrl, end);
+    return n !== null && this.settle(owner, n, imageUrl, role, end);
   }
 
   /** Link ids as the JSON array `json_each` reads; ids never issued are dropped. */
@@ -120,14 +124,21 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
     );
   }
 
-  /** Moves a still-pending image for `imageUrl` to `status`; false when it was not pending. */
-  private settle(owner: OwnerId, linkId: number, imageUrl: string, status: string): boolean {
+  /** Moves a still-pending picture for this URL and role to `status`; false when it was not pending. */
+  private settle(
+    owner: OwnerId,
+    linkId: number,
+    imageUrl: string,
+    role: ImageRole,
+    status: string,
+  ): boolean {
     const { changes } = this.db
       .prepare(
         `UPDATE snapshots SET image_status = ?
-         WHERE link_id = ? AND owner_id = ? AND image_status = 'pending' AND image_url = ?`,
+         WHERE link_id = ? AND owner_id = ? AND image_status = 'pending'
+           AND coalesce(image_url, icon_url) = ? AND (image_url IS NULL) = ?`,
       )
-      .run(status, linkId, owner, imageUrl);
+      .run(status, linkId, owner, imageUrl, role === "icon" ? 1 : 0);
     return changes === 1;
   }
 }

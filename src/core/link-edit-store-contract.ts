@@ -47,7 +47,8 @@ export function describeLinkEditStoreContract(
       const lease = await h.links.leaseSnapshot(owner, link.id, at(1), at(100));
       if (!lease) throw new Error("the new link's snapshot should be leasable");
       await h.links.recordSnapshot(owner, link.id, lease.claim, record({ imageUrl: IMG }));
-      if (page) expect(await h.images.writeImage(owner, link.id, IMG, page, at(2))).toBe(true);
+      if (page)
+        expect(await h.images.writeImage(owner, link.id, IMG, "preview", page, at(2))).toBe(true);
       return link.id;
     };
     /** What a card and the dialog read for the link. */
@@ -83,7 +84,7 @@ export function describeLinkEditStoreContract(
     it("keeps the owner's picture showing when a fetch lands after it", async () => {
       const id = await linkWith(A);
       await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(10)));
-      expect(await h.images.writeImage(A, id, IMG, png(1), at(11))).toBe(true);
+      expect(await h.images.writeImage(A, id, IMG, "preview", png(1), at(11))).toBe(true);
       expect(await shows(A, id)).toEqual({
         title: "Page",
         version: v(png(2)),

@@ -110,6 +110,7 @@ describe("retry schedule", () => {
       title: null,
       description: null,
       imageUrl: null,
+      iconUrls: [],
       text: null,
       lastError: "lease:expired",
     });
@@ -148,6 +149,7 @@ describe("snapshotRecord", () => {
       title: null,
       description: null,
       imageUrl: null,
+      iconUrls: [],
       text: null,
       lastError,
     });
@@ -182,6 +184,7 @@ describe("snapshotRecord", () => {
       title: null,
       description: null,
       imageUrl: null,
+      iconUrls: [],
       text: null,
       lastError,
     });
@@ -198,6 +201,7 @@ describe("snapshotRecord", () => {
       title: "T",
       description: "D",
       imageUrl: "https://x.test/i.png",
+      iconUrls: [],
       text: "body",
       lastError: null,
     });
@@ -235,6 +239,7 @@ describe("snapshotRecord", () => {
         title: "T",
         description: "D",
         imageUrl: "https://x.test/i.png",
+        iconUrls: [],
         text: null,
         lastError,
       });
@@ -252,6 +257,7 @@ describe("snapshotRecord", () => {
         title: null,
         description: null,
         imageUrl: null,
+        iconUrls: [],
       });
     },
   );

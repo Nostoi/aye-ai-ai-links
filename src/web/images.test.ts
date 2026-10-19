@@ -34,6 +34,7 @@ async function linkWithImage(
       owner,
       link.id,
       imageUrl,
+      "preview",
       { contentType: "image/png", bytes },
       new Date(),
     );

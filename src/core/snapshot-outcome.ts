@@ -36,6 +36,7 @@ export function pastLastAttemptRecord(attempts: number): SnapshotRecord {
     title: null,
     description: null,
     imageUrl: null,
+    iconUrls: [],
     text: null,
     lastError: "lease:expired",
   };
@@ -119,7 +120,14 @@ export function snapshotRecord(input: {
 }): SnapshotRecord {
   const { outcome, attempts, now } = input;
   const v = judge(outcome);
-  const base = { attempts, title: null, description: null, imageUrl: null, text: null };
+  const base = {
+    attempts,
+    title: null,
+    description: null,
+    imageUrl: null,
+    iconUrls: [],
+    text: null,
+  };
   if ("retry" in v) {
     const delay = attempts >= MAX_ATTEMPTS ? undefined : RETRY_DELAYS_MS[attempts - 1];
     return {

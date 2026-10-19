@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import {
   hasConsistentSchedule,
+  hasValidIcons,
   type SnapshotLease,
   type SnapshotRecord,
   type SnapshotStore,
@@ -273,31 +274,44 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
 
   async recordSnapshot(owner: OwnerId, linkId: string, claim: number, r: SnapshotRecord) {
     const n = parseId(linkId);
-    if (n === null || !hasConsistentSchedule(r)) return false;
-    const { changes } = this.db
-      .prepare(
-        `UPDATE snapshots SET fetch_status = ?, attempts = ?, next_fetch_at = ?, fetched_at = ?,
-           title = ?, description = ?, image_url = ?,
-           image_status = CASE WHEN ? IS NULL THEN NULL ELSE 'pending' END, text = ?, last_error = ?,
-           lease_token = lease_token + 1
-         WHERE link_id = ? AND owner_id = ? AND lease_token = ?`,
-      )
-      .run(
-        r.status,
-        r.attempts,
-        toMs(r.nextFetchAt),
-        toMs(r.fetchedAt),
-        r.title,
-        r.description,
-        r.imageUrl,
-        r.imageUrl,
-        r.text,
-        r.lastError,
-        n,
-        owner,
-        claim,
-      );
-    return changes === 1;
+    if (n === null || !hasConsistentSchedule(r) || !hasValidIcons(r)) return false;
+    return this.db
+      .transaction(() => {
+        const { changes } = this.db
+          .prepare(
+            `UPDATE snapshots SET fetch_status = ?, attempts = ?, next_fetch_at = ?, fetched_at = ?,
+               title = ?, description = ?, image_url = ?, icon_url = ?, icon_next_url = ?,
+               image_status = CASE WHEN coalesce(?, ?) IS NOT NULL THEN 'pending' ELSE NULL END,
+               text = ?, last_error = ?, lease_token = lease_token + 1
+             WHERE link_id = ? AND owner_id = ? AND lease_token = ?`,
+          )
+          .run(
+            r.status,
+            r.attempts,
+            toMs(r.nextFetchAt),
+            toMs(r.fetchedAt),
+            r.title,
+            r.description,
+            r.imageUrl,
+            r.iconUrls[0] ?? null,
+            r.iconUrls[1] ?? null,
+            r.imageUrl,
+            r.iconUrls[0] ?? null,
+            r.text,
+            r.lastError,
+            n,
+            owner,
+            claim,
+          );
+        if (changes !== 1) return false;
+        if (r.imageUrl !== null) {
+          this.db
+            .prepare("DELETE FROM link_images WHERE owner_id = ? AND link_id = ? AND role = 'icon'")
+            .run(owner, n);
+        }
+        return true;
+      })
+      .immediate();
   }
 
   async getSnapshotText(owner: OwnerId, linkId: string) {

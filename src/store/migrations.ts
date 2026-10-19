@@ -306,6 +306,12 @@ export const MIGRATIONS: string[] = [
     id TEXT NOT NULL
   );
   `,
+  // Site icons (#149): two icon candidates per snapshot, and whether a fetched picture is the preview or the icon. Additive.
+  `
+  ALTER TABLE snapshots ADD COLUMN icon_url TEXT;
+  ALTER TABLE snapshots ADD COLUMN icon_next_url TEXT;
+  ALTER TABLE link_images ADD COLUMN role TEXT NOT NULL DEFAULT 'preview' CHECK (role IN ('preview', 'icon'));
+  `,
 ];
 
 /**

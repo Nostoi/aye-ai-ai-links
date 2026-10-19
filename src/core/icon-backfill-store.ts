@@ -10,8 +10,8 @@ export type IconCandidate = { owner: OwnerId; linkId: string; url: string };
  *   link has no fetched picture and is not flagged gone now. A link with an owner picture, and an
  *   archived link, can be one.
  * - `iconCandidates` is cross-owner maintenance for the backfill, never for a request.
- * - `recordIconCheck` compares and sets: it writes only while the snapshot is still `ok`, names no
- *   preview and was never looked at, and it writes only the icon candidates and the image status.
+ * - `recordIconCheck` compares and sets: it writes only while the link is still a candidate, and
+ *   it writes only the icon candidates and the image status.
  * - Ids: those of `LinkStore`. An id never issued, or one owned by someone else, yields false.
  */
 export interface IconBackfillStore {

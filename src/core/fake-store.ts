@@ -670,9 +670,7 @@ export class FakeStore
     const found: IconCandidate[] = [];
     for (const [owner, mine] of this.snapshots) {
       for (const [linkId, s] of mine) {
-        if (!this.iconUnchecked(owner, linkId, s)) continue;
-        if (this.storedImages.has(imageKey(owner, linkId))) continue;
-        if ((this.checkRows.get(owner)?.get(linkId)?.flaggedAt ?? null) !== null) continue;
+        if (!this.iconOpen(owner, linkId, s)) continue;
         if (afterId !== null && order(linkId) <= order(afterId)) continue;
         found.push({ owner, linkId, url: (this.owned(owner).get(linkId) as Link).url });
       }
@@ -682,7 +680,7 @@ export class FakeStore
 
   async recordIconCheck(owner: OwnerId, linkId: string, iconUrls: string[]): Promise<boolean> {
     const s = this.snapshots.get(owner)?.get(linkId);
-    if (!s || !this.iconUnchecked(owner, linkId, s) || iconUrls.length > MAX_ICON_URLS) {
+    if (!s || !this.iconOpen(owner, linkId, s) || iconUrls.length > MAX_ICON_URLS) {
       return false;
     }
     s.iconUrls = [...iconUrls];
@@ -695,6 +693,15 @@ export class FakeStore
   /** Test seeding: the image status a snapshot recorded before PR B has (NULL). */
   forgetIconCheck(owner: OwnerId, linkId: string): void {
     this.imageStates.delete(imageKey(owner, linkId));
+  }
+
+  /** An icon check may be recorded: unchecked, no fetched picture, and the link not flagged gone. */
+  private iconOpen(owner: OwnerId, linkId: string, s: SnapshotRecord): boolean {
+    return (
+      this.iconUnchecked(owner, linkId, s) &&
+      !this.storedImages.has(imageKey(owner, linkId)) &&
+      (this.checkRows.get(owner)?.get(linkId)?.flaggedAt ?? null) === null
+    );
   }
 
   /** The snapshot is ok, names no preview, and was never looked at for an icon. */

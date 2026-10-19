@@ -180,7 +180,11 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
         `UPDATE snapshots SET icon_url = ?, icon_next_url = ?,
            image_status = CASE WHEN ? IS NULL THEN 'none' ELSE 'pending' END
          WHERE owner_id = ? AND link_id = ? AND fetch_status = 'ok'
-           AND image_url IS NULL AND image_status IS NULL`,
+           AND image_url IS NULL AND image_status IS NULL
+           AND NOT EXISTS (SELECT 1 FROM link_images f
+             WHERE f.owner_id = snapshots.owner_id AND f.link_id = snapshots.link_id)
+           AND NOT EXISTS (SELECT 1 FROM link_checks k WHERE k.owner_id = snapshots.owner_id
+             AND k.link_id = snapshots.link_id AND k.flagged_at IS NOT NULL)`,
       )
       .run(first, iconUrls[1] ?? null, first, owner, n);
     return changes === 1;

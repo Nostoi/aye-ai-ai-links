@@ -285,6 +285,25 @@ export function describeIconBackfillStoreContract(
           return { id, writer: A };
         },
       ],
+      [
+        "flagged gone",
+        false,
+        async () => {
+          const id = await legacy();
+          expect((await h.checks.updateCheckIf(A, id, null, gone))?.applied).toBe(true);
+          return { id, writer: A };
+        },
+      ],
+      [
+        "a fetched picture",
+        false,
+        async () => {
+          const id = await recorded(A, record({ imageUrl: null, iconUrls: [ICON] }));
+          expect(await h.images.writeImage(A, id, ICON, "icon", PNG, at(5))).toBe(true);
+          await h.forgetIconCheck(A, id);
+          return { id, writer: A };
+        },
+      ],
       ["another owner's link", false, async () => ({ id: await legacy(A), writer: B })],
     ])("★ the candidate read and the check's write agree: %s", async (_name, expected, seed) => {
       // [A row the read lists but the write refuses burns the backfill's retry budget; the reverse hides a link for good.]

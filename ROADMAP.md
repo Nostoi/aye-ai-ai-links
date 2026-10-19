@@ -22,6 +22,22 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-19:** Export (#130). Owner rulings, 2026-10-18 (#130 comment 6259932341) and 2026-10-19 (#130 comment 6260957537), which are binding. The design is `docs/specs/2026-10-18-export-design.md`, revised after the solution-choice challenge and approved by the owner on 2026-10-19.
+  - **What it is:** on Apps and keys, under "Your data", two downloads:
+    - a zip with a versioned `links.json`, the owner's and the pages' pictures, the saved copies as Markdown with front matter, and a `bookmarks.html`;
+    - a links-only JSON file.
+
+    There is no MCP tool, CLI command or scheduled export. Import is #131, which follows this format.
+  - **The zip is prepared, then downloaded** (owner ruling, 2026-10-19). **Prepare export** shows "Preparing…", then a **Download** link, and the file is kept for 24 hours. This replaces the 2026-10-18 default of a plain download link. The links-only JSON stays a direct download, `GET /export.json`.
+  - **Left out:** page snapshot text, the search log, the meaning vectors and search indexes, and keys and auth. These are the 2026-10-18 comment's controller defaults, kept by the approved design.
+  - **Re-importing this app's export restores whys, sources and tags as they were** (same comment). So `links.json` keeps every source and date. Removed copies stay as tombstones, in the links-only JSON too, so an import never makes them again.
+  - **The approval accepts the design's own answers to its open questions.** The owner did not rule on each one separately:
+    - the filename date is UTC;
+    - one build runs per owner;
+    - zip paths are ASCII, with no title slug;
+    - `/export.json` keeps tags, notes and focus;
+    - a ready zip is kept 24 hours.
+  - **Lands in two PRs:** the manifest and the JSON download, then builds and the zip, which closes #130.
 - **2026-10-18:** Three owner requests join Later, unordered.
   - **#159:** reach a local AI, ChatGPT and Claude through their APIs for chat and saving, alongside the MCP connectors.
   - **#160:** the server keeps an AI-made summary of each link.

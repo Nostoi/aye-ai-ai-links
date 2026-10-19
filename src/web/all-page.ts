@@ -62,7 +62,7 @@ type Input = {
 };
 
 /** GiB rounded down to one decimal, so a used amount below the limit never reads as all of it. */
-const gib = (bytes: number) => String(Math.floor((bytes / 1024 ** 3) * 10) / 10);
+const gib = (bytes: number) => String(Math.floor((bytes * 10) / 1024 ** 3 + 1e-6) / 10);
 
 const noticeText = (n: CopyNotice): string =>
   n.kind === "high"

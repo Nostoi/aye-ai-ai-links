@@ -331,6 +331,13 @@ describe("the saved-copy usage line", () => {
     expect(el?.textContent?.trim()).toBe("Saved copies use 0.9 of 1 GiB.");
   });
 
+  it("shows exact tenths as set, such as a 1.3 GiB limit", () => {
+    const el = notice(
+      all({ notice: { kind: "high", usedBytes: Math.floor(1.2 * GIB), limitBytes: Math.floor(1.3 * GIB) } }),
+    );
+    expect(el?.textContent?.trim()).toBe("Saved copies use 1.2 of 1.3 GiB.");
+  });
+
   it("says full and paused in amber", () => {
     const full = notice(all({ notice: { kind: "full" } }));
     expect(full?.textContent?.trim()).toBe(FULL);

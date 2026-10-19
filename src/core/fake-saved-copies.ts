@@ -8,6 +8,7 @@ import {
   type CopyImageEnd,
   type CopyImageResult,
   type CopyInfo,
+  type CopyLedgerEntry,
   type CopyLimits,
   type CopyRef,
   type CopyStatus,
@@ -297,6 +298,17 @@ export class FakeSavedCopies
       if (row?.status === "ok" && row.madeAt) info.set(id, { madeAt: new Date(row.madeAt) });
     }
     return info;
+  }
+
+  async listCopies(owner: OwnerId): Promise<Map<string, CopyLedgerEntry>> {
+    const list = new Map<string, CopyLedgerEntry>();
+    for (const [k, row] of this.rows) {
+      const [rowOwner, linkId] = JSON.parse(k) as [string, string];
+      if (rowOwner !== owner || !row.madeAt) continue;
+      if (row.status === "ok" || row.status === "removed")
+        list.set(linkId, { status: row.status, madeAt: new Date(row.madeAt) });
+    }
+    return list;
   }
 
   async readCopy(owner: OwnerId, linkId: string): Promise<ReadCopy | "missing" | null> {

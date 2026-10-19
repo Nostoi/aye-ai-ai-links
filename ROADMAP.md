@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-19:** Export (#130) PR 2 is done: Prepare export, the zip and `bookmarks.html`. Rulings that change `docs/specs/2026-10-18-export-design.md` (controller, 2026-10-19):
+  - **R1a:** v1's `picture` gains `pageRole` (`preview` or `icon`, null when `page` is), read with the page picture's bytes. It is still version 1, because no manifest with `picture` was written before PR 2 (after #168).
+  - **R2:** `ExportDeps` uses AppDeps' names (`savedCopies`, `readGate`), not the spec's sketch names.
+  - **R5:** the previous zip stays downloadable during a rebuild and after a failed one, until it expires.
+  - **R9:** start-up deletes only the names a build makes in the `exports` folder, not everything in it.
+  - **R17:** sizes are decimal MB or GB; times are UTC.
+  - **Found in the build:** v1 also refuses an `ok` copy with no file in a zip; copy images must be strictly increasing, numbered from 01; front matter also escapes U+FFFE and U+FFFF; an expiry during a rebuild defers its delete until the build ends.
+  - **Gate, after deploy (owner):** download a large export through the public address on a phone; record its size, the time it took, and that `unzip -t` accepts it. Not a CI item. The result goes in a #130 comment; if it fails, file a linked issue.
 - **2026-10-19:** Export (#130). Owner rulings, 2026-10-18 (#130 comment 6259932341) and 2026-10-19 (#130 comment 6260957537), which are binding. The design is `docs/specs/2026-10-18-export-design.md`, revised after the solution-choice challenge and approved by the owner on 2026-10-19.
   - **What it is:** on Apps and keys, under "Your data", two downloads:
     - a zip with a versioned `links.json`, the owner's and the pages' pictures, the saved copies as Markdown with front matter, and a `bookmarks.html`;

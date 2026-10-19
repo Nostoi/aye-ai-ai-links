@@ -16,12 +16,35 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134), AI endpoints for a local AI, ChatGPT and Claude (#159), saved summaries (#160), stats and what they say about you (#161) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134), AI endpoints for a local AI, ChatGPT and Claude (#159), saved summaries (#160), stats and what they say about you (#161), a site's icon when a page names no preview image (#149) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-19:** A site's icon when a page names no preview image (#149). Owner rulings: 2026-10-17 (#149 body), 2026-10-18 (#149 comment 6259932087) and 2026-10-19 (comment 6260957774). The design is `docs/specs/2026-10-18-site-icon-design.md`, approved by the owner on 2026-10-19 after an independent challenge.
+  - **The order:**
+    1. the owner's picture;
+    2. the page's preview image;
+    3. the site's icon, shown whole on a light plate and never cropped;
+    4. the title's initials on the space colour, on every card (the site's when there is no title).
+  - **A named preview that fails to fetch never falls back to the icon,** for now (comment 6259932087).
+  - **A declared preview the server can never use counts as none,** so the icon shows: a `data:` URL, credentials in the URL, or more than 2,048 characters (comment 6260957774). This settles the spec's open question in §1 and §13.
+  - **Controller defaults** (comment 6259932087). Any of them can be changed:
+    - the 64px floor is measured from the image's bytes, on its shorter side;
+    - the owner's picture still fills its box;
+    - mosaics show the newest pictures of either kind, with icons whole;
+    - `get_link`'s `imageUrl` stays the page's preview address;
+    - `favicon.ico` and SVG are refused, so expect initials often.
+  - **Where the approved design departs from that comment** (controller rulings, 2026-10-19):
+    - the backfill includes links with an owner picture, so the icon shows if that picture is removed;
+    - it skips a dead-flagged link only while the link is flagged.
+  - **Store rulings** (controller, 2026-10-19):
+    - a stored icon is retired inside `recordSnapshot` as soon as a snapshot names a preview, so no reader shows it, whether the preview is pending or later fails;
+    - the pending key is the URL and the role (preview or icon), not a generation token;
+    - at most two icon candidates are tried;
+    - whether a page was looked at for an icon is `image_status`, with no new column.
+  - **Lands in three PRs:** A, the schema, the store and the display, which brings initials everywhere; B, finding icons on new saves; C, a one-at-a-time backfill for older links. Each PR updates the README for what it shows.
 - **2026-10-18:** Three owner requests join Later, unordered.
   - **#159:** reach a local AI, ChatGPT and Claude through their APIs for chat and saving, alongside the MCP connectors.
   - **#160:** the server keeps an AI-made summary of each link.

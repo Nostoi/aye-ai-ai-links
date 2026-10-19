@@ -89,6 +89,17 @@ export function hasConsistentSchedule(r: SnapshotRecord): boolean {
 /** The most icon candidates a record may name. */
 export const MAX_ICON_URLS = 2;
 
+/**
+ * The icon candidates in an extraction's metadata, as a record may carry them: the strings, in
+ * order, at most MAX_ICON_URLS; none for anything but an array. The extraction child's messages
+ * are not validated, so every reader of `PageMetadata.iconUrls` goes through this.
+ */
+export function boundedIconUrls(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((u): u is string => typeof u === "string").slice(0, MAX_ICON_URLS)
+    : [];
+}
+
 /** True when the record names at most MAX_ICON_URLS icons; both stores refuse a record that fails this. */
 export function hasValidIcons(r: SnapshotRecord): boolean {
   return r.iconUrls.length <= MAX_ICON_URLS;

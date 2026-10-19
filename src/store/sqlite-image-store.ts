@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import type { ImageType } from "../core/fetch.js";
+import type { IconBackfillStore, IconCandidate } from "../core/icon-backfill-store.js";
 import {
   type ImageBytes,
   type ImageEnd,
@@ -14,11 +15,12 @@ import {
   type ShownPicture,
   type StoredImage,
 } from "../core/image-store.js";
+import { MAX_ICON_URLS } from "../core/snapshot-store.js";
 import type { OwnerId } from "../core/types.js";
 import { parseId } from "./sqlite-store.js";
 
-/** Fetched pictures, a page's preview or a site's icon (`link_images`, pending in `snapshots.image_status`), and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
-export class SqliteImageStore implements ImageStore, LinkImageReader {
+/** Fetched pictures, a page's preview or a site's icon (`link_images`, pending in `snapshots.image_status`), the one-time icon check of links snapshotted before icons were looked for, and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
+export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfillStore {
   constructor(private readonly db: Database) {}
 
   async pendingImages(afterId: string | null, limit: number): Promise<PendingImage[]> {
@@ -149,6 +151,39 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
         },
       ]),
     );
+  }
+
+  async iconCandidates(afterId: string | null, limit: number): Promise<IconCandidate[]> {
+    const after = afterId === null ? 0 : parseId(afterId);
+    if (after === null) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT l.owner_id, l.id, l.url FROM snapshots s
+         JOIN links l ON l.owner_id = s.owner_id AND l.id = s.link_id
+         WHERE s.fetch_status = 'ok' AND s.image_url IS NULL AND s.image_status IS NULL
+           AND NOT EXISTS (SELECT 1 FROM link_images f
+             WHERE f.owner_id = l.owner_id AND f.link_id = l.id)
+           AND NOT EXISTS (SELECT 1 FROM link_checks k WHERE k.owner_id = l.owner_id
+             AND k.link_id = l.id AND k.flagged_at IS NOT NULL)
+           AND l.id > ? ORDER BY l.id LIMIT ?`,
+      )
+      .all(after, limit) as { owner_id: string; id: number; url: string }[];
+    return rows.map((r) => ({ owner: r.owner_id, linkId: String(r.id), url: r.url }));
+  }
+
+  async recordIconCheck(owner: OwnerId, linkId: string, iconUrls: string[]): Promise<boolean> {
+    const n = parseId(linkId);
+    if (n === null || iconUrls.length > MAX_ICON_URLS) return false;
+    const first = iconUrls[0] ?? null;
+    const { changes } = this.db
+      .prepare(
+        `UPDATE snapshots SET icon_url = ?, icon_next_url = ?,
+           image_status = CASE WHEN ? IS NULL THEN 'none' ELSE 'pending' END
+         WHERE owner_id = ? AND link_id = ? AND fetch_status = 'ok'
+           AND image_url IS NULL AND image_status IS NULL`,
+      )
+      .run(first, iconUrls[1] ?? null, first, owner, n);
+    return changes === 1;
   }
 
   /** Moves a still-pending picture for this URL and role to `status`; false when it was not pending. */

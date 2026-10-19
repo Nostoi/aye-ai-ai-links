@@ -28,6 +28,8 @@ function keyItem(k: KeyInfo, now: Date): string {
  *
  * Save from your browser offers the bookmarklet to drag, and its code to copy for a phone (#129).
  * The code is element text, never an attribute but the link's href.
+ *
+ * Your data links to the links-only JSON download (#130).
  */
 export const connectionsPage = ({
   connections,
@@ -86,6 +88,11 @@ ${keys
 <li><strong>iPhone and iPad (Safari):</strong> bookmark any page; open Bookmarks, tap Edit, edit that bookmark, rename it, and replace its address with the copied code. To save a page, open Bookmarks and tap it.</li>
 <li><strong>Android (Chrome):</strong> bookmark any page; edit the bookmark, rename it, and replace its URL with the copied code. To save a page, type the bookmark's name in the address bar and tap the bookmark in the suggestions.</li>
 </ul>
+</section>
+<section id="your-data" aria-labelledby="your-data-heading">
+<h2 id="your-data-heading">Your data</h2>
+<p class="lead">Download every link you've saved, with its why, tags and dates, plus your tags, profile notes and focus, as one JSON file.</p>
+<p><a class="button" href="/export.json">Links only (.json)</a></p>
 </section>
 </main>
 <script>

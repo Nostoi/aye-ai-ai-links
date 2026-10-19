@@ -1,3 +1,4 @@
+import type { CopyNotice } from "../core/copy-usage.js";
 import type { PictureInfo } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace } from "../core/link-space.js";
@@ -5,6 +6,7 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { removeCopyScript } from "./copy-menu.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
@@ -55,7 +57,24 @@ type Input = {
   pictures?: Map<string, PictureInfo>;
   /** The links that have a saved copy. */
   copies?: Map<string, CopyInfo>;
+  /** What to say about saved copies at the foot; shown on the first page of active links only. */
+  notice?: CopyNotice | null;
 };
+
+/** GiB to one decimal, with a trailing ".0" trimmed. */
+const gib = (bytes: number) => (bytes / 1024 ** 3).toFixed(1).replace(/\.0$/, "");
+
+const noticeText = (n: CopyNotice): string =>
+  n.kind === "high"
+    ? `Saved copies use ${gib(n.usedBytes)} of ${gib(n.limitBytes)} GiB.`
+    : n.kind === "full"
+      ? "Saved copies are almost full, so new links may not get one. Raise AYE_SAVED_COPY_LIMIT_GB or remove some copies."
+      : "Saved copies are paused: the server can't write to its folder.";
+
+const noticeLine = ({ notice, done, later }: Input): string =>
+  notice && !done && !later
+    ? `<p class="copy-notice${notice.kind === "high" ? "" : " needs-you"}">${escapeHtml(noticeText(notice))}</p>`
+    : "";
 
 /** The time a card is grouped by: when it was opened in opened order, else when it was saved. */
 const groupTime = (link: Link, order: LinkOrder) =>
@@ -160,9 +179,9 @@ export function allPage(input: Input): string {
 <nav class="orders" aria-label="Order">${choices}</nav>
 ${done ? "" : '<p id="all-error" role="alert"></p>'}
 ${list}
-<div class="all-foot">${more}${other}</div>
+<div class="all-foot">${noticeLine(input)}${more}${other}</div>
 </main>
-${done ? "" : `${editDialog()}\n<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+${done ? "" : `${editDialog()}\n<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n${removeCopyScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     { menu: true, undo: !done },
   );
 }

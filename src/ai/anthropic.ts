@@ -63,7 +63,12 @@ function readReply(data: unknown): ModelReply {
   const root = data as {
     content?: unknown;
     stop_reason?: unknown;
-    usage?: { input_tokens?: unknown; output_tokens?: unknown };
+    usage?: {
+      input_tokens?: unknown;
+      cache_creation_input_tokens?: unknown;
+      cache_read_input_tokens?: unknown;
+      output_tokens?: unknown;
+    };
   } | null;
   if (!Array.isArray(root?.content)) throw new AiUnavailable(UNREADABLE);
   let text = "";
@@ -79,8 +84,15 @@ function readReply(data: unknown): ModelReply {
     }
   }
   const reply: ModelReply = { text, toolCalls, raw: root.content };
-  const { input_tokens: input, output_tokens: output } = root.usage ?? {};
-  if (typeof input === "number" && typeof output === "number") reply.usage = { input, output };
+  const { input_tokens: input, output_tokens: output, ...usage } = root.usage ?? {};
+  if (typeof input === "number" && typeof output === "number") {
+    // input_tokens leaves out what was written to or read from the prompt cache.
+    let all = input;
+    for (const cached of [usage.cache_creation_input_tokens, usage.cache_read_input_tokens]) {
+      if (typeof cached === "number") all += cached;
+    }
+    reply.usage = { input: all, output };
+  }
   if (root.stop_reason === "max_tokens") reply.truncated = true;
   return reply;
 }
@@ -103,7 +115,10 @@ export function anthropicModel(config: AnthropicConfig, fetchImpl: Fetch = fetch
       const body: Record<string, unknown> = {
         model: config.model,
         max_tokens: MAX_TOKENS,
-        system: request.system,
+        // Prompt caching. The mark on system caches the tools and system, which every call
+        // shares; the top-level mark caches the conversation so far, for the turn's next call.
+        system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
+        cache_control: { type: "ephemeral" },
         messages: wireMessages(request.messages),
       };
       if (request.tools.length > 0) {

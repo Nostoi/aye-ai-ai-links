@@ -21,15 +21,22 @@ import {
   type SaveCopyResult,
   type SavedCopyMaintenance,
   type SavedCopyReader,
+  type SavedCopyRemover,
   type SavedCopyUsage,
   type SavedCopyWriter,
   type SweepReport,
 } from "../core/saved-copy.js";
 import type { OwnerId } from "../core/types.js";
-import { CopyFolder, TMP } from "./copy-folder.js";
+import { CopyFolder, madeByStore, TMP } from "./copy-folder.js";
 import { parseId, toMs } from "./sqlite-store.js";
 
 const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+
+/**
+ * A removed row whose purge has begun. An unpurged removed row always has a nonce or a finish
+ * time, since `confirmCopy` sets `finished_at` exactly when there is no nonce.
+ */
+const TOMBSTONE = "(status = 'removed' AND image_nonce IS NULL AND finished_at IS NULL)";
 
 const imageName = (n: number, type: ImageType) =>
   `${String(n).padStart(2, "0")}.${IMAGE_EXT[type]}`;
@@ -40,7 +47,8 @@ export class SqliteSavedCopyStore
     SavedCopyReader,
     SavedCopyUsage,
     SavedCopyWriter,
-    Omit<SavedCopyMaintenance, "purgeRemoved">
+    SavedCopyMaintenance,
+    SavedCopyRemover
 {
   private readonly folder: CopyFolder;
   private check: FolderCheck = {
@@ -348,7 +356,8 @@ export class SqliteSavedCopyStore
     const hasCopy = new Set(
       this.db
         .prepare(
-          "SELECT DISTINCT link_id FROM saved_copies WHERE status IN ('saving', 'ok', 'removed')",
+          `SELECT DISTINCT link_id FROM saved_copies
+           WHERE status IN ('saving', 'ok', 'removed') AND NOT ${TOMBSTONE}`,
         )
         .pluck()
         .all() as number[],
@@ -492,9 +501,11 @@ export class SqliteSavedCopyStore
             this.db
               .prepare(
                 `UPDATE saved_copy_images SET status = ?
-                 WHERE owner_id = ? AND link_id = ? AND n = ? AND url = ? AND status = 'pending'`,
+                 WHERE owner_id = ? AND link_id = ? AND n = ? AND url = ? AND status = 'pending'
+                   AND EXISTS (SELECT 1 FROM saved_copies c WHERE c.owner_id = ?
+                     AND c.link_id = ? AND c.status = 'ok')`,
               )
-              .run(end, owner, id, n, url).changes,
+              .run(end, owner, id, n, url, owner, id).changes,
         )
         .immediate() === 1
     );
@@ -570,7 +581,7 @@ export class SqliteSavedCopyStore
     if (length > row.md_bytes) throw new Error("The finished copy is longer than reserved");
     // No await from here: the recheck and the file replacement see the same rows.
     if (this.check.state !== "ready" || !this.finishable(owner, id)) return false;
-    this.folder.replaceMarkdown(linkId, finished);
+    if (!this.folder.replaceMarkdown(linkId, finished)) return false;
     return (
       this.db
         .transaction(
@@ -648,6 +659,8 @@ export class SqliteSavedCopyStore
     if (!row) return null;
     if (!this.readable) return "missing";
     const markdown = await this.folder.readMarkdown(linkId);
+    // A removal or purge during the read hides the copy from this answer too.
+    if (!this.stillOk(owner, id, row.made_at)) return null;
     if (markdown === null) return "missing";
     const images = this.db
       .prepare(
@@ -671,20 +684,147 @@ export class SqliteSavedCopyStore
     if (id === null || !Number.isInteger(n)) return null;
     const row = this.db
       .prepare(
-        `SELECT i.content_type, i.sha256 FROM saved_copy_images i
+        `SELECT i.content_type, i.sha256, c.made_at FROM saved_copy_images i
          JOIN saved_copies c ON c.owner_id = i.owner_id AND c.link_id = i.link_id
          WHERE i.owner_id = ? AND i.link_id = ? AND i.n = ? AND i.status = 'ok' AND c.status = 'ok'`,
       )
-      .get(owner, id, n) as { content_type: ImageType; sha256: string } | undefined;
+      .get(owner, id, n) as
+      | { content_type: ImageType; sha256: string; made_at: number }
+      | undefined;
     if (!row || !this.readable) return null;
     const bytes = await this.folder.readImage(linkId, imageName(n, row.content_type));
+    if (!this.stillOk(owner, id, row.made_at, { n, sha256: row.sha256 })) return null;
     return bytes
       ? { contentType: row.content_type, bytes, version: imageVersion(row.sha256) }
       : null;
   }
 
+  /** The same `ok` copy (and, when given, the same `ok` image) is still there. */
+  private stillOk(
+    owner: OwnerId,
+    id: number,
+    madeAt: number,
+    image?: { n: number; sha256: string },
+  ): boolean {
+    const copy = this.db
+      .prepare(
+        "SELECT 1 FROM saved_copies WHERE owner_id = ? AND link_id = ? AND status = 'ok' AND made_at = ?",
+      )
+      .get(owner, id, madeAt);
+    if (!copy) return false;
+    if (!image) return true;
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM saved_copy_images
+           WHERE owner_id = ? AND link_id = ? AND n = ? AND status = 'ok' AND sha256 = ?`,
+        )
+        .get(owner, id, image.n, image.sha256) !== undefined
+    );
+  }
+
   async usedBytes(): Promise<number> {
     return this.usedNow();
+  }
+
+  lastCheck(): FolderCheck {
+    return this.check;
+  }
+
+  /** Database only, so it works while the folder is paused; every reader filters on `ok`. */
+  async removeCopy(owner: OwnerId, linkId: string, at: Date): Promise<boolean> {
+    const id = parseId(linkId);
+    if (id === null) return false;
+    return this.change(
+      `UPDATE saved_copies SET status = 'removed', removed_at = ?
+       WHERE owner_id = ? AND link_id = ? AND status = 'ok'`,
+      toMs(at),
+      owner,
+      id,
+    );
+  }
+
+  async restoreCopy(owner: OwnerId, linkId: string, since: Date): Promise<boolean> {
+    const id = parseId(linkId);
+    if (id === null) return false;
+    return this.change(
+      `UPDATE saved_copies SET status = 'ok', removed_at = NULL
+       WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND removed_at >= ?
+         AND NOT ${TOMBSTONE}`,
+      owner,
+      id,
+      toMs(since),
+    );
+  }
+
+  /** Runs one UPDATE in its own transaction and answers whether it changed exactly one row. */
+  private change(sql: string, ...params: unknown[]): boolean {
+    return this.db.transaction(() => this.db.prepare(sql).run(...params).changes).immediate() === 1;
+  }
+
+  /**
+   * Each row is marked a tombstone before its files go, so a restore can never revive it; its
+   * bytes and picture rows go only once no file the store made is left. Nothing is awaited.
+   */
+  async purgeRemoved(before: Date): Promise<number> {
+    if (!this.owned()) return 0;
+    const cutoff = toMs(before);
+    const due = this.db
+      .prepare(
+        `SELECT owner_id, link_id FROM saved_copies
+         WHERE status = 'removed' AND removed_at < ? AND (NOT ${TOMBSTONE} OR bytes > 0)`,
+      )
+      .all(cutoff) as { owner_id: string; link_id: number }[];
+    let purged = 0;
+    for (const { owner_id: owner, link_id: id } of due) {
+      const marked = this.change(
+        `UPDATE saved_copies SET image_nonce = NULL, finished_at = NULL
+         WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND removed_at < ?`,
+        owner,
+        id,
+        cutoff,
+      );
+      if (!marked) continue;
+      let left: string[];
+      try {
+        left = this.folder.removeCopy(String(id));
+      } catch {
+        continue; // retried next sweep
+      }
+      if (left.some(madeByStore)) continue;
+      const zeroed = this.db
+        .transaction(() => {
+          const changed = this.db
+            .prepare(
+              `UPDATE saved_copies SET bytes = 0, md_bytes = 0
+               WHERE owner_id = ? AND link_id = ? AND ${TOMBSTONE}`,
+            )
+            .run(owner, id).changes;
+          if (changed === 1) {
+            this.db
+              .prepare("DELETE FROM saved_copy_images WHERE owner_id = ? AND link_id = ?")
+              .run(owner, id);
+          }
+          return changed;
+        })
+        .immediate();
+      if (zeroed === 1) purged++;
+    }
+    return purged;
+  }
+
+  async copyFileMissing(owner: OwnerId, linkId: string): Promise<boolean> {
+    const id = parseId(linkId);
+    if (id === null || !this.owned()) return false;
+    const ok = this.db
+      .prepare("SELECT 1 FROM saved_copies WHERE owner_id = ? AND link_id = ? AND status = 'ok'")
+      .get(owner, id);
+    if (!ok) return false;
+    try {
+      return !this.folder.hasCopyFile(linkId);
+    } catch {
+      return false; // unknown, so its pictures are still tried
+    }
   }
 
   async backfillCandidates(

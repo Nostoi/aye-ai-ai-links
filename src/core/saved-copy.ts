@@ -102,6 +102,8 @@ export interface SavedCopyReader {
 /** Bytes the saved copies hold, for a request that must show it. */
 export interface SavedCopyUsage {
   usedBytes(): Promise<number>;
+  /** The last folder check; no I/O. */
+  lastCheck(): FolderCheck;
 }
 
 /** Cross-owner work for background passes; never for a request. */
@@ -119,10 +121,13 @@ export interface SavedCopyMaintenance {
   unfinishedCopies(afterId: string | null, limit: number): Promise<CopyRef[]>;
   undoUnconfirmed(): Promise<{ copies: number; images: number }>;
   sweep(graceMs: number, now: Date): Promise<SweepReport>;
-  purgeRemoved(before: Date): Promise<number>; // PR C
+  /** Deletes the files of copies removed before `before`, leaving a 0-byte row; answers how many. */
+  purgeRemoved(before: Date): Promise<number>;
+  /** True when the owner's `ok` copy has no copy.md file, on a folder this store owns. */
+  copyFileMissing(owner: OwnerId, linkId: string): Promise<boolean>;
 }
 
-/** Removes and restores a copy (PR C). */
+/** Removes and restores a copy. A false means the owner has no copy in that state. */
 export interface SavedCopyRemover {
   removeCopy(owner: OwnerId, linkId: string, at: Date): Promise<boolean>;
   restoreCopy(owner: OwnerId, linkId: string, since: Date): Promise<boolean>;

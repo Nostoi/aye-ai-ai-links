@@ -9,6 +9,7 @@ import {
   imageRef,
   type SavedCopyMaintenance,
   type SavedCopyReader,
+  type SavedCopyRemover,
   type SavedCopyUsage,
   type SavedCopyWriter,
 } from "./saved-copy.js";
@@ -25,7 +26,11 @@ export type CopyHarness = {
   copies: SavedCopyWriter &
     SavedCopyReader &
     SavedCopyUsage &
-    Pick<SavedCopyMaintenance, "backfillCandidates" | "pendingCopyImages" | "unfinishedCopies">;
+    SavedCopyRemover &
+    Pick<
+      SavedCopyMaintenance,
+      "backfillCandidates" | "pendingCopyImages" | "unfinishedCopies" | "purgeRemoved"
+    >;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
   /** Make the folder unusable for writes (the next write returns "unavailable"). */
@@ -381,6 +386,115 @@ export function describeSavedCopyStoreContract(
           [A, ids[2]],
         ]);
         expect(await candidates(ids[2])).toEqual([]);
+      });
+    });
+
+    describe("removing and restoring", () => {
+      const T = at(10);
+      const saved = async (owner: string, markdown = "body", images = 0) => {
+        const id = await save(owner);
+        expect(await h.copies.saveCopy(owner, id, draft(markdown, images), LIMITS, at(5))).toBe(
+          "saved",
+        );
+        return id;
+      };
+      const ids = (refs: { linkId: string }[]) => refs.map((r) => r.linkId);
+
+      it("hides a removed copy from every read and every pass, and keeps its bytes counted", async () => {
+        const unfinished = await saved(A, "pics", 2);
+        await h.copies.saveCopyImage(A, unfinished, 1, urlOf(1), img(4), LIMITS);
+        await h.copies.endCopyImage(A, unfinished, 2, urlOf(2), "none");
+        const waiting = await saved(A, "wait", 1);
+        expect(ids(await h.copies.unfinishedCopies(null, 50))).toEqual([unfinished]);
+        expect(ids(await h.copies.pendingCopyImages(null, 50))).toEqual([waiting]);
+        const used = await h.copies.usedBytes();
+        expect(await h.copies.removeCopy(A, unfinished, T)).toBe(true);
+        expect(await h.copies.removeCopy(A, waiting, T)).toBe(true);
+        expect(await h.copies.copyInfo(A, [unfinished, waiting])).toEqual(new Map());
+        expect(await h.copies.readCopy(A, unfinished)).toBeNull();
+        expect(await h.copies.copyImage(A, unfinished, 1)).toBeNull();
+        expect(await h.copies.unfinishedCopies(null, 50)).toEqual([]);
+        expect(await h.copies.pendingCopyImages(null, 50)).toEqual([]);
+        expect(await h.copies.usedBytes()).toBe(used);
+      });
+
+      it("removes only the owner's ok copy", async () => {
+        const id = await saved(A);
+        const before = await h.copies.readCopy(A, id);
+        expect(await h.copies.removeCopy(B, id, T)).toBe(false);
+        expect(await h.copies.readCopy(A, id)).toEqual(before);
+        const none = await save(A);
+        await h.copies.recordNoCopy(A, none, "none");
+        expect(await h.copies.removeCopy(A, none, T)).toBe(false);
+        expect(await h.copies.removeCopy(A, await save(A), T)).toBe(false);
+        expect(await h.copies.removeCopy(A, "999999", T)).toBe(false);
+        expect(await h.copies.removeCopy(A, id, T)).toBe(true);
+        expect(await h.copies.removeCopy(A, id, T)).toBe(false);
+      });
+
+      it("restores a copy removed at or after `since`, images included", async () => {
+        const id = await saved(A, "pics", 1);
+        await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(4), LIMITS);
+        const before = await h.copies.readCopy(A, id);
+        await h.copies.removeCopy(A, id, T);
+        expect(await h.copies.restoreCopy(A, id, new Date(T.getTime() + 1))).toBe(false);
+        expect(await h.copies.restoreCopy(B, id, T)).toBe(false);
+        expect(await h.copies.readCopy(A, id)).toBeNull();
+        expect(await h.copies.restoreCopy(A, id, T)).toBe(true);
+        expect(await h.copies.readCopy(A, id)).toEqual(before);
+        expect(await h.copies.restoreCopy(A, id, T)).toBe(false);
+      });
+
+      it("never makes a removed copy again, purged or not", async () => {
+        const purged = await saved(A);
+        const inWindow = await saved(A);
+        await snapshotOk(A, purged);
+        await snapshotOk(A, inWindow);
+        await h.copies.removeCopy(A, purged, T);
+        await h.copies.removeCopy(A, inWindow, at(20));
+        expect(await h.copies.purgeRemoved(at(11))).toBe(1);
+        expect(await candidates(null, 50, true)).toEqual([]);
+        for (const id of [purged, inWindow]) {
+          expect(await h.copies.saveCopy(A, id, draft("again"), LIMITS, at(30))).toBe("exists");
+          expect(await h.copies.recordNoCopy(A, id, "none")).toBe(false);
+        }
+      });
+
+      it("purges copies removed before the cutoff, which can then never be restored", async () => {
+        const early = await saved(A, "early", 1);
+        await h.copies.saveCopyImage(A, early, 1, urlOf(1), img(4), LIMITS);
+        const empty = await saved(A, "");
+        const late = await saved(A, "late");
+        const theirs = await saved(B, "theirs");
+        const ok = await saved(A, "ok");
+        await h.copies.removeCopy(A, early, T);
+        await h.copies.removeCopy(A, empty, T);
+        await h.copies.removeCopy(A, late, at(20));
+        await h.copies.removeCopy(B, theirs, at(20));
+        const used = await h.copies.usedBytes();
+        expect(await h.copies.purgeRemoved(at(20))).toBe(2);
+        expect(await h.copies.usedBytes()).toBe(used - bytes("early") - 4);
+        for (const id of [early, empty]) {
+          expect(await h.copies.restoreCopy(A, id, new Date(0))).toBe(false);
+          expect(await h.copies.readCopy(A, id)).toBeNull();
+        }
+        expect(await h.copies.purgeRemoved(at(20))).toBe(0);
+        expect(await h.copies.readCopy(A, ok)).toMatchObject({ markdown: "ok" });
+        expect(await h.copies.restoreCopy(A, late, at(20))).toBe(true);
+        expect(await h.copies.restoreCopy(B, theirs, at(20))).toBe(true);
+        expect(await h.copies.readCopy(B, theirs)).toMatchObject({ markdown: "theirs" });
+      });
+
+      it("stores and settles no picture of a removed copy, which stays pending for a restore", async () => {
+        const id = await saved(A, "pics", 2);
+        const used = await h.copies.usedBytes();
+        await h.copies.removeCopy(A, id, T);
+        expect(await h.copies.saveCopyImage(A, id, 1, urlOf(1), img(4), LIMITS)).toBe(false);
+        expect(await h.copies.endCopyImage(A, id, 2, urlOf(2), "none")).toBe(false);
+        expect(await h.copies.usedBytes()).toBe(used);
+        expect(await h.copies.restoreCopy(A, id, T)).toBe(true);
+        expect((await h.copies.pendingCopyImages(null, 50)).map((p) => p.n)).toEqual([1, 2]);
+        expect(await h.copies.copyImage(A, id, 1)).toBeNull();
       });
     });
   });

@@ -3,7 +3,7 @@ import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import { copyLimits } from "./saved-copy.js";
 import { describeSavedCopyStoreContract } from "./saved-copy-store-contract.js";
-import { A, at, newLink } from "./snapshot-store-contract.js";
+import { A, at, B, newLink } from "./snapshot-store-contract.js";
 
 describeSavedCopyStoreContract("FakeSavedCopies", () => {
   const store = new FakeStore();
@@ -53,5 +53,38 @@ describe("FakeSavedCopies fault injection", () => {
     expect(await copies.usedBytes()).toBe(used);
     expect((await copies.pendingCopyImages(null, 10)).map((p) => p.n)).toEqual([1]);
     expect(await copies.saveCopyImage(A, id, 1, url, image, limits)).toBe("saved");
+  });
+
+  it("answers its last folder check, starting ready", async () => {
+    const { copies } = await setup();
+    expect(copies.lastCheck()).toEqual({ state: "ready" });
+    copies.fail("unwritable");
+    expect(copies.lastCheck()).toEqual({ state: "ready" });
+    const failed = await copies.checkFolder();
+    expect(failed).toMatchObject({ state: "unwritable" });
+    expect(copies.lastCheck()).toEqual(failed);
+    copies.heal();
+    await copies.checkFolder();
+    expect(copies.lastCheck()).toEqual({ state: "ready" });
+  });
+
+  it("loses a copy's files: the copy reads as missing and gets no more pictures", async () => {
+    const { copies, id } = await setup();
+    await copies.saveCopy(A, id, draft(1), limits, at(5));
+    expect(await copies.copyFileMissing(A, id)).toBe(false);
+    copies.loseFiles(A, id);
+    expect(await copies.copyFileMissing(A, id)).toBe(true);
+    expect(await copies.copyFileMissing(B, id)).toBe(false);
+    expect(await copies.readCopy(A, id)).toBe("missing");
+    const used = await copies.usedBytes();
+    const image = { contentType: "image/png" as const, bytes: new Uint8Array(4).fill(1) };
+    await expect(
+      copies.saveCopyImage(A, id, 1, "https://img.example/1.png", image, limits),
+    ).rejects.toThrow();
+    expect(await copies.usedBytes()).toBe(used);
+    expect((await copies.pendingCopyImages(null, 10)).map((p) => p.n)).toEqual([1]);
+    copies.fail("mismatch");
+    await copies.checkFolder();
+    expect(await copies.copyFileMissing(A, id)).toBe(false);
   });
 });

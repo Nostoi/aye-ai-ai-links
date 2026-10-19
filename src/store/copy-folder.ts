@@ -15,6 +15,12 @@ const STAGE_FILE = /^(tmp-[0-9a-f]{32}|write-check-[0-9]+)$/;
 
 /** Thrown by a read whose file is over its cap, before its bytes are returned. */
 export class CopyFileTooLarge extends Error {}
+/** Thrown by an image write into a link folder that has no copy.md. */
+export class CopyFolderMissing extends Error {}
+
+/** Whether a name removeCopy left, relative to the link folder, is one the store makes. */
+export const madeByStore = (name: string): boolean =>
+  name === "copy.md" || (name.startsWith("images/") && IMAGE_FILE.test(name.slice(7)));
 
 const refused = () => new Error("Refused saved-copy path");
 const code = (e: unknown) => (e as NodeJS.ErrnoException).code;
@@ -232,20 +238,33 @@ export class CopyFolder {
     return [];
   }
 
+  /** Whether <linkId>/copy.md is a regular file; a symlink is not. */
+  hasCopyFile(linkId: string): boolean {
+    const link = this.linkDir(linkId, false);
+    return link !== null && lstat(join(link, "copy.md"))?.isFile() === true;
+  }
+
   private imageName(name: string): string {
     if (!IMAGE_FILE.test(name)) throw refused();
     return name;
   }
 
+  /** Throws CopyFolderMissing, creating nothing, unless <linkId>/copy.md is a regular file. */
   writeImage(linkId: string, name: string, bytes: Uint8Array): void {
     this.imageName(name);
+    if (!this.hasCopyFile(linkId)) {
+      throw new CopyFolderMissing(`Saved copy ${linkId} has no copy.md`);
+    }
     const images = this.imagesDir(linkId, true) as string;
     this.atomicWrite(join(images, name), bytes);
   }
 
-  replaceMarkdown(linkId: string, markdown: string): void {
-    const link = this.linkDir(linkId, true) as string;
+  /** Replaces an existing copy.md; false, creating nothing, when the folder or the file is gone. */
+  replaceMarkdown(linkId: string, markdown: string): boolean {
+    const link = this.linkDir(linkId, false);
+    if (!link || !lstat(join(link, "copy.md"))) return false;
     this.atomicWrite(join(link, "copy.md"), Buffer.from(markdown));
+    return true;
   }
 
   private async existingLinkDir(linkId: string): Promise<string | null> {

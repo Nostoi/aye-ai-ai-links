@@ -11,7 +11,14 @@ import {
   webpLossless,
   webpLossy,
 } from "./image-test-kit.js";
-import { checkImage, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS, readImageHeader } from "./image-type.js";
+import {
+  checkImage,
+  ICON_MIN_PX,
+  iconBigEnough,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_PIXELS,
+  readImageHeader,
+} from "./image-type.js";
 
 describe("readImageHeader", () => {
   it.each([
@@ -186,4 +193,20 @@ describe("checkImage, the one image check for fetched and uploaded pictures", ()
       reason: "too_large",
     });
   });
+});
+
+describe("iconBigEnough", () => {
+  it.each([
+    ["64×64 PNG", png(64, 64), true],
+    ["64×1000 PNG", png(64, 1000), true],
+    ["63×200 PNG", png(63, 200), false],
+    ["200×63 PNG", png(200, 63), false],
+    ["64×64 GIF", gif(64, 64), true],
+    ["63×63 JPEG", jpeg(63, 63), false],
+    ["a header cut short", Buffer.from([0x89, 0x50, 0x4e, 0x47]), false],
+  ])("%s → %s", (_n, bytes, want) => {
+    expect(iconBigEnough(bytes)).toBe(want);
+  });
+
+  it("is 64", () => expect(ICON_MIN_PX).toBe(64));
 });

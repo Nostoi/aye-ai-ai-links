@@ -8,6 +8,7 @@ import {
   RETRY_BASE_MS,
   RETRY_MAX_MS,
 } from "./image-indexer.js";
+import { png } from "./image-test-kit.js";
 import type { SnapshotRecord } from "./snapshot-store.js";
 import { at, newLink, record } from "./snapshot-store-contract.js";
 
@@ -272,8 +273,76 @@ async function recordOn(store: FakeStore, id: string, now: Date, over: Partial<S
 }
 const P = "https://ex.com/p.png";
 const I = "https://ex.com/icon.png";
+const I2 = "https://ex.com/icon2.png";
+const okPng = (bytes: Buffer): ImageOutcome => ({ kind: "ok", contentType: "image/png", bytes });
+const ICON_PNG = okPng(png(128, 128));
+
+/** A link whose fetched page named only these icons. */
+async function iconsOnly(store: FakeStore, urls: string[]) {
+  const { link } = await store.insertIfAbsent(OWNER, newLink(1, at(0)));
+  await recordOn(store, link.id, at(1), { imageUrl: null, iconUrls: urls });
+  return link.id;
+}
 
 describe("icons", () => {
+  it("★ measures the shorter side: a 63×200 first icon ends and the second, 64×64, is stored", async () => {
+    const t = setup(async (url) => okPng(url === I ? png(63, 200) : png(64, 64)));
+    const id = await iconsOnly(t.store, [I, I2]);
+    await t.indexer.sweep();
+    expect(await t.store.image(OWNER, id)).toBeNull();
+    expect(await t.store.pendingImages(null, 100)).toEqual([
+      { owner: OWNER, linkId: id, imageUrl: I2, role: "icon" },
+    ]);
+    await t.indexer.sweep();
+    expect(t.calls).toEqual([I, I2]);
+    expect((await t.store.image(OWNER, id))?.bytes).toEqual(new Uint8Array(png(64, 64)));
+    expect((await t.store.imageVersions(OWNER, [id])).get(id)?.fit).toBe("contain");
+  });
+
+  it("★ trusts the bytes, not the declaration: an icon declared 512x512 with 32×32 bytes ends as none", async () => {
+    const t = setup(async () => okPng(png(32, 32)));
+    const id = await iconsOnly(t.store, ["https://ex.com/icon512.png"]);
+    await t.indexer.sweep();
+    expect(await t.store.image(OWNER, id)).toBeNull();
+    expect(await t.pending()).toEqual([]);
+    expect(t.store.imageStatusOf(OWNER, id)).toBe("none");
+  });
+
+  it("★ keeps a 32×32 preview: the floor is for icons only", async () => {
+    const t = setup(async () => okPng(png(32, 32)));
+    const id = await linkWithImage(t.store, 1);
+    await t.indexer.sweep();
+    expect((await t.store.image(OWNER, id))?.bytes).toEqual(new Uint8Array(png(32, 32)));
+  });
+
+  it.each([
+    ["an unsized 57px icon", okPng(png(57, 57))],
+    ["an ICO body", { kind: "not_image", contentType: "image/x-icon" }],
+    ["an address refused after a redirect", { kind: "refused", reason: "address" }],
+  ] as [string, ImageOutcome][])("★ stores the second icon after %s first", async (_n, first) => {
+    const t = setup(async (url) => (url === I ? first : okPng(png(96, 96))));
+    const id = await iconsOnly(t.store, [I, I2]);
+    await t.indexer.sweep();
+    await t.indexer.sweep();
+    expect(t.calls).toEqual([I, I2]);
+    expect((await t.store.image(OWNER, id))?.bytes).toEqual(new Uint8Array(png(96, 96)));
+  });
+
+  it("★ ends as none when both icons fail, with no further fetch", async () => {
+    const t = setup(async (url) =>
+      url === I ? okPng(png(16, 16)) : { kind: "http_error", status: 404 },
+    );
+    const id = await iconsOnly(t.store, [I, I2]);
+    for (let i = 0; i < 4; i++) {
+      await t.indexer.sweep();
+      t.advance(RETRY_MAX_MS);
+    }
+    expect(t.calls).toEqual([I, I2]);
+    expect(await t.pending()).toEqual([]);
+    expect(t.store.imageStatusOf(OWNER, id)).toBe("none");
+    expect(await t.store.image(OWNER, id)).toBeNull();
+  });
+
   it("★ fetches only the preview when a page names both; a preview that ends shows no icon", async () => {
     const t = setup(async () => ({ kind: "http_error", status: 404 }));
     const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
@@ -299,7 +368,7 @@ describe("icons", () => {
   ] as [string, ImageOutcome[]][])(
     "★ shows no stored icon after its new preview ends on %s",
     async (_, outcomes) => {
-      const t = setup(async (url) => (url === I ? PNG : (outcomes.shift() ?? PNG)));
+      const t = setup(async (url) => (url === I ? ICON_PNG : (outcomes.shift() ?? PNG)));
       const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
       await recordOn(t.store, link.id, at(1), {
         status: "retrying",

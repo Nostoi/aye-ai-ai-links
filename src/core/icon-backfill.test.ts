@@ -53,6 +53,7 @@ function setup(
     extract?: (signal?: AbortSignal) => Promise<ExtractOutcome> | ExtractOutcome;
     canResolve?: () => boolean;
     pollMs?: number;
+    pageSize?: number;
   } = {},
 ) {
   const store = new FakeStore();
@@ -85,6 +86,7 @@ function setup(
       log: (message) => logged.push(message),
       canResolve: async () => (o.canResolve ?? (() => true))(),
       ...(o.pollMs !== undefined && { pollMs: o.pollMs }),
+      ...(o.pageSize !== undefined && { pageSize: o.pageSize }),
     });
     running.push(pass);
     return pass;
@@ -153,6 +155,7 @@ describe("icon backfill", () => {
       imageUrl: null,
     });
     expect(await t.store.getSnapshotText(OWNER, id)).toBe("body text");
+    expect(t.pageCalls).toHaveLength(1);
   });
 
   it("★ records none when the fresh page names a usable preview, writing no icon or preview", async () => {
@@ -256,6 +259,49 @@ describe("icon backfill", () => {
       await t.pass.sweep();
       expect(t.pageCalls.at(-1)).toBe("https://ex.com/1");
       expect(t.status(a)).toBe("pending");
+    });
+
+    it("★ records nothing for a timeout while the network is down", async () => {
+      // [Treating only a network error as a sign the network is down.]
+      const t = setup({ page: () => ({ kind: "timeout" }), canResolve: () => false });
+      const a = await t.legacy(1);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual(["https://ex.com/1"]);
+      expect(t.status(a)).toBeNull();
+    });
+
+    it("★ never counts a network that is down as a failure, however many sweeps (R5)", async () => {
+      // [Routing 'offline' through the failure path: it logs, and gives up at the cap.]
+      let up = false;
+      const t = setup({
+        page: (url) => (up ? okPage(url) : { kind: "network_error", code: "ENOTFOUND" }),
+        canResolve: () => up,
+      });
+      const a = await t.legacy(1);
+      for (let i = 0; i < MAX_IMAGE_ATTEMPTS + 2; i++) {
+        await t.pass.sweep();
+        t.wait();
+      }
+      expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS + 2);
+      up = true;
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS + 3);
+      expect(t.status(a)).toBe("pending");
+      expect(t.logged).toEqual([]);
+    });
+
+    it("★ reaches the next page of candidates when the first page's link is waiting out a failure", async () => {
+      // [Reading only the first page of candidates.]
+      const t = setup({
+        pageSize: 1,
+        page: (url) => (url === "https://ex.com/1" ? { kind: "aborted" } : okPage(url)),
+      });
+      await t.legacy(1);
+      const b = await t.legacy(2);
+      await t.pass.sweep();
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual(["https://ex.com/1", "https://ex.com/2"]);
+      expect(t.status(b)).toBe("pending");
     });
 
     it("★ records nothing when the child cannot start, and moves to the next link", async () => {

@@ -79,7 +79,7 @@ export class SqliteLinkCheckStore implements LinkCheckStore {
     return this.db
       .transaction((): CheckWrite | null => {
         const link = this.db
-          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?")
+          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
           .get(n, owner);
         if (!link) return null;
         const current = this.read(owner, n);

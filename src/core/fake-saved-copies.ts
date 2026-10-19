@@ -415,7 +415,7 @@ export class FakeSavedCopies
 
   async removeCopy(owner: OwnerId, linkId: string, at: Date): Promise<boolean> {
     const row = this.rowOf(owner, linkId);
-    if (row?.status !== "ok") return false;
+    if (row?.status !== "ok" || !(await this.owns(owner, linkId))) return false;
     row.status = "removed";
     row.removedAt = at;
     return true;
@@ -424,7 +424,7 @@ export class FakeSavedCopies
   async restoreCopy(owner: OwnerId, linkId: string, since: Date): Promise<boolean> {
     const row = this.rowOf(owner, linkId);
     if (row?.status !== "removed" || !row.removedAt || row.removedAt < since) return false;
-    if (this.tombstone(row)) return false;
+    if (this.tombstone(row) || !(await this.owns(owner, linkId))) return false;
     row.status = "ok";
     row.removedAt = null;
     return true;

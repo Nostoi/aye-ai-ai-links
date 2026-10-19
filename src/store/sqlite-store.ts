@@ -216,7 +216,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
     const { changes } = this.db
       .prepare(
         `UPDATE links SET last_surfaced_at = ?
-         WHERE id = ? AND owner_id = ? AND last_surfaced_at = ?`,
+         WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND last_surfaced_at = ?`,
       )
       .run(toMs(claim.previous), n, owner, toMs(claim.at));
     return changes === 1;
@@ -352,7 +352,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
     return this.db
       .transaction((): ToolWrite | null => {
         const link = this.db
-          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?")
+          .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
           .get(n, owner);
         if (!link) return null;
         const current = this.readTool(owner, n);
@@ -386,6 +386,9 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   }
 
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {
+    this.db
+      .prepare("DELETE FROM links WHERE owner_id = ? AND url_key = ? AND deleted_at IS NOT NULL")
+      .run(owner, link.urlKey);
     let row: { id: number } | undefined;
     try {
       row = this.db
@@ -457,7 +460,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
       set("why_source", patch.why?.source ?? null);
     }
     if (sets.length === 0) sets.push("id = id");
-    const where = ["id = ?", "owner_id = ?"];
+    const where = ["id = ?", "owner_id = ?", "deleted_at IS NULL"];
     const whereValues: unknown[] = [id, owner];
     if (expected.state !== undefined) {
       where.push("state = ?");
@@ -488,7 +491,8 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   private fillSync(owner: OwnerId, id: number, why: Labelled): Link | null {
     this.db
       .prepare(
-        "UPDATE links SET why_text = ?, why_source = ? WHERE id = ? AND owner_id = ? AND why_text IS NULL",
+        `UPDATE links SET why_text = ?, why_source = ?
+         WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND why_text IS NULL`,
       )
       .run(why.text, why.source, id, owner);
     return this.read(owner, id);
@@ -522,7 +526,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
            WHERE c.owner_id = links.owner_id AND c.link_id = links.id AND c.flagged_at IS NOT NULL))`,
     );
     const mark = this.db.prepare(
-      "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ?",
+      "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ? AND deleted_at IS NULL",
     );
     const claimed: SurfacedClaim[] = [];
     for (const id of ids) {

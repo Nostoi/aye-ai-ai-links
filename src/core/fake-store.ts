@@ -152,7 +152,29 @@ export class FakeStore
     return out;
   }
 
+  /** Removes the link, hidden or not, and everything the store keeps for it, as the table's ON DELETE CASCADE does. */
+  private cascade(owner: OwnerId, id: string): void {
+    const key = imageKey(owner, id);
+    this.owned(owner).delete(id);
+    this.hidden.get(owner)?.delete(id);
+    this.snapshots.get(owner)?.delete(id);
+    this.tokens.get(owner)?.delete(id);
+    this.toolRows.get(owner)?.delete(id);
+    this.checkRows.get(owner)?.delete(id);
+    for (const perLink of [
+      this.imageStates,
+      this.storedImages,
+      this.ownerImages,
+      this.editRecords,
+    ]) {
+      perLink.delete(key);
+    }
+  }
+
   async insertIfAbsent(owner: OwnerId, link: NewLink) {
+    for (const [id, entry] of this.hidden.get(owner) ?? []) {
+      if (entry.link.urlKey === link.urlKey) this.cascade(owner, id);
+    }
     const mine = this.owned(owner);
     for (const existing of mine.values()) {
       if (existing.urlKey === link.urlKey) {
@@ -272,6 +294,14 @@ export class FakeStore
       this.hidden.set(owner, mine);
     }
     mine.set(id, { link, at });
+  }
+
+  /** Test-only: puts a hidden link back. */
+  unhide(owner: OwnerId, id: string): void {
+    const entry = this.hidden.get(owner)?.get(id);
+    if (!entry) return;
+    this.hidden.get(owner)?.delete(id);
+    this.owned(owner).set(id, entry.link);
   }
 
   private isHidden(owner: OwnerId, id: string): boolean {

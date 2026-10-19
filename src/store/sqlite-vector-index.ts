@@ -55,7 +55,7 @@ export class SqliteVectorIndex implements VectorIndexStore {
     const { changes } = this.db
       .prepare(
         `INSERT INTO link_vectors (owner_id, link_id, model_key, dims, text_hash, embedding, embedded_at)
-         SELECT owner_id, id, ?, ?, ?, ?, ? FROM links WHERE id = ? AND owner_id = ?
+         SELECT owner_id, id, ?, ?, ?, ?, ? FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
          ON CONFLICT (link_id, model_key) DO UPDATE SET dims = excluded.dims,
            text_hash = excluded.text_hash, embedding = excluded.embedding,
            embedded_at = excluded.embedded_at`,

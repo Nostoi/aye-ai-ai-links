@@ -23,6 +23,8 @@ export type StoreHarness = {
   seedTag(owner: string, tag: Tag): MaybeAsync<void>;
   /** Hide the link as a deleted one. Test-only. */
   hide(owner: string, id: string, at: Date): MaybeAsync<void>;
+  /** Undo `hide`. Test-only. */
+  unhide(owner: string, id: string): MaybeAsync<void>;
 };
 
 const A = "owner-a";
@@ -1813,6 +1815,43 @@ export function describeStoreContract(
           now: at,
         });
         expect(claimed.map((c) => c.link.id)).toEqual([kept]);
+      });
+
+      it("writes on a hidden link return absent and change nothing", async () => {
+        const { gone } = await twoLinks();
+        const at = new Date("2026-03-01T00:00:00Z");
+        const later = new Date("2026-04-01T00:00:00Z");
+        await h.unhide(A, gone);
+        await h.store.claimSurfaced(A, [gone], { at, notSurfacedAfter: at, now: at });
+        const before = await h.store.get(A, gone);
+        await h.hide(A, gone, clock);
+
+        expect(await h.store.update(A, gone, { title: "x", tags: [] })).toBeNull();
+        expect(await h.store.updateIf(A, gone, {}, { title: "x" })).toBeNull();
+        expect(await h.store.fillWhyIfMissing(A, gone, { text: "w", source: "stated" })).toBeNull();
+        expect(
+          await h.store.claimSurfaced(A, [gone], {
+            at: later,
+            notSurfacedAfter: later,
+            now: later,
+          }),
+        ).toEqual([]);
+        expect(await h.store.unclaimSurfaced(A, gone, { at, previous: null })).toBe(false);
+
+        await h.unhide(A, gone);
+        expect(await h.store.get(A, gone)).toEqual(before);
+      });
+
+      it("saving a hidden link's address makes a new link", async () => {
+        const { gone } = await twoLinks();
+        const again = await saveLink(deps(), A, { url: "https://ex.com/gone", savedBy: "t" });
+        expect(again.created).toBe(true);
+        expect(again.link.id).not.toBe(gone);
+        const sameKey = async () =>
+          (await h.store.listLinks(A)).filter((l) => l.urlKey === again.link.urlKey);
+        expect((await sameKey()).map((l) => l.id)).toEqual([again.link.id]);
+        await h.unhide(A, gone);
+        expect((await sameKey()).map((l) => l.id)).toEqual([again.link.id]);
       });
 
       it("getLink and updateLink answer not_found for a hidden link", async () => {

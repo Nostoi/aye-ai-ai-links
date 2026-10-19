@@ -27,6 +27,7 @@ function harnessFor(store: FakeStore): StoreHarness {
     catalog: (owner) => store.catalog(owner),
     seedTag: (owner, tag) => store.seedTag(owner, tag),
     hide: (owner, id, at) => store.hide(owner, id, at),
+    unhide: (owner, id) => store.unhide(owner, id),
   };
 }
 

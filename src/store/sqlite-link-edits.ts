@@ -113,9 +113,9 @@ export class SqliteLinkEditStore implements LinkEditStore {
   }
 
   private link(owner: OwnerId, n: number) {
-    return this.db.prepare("SELECT title FROM links WHERE owner_id = ? AND id = ?").get(owner, n) as
-      | { title: string | null }
-      | undefined;
+    return this.db
+      .prepare("SELECT title FROM links WHERE owner_id = ? AND id = ? AND deleted_at IS NULL")
+      .get(owner, n) as { title: string | null } | undefined;
   }
 
   private own(owner: OwnerId, n: number) {

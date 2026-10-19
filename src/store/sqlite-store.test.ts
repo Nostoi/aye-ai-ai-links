@@ -51,6 +51,12 @@ function harnessFor(db: Db): StoreHarness {
         Number(id),
       );
     },
+    unhide: (owner, id) => {
+      db.prepare("UPDATE links SET deleted_at = NULL WHERE owner_id = ? AND id = ?").run(
+        owner,
+        Number(id),
+      );
+    },
     seedTag: (owner, t) => {
       db.prepare(
         "INSERT INTO tags (owner_id, key, name, kind, kind_source, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

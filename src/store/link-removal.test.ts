@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { previewDigest } from "../core/digest.js";
 import type { ImageBytes } from "../core/image-store.js";
 import type { LinkCheck } from "../core/link-check-store.js";
+import { copyLimits } from "../core/saved-copy.js";
 import { at, newLink, record } from "../core/snapshot-store-contract.js";
 import type { ToolRecord } from "../core/tool-store.js";
 import { listShelf } from "../core/tools.js";
@@ -170,5 +171,91 @@ describe("hidden links in the digest, Handy and the gone pick", () => {
     hide(tool, gone, plain);
 
     expect(await view()).toEqual({ shelf: [], gone: null, digest: [] });
+  });
+});
+
+const CHILD_TABLES = ["link_tools", "owner_images", "link_edits", "link_checks", "link_vectors"];
+
+describe("writes on a hidden link", () => {
+  it("tool, edit, check, vector and copy writes refuse a hidden link and change nothing", async () => {
+    const { db, deps, embedder, save, hide } = setup();
+    const id = await save({ title: "before" });
+    const bare = await save();
+    const vector = await embedder.embedQuery("marsupial");
+    await deps.tools.updateToolIf(A, id, null, kept);
+    await deps.edits.applyEdit(A, id, { title: "edited", picture: { set: PNG } }, at(3));
+    await deps.checks.updateCheckIf(A, id, null, flagged);
+    await deps.vectorIndex.writeVector(A, id, MODEL_KEY, "h", vector, at(2));
+    db.prepare(
+      `INSERT INTO saved_copies (owner_id, link_id, status, made_at, finished_at, bytes, md_bytes)
+       VALUES (?, ?, 'ok', 1, 2, 5, 5)`,
+    ).run(A, Number(id));
+    const rowsOf = (linkId: string) =>
+      [...CHILD_TABLES, "saved_copies"].map((t) =>
+        db.prepare(`SELECT * FROM ${t} WHERE link_id = ?`).all(Number(linkId)),
+      );
+    const titleOf = () => db.prepare("SELECT title FROM links WHERE id = ?").get(Number(id));
+    const beforeRows = rowsOf(id);
+    const beforeTitle = titleOf();
+    expect(beforeRows.every((rows) => rows.length === 1)).toBe(true);
+    const editId = (db.prepare("SELECT edit_id FROM link_edits").get() as { edit_id: string })
+      .edit_id;
+    hide(id, bare);
+
+    expect(await deps.tools.updateToolIf(A, id, kept, null)).toBeNull();
+    expect(
+      await deps.edits.applyEdit(A, id, { title: "again", picture: "page" }, at(4)),
+    ).toBeNull();
+    expect(await deps.edits.undoEdit(A, id, editId)).toBeNull();
+    expect(
+      await deps.checks.updateCheckIf(A, id, flagged, { ...flagged, stillWorksAt: at(200) }),
+    ).toBeNull();
+    expect(await deps.vectorIndex.writeVector(A, id, MODEL_KEY, "h2", vector, at(9))).toBe(false);
+    expect(await deps.savedCopies.removeCopy(A, id, at(5))).toBe(false);
+    db.prepare("UPDATE saved_copies SET status = 'removed', removed_at = ? WHERE link_id = ?").run(
+      at(4).getTime(),
+      Number(id),
+    );
+    const removed = rowsOf(id);
+    expect(await deps.savedCopies.restoreCopy(A, id, at(0))).toBe(false);
+    expect(await deps.savedCopies.recordNoCopy(A, bare, "none")).toBe(false);
+    const draft = { markdown: "m", imageUrls: [], nonce: "" };
+    expect(await deps.savedCopies.saveCopy(A, bare, draft, copyLimits(10_000), at(6))).toBeNull();
+
+    expect(titleOf()).toEqual(beforeTitle);
+    expect(rowsOf(id)).toEqual(removed);
+    expect(removed.slice(0, -1)).toEqual(beforeRows.slice(0, -1));
+    expect(rowsOf(bare)).toEqual([[], [], [], [], [], []]);
+  });
+
+  it("a new save over a hidden address cascades the old row's children", async () => {
+    const { db, deps, embedder, save, snapshot, hide } = setup();
+    const tag = { key: "t", name: "t", source: "stated", kind: "topic", kindSource: "stated" };
+    const id = await save({ title: "quokka", tags: [tag as never] });
+    await snapshot(id, { text: "page words" });
+    await deps.vectorIndex.writeVector(
+      A,
+      id,
+      MODEL_KEY,
+      "h",
+      await embedder.embedQuery("marsupial"),
+      at(2),
+    );
+    const count = (table: string) =>
+      db
+        .prepare(
+          `SELECT 1 FROM ${table} WHERE ${table === "link_search" ? "rowid" : "link_id"} = ?`,
+        )
+        .all(Number(id)).length;
+    const tables = ["link_tags", "snapshots", "link_vectors", "link_search"];
+    expect(tables.map(count)).toEqual([1, 1, 1, 1]);
+    const urlKey = (await deps.store.get(A, id))?.urlKey as string;
+    hide(id);
+
+    const again = await deps.store.insertIfAbsent(A, { ...newLink(1, at(0)), urlKey });
+
+    expect(again.created).toBe(true);
+    expect(again.link.id).not.toBe(id);
+    expect(tables.map(count)).toEqual([0, 0, 0, 0]);
   });
 });

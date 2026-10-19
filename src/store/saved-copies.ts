@@ -39,6 +39,10 @@ const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error
  */
 const TOMBSTONE = "(status = 'removed' AND image_nonce IS NULL AND finished_at IS NULL)";
 
+/** In an UPDATE of `saved_copies`: the row's link is not deleted. */
+const LINK_LIVE = `EXISTS (SELECT 1 FROM links l WHERE l.owner_id = saved_copies.owner_id
+  AND l.id = saved_copies.link_id AND l.deleted_at IS NULL)`;
+
 const imageName = (n: number, type: ImageType) =>
   `${String(n).padStart(2, "0")}.${IMAGE_EXT[type]}`;
 
@@ -179,7 +183,11 @@ export class SqliteSavedCopyStore
     limits: CopyLimits,
     at: Date,
   ): SaveCopyResult | null | "write" {
-    if (!this.db.prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?").get(id, owner)) {
+    if (
+      !this.db
+        .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
+        .get(id, owner)
+    ) {
       return null;
     }
     const row = this.db
@@ -622,7 +630,11 @@ export class SqliteSavedCopyStore
     if (id === null) return false;
     return this.db
       .transaction((): boolean => {
-        if (!this.db.prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ?").get(id, owner)) {
+        if (
+          !this.db
+            .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
+            .get(id, owner)
+        ) {
           return false;
         }
         const row = this.db
@@ -750,7 +762,7 @@ export class SqliteSavedCopyStore
     if (id === null) return false;
     return this.change(
       `UPDATE saved_copies SET status = 'removed', removed_at = ?
-       WHERE owner_id = ? AND link_id = ? AND status = 'ok'`,
+       WHERE owner_id = ? AND link_id = ? AND status = 'ok' AND ${LINK_LIVE}`,
       toMs(at),
       owner,
       id,
@@ -763,7 +775,7 @@ export class SqliteSavedCopyStore
     return this.change(
       `UPDATE saved_copies SET status = 'ok', removed_at = NULL
        WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND removed_at >= ?
-         AND NOT ${TOMBSTONE}`,
+         AND NOT ${TOMBSTONE} AND ${LINK_LIVE}`,
       owner,
       id,
       toMs(since),

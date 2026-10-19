@@ -1510,8 +1510,6 @@ describe("startServer", () => {
     });
 
     it("★ on stop, ends the backfill's page fetch before the fetcher closes, recording nothing", async () => {
-      // [Stopping the pass after fetcher.close(): the fake's close ends the fetch as a network
-      // error, canResolve answers true, and the backfill would record 'none'.]
       // No text, so the copy pass has no candidate: the backfill is the only one to fetch OLD.
       await seedLegacy(null);
       let asked = false;

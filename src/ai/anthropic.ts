@@ -57,6 +57,7 @@ function wireMessages(messages: ChatMessage[]): WireMessage[] {
 function readReply(data: unknown): ModelReply {
   const root = data as {
     content?: unknown;
+    stop_reason?: unknown;
     usage?: { input_tokens?: unknown; output_tokens?: unknown };
   } | null;
   if (!Array.isArray(root?.content)) throw new AiUnavailable(UNREADABLE);
@@ -75,6 +76,7 @@ function readReply(data: unknown): ModelReply {
   const reply: ModelReply = { text, toolCalls };
   const { input_tokens: input, output_tokens: output } = root.usage ?? {};
   if (typeof input === "number" && typeof output === "number") reply.usage = { input, output };
+  if (root.stop_reason === "max_tokens") reply.truncated = true;
   return reply;
 }
 

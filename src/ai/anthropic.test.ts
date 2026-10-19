@@ -163,6 +163,15 @@ describe("anthropicModel", () => {
     expect(b).not.toHaveProperty("usage");
   });
 
+  it("marks a reply cut off at max_tokens as truncated", async () => {
+    const cut = fake(200, reply([{ type: "text", text: "a" }], { stop_reason: "max_tokens" }));
+    const a = await anthropicModel(CONFIG, cut.fetchImpl).reply(request());
+    expect(a.truncated).toBe(true);
+    const whole = fake(200, reply([{ type: "text", text: "a" }], { stop_reason: "end_turn" }));
+    const b = await anthropicModel(CONFIG, whole.fetchImpl).reply(request());
+    expect(b).not.toHaveProperty("truncated");
+  });
+
   describe("redirects", () => {
     const servers: Server[] = [];
     afterEach(async () => {

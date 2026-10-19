@@ -13,10 +13,12 @@ export type ChatMessage =
   | { role: "assistant"; text: string; toolCalls?: ToolCall[] }
   | { role: "tool"; callId: string; name: string; text: string; isError: boolean };
 
+/** `truncated` is set when the reply hit the token limit, so its text or tool calls may be cut off. */
 export type ModelReply = {
   text: string;
   toolCalls: ToolCall[];
   usage?: { input: number; output: number };
+  truncated?: boolean;
 };
 
 export type ModelRequest = {

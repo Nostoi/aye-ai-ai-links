@@ -46,7 +46,7 @@ function readCall(raw: unknown): ToolCall {
 
 function readReply(data: unknown): ModelReply {
   const root = data as {
-    choices?: { message?: { content?: unknown; tool_calls?: unknown } }[];
+    choices?: { message?: { content?: unknown; tool_calls?: unknown }; finish_reason?: unknown }[];
     usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
   } | null;
   const message = root?.choices?.[0]?.message;
@@ -58,6 +58,7 @@ function readReply(data: unknown): ModelReply {
   };
   const { prompt_tokens: input, completion_tokens: output } = root?.usage ?? {};
   if (typeof input === "number" && typeof output === "number") reply.usage = { input, output };
+  if (root?.choices?.[0]?.finish_reason === "length") reply.truncated = true;
   return reply;
 }
 

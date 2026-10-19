@@ -173,6 +173,15 @@ describe("openAiModel", () => {
     expect(b).not.toHaveProperty("usage");
   });
 
+  it("marks a reply cut off at the length limit as truncated", async () => {
+    const cut = fake(200, { choices: [{ message: { content: "a" }, finish_reason: "length" }] });
+    const a = await openAiModel(CONFIG, cut.fetchImpl).reply(request());
+    expect(a.truncated).toBe(true);
+    const whole = fake(200, { choices: [{ message: { content: "a" }, finish_reason: "stop" }] });
+    const b = await openAiModel(CONFIG, whole.fetchImpl).reply(request());
+    expect(b).not.toHaveProperty("truncated");
+  });
+
   it("treats null content as empty text", async () => {
     const { fetchImpl } = fake(200, reply({ content: null }));
     const out = await openAiModel(CONFIG, fetchImpl).reply(request());

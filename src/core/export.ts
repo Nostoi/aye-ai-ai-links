@@ -57,7 +57,13 @@ export async function writeExport(
     readCopy: (o, id) => guarded(() => s.readCopy(o, id)),
     copyImage: (o, id, n) => guarded(() => s.copyImage(o, id, n)),
   };
-  const reader = createCopyReader({ store: deps.store, copies, gate: deps.readGate });
+  // After a stop, a queued read rejects or reaches its deadline; neither is a read failure.
+  const log = (message: string, error?: unknown) => {
+    if (stop.stopped) return;
+    if (error === undefined) console.error(message);
+    else console.error(message, error);
+  };
+  const reader = createCopyReader({ store: deps.store, copies, gate: deps.readGate, log });
 
   check();
   const exportedAt = deps.now();
@@ -136,10 +142,15 @@ export async function writeExport(
     if (read.madeAt.getTime() !== before) return without("removed");
     const got: { nn: number; image: StoredImage }[] = [];
     let gone = false;
-    for (const nn of [...read.images.keys()].sort((a, b) => a - b)) {
+    const readImage = async (nn: number) => {
       check();
       const image = await reader.image(owner, link.id, nn);
       check();
+      return image;
+    };
+    for (const nn of [...read.images.keys()].sort((a, b) => a - b)) {
+      // A Remove then Undo during the read answers null for a copy that is whole again: read once more.
+      const image = (await readImage(nn)) ?? (await readImage(nn));
       if (image === "unreadable") return without("unreadable");
       if (image === null) {
         gone = true;

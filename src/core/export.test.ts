@@ -405,6 +405,54 @@ describe("writeExport", () => {
     expect(copyFiles(next.files, 1)).toEqual([]);
   });
 
+  it("a copy removed and undone during an image read is re-read once and exports ok with every image", async () => {
+    const h = setup();
+    const IMG1 = pic("image/png", "c1");
+    const IMG2 = pic("image/gif", "c2");
+    const id1 = await h.save(A, 1);
+    await h.finishedCopy(A, id1, [IMG1, IMG2]);
+    const real = h.savedCopies.copyImage.bind(h.savedCopies);
+    const reads: number[] = [];
+    vi.spyOn(h.savedCopies, "copyImage").mockImplementation(async (o, id, n) => {
+      reads.push(n);
+      if (reads.length > 1) return real(o, id, n);
+      expect(await h.savedCopies.removeCopy(A, id1, at(96))).toBe(true);
+      const image = await real(o, id, n);
+      expect(await h.savedCopies.restoreCopy(A, id1, at(96))).toBe(true);
+      return image;
+    });
+
+    const { files, manifest } = await built(h.deps, A);
+
+    expect(reads).toEqual([1, 1, 2]);
+    expect(manifest.links[0]?.copy).toEqual({
+      status: "ok",
+      madeAt: MADE.toISOString(),
+      file: "copies/1/copy.md",
+      images: ["copies/1/images/01.png", "copies/1/images/02.gif"],
+    });
+    expect(files.get("copies/1/images/01.png")).toEqual(IMG1.bytes);
+    expect(files.get("copies/1/images/02.gif")).toEqual(IMG2.bytes);
+  });
+
+  it("a copy read that really fails before any stop is still logged, and gives unreadable", async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
+    const h = setup();
+    const id1 = await h.save(A, 1);
+    await h.finishedCopy(A, id1, []);
+    vi.spyOn(h.savedCopies, "readCopy").mockRejectedValueOnce(new Error("disk said no"));
+
+    const { manifest } = await built(h.deps, A);
+
+    expect(manifest.links[0]?.copy?.status).toBe("unreadable");
+    expect(lines).toEqual([
+      expect.stringContaining(`[saved copies] copy ${id1} could not be read: disk said no`),
+    ]);
+  });
+
   it("missing and unreadable: a gone copy.md, a gone image, a gate timeout; the zip validates each time", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const cases = [
@@ -482,8 +530,11 @@ describe("writeExport", () => {
     );
   });
 
-  it("stop: set during a pending read, no later read starts, including one queued at the gate; the build throws ExportStopped", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+  it("stop: set during a pending read, no later read starts, including one queued at the gate; the build throws ExportStopped, logging no read failure", async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
     const gate = createReadGate();
     let exportQueued = () => {};
     const queued = new Promise<void>((resolve) => {
@@ -542,6 +593,7 @@ describe("writeExport", () => {
     expect(copyImage.mock.calls.filter(([o]) => o === A)).toEqual([]);
     expect(copyInfo.mock.calls.length).toBe(before.copyInfo);
     expect(image.mock.calls.length).toBe(before.image);
+    expect(lines.filter((l) => l.includes("could not be read"))).toEqual([]);
 
     // The stopped build left the gate free: a new build runs to a valid zip.
     const { manifest } = await built(h.deps, A);

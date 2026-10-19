@@ -9,9 +9,10 @@ const CELLS = 3;
 const mosaic = (s: HomeSpace) =>
   Array.from({ length: CELLS }, (_, i) => {
     const image = s.mosaic[i];
-    return image
-      ? `<img src="/images/${encodeURIComponent(image.linkId)}?v=${encodeURIComponent(image.version)}" alt="" loading="lazy">`
-      : `<div class="tint-${i + 1}"></div>`;
+    if (!image) return `<div class="tint-${i + 1}"></div>`;
+    const contain = image.fit === "contain";
+    const img = `<img${contain ? ' class="site-icon"' : ""} src="/images/${encodeURIComponent(image.linkId)}?v=${encodeURIComponent(image.version)}" alt="" loading="lazy">`;
+    return contain ? `<div class="mosaic-icon">${img}</div>` : img;
   }).join("");
 
 const tile = (s: HomeSpace) =>

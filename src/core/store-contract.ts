@@ -1804,6 +1804,17 @@ export function describeStoreContract(
         expect(await h.store.get(A, kept)).not.toBeNull();
       });
 
+      it("claimSurfaced claims the other links and skips a hidden one", async () => {
+        const { gone, kept } = await twoLinks();
+        const at = new Date("2026-03-01T00:00:00Z");
+        const claimed = await h.store.claimSurfaced(A, [gone, kept], {
+          at,
+          notSurfacedAfter: at,
+          now: at,
+        });
+        expect(claimed.map((c) => c.link.id)).toEqual([kept]);
+      });
+
       it("getLink and updateLink answer not_found for a hidden link", async () => {
         const { gone } = await twoLinks();
         expect(await code(getLink(deps(), A, gone))).toBe("not_found");

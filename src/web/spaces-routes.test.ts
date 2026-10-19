@@ -104,11 +104,33 @@ describe("a space page", () => {
     const world = await oauthWorld();
     await save(world, A, "https://a.example/one", ["Kitchen"]);
     const browser = await signedIn(world);
-    for (const before of ["garbage", "1.999999", ""]) {
+    for (const before of ["garbage", ""]) {
       const res = await browser.send(`${path}?tag=kitchen&before=${encodeURIComponent(before)}`);
       expect(res.status, before).toBe(400);
       expect(res.headers.get("cache-control")).toBe("no-store");
     }
+  });
+
+  it.each(["/spaces", "/spaces/done"])(
+    "restarts %s at its first page when the cursor names no live link",
+    async (path) => {
+      const world = await oauthWorld();
+      await save(world, A, "https://a.example/one", ["Kitchen"]);
+      const browser = await signedIn(world);
+      const res = await browser.send(`${path}?tag=kitchen&before=1.999999`);
+      expect(res.status).toBe(303);
+      expect(res.headers.get("location")).toBe(`${path}?tag=kitchen`);
+    },
+  );
+
+  it("a stale cursor on a tag the owner lacks redirects, then the first page is 404", async () => {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/one", ["Kitchen"]);
+    const browser = await signedIn(world);
+    const stale = await browser.send("/spaces?tag=pantry&before=1.999999");
+    expect(stale.status).toBe(303);
+    expect(stale.headers.get("location")).toBe("/spaces?tag=pantry");
+    expect((await browser.send("/spaces?tag=pantry")).status).toBe(404);
   });
 
   it("pages through a space with the Show older links href", async () => {

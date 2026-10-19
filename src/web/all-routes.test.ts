@@ -121,6 +121,31 @@ describe("the All links routes", () => {
     }
   });
 
+  it.each(["/all", "/all/done"])(
+    "redirects Show older to the same list's first page when the cursor's link was deleted (%s)",
+    async (path) => {
+      const world = await oauthWorld();
+      for (let i = 0; i < 25; i++) {
+        const id = await save(world, A, `https://a.example/${i}`);
+        if (path === "/all/done") await depsOf(world).store.update(A, id, { state: "archived" });
+      }
+      const browser = await signedIn(world);
+      const first = `${path}?order=oldest`;
+      const [older] = hrefsOf(html(await browser.send(first)), "#older");
+      expect(older).toBeDefined();
+      const cursor = new URL(older as string, "http://x").searchParams.get("before") as string;
+      const cursorId = cursor.slice(cursor.indexOf(".") + 1);
+      expect(await depsOf(world).store.markDeleted(A, cursorId, new Date(10_000))).toBe(true);
+      const hidden = await browser.send(older as string);
+      expect(hidden.status).toBe(303);
+      expect(hidden.headers.get("location")).toBe(first);
+      expect(await depsOf(world).store.purgeDeleted(new Date(20_000))).toBe(1);
+      const purged = await browser.send(older as string);
+      expect(purged.status).toBe(303);
+      expect(purged.headers.get("location")).toBe(first);
+    },
+  );
+
   it("sends a browser without a session to /login, and refuses another site's Origin", async () => {
     const world = await oauthWorld();
     await save(world, A, "https://a.example/k");

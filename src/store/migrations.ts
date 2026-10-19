@@ -12,6 +12,8 @@ import type { Database } from "better-sqlite3";
  * - A rebuild builds the new table beside the old one and renames it into place; it never
  *   renames the old table first. It reads the triggers and indexes from `sqlite_master`
  *   while it runs, so none that an earlier migration added is lost.
+ * - A function migration carries its own SQL and calls no current app code, so databases upgraded
+ *   at different times end with the same schema.
  */
 export type Migration = string | ((db: Database) => void);
 

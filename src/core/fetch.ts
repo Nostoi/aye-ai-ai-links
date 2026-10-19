@@ -48,7 +48,7 @@ export type ImageOutcome =
   | { kind: "not_image"; contentType: string }
   | FetchFailure;
 
-/** Fetches a link's preview image, under the same address rules as `PageFetcher`. */
+/** Fetches a link's preview image or its site's icon, under the same address rules as `PageFetcher`. */
 export interface ImageFetcher {
   fetch(url: string, signal?: AbortSignal): Promise<ImageOutcome>;
   close(): Promise<void>;

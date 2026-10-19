@@ -35,7 +35,8 @@ function readCall(raw: unknown): ToolCall {
   const call = raw as { id?: unknown; function?: { name?: unknown; arguments?: unknown } };
   const { id, function: fn } = call;
   if (typeof id !== "string" || typeof fn?.name !== "string") throw new AiUnavailable(UNREADABLE);
-  const text = typeof fn.arguments === "string" ? fn.arguments : "{}";
+  const given = typeof fn.arguments === "string" ? fn.arguments : "";
+  const text = given.trim() === "" ? "{}" : given;
   try {
     return { id, name: fn.name, arguments: JSON.parse(text) };
   } catch {
@@ -109,7 +110,7 @@ export function openAiModel(config: OpenAiConfig, fetchImpl: Fetch = fetch): Cha
       try {
         data = await response.json();
       } catch {
-        throw new AiUnavailable(UNREADABLE);
+        throw new AiUnavailable(request.signal.aborted ? "it timed out" : UNREADABLE);
       }
       return readReply(data);
     },

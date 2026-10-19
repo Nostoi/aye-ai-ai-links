@@ -130,6 +130,20 @@ describe("openAiModel", () => {
     ]);
   });
 
+  it("reads empty or whitespace-only arguments as none, not as bad", async () => {
+    for (const args of ["", "  \n"]) {
+      const { fetchImpl } = fake(
+        200,
+        reply({
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "find", arguments: args } }],
+        }),
+      );
+      const out = await openAiModel(CONFIG, fetchImpl).reply(request());
+      expect(out.toolCalls).toEqual([{ id: "c1", name: "find", arguments: {} }]);
+    }
+  });
+
   it("sends a bad-arguments call back with its raw string", async () => {
     const { fetchImpl, seen } = fake(200, reply({ content: "ok" }));
     await openAiModel(CONFIG, fetchImpl).reply(
@@ -233,6 +247,22 @@ describe("openAiModel", () => {
       const error = await failure(fetchImpl, request({ signal: controller.signal }));
       expect(error.reason).toMatch(/timed out/);
       expect(String(error)).not.toContain(KEY);
+    });
+
+    it("reads a time limit that hits while the body is being read as timed out", async () => {
+      const controller = new AbortController();
+      const fetchImpl = (async () =>
+        new Response(
+          new ReadableStream({
+            pull(stream) {
+              controller.abort();
+              stream.error(new DOMException("aborted", "AbortError"));
+            },
+          }),
+          { status: 200 },
+        )) as unknown as Fetch;
+      const error = await failure(fetchImpl, request({ signal: controller.signal }));
+      expect(error.reason).toMatch(/timed out/);
     });
 
     it("turns a reply it can't read into AiUnavailable", async () => {

@@ -23,6 +23,8 @@ export const imageVersion = (sha256: string): string => sha256.slice(0, 16);
  *
  * - A snapshot recorded with an image URL (else an icon URL) is pending until `writeImage` or
  *   `endImage`. A snapshot that names a preview deletes the link's stored icon in the same step.
+ *   Ending an icon while the snapshot names a second icon makes the second pending instead;
+ *   ending a preview never makes an icon pending.
  * - Owner scoping: `writeImage` and `endImage` take the owner and never touch another owner's
  *   link. `pendingImages` is the exception: cross-owner maintenance for the image pass, never
  *   for a request.
@@ -48,7 +50,10 @@ export interface ImageStore {
     at: Date,
   ): Promise<boolean>;
 
-  /** End the pending state with no image. Returns false, writing nothing, unless pending. */
+  /**
+   * End the pending state with no image; for an icon whose snapshot names a second, that one
+   * becomes pending instead. Returns false, writing nothing, unless pending.
+   */
   endImage(
     owner: OwnerId,
     linkId: string,

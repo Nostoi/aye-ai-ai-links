@@ -7,7 +7,7 @@ import { CHILD_ENTRY, createChildExtractor } from "./extract-runner.js";
 
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url);
 const URL0 = "https://example.com/post";
-const PAGE = `<!doctype html><html><head><title>Hi</title><meta property='og:image' content='/i.png'></head><body><article><h1>Quokkas</h1><p>${"Quokkas live on Rottnest island and are very friendly to visitors. ".repeat(20)}</p></article></body></html>`;
+const PAGE = `<!doctype html><html><head><title>Hi</title><meta property='og:image' content='/i.png'><link rel='icon' sizes='192x192' href='/icon.png'></head><body><article><h1>Quokkas</h1><p>${"Quokkas live on Rottnest island and are very friendly to visitors. ".repeat(20)}</p></article></body></html>`;
 const SLOW_TEXT = `<title>Parsed fast</title><body>${"<div>".repeat(190)}<p>${"word ".repeat(200_000)}</p>${"</div>".repeat(190)}`;
 // Child start-up counts against the deadline, and a child that has not yet received the page when
 // it fires is reported `spawn_failed`, not `timeout`. Idle start-up is 40-80 ms; this leaves room
@@ -47,7 +47,11 @@ describe("child extractor: the real extraction code, as the child loads it", () 
     const out = await make({ onSpawn: (pid) => pids.push(pid) }).extract(PAGE, URL0);
     expect(out).toMatchObject({
       kind: "ok",
-      metadata: { title: "Hi", imageUrl: "https://example.com/i.png" },
+      metadata: {
+        title: "Hi",
+        imageUrl: "https://example.com/i.png",
+        iconUrls: ["https://example.com/icon.png"],
+      },
     });
     expect(out.kind === "ok" && out.text).toContain("Rottnest");
     expect(CHILD_ENTRY.pathname).toMatch(/\/src\/fetch\/extract-child\.ts$/);
@@ -104,7 +108,7 @@ describe("child extractor: a hostile page", () => {
     }).extract(PAGE, URL0);
     expect(out).toEqual({
       kind: "timeout",
-      metadata: { title: "Posted first", description: null, imageUrl: null },
+      metadata: { title: "Posted first", description: null, imageUrl: null, iconUrls: [] },
     });
   }, 20_000);
 

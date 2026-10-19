@@ -17,7 +17,7 @@ import {
 import type { OwnerId } from "../core/types.js";
 import { parseId } from "./sqlite-store.js";
 
-/** Fetched preview images (`link_images`, pending in `snapshots.image_status`), and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
+/** Fetched pictures, a page's preview or a site's icon (`link_images`, pending in `snapshots.image_status`), and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
 export class SqliteImageStore implements ImageStore, LinkImageReader {
   constructor(private readonly db: Database) {}
 
@@ -67,7 +67,17 @@ export class SqliteImageStore implements ImageStore, LinkImageReader {
 
   async endImage(owner: OwnerId, linkId: string, imageUrl: string, role: ImageRole, end: ImageEnd) {
     const n = parseId(linkId);
-    return n !== null && this.settle(owner, n, imageUrl, role, end);
+    if (n === null) return false;
+    if (role === "preview") return this.settle(owner, n, imageUrl, role, end);
+    const { changes } = this.db
+      .prepare(
+        `UPDATE snapshots SET icon_url = coalesce(icon_next_url, icon_url), icon_next_url = NULL,
+           image_status = CASE WHEN icon_next_url IS NULL THEN ? ELSE 'pending' END
+         WHERE link_id = ? AND owner_id = ? AND image_status = 'pending'
+           AND image_url IS NULL AND icon_url = ?`,
+      )
+      .run(end, n, owner, imageUrl);
+    return changes === 1;
   }
 
   /** Link ids as the JSON array `json_each` reads; ids never issued are dropped. */

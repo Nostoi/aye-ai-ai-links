@@ -281,7 +281,8 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
           .prepare(
             `UPDATE snapshots SET fetch_status = ?, attempts = ?, next_fetch_at = ?, fetched_at = ?,
                title = ?, description = ?, image_url = ?, icon_url = ?, icon_next_url = ?,
-               image_status = CASE WHEN coalesce(?, ?) IS NOT NULL THEN 'pending' ELSE NULL END,
+               image_status = CASE WHEN coalesce(?, ?) IS NOT NULL THEN 'pending'
+                 WHEN ? IS NOT NULL THEN 'none' ELSE NULL END,
                text = ?, last_error = ?, lease_token = lease_token + 1
              WHERE link_id = ? AND owner_id = ? AND lease_token = ?`,
           )
@@ -297,6 +298,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
             r.iconUrls[1] ?? null,
             r.imageUrl,
             r.iconUrls[0] ?? null,
+            toMs(r.fetchedAt),
             r.text,
             r.lastError,
             n,

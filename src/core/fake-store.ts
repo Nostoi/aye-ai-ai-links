@@ -534,16 +534,22 @@ export class FakeStore
     return versions;
   }
 
-  async image(owner: OwnerId, linkId: string, which?: "page"): Promise<StoredImage | null> {
+  async image(
+    owner: OwnerId,
+    linkId: string,
+    which?: "page" | "own",
+  ): Promise<(StoredImage & { role?: ImageRole }) | null> {
     const key = imageKey(owner, linkId);
     const own = which === "page" ? undefined : this.ownerImages.get(key);
     if (own) return stored(own);
+    if (which === "own") return null;
     const fetched = this.storedImages.get(key);
     return fetched
       ? {
           contentType: fetched.contentType,
           bytes: new Uint8Array(fetched.bytes),
           version: fetched.version,
+          ...(which === "page" ? { role: fetched.role } : {}),
         }
       : null;
   }

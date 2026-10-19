@@ -119,8 +119,7 @@ export const SHRINK_SIDE = 1600;
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
  *   Save stays off until its answer comes. An answer that comes after the dialog closed or reopened
- *   still updates its own card and offers Undo (unless the bar shows another action's), but leaves
- *   the dialog alone; a refusal that comes then
+ *   still updates its own card and offers Undo, but leaves the dialog alone; a refusal that comes then
  *   shows in the page's alert.
  * - Focus goes back to the card's ⋯ when the dialog closes.
  * - Delete link drops the unsaved change, closes the dialog and calls `deleteLinkScript`'s
@@ -430,6 +429,7 @@ form.addEventListener("submit", async (event) => {
   editAlert.textContent = "";
   const target = card;
   const turn = ++saveTurn;
+  const offersAtSave = showUndo.offers();
   saving = true;
   syncBusy();
   const res = await fetch("/links/edit", { method: "POST", body, redirect: "manual" }).catch(() => null);
@@ -449,15 +449,14 @@ form.addEventListener("submit", async (event) => {
   showCard(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => target.isConnected && showUndo(${JSON.stringify("Link updated")}, async () => {
+  const offer = () => target.isConnected && showUndo.offers() === offersAtSave && showUndo(${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
     if (undone) showCard(target, undone);
     else editAlert.textContent = await failure(back);
   });
   heldUndo = dialog.open ? offer : null;
-  // A late answer must not replace another action's Undo on the bar.
-  if (!dialog.open && document.getElementById("undo-bar").hidden) offer();
+  if (!dialog.open) offer();
 });
 }
 }`;

@@ -375,6 +375,71 @@ describe("Delete link beside other scripts", () => {
       await click(p, "#undo-bar button");
       expect(p.sent[1]).toMatchObject({ url: "/links/edit/undo", body: { id: "8", editId: "e1" } });
     });
+
+    it("held for a reopened dialog, leaves the bar of a delete made meanwhile", async () => {
+      let release: () => void = () => {};
+      const wait = new Promise<void>((r) => {
+        release = r;
+      });
+      const p = runPage(
+        searchPage({ query: "", links: [link("7"), link("8"), link("9")], now: NOW }),
+        (s) => (s.url === "/links/edit" ? { status: 200, wait, body: edited } : { status: 204 }),
+      );
+      const dialog = stubDialog(p);
+      p.dispatch(p.$("[data-id='8'] button[data-act=edit]"), "click");
+      (p.$("#edit-title") as HTMLInputElement).value = "Edited";
+      p.dispatch(p.$("#edit-link form"), "submit");
+      await p.settle();
+      dialog.close();
+      await click(p, DELETE);
+      p.dispatch(p.$("[data-id='9'] button[data-act=edit]"), "click");
+      release();
+      await p.settle();
+      dialog.close();
+      await p.settle();
+      expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+    });
+  });
+
+  describe("an edit answered in order", () => {
+    const answer = (editId: string) => ({
+      title: `Edited ${editId}`,
+      url: "https://ex.com/8",
+      initials: "E",
+      version: "v",
+      fit: "cover",
+      picture: { own: false, pageVersion: "v", pageFit: "cover" },
+      editId,
+    });
+    const save = async (p: ReturnType<typeof load>, title: string) => {
+      p.dispatch(p.$("[data-id='8'] button[data-act=edit]"), "click");
+      (p.$("#edit-title") as HTMLInputElement).value = title;
+      p.dispatch(p.$("#edit-link form"), "submit");
+      await p.settle();
+    };
+
+    it("offers its Undo while another action's bar is showing", async () => {
+      const p = load((s) =>
+        s.url === "/links/edit" ? { status: 200, body: answer("e1") } : { status: 204 },
+      );
+      await click(p, DELETE);
+      await save(p, "Edited");
+      expect(p.$("#undo-bar span").textContent).toBe("Link updated");
+    });
+
+    it("a second edit's Undo replaces the first's and undoes the second", async () => {
+      let n = 0;
+      const p = load((s) =>
+        s.url === "/links/edit"
+          ? { status: 200, body: answer(`e${++n}`) }
+          : { status: 200, body: answer("undone") },
+      );
+      await save(p, "First");
+      await save(p, "Second");
+      expect(p.$("#undo-bar span").textContent).toBe("Link updated");
+      await click(p, "#undo-bar button");
+      expect(p.sent[2]).toMatchObject({ url: "/links/edit/undo", body: { id: "8", editId: "e2" } });
+    });
   });
 });
 

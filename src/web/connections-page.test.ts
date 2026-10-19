@@ -1,5 +1,6 @@
-import { parseHTML } from "linkedom";
+import { DOMParser, parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import type { ExportView } from "../core/export-types.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { connectionsPage } from "./connections-page.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
@@ -7,6 +8,7 @@ import { escapeHtml } from "./page.js";
 
 const NOW = new Date("2026-10-14T10:00:00Z");
 const CODE = bookmarkletCode("https://links.example");
+const IDLE: ExportView = { state: "idle" };
 const key = (id: number, name: string) => ({
   id,
   name,
@@ -14,7 +16,7 @@ const key = (id: number, name: string) => ({
   revokedAt: null,
 });
 
-type Answer = { status: number; type?: string; body?: unknown };
+type Answer = { status: number; type?: string; body?: unknown; text?: string };
 type Sent = { url: string; body: unknown; redirect: unknown };
 
 /** A 302 to `/login` as a `redirect: "manual"` fetch reports it. */
@@ -28,29 +30,36 @@ function load(
   answer: (sent: Sent) => Answer,
   keys = [key(7, "codex"), key(8, "claude")],
   navigator: object = {},
+  exportView: ExportView = { state: "idle" },
 ) {
-  const html = connectionsPage({ connections: [], keys, now: NOW, bookmarklet: CODE });
+  const html = connectionsPage({ connections: [], keys, now: NOW, bookmarklet: CODE, exportView });
   const { document, window } = parseHTML(html);
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
     .filter((s) => !s.includes("sign-out"))
     .join("\n");
   const sent: Sent[] = [];
-  const fetch = async (url: string, init: { body: string; redirect?: string }) => {
-    const request = { url, body: JSON.parse(init.body), redirect: init.redirect };
+  const fetch = async (url: string, init?: { body?: string; redirect?: string }) => {
+    const request = {
+      url,
+      body: init?.body === undefined ? undefined : JSON.parse(init.body),
+      redirect: init?.redirect,
+    };
     sent.push(request);
     const a = answer(request);
     return {
       status: a.status,
       ok: a.status >= 200 && a.status < 300,
       type: a.type ?? "basic",
+      text: async () => a.text ?? "",
       json: async () => {
         if (a.body === undefined) throw new SyntaxError("no body");
         return a.body;
       },
     };
   };
-  const noTimer = () => 0;
+  const timers: (() => void)[] = [];
+  const setTimer = (fn: () => void) => timers.push(fn);
   const location = { reloads: 0, reload: () => location.reloads++ };
   const onWindow = new Map<string, (event: unknown) => void>();
   new Function(
@@ -62,6 +71,7 @@ function load(
     "addEventListener",
     "setTimeout",
     "clearTimeout",
+    "DOMParser",
     code,
   )(
     document,
@@ -70,8 +80,9 @@ function load(
     navigator,
     () => ({}),
     (type: string, fn: (event: unknown) => void) => onWindow.set(type, fn),
-    noTimer,
+    setTimer,
     () => {},
+    DOMParser,
   );
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
   const click = (selector: string) =>
@@ -80,10 +91,15 @@ function load(
     $("#make-key").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
   const rows = () =>
     [...document.querySelectorAll("#keys li")].map((li) => (li as HTMLElement).dataset.keyId);
-  const settle = () => new Promise((r) => setTimeout(r, 0));
+  const settle = () => new Promise((r) => setTimeout(r, 10));
+  /** Runs the 5-second timers the script has set so far (not those they set), then lets answers land. */
+  const tick = async () => {
+    for (const fn of timers.splice(0)) fn();
+    await settle();
+  };
   /** A window event, such as `pageshow`, sent to what the script registered. */
   const fire = (type: string, event: unknown) => onWindow.get(type)?.(event);
-  return { $, click, submit, rows, sent, settle, html, location, fire };
+  return { $, click, submit, rows, sent, settle, tick, html, location, fire };
 }
 
 const turnOffButton = (id: number) => `li[data-key-id="${id}"] button`;
@@ -242,6 +258,7 @@ describe("the page as served", () => {
       keys: [key(7, "codex"), { ...key(8, "Retired agent"), revokedAt: NOW }],
       now: NOW,
       bookmarklet: CODE,
+      exportView: IDLE,
     });
     expect(html).toContain("Connected October 13");
     expect(html).toContain(
@@ -255,7 +272,13 @@ describe("the page as served", () => {
 });
 
 describe("Save from your browser", () => {
-  const html = connectionsPage({ connections: [], keys: [], now: NOW, bookmarklet: CODE });
+  const html = connectionsPage({
+    connections: [],
+    keys: [],
+    now: NOW,
+    bookmarklet: CODE,
+    exportView: IDLE,
+  });
 
   it("offers the bookmarklet as a link to drag and as code to copy, the same code in both, with the phone steps", () => {
     const { document } = parseHTML(html);
@@ -372,16 +395,175 @@ describe("Save from your browser", () => {
 });
 
 describe("Your data", () => {
-  const html = connectionsPage({ connections: [], keys: [], now: NOW, bookmarklet: CODE });
-  it("is the page's last section, with a button-sized link to the JSON download and nothing about the zip yet", () => {
-    const { document } = parseHTML(html);
-    const last = [...document.querySelectorAll("main > section")].at(-1);
-    expect(last?.id).toBe("your-data");
-    expect(last?.querySelector("h2")?.textContent).toBe("Your data");
-    const link = last?.querySelector('a[href="/export.json"]');
-    expect(link?.textContent).toBe("Links only (.json)");
-    expect(link?.classList.contains("button")).toBe(true);
-    expect(last?.textContent).not.toMatch(/prepare|zip|picture|bookmarks/i);
+  const view = (exportView: ExportView) =>
+    connectionsPage({ connections: [], keys: [], now: NOW, bookmarklet: CODE, exportView });
+  const answerBy = (answers: Record<string, Answer | Answer[]>) => (sent: Sent) => {
+    const a = answers[sent.url];
+    if (a === undefined) throw new Error(`unexpected request ${sent.url}`);
+    return Array.isArray(a) ? (a.shift() as Answer) : a;
+  };
+  const prepare = 'button[data-export="prepare"]';
+  const preparing: ExportView = { state: "preparing", startedAt: NOW };
+
+  const VIEWS: [ExportView, RegExp[]][] = [
+    [
+      { state: "idle" },
+      [
+        /Download everything you've saved: links, pictures, saved copies and a bookmarks file\./,
+        /<button class="primary" type="button" data-export="prepare">Prepare export<\/button>/,
+      ],
+    ],
+    [preparing, [/<p role="status">Preparing your export…<\/p>/]],
+    [
+      { state: "ready", exportedAt: new Date("2026-10-18T14:05:00Z"), bytes: 1_234_000_000 },
+      [
+        /<a class="button primary" href="\/export.zip">Download<\/a>/,
+        /1\.2 GB, prepared 18 Oct 14:05 UTC\. Kept for 24 hours\./,
+        />Prepare again</,
+      ],
+    ],
+    [{ state: "failed", at: NOW }, [/The last export didn't finish\./, />Try again</]],
+  ];
+  it.each(VIEWS)("shows %o with the links-only JSON under it", (v, shown) => {
+    const html = view(v);
+    const section = html.slice(html.indexOf('<section id="your-data"'));
+    for (const r of shown) expect(section).toMatch(r);
+    expect(section).toContain(`data-state="${v.state}"`);
+    expect(section).toContain('<a class="button" href="/export.json">Links only (.json)</a>');
+    expect(section).toContain('aria-labelledby="your-data-heading"');
+    expect(parseHTML(html).document.querySelector("main > section:last-of-type")?.id).toBe(
+      "your-data",
+    );
     expect(outsideRefs(html)).toEqual([]);
+  });
+
+  it("sizes under a GB read in MB, with one decimal", () => {
+    const ready = (bytes: number) => view({ state: "ready", exportedAt: NOW, bytes });
+    expect(ready(52_400_000)).toContain("52.4 MB, prepared");
+    expect(ready(2_000_000_000)).toContain("2.0 GB, prepared");
+  });
+
+  it("sizes at the MB/GB edge never read as 1000.0 MB", () => {
+    const ready = (bytes: number) => view({ state: "ready", exportedAt: NOW, bytes });
+    expect(ready(0)).toContain("0.0 MB, prepared");
+    expect(ready(999_949_999)).toContain("999.9 MB, prepared");
+    expect(ready(999_999_999)).toContain("1.0 GB, prepared");
+    expect(ready(1_000_000_000)).toContain("1.0 GB, prepared");
+  });
+
+  it("a non-200 answer from /connections is never swapped in, even with a #your-data in it", async () => {
+    const page = load(
+      answerBy({
+        "/export/prepare": { status: 202 },
+        "/connections": { status: 500, text: view({ state: "failed", at: NOW }) },
+      }),
+      undefined,
+      {},
+      { state: "idle" },
+    );
+    page.click(prepare);
+    await page.settle();
+    expect(page.$("#your-data").dataset.state).toBe("idle");
+    expect(page.$("#export-error").textContent).toMatch(/Reload the page/);
+  });
+
+  it("Prepare posts once, then swaps in the fresh section from /connections without reloading", async () => {
+    const page = load(
+      answerBy({
+        "/export/prepare": { status: 202 },
+        "/connections": { status: 200, text: view(preparing) },
+      }),
+      undefined,
+      {},
+      { state: "idle" },
+    );
+    page.$("#key-name").setAttribute("value", "half-typed");
+    page.click(prepare);
+    page.click(prepare);
+    await page.settle();
+    expect(page.sent.map((s) => s.url)).toEqual(["/export/prepare", "/connections"]);
+    expect(page.sent.map((s) => s.redirect)).toEqual(["manual", "manual"]);
+    expect(page.$("#your-data").dataset.state).toBe("preparing");
+    expect(page.$("#your-data").textContent).toContain("Preparing your export…");
+    expect(page.location.reloads).toBe(0);
+    expect(page.$("#key-name").getAttribute("value")).toBe("half-typed");
+  });
+
+  it("while preparing it reads the section again every 5 s and stops once it is ready; Prepare again works after the swap", async () => {
+    const ready: ExportView = { state: "ready", exportedAt: NOW, bytes: 5_000_000 };
+    const page = load(
+      answerBy({
+        "/connections": [
+          { status: 200, text: view(preparing) },
+          { status: 200, text: view(ready) },
+          { status: 200, text: view(preparing) },
+        ],
+        "/export/prepare": { status: 202 },
+      }),
+      undefined,
+      {},
+      preparing,
+    );
+    expect(page.sent).toEqual([]);
+    await page.tick();
+    expect(page.$("#your-data").dataset.state).toBe("preparing");
+    await page.tick();
+    expect(page.$("#your-data").dataset.state).toBe("ready");
+    await page.tick();
+    expect(page.sent.map((s) => s.url)).toEqual(["/connections", "/connections"]);
+    page.click(prepare);
+    await page.settle();
+    expect(page.sent.map((s) => s.url)).toEqual([
+      "/connections",
+      "/connections",
+      "/export/prepare",
+      "/connections",
+    ]);
+  });
+
+  it("a 409 swaps the section too", async () => {
+    const page = load(
+      answerBy({
+        "/export/prepare": { status: 409, body: { code: "already_preparing" } },
+        "/connections": { status: 200, text: view(preparing) },
+      }),
+      undefined,
+      {},
+      { state: "idle" },
+    );
+    page.click(prepare);
+    await page.settle();
+    expect(page.$("#your-data").dataset.state).toBe("preparing");
+    expect(page.$("#export-error").textContent).toBe("");
+  });
+
+  it("any other answer to Prepare is told to the owner and nothing is swapped", async () => {
+    const page = load(answerBy({ "/export/prepare": REDIRECT }), undefined, {}, { state: "idle" });
+    page.click(prepare);
+    await page.settle();
+    expect(page.sent.map((s) => s.url)).toEqual(["/export/prepare"]);
+    expect(page.$("#your-data").dataset.state).toBe("idle");
+    expect(page.$("#export-error").textContent).toMatch(/Reload the page/);
+  });
+
+  it("a sign-in redirect or a page with no #your-data is never swapped in; the owner is told to reload", async () => {
+    const page = load(
+      answerBy({
+        "/export/prepare": { status: 202 },
+        "/connections": [REDIRECT, { status: 200, text: "<html>login</html>" }],
+      }),
+      undefined,
+      {},
+      { state: "idle" },
+    );
+    page.click(prepare);
+    await page.settle();
+    expect(page.$("#your-data").dataset.state).toBe("idle");
+    expect(page.$("#export-error").textContent).toMatch(/Reload the page/);
+    page.$("#export-error").textContent = "";
+    page.click(prepare);
+    await page.settle();
+    expect(page.$("#your-data").dataset.state).toBe("idle");
+    expect(page.$("#export-error").textContent).toMatch(/Reload the page/);
   });
 });

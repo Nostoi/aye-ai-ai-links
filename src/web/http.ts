@@ -737,6 +737,7 @@ export function webApp({
       keys: keys.list(owner),
       now,
       bookmarklet,
+      exportView: { state: "idle" },
     });
     return c.html(page, 200, NO_STORE);
   });

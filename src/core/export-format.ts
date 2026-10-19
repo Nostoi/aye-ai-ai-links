@@ -1,7 +1,8 @@
 import { z } from "zod";
+import type { ImageType } from "./fetch.js";
 import { CHECK_RESULTS, type LinkCheck, type LinkCheckStore } from "./link-check-store.js";
 import type { ProfileStore } from "./profile-store.js";
-import type { SavedCopyReader } from "./saved-copy.js";
+import { IMAGE_EXT, type SavedCopyReader } from "./saved-copy.js";
 import type { LinkStore } from "./store.js";
 import type { ToolRecord, ToolStore } from "./tool-store.js";
 import {
@@ -27,24 +28,36 @@ const isStoredDate = (s: string) => {
   return !Number.isNaN(t.getTime()) && t.toISOString() === s;
 };
 const date = z.string().refine(isStoredDate, "an ISO timestamp with milliseconds, in UTC");
-/** The rule `urlKey` saves by: WHATWG parsing, http or https. It accepts `https:example.com`, which `isWebUrl` refuses. */
+/** The rule `urlKey` saves by: it throws on what the library refuses (not http or https, or a user name or password). */
 const isSavedUrl = (s: string) => {
   try {
-    const { protocol } = new URL(s);
-    return protocol === "http:" || protocol === "https:";
+    urlKey(s);
+    return true;
   } catch {
     return false;
   }
 };
 const source = z.enum(SOURCES);
-/** A path inside the zip: ASCII digits, fixed words and an image extension (spec, "The zip layout"). */
-const zipPath = z.string().regex(/^[a-z0-9]+(\/[a-z0-9.-]+)+$/);
+/** The image extensions v1 may name. A test checks that every `IMAGE_EXT` value is here, so a new image type fails CI. */
+export const V1_IMAGE_EXTS = ["png", "jpg", "gif", "webp"] as const;
+const EXTS = V1_IMAGE_EXTS.join("|");
+/** One anchored pattern per field (spec, "The zip layout"); group 1 is the link's number. */
+const ownPath = new RegExp(`^pictures/([1-9][0-9]*)-own\\.(${EXTS})$`);
+const pagePath = new RegExp(`^pictures/([1-9][0-9]*)-page\\.(${EXTS})$`);
+const copyFile = /^copies\/([1-9][0-9]*)\/copy\.md$/;
+const copyImage = new RegExp(`^copies/([1-9][0-9]*)/images/[0-9]{2}\\.(${EXTS})$`);
+
+export const picturePath = (n: number, which: "own" | "page", type: ImageType) =>
+  `pictures/${n}-${which}.${IMAGE_EXT[type]}`;
+export const copyFilePath = (n: number) => `copies/${n}/copy.md`;
+export const copyImagePath = (n: number, nn: number, type: ImageType) =>
+  `copies/${n}/images/${String(nn).padStart(2, "0")}.${IMAGE_EXT[type]}`;
 const copySchema = z
   .strictObject({
     status: z.enum(["ok", "missing", "unreadable", "removed"]),
     madeAt: date.nullable(),
-    file: zipPath.nullable(),
-    images: z.array(zipPath),
+    file: z.string().regex(copyFile).nullable(),
+    images: z.array(z.string().regex(copyImage)),
   })
   .refine(
     (c) => c.status === "ok" || (c.file === null && c.images.length === 0),
@@ -90,7 +103,17 @@ const linkSchema = z.strictObject({
       stillWorksAt: date.nullable(),
     })
     .nullable(),
-  picture: z.strictObject({ own: zipPath.nullable(), page: zipPath.nullable() }).optional(),
+  picture: z
+    .strictObject({
+      own: z.string().regex(ownPath).nullable(),
+      page: z.string().regex(pagePath).nullable(),
+      pageRole: z.enum(["preview", "icon"]).nullable(),
+    })
+    .refine(
+      (p) => (p.page === null) === (p.pageRole === null),
+      "pageRole is null exactly when page is",
+    )
+    .optional(),
   copy: copySchema.nullable(),
 });
 
@@ -129,6 +152,20 @@ export const manifestSchema = z
           message: "picture is present exactly when includesFiles",
         });
       const c = l.copy;
+      const numbered = [
+        [["picture", "own"], l.picture?.own, ownPath],
+        [["picture", "page"], l.picture?.page, pagePath],
+        [["copy", "file"], c?.file, copyFile],
+        ...(c?.images ?? []).map((img, k) => [["copy", "images", k], img, copyImage] as const),
+      ] as const;
+      for (const [path, value, pattern] of numbered) {
+        if (value && Number(pattern.exec(value)?.[1]) !== i + 1)
+          ctx.addIssue({
+            code: "custom",
+            path: ["links", i, ...path],
+            message: "the path's number is the link's position",
+          });
+      }
       if (
         !m.includesFiles &&
         c &&
@@ -159,6 +196,8 @@ export type ManifestReads = {
   notes: ProfileNote[];
   focus: FocusEntry[];
   copies: Map<string, ManifestCopy>;
+  /** Non-null for a zip manifest: the picture paths by link id. A link with no entry has none. */
+  pictures: Map<string, NonNullable<ManifestLink["picture"]>> | null;
 };
 
 const iso = (d: Date) => d.toISOString();
@@ -204,16 +243,23 @@ function manifestLink(link: Link, r: ManifestReads): ManifestLink {
       stillWorksAt: isoOrNull(check.stillWorksAt),
     },
     copy: r.copies.get(link.id) ?? null,
+    ...(r.pictures && {
+      picture: r.pictures.get(link.id) ?? { own: null, page: null, pageRole: null },
+    }),
   };
 }
 
-/** The links-only manifest (`includesFiles: false`). PR 2 adds the zip's pictures and copy files. */
+/**
+ * The manifest as `links.json` holds it. Links-only (`pictures: null`): `includesFiles` is false and no link has
+ * `picture`. Zip (`pictures` a map): `includesFiles` is true and every link carries `picture`. Copy file paths
+ * come in through `copies`, as the caller wrote them.
+ */
 export function buildManifest(r: ManifestReads): ExportManifest {
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
     exportedAt: iso(r.exportedAt),
-    includesFiles: false,
+    includesFiles: r.pictures !== null,
     links: r.links.map((link) => manifestLink(link, r)),
     tags: r.catalog.map(({ key, name, kind, kindSource, color, pinned, projectStatus }) => ({
       key,
@@ -294,5 +340,40 @@ export async function exportManifest(deps: ManifestDeps, owner: OwnerId): Promis
       { status: row.status, madeAt: iso(row.madeAt), file: null, images: [] },
     ]),
   );
-  return buildManifest({ exportedAt, links, catalog, tools, checks, notes, focus, copies });
+  return buildManifest({
+    exportedAt,
+    links,
+    catalog,
+    tools,
+    checks,
+    notes,
+    focus,
+    copies,
+    pictures: null,
+  });
+}
+
+/** JSON leaves U+007F to U+009F, U+2028, U+2029 and U+FEFF raw, and YAML 1.1 reads some as line breaks. Writes them as \uXXXX. */
+const yamlSafe = (v: unknown) =>
+  JSON.stringify(v).replace(
+    /[\u007f-\u009f\u2028\u2029\ufeff]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+
+/** A saved copy's Markdown behind front matter of JSON-quoted values (R13). The title falls back to the page's, then the URL. */
+export function copyWithFrontMatter(link: Link, madeAt: Date, markdown: string): string {
+  const title = link.title ?? link.snapshot?.title ?? link.url;
+  return [
+    "---",
+    `title: ${yamlSafe(title)}`,
+    `url: ${yamlSafe(link.url)}`,
+    `saved: ${yamlSafe(iso(link.savedAt))}`,
+    `copied: ${yamlSafe(iso(madeAt))}`,
+    `tags: ${yamlSafe(link.tags.map((t) => t.name))}`,
+    `why: ${yamlSafe(link.why?.text ?? null)}`,
+    `why_source: ${yamlSafe(link.why?.source ?? null)}`,
+    "---",
+    "",
+    markdown,
+  ].join("\n");
 }

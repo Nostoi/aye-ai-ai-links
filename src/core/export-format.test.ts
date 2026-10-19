@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   buildManifest,
+  copyFilePath,
+  copyImagePath,
+  copyWithFrontMatter,
   exportFilename,
   exportManifest,
   type ManifestLink,
   type ManifestReads,
   manifestSchema,
+  picturePath,
   toNewLink,
+  V1_IMAGE_EXTS,
 } from "./export-format.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
-import { copyLimits } from "./saved-copy.js";
+import { copyLimits, IMAGE_EXT } from "./saved-copy.js";
 import { A, at, B, newLink } from "./snapshot-store-contract.js";
 import type { Link, LinkTag, Source, Tag, TagKind } from "./types.js";
 import { urlKey } from "./url-key.js";
@@ -140,6 +145,7 @@ const reads = (): ManifestReads => ({
     ["2", ledger("removed", 7)],
     ["999", ledger("ok", 8)],
   ]),
+  pictures: null,
 });
 const keysDeep = (v: unknown): string[] =>
   Array.isArray(v)
@@ -248,7 +254,7 @@ describe("manifestSchema", () => {
   });
   it("refuses, links-only, pictures, file statuses and files; and anywhere, short dates and other schemes", () => {
     refuses((m) => {
-      m.links[0].picture = { own: null, page: null };
+      m.links[0].picture = { own: null, page: null, pageRole: null };
     });
     refuses((m) => {
       m.links[0].copy.status = "missing";
@@ -266,7 +272,9 @@ describe("manifestSchema", () => {
   it("accepts a zip manifest whose every link names its pictures", () => {
     const m = json();
     m.includesFiles = true;
-    for (const l of m.links) l.picture = { own: null, page: "pictures/1-page.jpg" };
+    m.links.forEach((l: ManifestLink, i: number) => {
+      l.picture = { own: null, page: `pictures/${i + 1}-page.jpg`, pageRole: "preview" };
+    });
     expect(manifestSchema.safeParse(m).success).toBe(true);
   });
 });
@@ -319,6 +327,10 @@ describe("every address and date the library can hold", () => {
   );
   it.each(["ftp://x", "not a url"])("still refuses the address %s", (url) => {
     expect(manifestSchema.safeParse(written(odd(url))).success).toBe(false);
+  });
+  it("refuses a URL with a user name or password, as urlKey does (R12)", () => {
+    for (const url of ["https://u:p@ex.com/", "https://u@ex.com/"])
+      expect(manifestSchema.safeParse(written(odd(url))).success).toBe(false);
   });
 });
 
@@ -448,5 +460,158 @@ describe("exportManifest", () => {
     expect(m.notes.map((n) => n.text)).toEqual(["kept"]);
     expect(m.focus.map((f) => f.text)).toEqual(["f0", "f1", "f2", "f3", "f4", "f5", "f6"]);
     expect(m.links).toHaveLength(1);
+  });
+});
+
+describe("N1: one path pattern per field", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: mutating parsed JSON to build refused manifests
+  type Json = any;
+  const zipJson = (): Json => {
+    const m = JSON.parse(JSON.stringify(buildManifest({ ...reads(), pictures: new Map() })));
+    m.links[0].copy = {
+      status: "ok",
+      madeAt: T(6).toISOString(),
+      file: "copies/1/copy.md",
+      images: ["copies/1/images/01.png"],
+    };
+    m.links[0].picture = {
+      own: "pictures/1-own.png",
+      page: "pictures/1-page.jpg",
+      pageRole: "icon",
+    };
+    return m;
+  };
+  it("pageRole round-trips through the schema, and is null exactly when page is", () => {
+    expect(manifestSchema.parse(zipJson()).links[0]?.picture).toEqual({
+      own: "pictures/1-own.png",
+      page: "pictures/1-page.jpg",
+      pageRole: "icon",
+    });
+    for (const bad of [
+      { own: null, page: null, pageRole: "icon" },
+      { own: null, page: "pictures/1-page.jpg", pageRole: null },
+      { own: null, page: "pictures/1-page.jpg", pageRole: "logo" },
+      { own: null, page: null },
+    ]) {
+      const m = zipJson();
+      m.links[0].picture = bad;
+      expect(manifestSchema.safeParse(m).success).toBe(false);
+    }
+  });
+  it("accepts each field's own shape", () =>
+    expect(manifestSchema.safeParse(zipJson()).success).toBe(true));
+  it.each<[string, (m: Json) => void]>([
+    ["own holds a page path", (m) => (m.links[0].picture.own = "pictures/1-page.png")],
+    ["page holds the copy file", (m) => (m.links[0].picture.page = "copies/1/copy.md")],
+    ["file holds an image", (m) => (m.links[0].copy.file = "copies/1/images/01.png")],
+    ["images hold copy.md", (m) => (m.links[0].copy.images = ["copies/1/copy.md"])],
+    ["a dot-dot segment", (m) => (m.links[0].copy.file = "copies/1/../2/copy.md")],
+    ["another link's number", (m) => (m.links[0].picture.own = "pictures/2-own.png")],
+    ["an extension outside v1", (m) => (m.links[0].picture.page = "pictures/1-page.svg")],
+    ["a number with a leading zero", (m) => (m.links[0].copy.file = "copies/01/copy.md")],
+  ])("refuses %s", (_, mutate) => {
+    const m = zipJson();
+    mutate(m);
+    expect(manifestSchema.safeParse(m).success).toBe(false);
+  });
+  it("every image type the app stores has a v1 extension", () =>
+    expect(V1_IMAGE_EXTS).toEqual(expect.arrayContaining(Object.values(IMAGE_EXT))));
+});
+
+describe("N2: v1's value lists are pinned", () => {
+  const link = manifestSchema.shape.links.element.shape;
+  const tag = manifestSchema.shape.tags.element.shape;
+  it.each([
+    ["why source", link.why.unwrap().shape.source.options, ["stated", "asked", "inferred"]],
+    ["state", link.state.options, ["active", "archived"]],
+    ["tag kind", tag.kind.options, ["topic", "project"]],
+    ["project status", tag.projectStatus.unwrap().options, ["active", "done"]],
+    ["tool status", link.tool.unwrap().shape.status.options, ["kept", "suggested", "declined"]],
+    ["check result", link.check.unwrap().shape.result.options, ["alive", "dead", "unknown"]],
+    [
+      "copy status",
+      link.copy.unwrap().shape.status.options,
+      ["ok", "missing", "unreadable", "removed"],
+    ],
+    [
+      "page picture role",
+      link.picture.unwrap().shape.pageRole.unwrap().options,
+      ["preview", "icon"],
+    ],
+    ["image extension", V1_IMAGE_EXTS, ["png", "jpg", "gif", "webp"]],
+  ])("%s", (_, actual, pinned) => expect([...actual]).toEqual(pinned));
+});
+
+describe("buildManifest with pictures", () => {
+  it("is a zip manifest: includesFiles, and every link names its pictures", () => {
+    const m = buildManifest({
+      ...reads(),
+      pictures: new Map([["1", { own: "pictures/1-own.png", page: null, pageRole: null }]]),
+    });
+    expect(m.includesFiles).toBe(true);
+    expect(m.links.map((l) => l.picture)).toEqual([
+      { own: "pictures/1-own.png", page: null, pageRole: null },
+      ...Array(4).fill({ own: null, page: null, pageRole: null }),
+    ]);
+  });
+});
+
+describe("path helpers", () => {
+  it("name each file the schema's patterns accept", () => {
+    expect(picturePath(3, "own", "image/png")).toBe("pictures/3-own.png");
+    expect(picturePath(3, "page", "image/jpeg")).toBe("pictures/3-page.jpg");
+    expect(copyFilePath(12)).toBe("copies/12/copy.md");
+    expect(copyImagePath(12, 4, "image/webp")).toBe("copies/12/images/04.webp");
+  });
+});
+
+describe("copyWithFrontMatter", () => {
+  const title = 'He said "x": a\nb\r\n--- end\u2028\u2029\u0085\u007f';
+  const fm = copyWithFrontMatter(
+    link(1, {
+      title,
+      tags: [tag("Cabin", "stated"), tag("energy", "inferred")],
+      why: { text: "Why: #1", source: "inferred" },
+    }),
+    T(9),
+    "# Body\n",
+  );
+  it("is exactly the front matter, a blank line, then the Markdown", () => {
+    expect(fm).toBe(
+      [
+        "---",
+        'title: "He said \\"x\\": a\\nb\\r\\n--- end\\u2028\\u2029\\u0085\\u007f"',
+        'url: "https://ex.com/1"',
+        `saved: "${T(1).toISOString()}"`,
+        `copied: "${T(9).toISOString()}"`,
+        'tags: ["Cabin","energy"]',
+        'why: "Why: #1"',
+        'why_source: "inferred"',
+        "---",
+        "",
+        "# Body\n",
+      ].join("\n"),
+    );
+  });
+  it("each value JSON-parses back to the original, and only the fences start with ---", () => {
+    const head = fm.split("\n---\n")[0]?.split("\n").slice(1) as string[];
+    expect(JSON.parse((head[0] as string).slice(7))).toBe(title);
+    expect(fm.split("\n").filter((l) => l.startsWith("---"))).toEqual(["---", "---"]);
+  });
+  it("why and why_source are null without a why; the title falls back to the page's, then the URL", () => {
+    const head = (l: Link) => copyWithFrontMatter(l, T(9), "x").split("\n");
+    const page = {
+      status: "ok" as const,
+      fetchedAt: T(2),
+      title: "Page title",
+      description: null,
+      imageUrl: null,
+    };
+    const a = head(link(1, { title: null, snapshot: page }));
+    expect(a[1]).toBe('title: "Page title"');
+    expect(a).toContain("why: null");
+    expect(a).toContain("why_source: null");
+    expect(a).toContain("tags: []");
+    expect(head(link(2, { title: null }))[1]).toBe('title: "https://ex.com/2"');
   });
 });

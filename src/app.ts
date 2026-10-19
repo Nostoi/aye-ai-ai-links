@@ -22,7 +22,7 @@ import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { ReadGate } from "./core/copy-reading.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
-import type { SavedCopyReader, SavedCopyRemover } from "./core/saved-copy.js";
+import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
@@ -118,7 +118,10 @@ export type AppOptions = {
       deps: McpDeps & {
         images: LinkImageReader;
         edits: LinkEditStore;
-        savedCopies: SavedCopyReader & SavedCopyRemover;
+        savedCopies: SavedCopyReader &
+          SavedCopyRemover &
+          Pick<SavedCopyUsage, "usedBytes" | "lastCheck">;
+        copyLimitBytes?: number;
         readGate: ReadGate;
       };
       auth: AuthDeps;

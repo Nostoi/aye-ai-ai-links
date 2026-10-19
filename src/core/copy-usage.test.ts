@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { copiesFull, copyNotice, copyUsageLevel } from "./copy-usage.js";
-import { MAX_COPY_BYTES } from "./saved-copy.js";
+import { describe, expect, it, vi } from "vitest";
+import { copiesFull, copyNotice, copyUsageLevel, readCopyNotice } from "./copy-usage.js";
+import { type FolderCheck, MAX_COPY_BYTES } from "./saved-copy.js";
 
 const LIMIT = 1000 * MAX_COPY_BYTES;
 
@@ -55,5 +55,28 @@ describe("copyNotice", () => {
 
   it("is null at 79%", () => {
     expect(copyNotice(0.79 * LIMIT, LIMIT, "ready")).toBeNull();
+  });
+});
+
+describe("readCopyNotice", () => {
+  const usage = (used: number, folder: FolderCheck = { state: "ready" }) => ({
+    usedBytes: vi.fn(async () => used),
+    lastCheck: () => folder,
+  });
+
+  it("never reads the usage at limit 0", async () => {
+    const copies = usage(0);
+    expect(await readCopyNotice(copies, 0)).toBeNull();
+    expect(copies.usedBytes).not.toHaveBeenCalled();
+  });
+
+  it("never reads the usage while paused", async () => {
+    const copies = usage(0, { state: "unwritable", detail: "x" });
+    expect(await readCopyNotice(copies, LIMIT)).toEqual({ kind: "paused" });
+    expect(copies.usedBytes).not.toHaveBeenCalled();
+  });
+
+  it("reads the usage when ready", async () => {
+    expect(await readCopyNotice(usage(LIMIT), LIMIT)).toEqual({ kind: "full" });
   });
 });

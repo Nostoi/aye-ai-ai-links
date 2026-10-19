@@ -9,6 +9,7 @@ import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
 import { removeSavedCopy, restoreSavedCopy } from "../core/copy-removal.js";
+import { readCopyNotice } from "../core/copy-usage.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
@@ -28,7 +29,7 @@ import {
 import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
-import type { SavedCopyReader, SavedCopyRemover } from "../core/saved-copy.js";
+import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/saved-copy.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -449,7 +450,11 @@ export function webApp({
       images: LinkImageReader;
       edits: LinkEditStore;
       profile: ProfileStore;
-      savedCopies: SavedCopyReader & SavedCopyRemover;
+      savedCopies: SavedCopyReader &
+        SavedCopyRemover &
+        Pick<SavedCopyUsage, "usedBytes" | "lastCheck">;
+      /** The saved-copy limit, for the usage line on All links; 0 or left out shows none. */
+      copyLimitBytes?: number;
       readGate: ReadGate;
     };
   auth: Auth;
@@ -656,6 +661,8 @@ export function webApp({
             page.links.map((l) => l.id),
           );
       const later = before !== undefined;
+      const notice =
+        done || later ? null : await readCopyNotice(deps.savedCopies, deps.copyLimitBytes ?? 0);
       const html = allPage({
         order,
         ...page,
@@ -665,6 +672,7 @@ export function webApp({
         gone,
         pictures,
         copies,
+        notice,
         now: deps.now(),
         done,
         later,

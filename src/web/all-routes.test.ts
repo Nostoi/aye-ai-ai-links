@@ -1,7 +1,11 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseHTML } from "linkedom";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
+import { MAX_COPY_BYTES } from "../core/saved-copy.js";
 import { LINK_ORDERS } from "../core/search.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -128,5 +132,56 @@ describe("the All links routes", () => {
       const foreign = await browser.send(path, { headers: { origin: "https://evil.example" } });
       expect(foreign.status).toBe(403);
     }
+  });
+});
+
+describe("the All links saved-copy line", () => {
+  const MiB = 1024 * 1024;
+  const dirs: string[] = [];
+  async function withCopies(limit: (used: number) => number, used = 0) {
+    const dir = mkdtempSync(join(tmpdir(), "aye-all-notice-"));
+    dirs.push(dir);
+    const world = await oauthWorld({ savedCopyDir: dir, copyLimitBytes: limit(used) });
+    vi.spyOn(world.savedCopies, "usedBytes").mockResolvedValue(used);
+    return world;
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("shows the amber full line when less than the largest copy's room is left", async () => {
+    const world = await withCopies((u) => u + MAX_COPY_BYTES - 1, 5 * MiB);
+    const res = await (await signedIn(world)).send("/all");
+    expect(html(res)).toContain(`<p class="copy-notice needs-you"`);
+    expect(html(res)).toContain("almost full");
+  });
+
+  it("shows the neutral line at 80% of the limit", async () => {
+    const world = await withCopies((u) => u / 0.8, 800 * MiB);
+    const res = await (await signedIn(world)).send("/all");
+    expect(html(res)).toContain(`<p class="copy-notice"`);
+    expect(html(res)).not.toContain("almost full");
+  });
+
+  it("shows the amber paused line when the folder check says unwritable", async () => {
+    const world = await withCopies((u) => u + 1000 * MiB);
+    vi.spyOn(world.savedCopies, "lastCheck").mockReturnValue({ state: "unwritable", detail: "x" });
+    const res = await (await signedIn(world)).send("/all");
+    expect(html(res)).toContain(`<p class="copy-notice needs-you"`);
+    expect(html(res)).not.toContain("almost full");
+  });
+
+  it("shows no line on /all/done or a later page", async () => {
+    const world = await withCopies((u) => u + MAX_COPY_BYTES - 1);
+    const browser = await signedIn(world);
+    const id = await save(world, A, "https://a.example/one");
+    expect(html(await browser.send("/all/done"))).not.toContain('<p class="copy-notice');
+    expect(html(await browser.send(`/all?before=${id}`))).not.toContain('<p class="copy-notice');
+  });
+
+  it("shows no line without the option", async () => {
+    const res = await (await signedIn(await oauthWorld())).send("/all");
+    expect(html(res)).not.toContain('<p class="copy-notice');
   });
 });

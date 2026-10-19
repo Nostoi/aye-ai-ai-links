@@ -367,6 +367,22 @@ const link = (over: Partial<Link> = {}): Link => ({
 const NOW = new Date("2026-10-14T10:00:00Z");
 const results = (links: Link[], query = "battery") => searchPage({ query, links, now: NOW });
 
+describe("Remove saved copy on the search page", () => {
+  it("is on the cards in `copies` only, and the page script posts remove and restore", () => {
+    const html = searchPage({
+      query: "battery",
+      links: [link({ id: "1" }), link({ id: "2" })],
+      now: NOW,
+      copies: new Map([["1", { madeAt: new Date(0) }]]),
+    });
+    const d = parseHTML(html).document;
+    expect(d.querySelectorAll('[data-id="1"] button[data-act=remove-copy]')).toHaveLength(1);
+    expect(d.querySelectorAll('[data-id="2"] button[data-act=remove-copy]')).toHaveLength(0);
+    expect(html).toContain('"/links/copy/remove"');
+    expect(html).toContain('"/links/copy/restore"');
+  });
+});
+
 describe("the search page's cards", () => {
   it("shows the title as a link that opens in a new tab, the host and the date, and the summary", () => {
     const html = results([link({ summary: "Side-by-side <costs>" })]);

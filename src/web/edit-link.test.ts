@@ -94,6 +94,23 @@ const data = (el: Element | undefined) =>
   );
 
 describe("the card menu and the card data", () => {
+  it("offers Read then Remove saved copy only with a copy, Remove being a button", () => {
+    const labels = (html: string) =>
+      [...parseHTML(html).document.querySelectorAll(".card-menu-list > *")].map(
+        (e) => `${e.tagName} ${e.getAttribute("data-act")} ${e.textContent}`,
+      );
+    const withCopy = editMenu(link("7"), { madeAt: new Date(0) });
+    expect(labels(editMenu(link("7")))).toEqual(["BUTTON edit Edit title and picture…"]);
+    expect(labels(withCopy)).toEqual([
+      "BUTTON edit Edit title and picture…",
+      "A read-copy Read saved copy",
+      "BUTTON remove-copy Remove saved copy",
+    ]);
+    expect(
+      parseHTML(withCopy).document.querySelector("button[data-act=remove-copy] svg"),
+    ).not.toBeNull();
+  });
+
   it.each(["search", "all", "space"] as const)(
     "gives every card on %s the menu with Edit title and picture…, and what the dialog needs",
     (name) => {

@@ -4,6 +4,7 @@ import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { removeCopyScript } from "./copy-menu.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
@@ -112,6 +113,7 @@ ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
+${removeCopyScript("space-links", "space-error")}
 ${editLinkScript("space-links", "space-error")}
 </script>
 `;

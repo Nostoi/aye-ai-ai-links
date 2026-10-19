@@ -86,6 +86,7 @@ describe("a card menu row with an href", () => {
     expect([...d.querySelectorAll(".card-menu-list > *")].map((e) => e.textContent)).toEqual([
       "Edit title and picture…",
       "Read saved copy",
+      "Remove saved copy",
     ]);
     const a = d.querySelector("a");
     expect(a?.getAttribute("href")).toBe(copyHref("7"));

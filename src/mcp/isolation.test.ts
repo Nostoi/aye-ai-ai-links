@@ -531,7 +531,14 @@ describe("owner isolation coverage", () => {
     await recordImageUrl(world, linkId, imageUrl);
     const images = new SqliteImageStore(world.links);
     expect(
-      await images.writeImage(A, linkId, imageUrl, { contentType: "image/png", bytes }, new Date()),
+      await images.writeImage(
+        A,
+        linkId,
+        imageUrl,
+        "preview",
+        { contentType: "image/png", bytes },
+        new Date(),
+      ),
     ).toBe(true);
   };
 

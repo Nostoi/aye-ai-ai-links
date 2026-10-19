@@ -10,6 +10,8 @@ export type SnapshotRecord = {
   title: string | null;
   description: string | null;
   imageUrl: string | null;
+  /** The site's icon candidates, best first; at most MAX_ICON_URLS. */
+  iconUrls: string[];
   text: string | null;
   lastError: string | null;
 };
@@ -82,4 +84,12 @@ export interface SnapshotStore {
 export function hasConsistentSchedule(r: SnapshotRecord): boolean {
   const open = r.status === "pending" || r.status === "retrying";
   return open === (r.nextFetchAt !== null);
+}
+
+/** The most icon candidates a record may name. */
+export const MAX_ICON_URLS = 2;
+
+/** True when the record names at most MAX_ICON_URLS icons; both stores refuse a record that fails this. */
+export function hasValidIcons(r: SnapshotRecord): boolean {
+  return r.iconUrls.length <= MAX_ICON_URLS;
 }

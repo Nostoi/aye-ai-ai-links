@@ -1,4 +1,5 @@
 import type { DigestLink, DigestReason } from "../core/digest.js";
+import type { ShownPicture } from "../core/image-store.js";
 import { linkSpace } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { Link, Tag } from "../core/types.js";
@@ -18,7 +19,7 @@ import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
  */
 export type WorthCards = {
   links: DigestLink[];
-  images: Map<string, string>;
+  images: Map<string, ShownPicture>;
   now: Date;
   catalog: Tag[];
   gone: Link | null;

@@ -139,9 +139,9 @@ describe("a check, on SQLite", () => {
       if (!lease) throw new Error("the new link's snapshot should be leasable");
       expect(await links.recordSnapshot("a", link.id, lease.claim, record())).toBe(true);
       const imageUrl = record().imageUrl as string;
-      expect(await new SqliteImageStore(db).writeImage("a", link.id, imageUrl, PNG, SAVED)).toBe(
-        true,
-      );
+      expect(
+        await new SqliteImageStore(db).writeImage("a", link.id, imageUrl, "preview", PNG, SAVED),
+      ).toBe(true);
       const n = Number(link.id);
       const kept = () => ({
         snapshot: db.prepare("SELECT * FROM snapshots WHERE link_id = ?").get(n),

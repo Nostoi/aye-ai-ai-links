@@ -1,6 +1,6 @@
 import { parseHTML } from "linkedom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import { png } from "../core/image-test-kit.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
@@ -9,7 +9,7 @@ import { EDIT_ITEM, editDialog, editMenu } from "./edit-link.js";
 import { handyShelf, NOT_HANDY } from "./handy-shelf.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
-import { searchPage } from "./pages.js";
+import { searchPage, tile } from "./pages.js";
 import { spacePage } from "./space-page.js";
 
 const NOW = new Date("2026-10-17T12:00:00Z");
@@ -53,12 +53,16 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
 const OWN = "own0000000000000";
 const PAGE = "page000000000000";
 
-type Pages = { links: Link[]; pictures?: Map<string, PictureInfo>; images?: Map<string, string> };
+type Pages = {
+  links: Link[];
+  pictures?: Map<string, PictureInfo>;
+  images?: Map<string, ShownPicture>;
+};
 /** The three pages with the edit menu, each showing `links`. */
 const pages = ({
   links,
-  pictures = new Map([["1", { own: true, pageVersion: PAGE }]]),
-  images = new Map([["1", OWN]]),
+  pictures = new Map([["1", { own: true, pageVersion: PAGE, pageFit: "cover" }]]),
+  images = new Map([["1", { version: OWN, fit: "cover" }]]),
 }: Pages) => ({
   search: searchPage({ query: "", links, now: NOW, images, catalog: [KITCHEN], pictures }),
   all: allPage({
@@ -128,8 +132,10 @@ describe("the card menu and the card data", () => {
         "data-title": "Link 1",
         "data-page-title": "The page's title",
         "data-version": OWN,
+        "data-fit": "cover",
         "data-own": "1",
         "data-page-version": PAGE,
+        "data-page-fit": "cover",
         "data-initials": "L1",
       });
       expect(data(second)).toEqual({
@@ -137,8 +143,10 @@ describe("the card menu and the card data", () => {
         "data-title": "",
         "data-page-title": "",
         "data-version": "",
+        "data-fit": "",
         "data-own": "0",
         "data-page-version": "",
+        "data-page-fit": "",
         "data-initials": "EC",
       });
     },
@@ -304,25 +312,22 @@ const answer = (over: Record<string, unknown> = {}) => ({
   url: "https://ex.com/1",
   initials: "L1",
   version: PAGE,
-  picture: { own: false, pageVersion: PAGE },
+  fit: "cover",
+  picture: { own: false, pageVersion: PAGE, pageFit: "cover" },
   editId: null,
   ...over,
 });
 /** The search page with the dialog, `<dialog>`'s two methods stood in for (linkedom has neither). */
 function opened(
   reply: (sent: Post) => Answer = () => ({ status: 200, body: answer() }),
-  pictures: Map<string, PictureInfo> = new Map([["1", { own: false, pageVersion: PAGE }]]),
-  images: Map<string, string> = new Map([["1", PAGE]]),
+  pictures: Map<string, PictureInfo> = new Map([
+    ["1", { own: false, pageVersion: PAGE, pageFit: "cover" }],
+  ]),
+  images: Map<string, ShownPicture> = new Map([["1", { version: PAGE, fit: "cover" }]]),
   links: Link[] = [link("1")],
+  where: "search" | "all" = "search",
 ) {
-  const html = searchPage({
-    query: "",
-    links,
-    now: NOW,
-    images,
-    catalog: [KITCHEN],
-    pictures,
-  });
+  const html = pages({ links, pictures, images })[where];
   const page = runPage(html, reply);
   const dialog = page.$("#edit-link") as HTMLElement & {
     open?: boolean;
@@ -577,8 +582,8 @@ describe("the edit dialog's script", () => {
   it("with the owner's picture over a page picture, offers Use the page's picture, previews it and sends page", async () => {
     const p = opened(
       undefined,
-      new Map([["1", { own: true, pageVersion: PAGE }]]),
-      new Map([["1", OWN]]),
+      new Map([["1", { own: true, pageVersion: PAGE, pageFit: "cover" }]]),
+      new Map([["1", { version: OWN, fit: "cover" }]]),
     );
     p.open();
     const remove = p.$("[data-edit=remove]");
@@ -595,8 +600,8 @@ describe("the edit dialog's script", () => {
   it("with the owner's picture and no page picture, offers Remove picture, and the preview falls back to the initials", () => {
     const p = opened(
       undefined,
-      new Map([["1", { own: true, pageVersion: null }]]),
-      new Map([["1", OWN]]),
+      new Map([["1", { own: true, pageVersion: null, pageFit: null }]]),
+      new Map([["1", { version: OWN, fit: "cover" }]]),
     );
     p.open();
     expect(p.$("[data-edit=remove]").textContent).toBe("Remove picture");
@@ -613,7 +618,7 @@ describe("the edit dialog's script", () => {
             body: answer({
               title: HOSTILE,
               version: OWN,
-              picture: { own: true, pageVersion: PAGE },
+              picture: { own: true, pageVersion: PAGE, pageFit: "cover" },
               editId: "e1",
             }),
           }
@@ -647,6 +652,7 @@ describe("the edit dialog's script", () => {
     expect(p.sent[1]).toMatchObject({ url: "/links/edit/undo", body: { id: "1", editId: "e1" } });
     expect(card.querySelector("h2 a")?.textContent).toBe("https://ex.com/1");
     expect(card.querySelector(".tile")?.tagName).toBe("DIV");
+    expect(card.querySelector(".tile")?.getAttribute("class")).toBe("tile initials-box");
     expect(card.querySelector(".tile")?.getAttribute("aria-hidden")).toBe("true");
     expect(card.getAttribute("data-initials")).toBe("EC");
     expect(card.querySelector(".card-menu summary .visually-hidden")?.textContent).toBe(
@@ -883,8 +889,8 @@ describe("the edit dialog's script", () => {
     const refused = { code: "invalid_input", message: "A title can be at most 200 characters." };
     const p = opened(
       () => ({ status: 400, wait: waits.shift(), body: refused }),
-      new Map([["1", { own: true, pageVersion: PAGE }]]),
-      new Map([["1", OWN]]),
+      new Map([["1", { own: true, pageVersion: PAGE, pageFit: "cover" }]]),
+      new Map([["1", { version: OWN, fit: "cover" }]]),
     );
     const fields = () => [
       p.title.hasAttribute("readonly"),
@@ -974,4 +980,103 @@ describe("the edit dialog's script", () => {
     page.dispatch(page.$('[data-id="2"] button[data-act=edit]'), "click");
     expect((page.$("#edit-title") as HTMLInputElement).value).toBe("Appended");
   });
+});
+
+/** Tag, sorted classes, other attributes and children, so DOM-built and server-built boxes compare. */
+const shape = (e: Element): unknown => ({
+  tag: e.tagName,
+  cls: [...e.classList].sort(),
+  attrs: Object.fromEntries(
+    [...e.attributes].filter((a) => a.name !== "class").map((a) => [a.name, a.value]),
+  ),
+  text: e.children.length === 0 ? e.textContent : undefined,
+  kids: [...e.children].map(shape),
+});
+const SHAPES = {
+  cover: {
+    picture: { version: OWN, fit: "cover" },
+    answer: {
+      version: OWN,
+      fit: "cover",
+      picture: { own: true, pageVersion: PAGE, pageFit: "contain" },
+    },
+  },
+  contain: {
+    picture: { version: PAGE, fit: "contain" },
+    answer: {
+      version: PAGE,
+      fit: "contain",
+      picture: { own: false, pageVersion: PAGE, pageFit: "contain" },
+    },
+  },
+  none: {
+    picture: undefined,
+    answer: { version: null, fit: null, picture: { own: false, pageVersion: null, pageFit: null } },
+  },
+} as const;
+const pairs = (["cover", "contain", "none"] as const).flatMap((a) =>
+  (["cover", "contain", "none"] as const).filter((b) => b !== a).map((b) => [a, b] as const),
+);
+const startInfo = new Map([["1", { own: false, pageVersion: PAGE, pageFit: "contain" as const }]]);
+/** The box tile() draws on the server for this picture, as a parsed element. */
+const serverBox = (picture: ShownPicture | undefined, cls: string) =>
+  parseHTML(`<html><body>${tile(link("1"), picture, cls)}</body></html>`).document.querySelector(
+    `.${cls}`,
+  ) as Element;
+describe.each([
+  ["search", "tile"],
+  ["all", "card-image"],
+] as const)("on %s cards", (page, cls) => {
+  it.each(pairs)("a Save from %s to %s draws exactly tile()'s box", async (from, to) => {
+    const start = SHAPES[from].picture;
+    const p = opened(
+      () => ({ status: 200, body: answer(SHAPES[to].answer) }),
+      startInfo,
+      new Map(start ? [["1", start]] : []),
+      [link("1")],
+      page,
+    );
+    p.open();
+    p.title.value = "x";
+    p.submit();
+    await p.settle();
+    expect(shape(p.$(`[data-id="1"] .${cls}`))).toEqual(shape(serverBox(SHAPES[to].picture, cls)));
+    expect(p.$('[data-id="1"]').getAttribute("data-fit")).toBe(SHAPES[to].answer.fit ?? "");
+  });
+});
+it("an Undo back to an icon draws tile()'s icon box again", async () => {
+  const p = opened(
+    (sent) => ({
+      status: 200,
+      body:
+        sent.url === "/links/edit"
+          ? answer({ ...SHAPES.cover.answer, editId: "e1" })
+          : answer(SHAPES.contain.answer),
+    }),
+    startInfo,
+    new Map([["1", SHAPES.contain.picture]]),
+  );
+  p.open();
+  p.title.value = "x";
+  p.submit();
+  await p.settle();
+  p.dispatch(p.$("#undo-bar button"), "click");
+  await p.settle();
+  expect(shape(p.$('[data-id="1"] .tile'))).toEqual(
+    shape(serverBox(SHAPES.contain.picture, "tile")),
+  );
+});
+it("over an icon, the owner's picture offers Use the site's icon, and previews the icon whole", () => {
+  const p = opened(
+    undefined,
+    new Map([["1", { own: true, pageVersion: PAGE, pageFit: "contain" }]]),
+    new Map([["1", { version: OWN, fit: "cover" }]]),
+  );
+  p.open();
+  expect(p.$(".edit-preview").classList.contains("fit-contain")).toBe(false);
+  expect(p.$("[data-edit=remove]").textContent).toBe("Use the site's icon");
+  p.dispatch(p.$("[data-edit=remove]"), "click");
+  expect(p.$(".edit-preview").classList.contains("fit-contain")).toBe(true);
+  expect(p.$(".edit-preview img")?.getAttribute("class")).toBe("site-icon");
+  expect(p.$(".edit-preview img")?.getAttribute("src")).toBe(`/images/1?page=1&v=${PAGE}`);
 });

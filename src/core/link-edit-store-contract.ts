@@ -47,13 +47,14 @@ export function describeLinkEditStoreContract(
       const lease = await h.links.leaseSnapshot(owner, link.id, at(1), at(100));
       if (!lease) throw new Error("the new link's snapshot should be leasable");
       await h.links.recordSnapshot(owner, link.id, lease.claim, record({ imageUrl: IMG }));
-      if (page) expect(await h.images.writeImage(owner, link.id, IMG, page, at(2))).toBe(true);
+      if (page)
+        expect(await h.images.writeImage(owner, link.id, IMG, "preview", page, at(2))).toBe(true);
       return link.id;
     };
     /** What a card and the dialog read for the link. */
     const shows = async (owner: string, id: string) => ({
       title: (await h.links.get(owner, id))?.title,
-      version: (await h.images.imageVersions(owner, [id])).get(id) ?? null,
+      version: (await h.images.imageVersions(owner, [id])).get(id)?.version ?? null,
       info: (await h.images.pictureInfo(owner, [id])).get(id) ?? null,
     });
     const editId = async (p: Promise<{ editId: string | null } | null>) => {
@@ -72,22 +73,24 @@ export function describeLinkEditStoreContract(
     it("shows the owner's picture over the fetched one in every read; image(…, 'page') serves the fetched one", async () => {
       const id = await linkWith(A, { page: png(1) });
       await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(10)));
-      expect(await h.images.imageVersions(A, [id])).toEqual(new Map([[id, v(png(2))]]));
+      expect(await h.images.imageVersions(A, [id])).toEqual(
+        new Map([[id, { version: v(png(2)), fit: "cover" }]]),
+      );
       expect(await h.images.image(A, id)).toEqual({ ...png(2), version: v(png(2)) });
       expect(await h.images.image(A, id, "page")).toEqual({ ...png(1), version: v(png(1)) });
       expect(await h.images.pictureInfo(A, [id])).toEqual(
-        new Map([[id, { own: true, pageVersion: v(png(1)) }]]),
+        new Map([[id, { own: true, pageVersion: v(png(1)), pageFit: "cover" }]]),
       );
     });
 
     it("keeps the owner's picture showing when a fetch lands after it", async () => {
       const id = await linkWith(A);
       await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(10)));
-      expect(await h.images.writeImage(A, id, IMG, png(1), at(11))).toBe(true);
+      expect(await h.images.writeImage(A, id, IMG, "preview", png(1), at(11))).toBe(true);
       expect(await shows(A, id)).toEqual({
         title: "Page",
         version: v(png(2)),
-        info: { own: true, pageVersion: v(png(1)) },
+        info: { own: true, pageVersion: v(png(1)), pageFit: "cover" },
       });
     });
 
@@ -98,13 +101,42 @@ export function describeLinkEditStoreContract(
       expect(await shows(A, withPage)).toEqual({
         title: "Page",
         version: v(png(1)),
-        info: { own: false, pageVersion: v(png(1)) },
+        info: { own: false, pageVersion: v(png(1)), pageFit: "cover" },
       });
       const bare = await linkWith(A);
       await editId(h.edits.applyEdit(A, bare, { picture: { set: png(3) } }, at(12)));
       await editId(h.edits.applyEdit(A, bare, { picture: "page" }, at(13)));
       expect(await shows(A, bare)).toEqual({ title: "Page", version: null, info: null });
       expect(await h.images.image(A, bare)).toBeNull();
+    });
+
+    it("★ an owner picture over an icon shows as cover; removing it shows the icon whole again", async () => {
+      const { link } = await h.links.insertIfAbsent(A, { ...newLink(++n, at(0)), title: "Page" });
+      const lease = await h.links.leaseSnapshot(A, link.id, at(1), at(100));
+      if (!lease) throw new Error("expected a lease");
+      await h.links.recordSnapshot(
+        A,
+        link.id,
+        lease.claim,
+        record({ imageUrl: null, iconUrls: [IMG] }),
+      );
+      expect(await h.images.writeImage(A, link.id, IMG, "icon", png(1), at(2))).toBe(true);
+      expect(await h.images.imageVersions(A, [link.id])).toEqual(
+        new Map([[link.id, { version: v(png(1)), fit: "contain" }]]),
+      );
+      await editId(h.edits.applyEdit(A, link.id, { picture: { set: png(2) } }, at(10)));
+      expect(await h.images.imageVersions(A, [link.id])).toEqual(
+        new Map([[link.id, { version: v(png(2)), fit: "cover" }]]),
+      );
+      expect((await h.images.pictureInfo(A, [link.id])).get(link.id)).toEqual({
+        own: true,
+        pageVersion: v(png(1)),
+        pageFit: "contain",
+      });
+      await editId(h.edits.applyEdit(A, link.id, { picture: "page" }, at(11)));
+      expect(await h.images.imageVersions(A, [link.id])).toEqual(
+        new Map([[link.id, { version: v(png(1)), fit: "contain" }]]),
+      );
     });
 
     it("writes the title it is given, including none", async () => {
@@ -138,7 +170,7 @@ export function describeLinkEditStoreContract(
       const after = {
         title: "Old",
         version: v(png(2)),
-        info: { own: true, pageVersion: v(png(1)) },
+        info: { own: true, pageVersion: v(png(1)), pageFit: "cover" },
       };
       expect(await shows(A, id)).toEqual(after);
       expect(await h.images.image(A, id)).toEqual({ ...png(2), version: v(png(2)) });
@@ -150,7 +182,11 @@ export function describeLinkEditStoreContract(
       const id = await linkWith(A, { page: png(1) });
       const first = await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(10)));
       expect(await h.edits.undoEdit(A, id, first)).toBe("undone");
-      expect((await shows(A, id)).info).toEqual({ own: false, pageVersion: v(png(1)) });
+      expect((await shows(A, id)).info).toEqual({
+        own: false,
+        pageVersion: v(png(1)),
+        pageFit: "cover",
+      });
       await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(11)));
       const removal = await editId(h.edits.applyEdit(A, id, { picture: "page" }, at(12)));
       expect(await h.edits.undoEdit(A, id, removal)).toBe("undone");
@@ -169,7 +205,7 @@ export function describeLinkEditStoreContract(
       expect(await shows(A, id)).toEqual({
         title: "B",
         version: v(png(2)),
-        info: { own: true, pageVersion: null },
+        info: { own: true, pageVersion: null, pageFit: null },
       });
       expect(await h.edits.undoEdit(A, id, b)).toBe("undone");
       expect(await shows(A, id)).toMatchObject({ title: "A", version: v(png(1)) });

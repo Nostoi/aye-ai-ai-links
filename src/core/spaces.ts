@@ -1,5 +1,5 @@
 import { CoreError } from "./errors.js";
-import type { LinkImageReader } from "./image-store.js";
+import type { LinkImageReader, PictureFit } from "./image-store.js";
 import { type LinkPage, linkPage } from "./link-pages.js";
 import { spaceColor } from "./link-space.js";
 import type { LinkSearch } from "./search.js";
@@ -18,7 +18,7 @@ export type HomeSpace = {
   name: string;
   color: SpaceColor | null;
   /** Up to three stored images, newest first; the tile tints the cells left over. */
-  mosaic: { linkId: string; version: string }[];
+  mosaic: { linkId: string; version: string; fit: PictureFit }[];
 };
 
 type Deps = {
@@ -50,8 +50,10 @@ export async function homeSpaces(
         links.map((l) => l.id),
       );
       const mosaic = links.flatMap((l) => {
-        const version = versions.get(l.id);
-        return version === undefined ? [] : [{ linkId: l.id, version }];
+        const shown = versions.get(l.id);
+        return shown === undefined
+          ? []
+          : [{ linkId: l.id, version: shown.version, fit: shown.fit }];
       });
       return {
         key: tag.key,

@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import type { ShownPicture } from "../core/image-store.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { handyShelf, SHELF_SIZE, SHELF_STALE } from "./handy-shelf.js";
@@ -49,7 +50,7 @@ const render = (
   items: ShelfItem[],
   suggestions: ToolItem[] = [],
   catalog: Tag[] = [],
-  images = new Map<string, string>(),
+  images = new Map<string, ShownPicture>(),
 ) => handyShelf({ items, suggestions, catalog, images });
 const dom = (html: string) => parseHTML(html).document;
 const tiles = (html: string) =>
@@ -108,36 +109,52 @@ describe("the Handy shelf", () => {
 
   it("fills a tile with the link's stored image, from this site, with no alt text", () => {
     const item = kept({ title: "Attendance" });
-    const [tile] = tiles(render([item], [], [], new Map([[item.link.id, "v7"]])));
+    const [tile] = tiles(
+      render([item], [], [], new Map([[item.link.id, { version: "v7", fit: "cover" }]])),
+    );
     const img = tile?.querySelector("img.handy-image") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(`/images/${item.link.id}?v=v7`);
     expect(img.getAttribute("alt")).toBe("");
     expect(img.getAttribute("loading")).toBe("lazy");
-    expect(tile?.querySelector(".handy-initials")).toBeNull();
+    expect(tile?.querySelector(".pic-initials")).toBeNull();
+  });
+
+  it("★ an icon tile shows the icon whole, without .photo, keeping the dark caption", () => {
+    const item = kept({ title: "Attendance" });
+    const [t] = tiles(
+      render([item], [], [], new Map([[item.link.id, { version: "v7", fit: "contain" }]])),
+    );
+    expect(t?.classList.contains("photo")).toBe(false);
+    expect(t?.querySelector("div.handy-image.icon-box > img.site-icon")?.getAttribute("src")).toBe(
+      `/images/${item.link.id}?v=v7`,
+    );
+    expect(t?.querySelector(".pic-initials")).toBeNull();
   });
 
   it("with no image shows a block for the space color and the initials of the title's first two words", () => {
     const [tile] = tiles(render([kept({ title: "attendance tracker online" })]));
     expect(tile?.querySelector("img")).toBeNull();
-    expect(tile?.querySelector("div.handy-image")?.getAttribute("aria-hidden")).toBe("true");
-    const initials = tile?.querySelector(".handy-initials");
+    expect(tile?.querySelector("div.handy-image.initials-box")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
+    const initials = tile?.querySelector(".pic-initials");
     expect(initials?.textContent).toBe("AT");
-    expect(initials?.getAttribute("aria-hidden")).toBe("true");
+    expect(initials?.parentElement?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("takes initials from the host when the link has no title, and skips words with no letter or digit", () => {
     const noTitle = kept({ title: null, url: "https://www.school.example/login" });
     const symbols = kept({ title: "& 2nd Floor Plan" });
     const [a, b] = tiles(render([noTitle, symbols]));
-    expect(a?.querySelector(".handy-initials")?.textContent).toBe("SE");
-    expect(b?.querySelector(".handy-initials")?.textContent).toBe("2F");
+    expect(a?.querySelector(".pic-initials")?.textContent).toBe("SE");
+    expect(b?.querySelector(".pic-initials")?.textContent).toBe("2F");
   });
 
   it("escapes a markup title everywhere it shows, so initials are only letters and digits", () => {
     const html = render([kept({ title: `<script>alert(1)</script> "co" & <b>` })]);
     expect(html).not.toContain("<script>alert");
     expect(html).not.toContain("<b>");
-    expect(tiles(html)[0]?.querySelector(".handy-initials")?.textContent).toBe("SC");
+    expect(tiles(html)[0]?.querySelector(".pic-initials")?.textContent).toBe("SC");
   });
 
   it("names the host only under the title, with the space's dot and not its name", () => {

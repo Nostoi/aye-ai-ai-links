@@ -66,7 +66,7 @@ type Failure = { attempts: number; retryAt: number };
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /**
- * Fetches and stores the preview image of every link whose snapshot named one, in the background
+ * Fetches and stores the preview image, or the site's icon, of every link whose snapshot named one, in the background
  * and apart from the snapshot jobs, so a save never waits for an image.
  *
  * An image is fetched at least once, until it is stored or ends: a refusal, a non-image, a body
@@ -93,7 +93,7 @@ export function createImageIndexer(o: ImageIndexerOptions): ImageIndexer {
   /** The sweep in flight. */
   let running: Promise<void> | undefined;
 
-  const keyOf = (p: PendingImage) => JSON.stringify([p.owner, p.linkId, p.imageUrl]);
+  const keyOf = (p: PendingImage) => JSON.stringify([p.owner, p.linkId, p.imageUrl, p.role]);
 
   /** Fetches one image and records what came of it. Throws only for a store error. */
   async function take(p: PendingImage, key: string): Promise<void> {
@@ -102,7 +102,7 @@ export function createImageIndexer(o: ImageIndexerOptions): ImageIndexer {
     if ("abandon" in verdict) return;
     if ("store" in verdict && outcome.kind === "ok") {
       const { contentType, bytes } = outcome;
-      await store.writeImage(p.owner, p.linkId, p.imageUrl, { contentType, bytes }, now());
+      await store.writeImage(p.owner, p.linkId, p.imageUrl, p.role, { contentType, bytes }, now());
       failures.delete(key);
       return;
     }
@@ -115,7 +115,13 @@ export function createImageIndexer(o: ImageIndexerOptions): ImageIndexer {
         return;
       }
     }
-    await store.endImage(p.owner, p.linkId, p.imageUrl, "end" in verdict ? verdict.end : "none");
+    await store.endImage(
+      p.owner,
+      p.linkId,
+      p.imageUrl,
+      p.role,
+      "end" in verdict ? verdict.end : "none",
+    );
     failures.delete(key);
   }
 

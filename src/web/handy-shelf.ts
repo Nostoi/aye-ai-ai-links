@@ -1,9 +1,9 @@
+import type { ShownPicture } from "../core/image-store.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
 import { hostOf } from "./host.js";
-import { initialsText } from "./initials.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -16,7 +16,7 @@ export type Shelf = {
   items: ShelfItem[];
   suggestions: ToolItem[];
   catalog: Tag[];
-  images: Map<string, string>;
+  images: Map<string, ShownPicture>;
 };
 
 const PLUS = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
@@ -58,12 +58,6 @@ export const NOT_HANDY: MenuItem = { act: "not-handy", icon: MINUS, text: "Not h
 
 const menu = (link: Link) => cardMenu(`More for ${link.title ?? link.url}`, [NOT_HANDY]);
 
-/** What a tile with no picture shows over its space color: the title's initials, else the host's. */
-function initials(link: Link): string {
-  const text = initialsText(link);
-  return text ? `<span class="handy-initials" aria-hidden="true">${escapeHtml(text)}</span>\n` : "";
-}
-
 /** The space's dot and the site's host, without the space's name (All links uses `siteLine`). */
 function hostLine(link: Link, space: Space | null): string {
   const host = hostOf(link.url);
@@ -85,10 +79,10 @@ function card(
   attrs = "",
 ): string {
   const space = linkSpace(link, catalog);
-  const version = images.get(link.id);
-  return `<article class="handy-tile${version === undefined ? "" : " photo"}${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
-${tile(link, version, "handy-image")}
-${version === undefined ? initials(link) : ""}<div class="handy-caption">
+  const picture = images.get(link.id);
+  return `<article class="handy-tile${picture?.fit === "cover" ? " photo" : ""}${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
+${tile(link, picture, "handy-image")}
+<div class="handy-caption">
 <h3>${linkTitle(link)}</h3>
 ${hostLine(link, space)}</div>
 ${after}

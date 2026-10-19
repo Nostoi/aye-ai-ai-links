@@ -4,11 +4,14 @@ import { describe, expect, it } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
 import { png } from "../core/image-test-kit.js";
 import { saveLink } from "../core/links.js";
+import type { SnapshotRecord } from "../core/snapshot-store.js";
+import { record } from "../core/snapshot-store-contract.js";
 import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
+import { SqliteStore } from "../store/sqlite-store.js";
 
 const PNG = png(64, 48);
 
@@ -34,6 +37,7 @@ async function linkWithImage(
       owner,
       link.id,
       imageUrl,
+      "preview",
       { contentType: "image/png", bytes },
       new Date(),
     );
@@ -49,7 +53,7 @@ async function world() {
 }
 
 const versionOf = async (w: World, id: string) =>
-  (await new SqliteImageStore(w.links).imageVersions("owner", [id])).get(id) as string;
+  (await new SqliteImageStore(w.links).imageVersions("owner", [id])).get(id)?.version as string;
 
 describe("the image route", () => {
   it("serves the owner's stored image with its sniffed type, safe headers and a year of private caching", async () => {
@@ -143,7 +147,7 @@ describe("the search page's images", () => {
     });
     const html = String((await owner.send("/search?q=quokka")).body);
     expect(html).toContain(`src="/images/${stored}?v=${await versionOf(w, stored)}"`);
-    expect(html.match(/<div class="tile" aria-hidden="true"><\/div>/g)).toHaveLength(1);
+    expect(html.match(/<div class="tile initials-box" aria-hidden="true">/g)).toHaveLength(1);
     expect(html).not.toContain("cdn.example");
   });
 });
@@ -167,6 +171,58 @@ describe("the Handy shelf's images", () => {
     expect(src(keptId)).toBe(`/images/${keptId}?v=${await versionOf(w, keptId)}`);
     expect(src(guessId)).toBe(`/images/${guessId}?v=${await versionOf(w, guessId)}`);
     expect(shelf.querySelector(`[data-id="${bareId}"] img`)).toBeNull();
-    expect(shelf.querySelector(`[data-id="${bareId}"] .handy-initials`)).not.toBeNull();
+    expect(shelf.querySelector(`[data-id="${bareId}"] .pic-initials`)).not.toBeNull();
+  });
+});
+
+describe("a retired stored icon", () => {
+  it("★ a stored icon retired by a named preview shows initials, and its bytes are gone", async () => {
+    const { w, owner } = await world();
+    const deps = createDeps(w.links, new FakeEmbedder(DIMS));
+    const { link } = await saveLink(deps, "owner", {
+      url: "https://a.example/pea",
+      savedBy: "seed",
+      title: "Photo Pea",
+    });
+    const store = new SqliteStore(w.links);
+    const images = new SqliteImageStore(w.links);
+    const recordNow = async (r: SnapshotRecord) => {
+      const now = new Date();
+      const lease = await store.leaseSnapshot(
+        "owner",
+        link.id,
+        now,
+        new Date(now.getTime() + 60_000),
+      );
+      if (!lease) throw new Error("expected a lease");
+      expect(await store.recordSnapshot("owner", link.id, lease.claim, r)).toBe(true);
+    };
+    await recordNow(
+      record({
+        status: "retrying",
+        nextFetchAt: new Date(0),
+        imageUrl: null,
+        iconUrls: ["https://a.example/i.png"],
+      }),
+    );
+    await images.writeImage(
+      "owner",
+      link.id,
+      "https://a.example/i.png",
+      "icon",
+      { contentType: "image/png", bytes: png(128, 128) },
+      new Date(),
+    );
+    const before = String((await owner.send("/search?q=pea")).body);
+    expect(before).toContain('class="tile icon-box"');
+    await recordNow(record({ imageUrl: "https://a.example/p.png" }));
+    for (const path of ["/search?q=pea", "/all"]) {
+      const card = parseHTML(String((await owner.send(path)).body)).document.querySelector(
+        `[data-id="${link.id}"]`,
+      );
+      expect(card?.querySelector(".initials-box .pic-initials")?.textContent).toBe("PP");
+      expect(card?.querySelector("img")).toBeNull();
+    }
+    expect((await owner.send(`/images/${link.id}`)).status).toBe(404);
   });
 });

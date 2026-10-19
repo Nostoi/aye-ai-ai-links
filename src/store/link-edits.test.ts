@@ -43,13 +43,16 @@ function legacy(): Db {
   return db;
 }
 
+const LINK_IMAGE_COLUMNS =
+  "SELECT owner_id, link_id, content_type, bytes, sha256, fetched_at FROM link_images";
+
 describe("the owner_images and link_edits migration, from the version before it", () => {
   it("is migration 13, adds both tables empty and leaves link_images as it was", () => {
     expect(MIGRATIONS[EDIT_MIGRATION]).toContain("CREATE TABLE owner_images");
     const db = legacy();
-    const fetched = db.prepare("SELECT * FROM link_images").all();
+    const fetched = db.prepare(LINK_IMAGE_COLUMNS).all();
     migrate(db);
-    expect(db.prepare("SELECT * FROM link_images").all()).toEqual(fetched);
+    expect(db.prepare(LINK_IMAGE_COLUMNS).all()).toEqual(fetched);
     expect(db.prepare("SELECT count(*) AS n FROM owner_images").get()).toEqual({ n: 0 });
     expect(db.prepare("SELECT count(*) AS n FROM link_edits").get()).toEqual({ n: 0 });
   });

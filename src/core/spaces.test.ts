@@ -3,6 +3,8 @@ import { CoreError } from "./errors.js";
 import { FakeSearch } from "./fake-search.js";
 import { FakeStore } from "./fake-store.js";
 import { saveLink } from "./links.js";
+import type { SnapshotRecord } from "./snapshot-store.js";
+import { record } from "./snapshot-store-contract.js";
 import { homeSpaces, MOSAIC_DEPTH, openSpace } from "./spaces.js";
 
 let store: FakeStore;
@@ -15,7 +17,11 @@ const deps = () => ({
   search: new FakeSearch(store),
   images: {
     imageVersions: async (_owner: string, ids: string[]) =>
-      new Map(ids.filter((id) => withImage.has(id)).map((id) => [id, `v-${id}`])),
+      new Map(
+        ids
+          .filter((id) => withImage.has(id))
+          .map((id) => [id, { version: `v-${id}`, fit: "cover" as const }]),
+      ),
   },
 });
 
@@ -70,9 +76,9 @@ describe("homeSpaces", () => {
     await pin("a", "kitchen", "clay");
     const [kitchen] = (await homeSpaces(deps(), "a")).spaces;
     expect(kitchen?.mosaic).toEqual([
-      { linkId: newest, version: `v-${newest}` },
-      { linkId: third, version: `v-${third}` },
-      { linkId: second, version: `v-${second}` },
+      { linkId: newest, version: `v-${newest}`, fit: "cover" },
+      { linkId: third, version: `v-${third}`, fit: "cover" },
+      { linkId: second, version: `v-${second}`, fit: "cover" },
     ]);
     expect(kitchen?.mosaic.map((m) => m.linkId)).not.toContain(oldest);
   });
@@ -122,5 +128,31 @@ describe("openSpace", () => {
       expect((refusal as CoreError).code).toBe("not_found");
       expect((refusal as CoreError).message).not.toContain(name);
     }
+  });
+});
+
+describe("a retired icon", () => {
+  it("★ drops a retired icon from the mosaic while the new preview is pending", async () => {
+    const id = await save("a", ["Kitchen"]);
+    await pin("a", "kitchen", "clay");
+    const live = { store, search: new FakeSearch(store), images: store };
+    const recordAt = async (now: number, over: Partial<SnapshotRecord>) => {
+      const lease = await store.leaseSnapshot("a", id, new Date(now), new Date(now + 99_000));
+      if (!lease) throw new Error("expected a lease");
+      expect(await store.recordSnapshot("a", id, lease.claim, record(over))).toBe(true);
+    };
+    await recordAt(clock, {
+      status: "retrying",
+      nextFetchAt: new Date(clock + 50),
+      imageUrl: null,
+      iconUrls: ["https://ex.com/i.png"],
+    });
+    await store.writeImage("a", id, "https://ex.com/i.png", "icon", {
+      contentType: "image/png",
+      bytes: new Uint8Array([1]),
+    });
+    expect((await homeSpaces(live, "a")).spaces[0]?.mosaic.map((m) => m.linkId)).toEqual([id]);
+    await recordAt(clock + 50, { imageUrl: "https://ex.com/p.png" });
+    expect((await homeSpaces(live, "a")).spaces[0]?.mosaic).toEqual([]);
   });
 });

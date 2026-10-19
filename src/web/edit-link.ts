@@ -1,4 +1,4 @@
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { titleFits } from "../core/links.js";
 import type { CopyInfo } from "../core/saved-copy.js";
@@ -39,16 +39,18 @@ export const editMenu = (link: Link, copy?: CopyInfo) =>
  */
 export function editData(
   link: Link,
-  version: string | undefined,
+  picture: ShownPicture | undefined,
   info: PictureInfo | undefined,
 ): string {
   const page = link.snapshot?.title ?? "";
   const data: [string, string][] = [
     ["title", link.title ?? ""],
     ["page-title", titleFits(page) ? page : ""],
-    ["version", version ?? ""],
+    ["version", picture?.version ?? ""],
+    ["fit", picture?.fit ?? ""],
     ["own", info?.own ? "1" : "0"],
     ["page-version", info?.pageVersion ?? ""],
+    ["page-fit", info?.pageFit ?? ""],
     ["initials", initialsText(link)],
   ];
   return data.map(([name, value]) => ` data-${name}="${escapeHtml(value)}"`).join("");
@@ -168,9 +170,15 @@ const render = (note) => {
   if (picture && picture.kind === "file") src = pickUrl;
   else if (picture && picture.kind === "page") src = d.pageVersion ? imageUrl(d.id, d.pageVersion, true) : null;
   else if (d.version) src = imageUrl(d.id, d.version, false);
+  const icon =
+    picture && picture.kind === "page"
+      ? d.pageFit === "contain"
+      : !picture && Boolean(d.version) && d.fit === "contain";
+  preview.classList.toggle("fit-contain", icon);
   for (const old of preview.querySelectorAll("img, .edit-initials")) old.remove();
   if (src) {
     const img = document.createElement("img");
+    if (icon) img.setAttribute("class", "site-icon");
     img.setAttribute("src", src);
     img.setAttribute("alt", "");
     preview.prepend(img);
@@ -185,7 +193,13 @@ const render = (note) => {
   chip.textContent = words;
   chip.hidden = words === "";
   removeButton.hidden = !((picture && picture.kind === "file") || (!picture && own));
-  removeButton.textContent = (own ? d.pageVersion : d.version) ? "Use the page's picture" : "Remove picture";
+  const fetched = own ? d.pageVersion : d.version;
+  const fetchedFit = own ? d.pageFit : d.fit;
+  removeButton.textContent = fetched
+    ? fetchedFit === "contain"
+      ? "Use the site's icon"
+      : "Use the page's picture"
+    : "Remove picture";
 };
 const shrink = async (file) => {
   const url = URL.createObjectURL(file);
@@ -240,8 +254,10 @@ const showCard = (target, answer) => {
   const d = target.dataset;
   d.title = answer.title === null ? "" : answer.title;
   d.version = answer.version === null ? "" : answer.version;
+  d.fit = answer.fit || "";
   d.own = answer.picture.own ? "1" : "0";
   d.pageVersion = answer.picture.pageVersion === null ? "" : answer.picture.pageVersion;
+  d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
   const label = answer.title === null ? answer.url : answer.title;
   const heading = target.querySelector(".result-body h2, .card-body h3");
@@ -249,13 +265,29 @@ const showCard = (target, answer) => {
   const named = target.querySelector(".card-menu summary .visually-hidden");
   if (named) named.textContent = "More for " + label;
   const tile = target.querySelector(".tile, .card-image");
-  const next = document.createElement(answer.version ? "img" : "div");
-  next.className = tile.getAttribute("class");
-  if (answer.version) {
-    next.setAttribute("src", imageUrl(d.id, answer.version, false));
-    next.setAttribute("alt", "");
-    next.setAttribute("loading", "lazy");
-  } else next.setAttribute("aria-hidden", "true");
+  const lazyImage = (cls) => {
+    const img = document.createElement("img");
+    img.className = cls;
+    img.setAttribute("src", imageUrl(d.id, answer.version, false));
+    img.setAttribute("alt", "");
+    img.setAttribute("loading", "lazy");
+    return img;
+  };
+  const box = tile.getAttribute("class").split(" ")[0];
+  let next;
+  if (answer.version && answer.fit === "cover") next = lazyImage(box);
+  else {
+    next = document.createElement("div");
+    next.className = box + (answer.version ? " icon-box" : " initials-box");
+    next.setAttribute("aria-hidden", "true");
+    if (answer.version) next.append(lazyImage("site-icon"));
+    else if (answer.initials) {
+      const initials = document.createElement("span");
+      initials.className = "pic-initials";
+      initials.textContent = answer.initials;
+      next.append(initials);
+    }
+  }
   tile.replaceWith(next);
 };
 const giveFocusBack = () => {

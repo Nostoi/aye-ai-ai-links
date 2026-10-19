@@ -2,11 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   type ImageBytes,
   type ImageEnd,
+  type ImageRole,
   type ImageStore,
   imageVersion,
   type LinkImageReader,
   type PendingImage,
+  type PictureFit,
   type PictureInfo,
+  type ShownPicture,
   type StoredImage,
 } from "./image-store.js";
 import {
@@ -20,6 +23,7 @@ import {
 import type { LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js";
 import {
   hasConsistentSchedule,
+  hasValidIcons,
   type SnapshotLease,
   type SnapshotRecord,
   type SnapshotStore,
@@ -40,6 +44,8 @@ import type {
 
 type ImageStatus = "pending" | "ok" | ImageEnd;
 const imageKey = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
+/** How a fetched picture of this role fits its box. */
+const roleFit = (role: ImageRole): PictureFit => (role === "icon" ? "contain" : "cover");
 
 type OwnRecord = ImageBytes & { sha256: string; setAt: Date };
 type EditRecord = {
@@ -76,7 +82,7 @@ export class FakeStore
   private tags = new Map<OwnerId, Map<string, Tag>>();
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
-  private storedImages = new Map<string, StoredImage>();
+  private storedImages = new Map<string, StoredImage & { role: ImageRole }>();
   /** The owner's pictures and each link's last edit record, by `imageKey`. */
   private ownerImages = new Map<string, OwnRecord>();
   private editRecords = new Map<string, EditRecord>();
@@ -160,6 +166,7 @@ export class FakeStore
       title: null,
       description: null,
       imageUrl: null,
+      iconUrls: [],
       text: null,
       lastError: null,
     });
@@ -208,10 +215,14 @@ export class FakeStore
   async recordSnapshot(owner: OwnerId, linkId: string, claim: number, result: SnapshotRecord) {
     const mine = this.snapshotsOf(owner);
     if (!mine.has(linkId) || this.tokenOf(owner, linkId) !== claim) return false;
-    if (!hasConsistentSchedule(result)) return false;
+    if (!hasConsistentSchedule(result) || !hasValidIcons(result)) return false;
     mine.set(linkId, structuredClone(result));
-    if (result.imageUrl === null) this.imageStates.delete(imageKey(owner, linkId));
-    else this.imageStates.set(imageKey(owner, linkId), { status: "pending" });
+    const key = imageKey(owner, linkId);
+    if ((result.imageUrl ?? result.iconUrls[0] ?? null) === null) this.imageStates.delete(key);
+    else this.imageStates.set(key, { status: "pending" });
+    if (result.imageUrl !== null && this.storedImages.get(key)?.role === "icon") {
+      this.storedImages.delete(key);
+    }
     this.bumpToken(owner, linkId);
     return true;
   }
@@ -476,37 +487,49 @@ export class FakeStore
     for (const [owner, mine] of this.snapshots) {
       for (const [linkId, s] of mine) {
         const state = this.imageStates.get(imageKey(owner, linkId));
-        if (s.imageUrl === null || state?.status !== "pending") continue;
+        const url = s.imageUrl ?? s.iconUrls[0] ?? null;
+        if (url === null || state?.status !== "pending") continue;
         if (afterId !== null && order(linkId) <= order(afterId)) continue;
-        pending.push({ owner, linkId, imageUrl: s.imageUrl });
+        pending.push({
+          owner,
+          linkId,
+          imageUrl: url,
+          role: s.imageUrl === null ? "icon" : "preview",
+        });
       }
     }
     return pending.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
   }
 
-  async writeImage(owner: OwnerId, linkId: string, imageUrl: string, image: ImageBytes) {
-    if (!this.settle(owner, linkId, imageUrl, "ok")) return false;
+  async writeImage(
+    owner: OwnerId,
+    linkId: string,
+    imageUrl: string,
+    role: ImageRole,
+    image: ImageBytes,
+  ) {
+    if (!this.settle(owner, linkId, imageUrl, role, "ok")) return false;
     const sha256 = createHash("sha256").update(image.bytes).digest("hex");
     this.storedImages.set(imageKey(owner, linkId), {
       contentType: image.contentType,
       bytes: new Uint8Array(image.bytes),
       version: imageVersion(sha256),
+      role,
     });
     return true;
   }
 
-  async endImage(owner: OwnerId, linkId: string, imageUrl: string, end: ImageEnd) {
-    return this.settle(owner, linkId, imageUrl, end);
+  async endImage(owner: OwnerId, linkId: string, imageUrl: string, role: ImageRole, end: ImageEnd) {
+    return this.settle(owner, linkId, imageUrl, role, end);
   }
 
   async imageVersions(owner: OwnerId, linkIds: string[]) {
-    const versions = new Map<string, string>();
+    const versions = new Map<string, ShownPicture>();
     for (const id of linkIds) {
       const own = this.ownerImages.get(imageKey(owner, id));
-      const version = own
-        ? imageVersion(own.sha256)
-        : this.storedImages.get(imageKey(owner, id))?.version;
-      if (version !== undefined) versions.set(id, version);
+      const page = this.storedImages.get(imageKey(owner, id));
+      if (own) versions.set(id, { version: imageVersion(own.sha256), fit: "cover" });
+      else if (page) versions.set(id, { version: page.version, fit: roleFit(page.role) });
     }
     return versions;
   }
@@ -516,15 +539,26 @@ export class FakeStore
     const own = which === "page" ? undefined : this.ownerImages.get(key);
     if (own) return stored(own);
     const fetched = this.storedImages.get(key);
-    return fetched ? structuredClone(fetched) : null;
+    return fetched
+      ? {
+          contentType: fetched.contentType,
+          bytes: new Uint8Array(fetched.bytes),
+          version: fetched.version,
+        }
+      : null;
   }
 
   async pictureInfo(owner: OwnerId, linkIds: string[]) {
     const info = new Map<string, PictureInfo>();
     for (const id of linkIds) {
       const own = this.ownerImages.has(imageKey(owner, id));
-      const page = this.storedImages.get(imageKey(owner, id))?.version ?? null;
-      if (own || page !== null) info.set(id, { own, pageVersion: page });
+      const page = this.storedImages.get(imageKey(owner, id));
+      if (own || page)
+        info.set(id, {
+          own,
+          pageVersion: page?.version ?? null,
+          pageFit: page ? roleFit(page.role) : null,
+        });
     }
     return info;
   }
@@ -586,11 +620,19 @@ export class FakeStore
     return "undone";
   }
 
-  private settle(owner: OwnerId, linkId: string, imageUrl: string, status: ImageStatus): boolean {
+  private settle(
+    owner: OwnerId,
+    linkId: string,
+    imageUrl: string,
+    role: ImageRole,
+    status: ImageStatus,
+  ): boolean {
     const key = imageKey(owner, linkId);
     const state = this.imageStates.get(key);
-    const url = this.snapshots.get(owner)?.get(linkId)?.imageUrl;
-    if (state?.status !== "pending" || url !== imageUrl) return false;
+    const s = this.snapshots.get(owner)?.get(linkId);
+    const url = s?.imageUrl ?? s?.iconUrls[0] ?? null;
+    const pendingRole: ImageRole = s?.imageUrl == null ? "icon" : "preview";
+    if (state?.status !== "pending" || url !== imageUrl || pendingRole !== role) return false;
     this.imageStates.set(key, { status });
     return true;
   }

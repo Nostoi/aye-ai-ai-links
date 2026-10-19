@@ -7,7 +7,14 @@ import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { itRecordsOpenings, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
-import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
+import {
+  consentExpiredPage,
+  consentPage,
+  loginPage,
+  oauthErrorPage,
+  searchPage,
+  tile,
+} from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { saveForm } from "./save-form.js";
 import { spacePage } from "./space-page.js";
@@ -192,7 +199,12 @@ const PAGES: [string, string][] = [
     homePage({
       ...EMPTY_HOME,
       spaces: spacesSection([
-        { key: "kitchen", name: "Kitchen", color: "clay", mosaic: [{ linkId: "1", version: "v" }] },
+        {
+          key: "kitchen",
+          name: "Kitchen",
+          color: "clay",
+          mosaic: [{ linkId: "1", version: "v", fit: "cover" }],
+        },
       ]),
     }),
   ],
@@ -442,10 +454,12 @@ describe("the search page's cards", () => {
         link({ id: "8", snapshot: { ...remote, imageUrl: "https://cdn.example/8.png" } }),
       ],
       now: NOW,
-      images: new Map([["7", "abc123"]]),
+      images: new Map([["7", { version: "abc123", fit: "cover" }]]),
     });
     expect(html).toContain('<img class="tile" src="/images/7?v=abc123" alt="" loading="lazy">');
-    expect(html.match(/<div class="tile" aria-hidden="true"><\/div>/g)).toHaveLength(1);
+    expect(
+      html.match(/<div class="tile initials-box" aria-hidden="true"><span class="pic-initials">/g),
+    ).toHaveLength(1);
     expect(html).not.toContain("cdn.example");
     expect(outsideRefs(html)).toEqual([]);
   });
@@ -507,5 +521,50 @@ describe("Keep handy on search results", () => {
     expect(parseHTML(html).document.querySelectorAll("#results-error[role=alert]")).toHaveLength(1);
     expect(html.match(/const post = /g)).toHaveLength(1);
     expect(() => runPage(html)).not.toThrow();
+  });
+});
+
+describe("tile()", () => {
+  const l = link({ id: "7", title: "Photo Pea" });
+  it.each([
+    [
+      "cover",
+      { version: "v1", fit: "cover" },
+      '<img class="card-image" src="/images/7?v=v1" alt="" loading="lazy">',
+    ],
+    [
+      "contain",
+      { version: "v1", fit: "contain" },
+      '<div class="card-image icon-box" aria-hidden="true"><img class="site-icon" src="/images/7?v=v1" alt="" loading="lazy"></div>',
+    ],
+    [
+      "none",
+      undefined,
+      '<div class="card-image initials-box" aria-hidden="true"><span class="pic-initials">PP</span></div>',
+    ],
+  ] as const)("renders %s", (_, picture, html) => {
+    expect(tile(l, picture, "card-image")).toBe(html);
+  });
+  it("leaves out the span when there are no initials, and escapes them", () => {
+    expect(tile(link({ id: "8", title: "!!", url: "not a url" }), undefined)).toBe(
+      '<div class="tile initials-box" aria-hidden="true"></div>',
+    );
+    expect(tile(link({ id: "9", title: "<b>x</b> y" }), undefined)).not.toContain("<b>");
+  });
+});
+
+describe("the search card's tile", () => {
+  it.each([
+    ["cover", { version: "v1", fit: "cover" }, "img.tile"],
+    ["contain", { version: "v1", fit: "contain" }, "div.tile.icon-box > img.site-icon"],
+    ["none", undefined, "div.tile.initials-box > span.pic-initials"],
+  ] as const)("renders %s", (_, picture, selector) => {
+    const html = searchPage({
+      query: "q",
+      links: [link({ id: "7" })],
+      now: NOW,
+      images: new Map(picture ? [["7", picture]] : []),
+    });
+    expect(parseHTML(html).document.querySelector(`.result ${selector}`)).not.toBeNull();
   });
 });

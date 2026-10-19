@@ -8,6 +8,7 @@ import {
   RETRY_BASE_MS,
   RETRY_MAX_MS,
 } from "./image-indexer.js";
+import type { SnapshotRecord } from "./snapshot-store.js";
 import { at, newLink, record } from "./snapshot-store-contract.js";
 
 const OWNER = "o";
@@ -110,7 +111,7 @@ describe("the image pass", () => {
       t.advance(RETRY_MAX_MS * 10);
       await t.indexer.sweep();
       expect(t.calls).toHaveLength(1);
-      expect(ended).toHaveBeenCalledWith(OWNER, id, "https://ex.com/1.png", end);
+      expect(ended).toHaveBeenCalledWith(OWNER, id, "https://ex.com/1.png", "preview", end);
       expect(await t.store.image(OWNER, id)).toBeNull();
       expect(await t.pending()).toEqual([]);
     },
@@ -156,7 +157,7 @@ describe("the image pass", () => {
       waits.push(waited);
     }
     expect(waits).toEqual([1, 2, 4, 8].map((k) => Math.min(k * RETRY_BASE_MS, RETRY_MAX_MS)));
-    expect(ended).toHaveBeenCalledWith(OWNER, id, "https://ex.com/1.png", "none");
+    expect(ended).toHaveBeenCalledWith(OWNER, id, "https://ex.com/1.png", "preview", "none");
     expect(await t.pending()).toEqual([]);
   });
 
@@ -261,5 +262,77 @@ describe("the image pass", () => {
     await t.indexer.sweep();
     expect(write).toHaveBeenCalledTimes(2);
     expect(await t.store.image(OWNER, id)).not.toBeNull();
+  });
+});
+
+async function recordOn(store: FakeStore, id: string, now: Date, over: Partial<SnapshotRecord>) {
+  const lease = await store.leaseSnapshot(OWNER, id, now, new Date(now.getTime() + 99_000));
+  if (!lease) throw new Error("expected a lease");
+  expect(await store.recordSnapshot(OWNER, id, lease.claim, record(over))).toBe(true);
+}
+const P = "https://ex.com/p.png";
+const I = "https://ex.com/icon.png";
+
+describe("icons", () => {
+  it("★ fetches only the preview when a page names both; a preview that ends shows no icon", async () => {
+    const t = setup(async () => ({ kind: "http_error", status: 404 }));
+    const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
+    await recordOn(t.store, link.id, at(1), { imageUrl: P, iconUrls: [I] });
+    await t.indexer.sweep();
+    t.advance(RETRY_MAX_MS * 10);
+    await t.indexer.sweep();
+    expect(t.calls).toEqual([P]);
+    expect(await t.pending()).toEqual([]);
+    expect(await t.store.image(OWNER, link.id)).toBeNull();
+  });
+
+  it.each([
+    ["a 404", [{ kind: "http_error", status: 404 }]],
+    ["a refusal", [{ kind: "refused", reason: "address" }]],
+    [
+      "the retries running out",
+      Array.from({ length: MAX_IMAGE_ATTEMPTS }, () => ({
+        kind: "network_error",
+        code: "ECONNRESET",
+      })),
+    ],
+  ] as [string, ImageOutcome[]][])(
+    "★ shows no stored icon after its new preview ends on %s",
+    async (_, outcomes) => {
+      const t = setup(async (url) => (url === I ? PNG : (outcomes.shift() ?? PNG)));
+      const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
+      await recordOn(t.store, link.id, at(1), {
+        status: "retrying",
+        nextFetchAt: at(50),
+        imageUrl: null,
+        iconUrls: [I],
+      });
+      await t.indexer.sweep();
+      expect(await t.store.image(OWNER, link.id)).not.toBeNull();
+      await recordOn(t.store, link.id, at(50), { imageUrl: P });
+      while (outcomes.length > 0) {
+        await t.indexer.sweep();
+        t.advance(RETRY_MAX_MS);
+      }
+      expect(await t.pending()).toEqual([]);
+      expect(await t.store.imageVersions(OWNER, [link.id])).toEqual(new Map());
+      expect(await t.store.image(OWNER, link.id, "page")).toBeNull();
+      expect(await t.store.pictureInfo(OWNER, [link.id])).toEqual(new Map());
+    },
+  );
+
+  it("★ keys the backoff by role: X failing as an icon doesn't delay X as the preview", async () => {
+    const t = setup(async () => ({ kind: "http_error", status: 503 }));
+    const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
+    await recordOn(t.store, link.id, at(1), {
+      status: "retrying",
+      nextFetchAt: at(50),
+      imageUrl: null,
+      iconUrls: [I],
+    });
+    await t.indexer.sweep();
+    await recordOn(t.store, link.id, at(50), { imageUrl: I });
+    await t.indexer.sweep();
+    expect(t.calls).toEqual([I, I]);
   });
 });

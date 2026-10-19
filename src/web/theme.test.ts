@@ -1,3 +1,4 @@
+import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { SPACE_COLORS } from "../core/tag-space.js";
 import { themeCss, tokens } from "./theme.js";
@@ -203,11 +204,17 @@ describe("the Handy postcards", () => {
     );
   });
 
-  it("keeps the initials in the card's top half, small enough never to meet a 3-line title", () => {
-    const initials = rule(".handy-initials");
-    expect(Number(/font-size:(\d+)px/.exec(initials)?.[1])).toBeLessThanOrEqual(36);
-    expect(initials).toContain("inset:0 0 auto;height:50%");
-    expect(initials).toContain("line-height:1;");
+  it("keeps the initials small enough never to meet a 3-line title, with a tight line height", () => {
+    const initials = computed(
+      el('<div class="handy-image initials-box"></div>', "div"),
+      "--initials",
+      "desktop",
+    );
+    expect(initials).toBe("34px");
+    expect(Number.parseInt(initials ?? "", 10)).toBeLessThanOrEqual(36);
+    expect(
+      computed(el('<span class="pic-initials"></span>', "span"), "line-height", "desktop"),
+    ).toBe("1");
   });
 
   it("sets the title at 14.5px and the host at 13px on one line with an ellipsis", () => {
@@ -344,5 +351,118 @@ describe("the edit dialog's look", () => {
     expect(phone).toContain(".edit-title{height:48px}");
     expect(phone).toContain(".edit-preview{width:100%;height:196px}");
     expect(phone).toContain(".edit-choose{min-height:48px;width:100%}");
+  });
+});
+
+type Rule = { media: string | null; selectors: string[]; decls: Map<string, string> };
+function parseCss(css: string): Rule[] {
+  const rules: Rule[] = [];
+  const walk = (src: string, media: string | null) => {
+    let i = 0;
+    for (;;) {
+      const open = src.indexOf("{", i);
+      if (open < 0) return;
+      let depth = 1;
+      let j = open + 1;
+      for (; depth > 0; j++) depth += src[j] === "{" ? 1 : src[j] === "}" ? -1 : 0;
+      const prelude = src.slice(i, open).trim();
+      const body = src.slice(open + 1, j - 1);
+      if (prelude.startsWith("@media")) walk(body, prelude.slice(6).trim());
+      else if (!prelude.startsWith("@"))
+        rules.push({
+          media,
+          selectors: prelude.split(",").map((s) => s.trim()),
+          decls: new Map(
+            body
+              .split(";")
+              .filter((d) => d.includes(":"))
+              .map((d) => {
+                const k = d.indexOf(":");
+                return [d.slice(0, k).trim(), d.slice(k + 1).trim()] as [string, string];
+              }),
+          ),
+        });
+      i = j;
+    }
+  };
+  walk(css.replace(/\/\*[\s\S]*?\*\//g, ""), null);
+  return rules;
+}
+const specificity = (sel: string) => {
+  const s = sel.replace(/:(not|is|has)\(/g, "(");
+  const ids = (s.match(/#[\w-]+/g) ?? []).length;
+  const cls = (s.match(/\.[\w-]+|\[[^\]]+\]|:[\w-]+/g) ?? []).length;
+  const types = (s.match(/(^|[\s>+~(])[a-z][\w-]*/g) ?? []).length;
+  return ids * 10000 + cls * 100 + types;
+};
+const AT_REST = /::|:(hover|focus|focus-visible|active)\b/;
+/** The winning value of `prop` on `el` at `width`, by specificity and then source order. */
+function computed(el: Element, prop: string, width: "desktop" | "phone"): string | undefined {
+  let best: { spec: number; value: string } | undefined;
+  for (const rule of parseCss(themeCss)) {
+    if (rule.media !== null && !(width === "phone" && rule.media === "(max-width:600px)")) continue;
+    const value = rule.decls.get(prop);
+    if (value === undefined) continue;
+    for (const sel of rule.selectors) {
+      if (AT_REST.test(sel) || !el.matches(sel)) continue;
+      const spec = specificity(sel);
+      if (!best || spec >= best.spec) best = { spec, value };
+    }
+  }
+  return best?.value;
+}
+const el = (html: string, pick: string) =>
+  parseHTML(`<html><body>${html}</body></html>`).document.querySelector(pick) as Element;
+
+describe("icons and initials", () => {
+  const mosaic = el(
+    '<div class="mosaic"><div class="mosaic-icon"><img class="site-icon"></div></div>',
+    "img",
+  );
+  const preview = el('<div class="edit-preview fit-contain"><img class="site-icon"></div>', "img");
+  it.each([
+    ["mosaic", mosaic],
+    ["edit preview", preview],
+  ])("★ shows the %s icon whole at its own size, beating the cover rule", (_, img) => {
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(img, "object-fit", w)).toBe("contain");
+      expect(computed(img, "width", w)).toBe("var(--icon,72px)");
+      expect(computed(img, "height", w)).toBe("var(--icon,72px)");
+    }
+  });
+  it.each(["card-image", "worth-image", "tile", "worth-tile"])(
+    "★ centres a div.%s box with flex",
+    (cls) => {
+      expect(computed(el(`<div class="${cls} icon-box"></div>`, "div"), "display", "desktop")).toBe(
+        "flex",
+      );
+      expect(
+        computed(el(`<div class="${cls} initials-box"></div>`, "div"), "display", "desktop"),
+      ).toBe("flex");
+    },
+  );
+  it("★ keeps Handy's icon and initials boxes in the tile's top half", () => {
+    for (const box of ["icon-box", "initials-box"]) {
+      const d = el(
+        `<article class="handy-tile"><div class="handy-image ${box}"></div></article>`,
+        "div",
+      );
+      expect(computed(d, "height", "phone")).toBe("50%");
+      expect(computed(d, "inset", "phone")).toBe("0 0 auto");
+    }
+  });
+  it("sizes the icon per box, and 56px in a search tile on a phone", () => {
+    const tile = el('<div class="tile icon-box"></div>', "div");
+    expect(computed(tile, "--icon", "desktop")).toBe("72px");
+    expect(computed(tile, "--icon", "phone")).toBe("56px");
+    expect(
+      computed(el('<div class="worth-image icon-box"></div>', "div"), "--icon", "desktop"),
+    ).toBe("112px");
+  });
+  it("puts the icon on the plate token, light in both modes, and drops .handy-initials", () => {
+    expect(tokens.light.plate).toBe("#FFFFFF");
+    expect(tokens.dark.plate).toBe("#E9E6E0");
+    expect(computed(mosaic, "background", "desktop")).toBe("var(--plate)");
+    expect(themeCss).not.toContain("handy-initials");
   });
 });

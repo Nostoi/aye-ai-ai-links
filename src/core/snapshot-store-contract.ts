@@ -41,6 +41,7 @@ export const record = (over: Partial<SnapshotRecord> = {}): SnapshotRecord => ({
   title: "Page title",
   description: "Page description",
   imageUrl: "https://ex.com/i.png",
+  iconUrls: [],
   text: "body text",
   lastError: null,
   ...over,
@@ -70,6 +71,34 @@ export function describeSnapshotStoreContract(
       await h.addOwner(A);
       await h.addOwner(B);
       n = 0;
+    });
+
+    it("refuses a record with more than two icon URLs, keeping the claim valid", async () => {
+      const link = await save(A, at(0));
+      const l = await lease(A, link, at(1), at(100));
+      const three = record({
+        iconUrls: ["https://ex.com/a.png", "https://ex.com/b.png", "https://ex.com/c.png"],
+      });
+      expect(await store.recordSnapshot(A, link.id, l.claim, three)).toBe(false);
+      expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(true);
+    });
+
+    it("never shows an icon URL to readers: an icon-only snapshot reads imageUrl null", async () => {
+      const link = await save(A, at(0));
+      const l = await lease(A, link, at(1), at(100));
+      await store.recordSnapshot(
+        A,
+        link.id,
+        l.claim,
+        record({ imageUrl: null, iconUrls: ["https://ex.com/icon.png"] }),
+      );
+      expect((await store.get(A, link.id))?.snapshot).toEqual({
+        status: "ok",
+        fetchedAt: at(10),
+        title: "Page title",
+        description: "Page description",
+        imageUrl: null,
+      });
     });
 
     it("gives a new link a pending snapshot, and a duplicate save leaves a finished one alone", async () => {

@@ -108,8 +108,8 @@ describe("the Your spaces section", () => {
         name: "Home batteries",
         color: "teal",
         mosaic: [
-          { linkId: "7", version: "v7" },
-          { linkId: "3", version: "v3" },
+          { linkId: "7", version: "v7", fit: "cover" },
+          { linkId: "3", version: "v3", fit: "cover" },
         ],
       }),
       tile({ key: "kitchen", name: "Kitchen", color: null }),
@@ -209,7 +209,7 @@ describe("a space page", () => {
 
   it("lists the links newest first as given, each in the space's color, opening in a new tab", () => {
     const links = [link("2", { tags: onTag("home batteries") }), link("1")];
-    const html = space({ links, images: new Map([["2", "v2"]]) });
+    const html = space({ links, images: new Map([["2", { version: "v2", fit: "cover" }]]) });
     const cards = [...dom(html).querySelectorAll("#space-links > li")];
     expect(cards.map((c) => c.querySelector("h3")?.textContent?.trim())).toEqual([
       "Link 2",
@@ -237,7 +237,7 @@ describe("a space page", () => {
       }),
       link("1"),
     ];
-    const html = space({ links, images: new Map([["1", "v1"]]) });
+    const html = space({ links, images: new Map([["1", { version: "v1", fit: "cover" }]]) });
     const srcs = [...dom(html).querySelectorAll("img")].map((i) => i.getAttribute("src"));
     expect(srcs).toEqual(["/images/1?v=v1"]);
     expect(outsideRefs(html)).toEqual([]);
@@ -558,5 +558,22 @@ describe("Keep handy on a space page", () => {
     const done = space({ links: [link("1", { state: "archived" })], done: true });
     expect(dom(done).querySelector("[data-handy]")).toBeNull();
     expect(done).not.toContain('id="undo-bar"');
+  });
+});
+
+describe("the space card's picture", () => {
+  it.each([
+    ["cover", { version: "v1", fit: "cover" }, "img.card-image"],
+    ["contain", { version: "v1", fit: "contain" }, "div.card-image.icon-box > img.site-icon"],
+    ["none", undefined, "div.card-image.initials-box > span.pic-initials"],
+  ] as const)("renders %s, on the done page too", (_, picture, selector) => {
+    for (const done of [false, true]) {
+      const html = space({
+        done,
+        links: [link("1", { state: done ? "archived" : "active" })],
+        images: new Map(picture ? [["1", picture]] : []),
+      });
+      expect(dom(html).querySelector(`#space-links ${selector}`), `done ${done}`).not.toBeNull();
+    }
   });
 });

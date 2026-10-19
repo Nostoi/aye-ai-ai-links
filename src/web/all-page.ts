@@ -1,5 +1,5 @@
 import type { CopyNotice } from "../core/copy-usage.js";
-import type { PictureInfo } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
@@ -45,7 +45,7 @@ type Input = {
   links: Link[];
   older: string | null;
   catalog: Tag[];
-  images: Map<string, string>;
+  images: Map<string, ShownPicture>;
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
@@ -113,9 +113,9 @@ function card(
   }: Input,
 ): string {
   const space = linkSpace(link, catalog);
-  const version = images.get(link.id);
-  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, version, pictures.get(link.id))}>
-${tile(link, version, "card-image")}
+  const picture = images.get(link.id);
+  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, picture, pictures.get(link.id))}>
+${tile(link, picture, "card-image")}
 ${done ? "" : `${editMenu(link, copies.get(link.id))}\n`}<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 ${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}${handyControl(link, handy.get(link.id))}</div>

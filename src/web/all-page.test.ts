@@ -139,7 +139,10 @@ describe("the All links page", () => {
   });
 
   it("shows a stored image from this site, and a plain tile otherwise", () => {
-    const html = all({ links: [link("1"), link("2")], images: new Map([["1", "v9"]]) });
+    const html = all({
+      links: [link("1"), link("2")],
+      images: new Map([["1", { version: "v9", fit: "cover" }]]),
+    });
     const [withImage, without] = [...dom(html).querySelectorAll(".link-card")];
     expect(withImage?.querySelector("img")?.getAttribute("src")).toBe("/images/1?v=v9");
     expect(without?.querySelector("img")).toBeNull();
@@ -373,5 +376,22 @@ describe("the saved-copy usage line", () => {
 
   it("runs the Remove saved copy script on the card list", () => {
     expect(all()).toContain("/links/copy/remove");
+  });
+});
+
+describe("the All links card's picture", () => {
+  it.each([
+    ["cover", { version: "v1", fit: "cover" }, "img.card-image"],
+    ["contain", { version: "v1", fit: "contain" }, "div.card-image.icon-box > img.site-icon"],
+    ["none", undefined, "div.card-image.initials-box > span.pic-initials"],
+  ] as const)("renders %s, on the done page too", (_, picture, selector) => {
+    for (const done of [false, true]) {
+      const html = all({
+        done,
+        links: [link("1", { state: done ? "archived" : "active" })],
+        images: new Map(picture ? [["1", picture]] : []),
+      });
+      expect(dom(html).querySelector(`.link-card ${selector}`), `done ${done}`).not.toBeNull();
+    }
   });
 });

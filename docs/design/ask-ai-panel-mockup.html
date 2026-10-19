@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask AI panel (#159), approved mockup</title>
+<style>
+body{margin:0;padding:32px;background:#DDD9D0;font-family:ui-rounded,'SF Pro Rounded',system-ui,sans-serif}
+a{color:#26262B}
+.screen{margin:0 0 56px}
+.screen-title{font-size:20px;margin:0 0 12px;color:#26262B}
+.frame{display:inline-block;box-shadow:0 6px 24px #0002;overflow:hidden;max-width:100%}
+</style>
+</head>
+<body>
+<p>Approved by the owner on 2026-10-19 for #159. A static copy of the reviewed mockup; the design is <code>docs/specs/2026-10-19-in-app-ai-design.md</code>. Coloured blocks stand in for real page pictures.</p>
+<section class="screen">
+<h2 class="screen-title">1. Home, Ask AI panel open (desktop)</h2>
+<div class="frame">
+<div style="width: 1280px; height: 900px; overflow: hidden; display: flex; flex-direction: column; background: #F6F4EF; color: #26262B; font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 17px; line-height: 1.5">
+
+<header style="display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 20px 32px 8px">
+<a href="#" style="display: inline-flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; color: #26262B">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="#2F8F83" stroke-width="3"></circle><path d="M9 15l3 3 7-8" fill="none" stroke="#2F8F83" stroke-width="3" stroke-linecap="round"></path></svg>
+Aye-AI-AI Links</a>
+<nav style="display: flex; align-items: center; gap: 22px; font-size: 15.5px">
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">All links</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Tags</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Profile</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Apps</a>
+<button type="button" aria-pressed="true" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font: inherit; font-size: 15.5px; font-weight: 600; padding: 0; background: none; border: 0; border-bottom: 2.5px solid #26262B; border-radius: 0; color: #26262B">
+<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="#26262B" stroke-width="2" stroke-linejoin="round"></path></svg>
+Ask AI</button>
+</nav>
+</header>
+
+<div style="flex: 1; min-height: 0; display: flex">
+
+<main style="flex: 1; min-width: 0; padding: 36px 48px 0; overflow: hidden">
+<form role="search" onsubmit="return false" style="max-width: 720px">
+<label for="q" style="display: block; font-size: 32px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.2; margin: 0 0 18px">What are you trying to remember?</label>
+<div style="display: flex; gap: 10px; align-items: center">
+<input id="q" type="search" placeholder="That article about batteries and the tax credit" style="flex: 1; min-width: 0; padding: 14px 20px; font: inherit; color: #26262B; background: #FFFFFF; border: 1.5px solid #8F8A82; border-radius: 999px">
+<button type="submit" style="font: inherit; font-size: 15.5px; font-weight: 600; min-height: 48px; padding: 10px 22px; border-radius: 999px; background: #26262B; color: #FFFFFF; border: 1.5px solid #26262B">Find it</button>
+</div>
+<p style="margin: 8px 0 0 20px; font-size: 13.5px; color: #6E6B66">Describe it however you remember it: when, why, what it looked like.</p>
+</form>
+
+<h2 style="font-size: 22px; margin: 40px 0 14px">Handy</h2>
+<div style="display: flex; gap: 14px">
+<div style="flex: 1; height: 92px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 10px #0000000b; padding: 14px; font-size: 15px; font-weight: 600">Tax portal</div>
+<div style="flex: 1; height: 92px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 10px #0000000b; padding: 14px; font-size: 15px; font-weight: 600">School calendar</div>
+<div style="flex: 1; height: 92px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 10px #0000000b; padding: 14px; font-size: 15px; font-weight: 600">Router settings</div>
+</div>
+
+<h2 style="font-size: 22px; margin: 36px 0 14px">Worth a look today</h2>
+<div style="display: flex; gap: 18px; background: #FFFFFF; border-radius: 20px; padding: 18px; box-shadow: 0 4px 18px #0000000f">
+<div aria-hidden="true" style="flex: 0 0 200px; height: 140px; border-radius: 14px; background: #C8683F; opacity: 0.22"></div>
+<div>
+<p style="margin: 0 0 4px; font-size: 14px; color: #C8683F; font-weight: 600">You said you're working on "the garden plan"</p>
+<h3 style="margin: 0 0 6px; font-size: 20px">Planting a pollinator border in clay soil</h3>
+<p style="margin: 0; font-size: 14px; color: #6E6B66">Saved in April</p>
+</div>
+</div>
+</main>
+
+<aside aria-label="Ask AI" style="flex: 0 0 400px; display: flex; flex-direction: column; background: #FFFFFF; border-left: 1.5px solid #E7E3DA">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 6px 22px">
+<div>
+<h2 style="margin: 0; font-size: 18px">Ask AI</h2>
+<p style="margin: 0; font-size: 13px; color: #6E6B66">Using Claude, on Home</p>
+</div>
+<div style="display: flex; gap: 2px">
+<button type="button" style="min-height: 44px; font: inherit; font-size: 14px; font-weight: 400; padding: 0 10px; background: none; border: 0; color: #6E6B66; text-decoration: underline; text-underline-offset: 3px">Start over</button>
+<button type="button" aria-label="Close" style="min-width: 44px; min-height: 44px; padding: 0; background: none; border: 0">
+<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="#26262B" stroke-width="2" stroke-linecap="round"></path></svg>
+</button>
+</div>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 14px">
+<div style="align-self: flex-end; max-width: 300px; text-align: right; color: #6E6B66; font-size: 15px; overflow-wrap: anywhere">
+thisoldhouse.com/kitchens/open-shelving-guide save this, it's for the kitchen remodel
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p style="margin: 0; font-size: 15.5px">Saved, with your kitchen remodel links.</p>
+<article style="display: flex; gap: 12px; background: #F6F4EF; border-radius: 14px; padding: 10px">
+<div aria-hidden="true" style="flex: 0 0 84px; height: 84px; border-radius: 10px; background: #2F8F83; opacity: 0.25"></div>
+<div style="min-width: 0">
+<h3 style="margin: 0 0 4px; font-size: 15.5px"><a href="#">The complete guide to open kitchen shelving</a></h3>
+<p style="margin: 0 0 6px; font-size: 13px; color: #6E6B66">"For the kitchen remodel"</p>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<span style="font-size: 13px; padding: 2px 10px; border-radius: 999px; background: #2F8F8322; color: #1F6B62">kitchen remodel</span>
+<span style="font-size: 13px; padding: 1px 9px; border-radius: 999px; border: 1.5px dashed #8F8A82; color: #6E6B66; font-style: italic">shelving (a guess)</span>
+</div>
+</div>
+</article>
+<div style="display: flex; gap: 8px">
+<button type="button" style="font: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 999px; background: #FFFFFF; color: #26262B; border: 1.5px solid #E7E3DA">Edit</button>
+<button type="button" style="font: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 999px; background: #FFFFFF; color: #26262B; border: 1.5px solid #E7E3DA">Undo</button>
+</div>
+</div>
+</div>
+
+<form onsubmit="return false" style="padding: 12px 16px 18px; border-top: 1.5px solid #E7E3DA">
+<label for="ask" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Message your AI</label>
+<div style="display: flex; gap: 8px; align-items: flex-end">
+<textarea id="ask" rows="2" placeholder="Ask, or paste a link to save" style="flex: 1; min-width: 0; padding: 10px 16px; font: inherit; font-size: 15.5px; color: #26262B; background: #FFFFFF; border: 1.5px solid #8F8A82; border-radius: 18px; resize: none"></textarea>
+<button type="submit" style="font: inherit; font-size: 15px; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #26262B; color: #FFFFFF; border: 1.5px solid #26262B">Send</button>
+</div>
+</form>
+</aside>
+
+</div>
+</div>
+</div>
+</section>
+<section class="screen">
+<h2 class="screen-title">2. Space page: the panel knows where you are</h2>
+<div class="frame">
+<div style="width: 1280px; height: 900px; overflow: hidden; display: flex; flex-direction: column; background: #F6F4EF; color: #26262B; font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 17px; line-height: 1.5">
+
+<header style="display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 20px 32px 8px">
+<a href="#" style="display: inline-flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; color: #26262B">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="#2F8F83" stroke-width="3"></circle><path d="M9 15l3 3 7-8" fill="none" stroke="#2F8F83" stroke-width="3" stroke-linecap="round"></path></svg>
+Aye-AI-AI Links</a>
+<nav style="display: flex; align-items: center; gap: 22px; font-size: 15.5px">
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">All links</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Tags</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Profile</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Apps</a>
+<button type="button" aria-pressed="true" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font: inherit; font-size: 15.5px; font-weight: 600; padding: 0; background: none; border: 0; border-bottom: 2.5px solid #26262B; border-radius: 0; color: #26262B">
+<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="#26262B" stroke-width="2" stroke-linejoin="round"></path></svg>
+Ask AI</button>
+</nav>
+</header>
+
+<div style="flex: 1; min-height: 0; display: flex">
+
+<main style="flex: 1; min-width: 0; padding: 36px 48px 0; overflow: hidden">
+<p style="margin: 0 0 6px; font-size: 14px; color: #6E6B66"><a href="#">Home</a> / Space</p>
+<h1 style="display: flex; align-items: center; gap: 12px; font-size: 30px; margin: 0 0 24px"><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 999px; background: #2F8F83"></span>Kitchen remodel</h1>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<article style="background: #FFFFFF; border-radius: 18px; padding: 12px; box-shadow: 0 2px 10px #0000000b">
+<div aria-hidden="true" style="height: 120px; border-radius: 12px; background: #2F8F83; opacity: 0.25; margin-bottom: 10px"></div>
+<h3 style="margin: 0 0 2px; font-size: 16px">Zellige vs. ceramic backsplash tile</h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">Saved in August</p>
+</article>
+<article style="background: #FFFFFF; border-radius: 18px; padding: 12px; box-shadow: 0 2px 10px #0000000b; opacity: 0.4">
+<div aria-hidden="true" style="height: 120px; border-radius: 12px; background: #2F8F83; opacity: 0.18; margin-bottom: 10px"></div>
+<h3 style="margin: 0 0 2px; font-size: 16px">The complete guide to open kitchen shelving</h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">Saved today</p>
+</article>
+<article style="background: #FFFFFF; border-radius: 18px; padding: 12px; box-shadow: 0 2px 10px #0000000b">
+<div aria-hidden="true" style="height: 120px; border-radius: 12px; background: #2F8F83; opacity: 0.3; margin-bottom: 10px"></div>
+<h3 style="margin: 0 0 2px; font-size: 16px">How to grout a floor without haze</h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">Saved in July</p>
+</article>
+<article style="background: #FFFFFF; border-radius: 18px; padding: 12px; box-shadow: 0 2px 10px #0000000b; opacity: 0.4">
+<div aria-hidden="true" style="height: 120px; border-radius: 12px; background: #2F8F83; opacity: 0.12; margin-bottom: 10px"></div>
+<h3 style="margin: 0 0 2px; font-size: 16px">Under-cabinet lighting buying guide</h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">Saved in June</p>
+</article>
+</div>
+</main>
+
+<aside aria-label="Ask AI" style="flex: 0 0 400px; display: flex; flex-direction: column; background: #FFFFFF; border-left: 1.5px solid #E7E3DA">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 6px 22px">
+<div>
+<h2 style="margin: 0; font-size: 18px">Ask AI</h2>
+<p style="margin: 0; font-size: 13px; color: #6E6B66">Using Claude, on Kitchen remodel</p>
+</div>
+<div style="display: flex; gap: 2px">
+<button type="button" style="min-height: 44px; font: inherit; font-size: 14px; font-weight: 400; padding: 0 10px; background: none; border: 0; color: #6E6B66; text-decoration: underline; text-underline-offset: 3px">Start over</button>
+<button type="button" aria-label="Close" style="min-width: 44px; min-height: 44px; padding: 0; background: none; border: 0">
+<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="#26262B" stroke-width="2" stroke-linecap="round"></path></svg>
+</button>
+</div>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0; font-size: 13px; color: #6E6B66; text-align: center">Earlier, on Home: saved "open kitchen shelving"</p>
+<div style="align-self: flex-end; max-width: 300px; text-align: right; color: #6E6B66; font-size: 15px">
+what's in here about tiles?
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p style="margin: 0; font-size: 15.5px">Two links in this space are about tile. The others are faded on the page.</p>
+<article style="display: flex; gap: 12px; background: #F6F4EF; border-radius: 14px; padding: 10px">
+<div aria-hidden="true" style="flex: 0 0 72px; height: 72px; border-radius: 10px; background: #2F8F83; opacity: 0.25"></div>
+<div style="min-width: 0">
+<h3 style="margin: 0 0 2px; font-size: 15.5px"><a href="#">Zellige vs. ceramic backsplash tile</a></h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">Compares cost and how each handles grease.</p>
+</div>
+</article>
+<article style="display: flex; gap: 12px; background: #F6F4EF; border-radius: 14px; padding: 10px">
+<div aria-hidden="true" style="flex: 0 0 72px; height: 72px; border-radius: 10px; background: #2F8F83; opacity: 0.3"></div>
+<div style="min-width: 0">
+<h3 style="margin: 0 0 2px; font-size: 15.5px"><a href="#">How to grout a floor without haze</a></h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">The floor, not the backsplash.</p>
+</div>
+</article>
+</div>
+</div>
+
+<form onsubmit="return false" style="padding: 12px 16px 18px; border-top: 1.5px solid #E7E3DA">
+<label for="ask-s" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Message your AI</label>
+<div style="display: flex; gap: 8px; align-items: flex-end">
+<textarea id="ask-s" rows="2" placeholder="Ask about this space, or paste a link" style="flex: 1; min-width: 0; padding: 10px 16px; font: inherit; font-size: 15.5px; color: #26262B; background: #FFFFFF; border: 1.5px solid #8F8A82; border-radius: 18px; resize: none"></textarea>
+<button type="submit" style="font: inherit; font-size: 15px; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #26262B; color: #FFFFFF; border: 1.5px solid #26262B">Send</button>
+</div>
+</form>
+</aside>
+
+</div>
+</div>
+</div>
+</section>
+<section class="screen">
+<h2 class="screen-title">3. Phone: Ask AI opens as a full-screen sheet</h2>
+<div class="frame">
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: #FFFFFF; color: #26262B; font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 17px; line-height: 1.5">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 8px 4px 16px">
+<button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font: inherit; font-size: 15.5px; font-weight: 600; padding: 0 8px 0 0; background: none; border: 0; color: #26262B">
+<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="#26262B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+Kitchen remodel</button>
+<button type="button" style="min-height: 44px; font: inherit; font-size: 14px; font-weight: 400; padding: 0 10px; background: none; border: 0; color: #6E6B66; text-decoration: underline; text-underline-offset: 3px">Start over</button>
+</div>
+
+<div style="padding: 12px 16px 0">
+<h2 style="margin: 0; font-size: 20px">Ask AI</h2>
+<p style="margin: 0; font-size: 13px; color: #6E6B66">Using Claude, on Kitchen remodel</p>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 12px">
+<div style="align-self: flex-end; max-width: 280px; text-align: right; color: #6E6B66; font-size: 15.5px">
+what's in here about tiles?
+</div>
+<p style="margin: 0; font-size: 16px">Two links in this space are about tile:</p>
+<article style="display: flex; gap: 12px; background: #F6F4EF; border-radius: 14px; padding: 10px">
+<div aria-hidden="true" style="flex: 0 0 64px; height: 64px; border-radius: 10px; background: #2F8F83; opacity: 0.25"></div>
+<div style="min-width: 0">
+<h3 style="margin: 0 0 2px; font-size: 15.5px"><a href="#">Zellige vs. ceramic backsplash tile</a></h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">Compares cost and how each handles grease.</p>
+</div>
+</article>
+<article style="display: flex; gap: 12px; background: #F6F4EF; border-radius: 14px; padding: 10px">
+<div aria-hidden="true" style="flex: 0 0 64px; height: 64px; border-radius: 10px; background: #2F8F83; opacity: 0.3"></div>
+<div style="min-width: 0">
+<h3 style="margin: 0 0 2px; font-size: 15.5px"><a href="#">How to grout a floor without haze</a></h3>
+<p style="margin: 0; font-size: 13.5px; color: #6E6B66">The floor, not the backsplash.</p>
+</div>
+</article>
+<div style="align-self: flex-end; max-width: 280px; text-align: right; color: #6E6B66; font-size: 15.5px">
+save the zellige one to my handy shelf
+</div>
+<p style="margin: 0; font-size: 16px">Done, it's on your Handy shelf.</p>
+<button type="button" style="align-self: flex-start; font: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 999px; background: #FFFFFF; color: #26262B; border: 1.5px solid #E7E3DA">Undo</button>
+</div>
+
+<form onsubmit="return false" style="padding: 10px 12px 20px; border-top: 1.5px solid #E7E3DA">
+<label for="ask-p" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Message your AI</label>
+<div style="display: flex; gap: 8px; align-items: flex-end">
+<textarea id="ask-p" rows="1" placeholder="Ask, or paste a link" style="flex: 1; min-width: 0; padding: 11px 16px; font: inherit; font-size: 16px; color: #26262B; background: #FFFFFF; border: 1.5px solid #8F8A82; border-radius: 22px; resize: none"></textarea>
+<button type="submit" style="font: inherit; font-size: 15px; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #26262B; color: #FFFFFF; border: 1.5px solid #26262B">Send</button>
+</div>
+</form>
+</div>
+</div>
+</section>
+<section class="screen">
+<h2 class="screen-title">4. The AI isn't answering</h2>
+<div class="frame">
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: #FFFFFF; color: #26262B; font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 17px; line-height: 1.5">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 8px 4px 16px">
+<button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font: inherit; font-size: 15.5px; font-weight: 600; padding: 0 8px 0 0; background: none; border: 0; color: #26262B">
+<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="#26262B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+Home</button>
+<button type="button" style="min-height: 44px; font: inherit; font-size: 14px; font-weight: 400; padding: 0 10px; background: none; border: 0; color: #6E6B66; text-decoration: underline; text-underline-offset: 3px">Start over</button>
+</div>
+
+<div style="padding: 12px 16px 0">
+<h2 style="margin: 0; font-size: 20px">Ask AI</h2>
+<p style="margin: 0; font-size: 13px; color: #6E6B66">Using Claude, on Home</p>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 12px">
+<div style="align-self: flex-end; max-width: 280px; text-align: right; color: #6E6B66; font-size: 15.5px">
+that recipe with the miso butter
+</div>
+<div role="alert" style="background: #FFFFFF; border: 1.5px solid #E7E3DA; border-radius: 16px; padding: 14px 16px">
+<p style="margin: 0 0 6px; font-weight: 600">Claude didn't answer: the connection timed out.</p>
+<p style="margin: 0 0 12px; font-size: 15px; color: #6E6B66">Nothing was saved or changed. Try again, or search your links the usual way.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<button type="button" style="font: inherit; font-size: 15px; font-weight: 600; min-height: 44px; padding: 8px 18px; border-radius: 999px; background: #FFFFFF; color: #26262B; border: 1.5px solid #E7E3DA">Try again</button>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1.5px solid #E7E3DA; background: #FFFFFF; font-size: 15px; font-weight: 600; text-decoration: none">Search for "miso butter"</a>
+</div>
+</div>
+</div>
+
+<form onsubmit="return false" style="padding: 10px 12px 20px; border-top: 1.5px solid #E7E3DA">
+<label for="ask-n" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Message your AI</label>
+<div style="display: flex; gap: 8px; align-items: flex-end">
+<textarea id="ask-n" rows="1" placeholder="Ask, or paste a link" style="flex: 1; min-width: 0; padding: 11px 16px; font: inherit; font-size: 16px; color: #26262B; background: #FFFFFF; border: 1.5px solid #8F8A82; border-radius: 22px; resize: none"></textarea>
+<button type="submit" style="font: inherit; font-size: 15px; font-weight: 600; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #26262B; color: #FFFFFF; border: 1.5px solid #26262B">Send</button>
+</div>
+</form>
+</div>
+</div>
+</section>
+<section class="screen">
+<h2 class="screen-title">5. No AI set up: home as today, no Ask AI</h2>
+<div class="frame">
+<div style="min-height: 560px; background: #F6F4EF; color: #26262B; font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 17px; line-height: 1.5">
+<div style="max-width: 980px; margin: 0 auto; padding: 0 24px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; padding: 24px 0 8px">
+<a href="#" style="display: inline-flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; color: #26262B">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="#2F8F83" stroke-width="3"></circle><path d="M9 15l3 3 7-8" fill="none" stroke="#2F8F83" stroke-width="3" stroke-linecap="round"></path></svg>
+Aye-AI-AI Links</a>
+<nav style="display: flex; flex-wrap: wrap; gap: 4px 22px; font-size: 15.5px">
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">All links</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Tags</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Profile</a>
+<a href="#" style="display: inline-flex; align-items: center; min-height: 44px; text-decoration: none">Apps</a>
+</nav>
+</header>
+
+<main style="padding: 32px 0 64px">
+<form role="search" onsubmit="return false">
+<label for="q" style="display: block; font-size: 34px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.2; margin: 0 0 18px">What are you trying to remember?</label>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+<input id="q" type="search" placeholder="That article about batteries and the tax credit" style="flex: 1 1 320px; min-width: 0; padding: 14px 20px; font: inherit; color: #26262B; background: #FFFFFF; border: 1.5px solid #8F8A82; border-radius: 999px">
+<button type="submit" style="font: inherit; font-size: 15.5px; font-weight: 600; min-height: 48px; padding: 10px 22px; border-radius: 999px; background: #26262B; color: #FFFFFF; border: 1.5px solid #26262B">Find it</button>
+</div>
+<p style="margin: 8px 0 0 20px; font-size: 13.5px; color: #6E6B66">Describe it however you remember it: when, why, what it looked like.</p>
+</form>
+<div aria-hidden="true" style="margin-top: 44px; border-top: 1.5px solid #E7E3DA; padding-top: 24px; color: #6E6B66; font-size: 15px">Exactly today's home page: no Ask AI in the menu, no mention of AI anywhere. Handy shelf, Worth a look today and Your spaces follow.</div>
+</main>
+</div>
+</div>
+</div>
+</section>
+</body>
+</html>

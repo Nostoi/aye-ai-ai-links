@@ -61,7 +61,7 @@ aye-ai-ai-links/
 ├─ AGENTS.md  README.md  ROADMAP.md  LICENSE
 ├─ docs/
 │  ├─ specs/      dated design records
-│  └─ design/     approved visual references (layout A only)
+│  └─ design/     approved visual references (layout A, and the Ask AI panel)
 ├─ .githooks/     pre-push runs `npm run check`
 ├─ .github/       CI: `npm run check` on pull requests
 ├─ deploy/        LaunchAgent plist, `deploy.sh`, and `release.sh` (names and publishes deploys; run where `gh` is signed in)

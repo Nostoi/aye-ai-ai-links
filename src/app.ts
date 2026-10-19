@@ -2,6 +2,7 @@ import { createResourceServerChallenge } from "@better-auth/oauth-provider";
 import { hostHeaderValidation } from "@modelcontextprotocol/hono";
 import { APIError } from "better-auth/api";
 import { Hono } from "hono";
+import type { ChatModel } from "./ai/model.js";
 import {
   createAgentKey,
   listAgentKeys,
@@ -27,6 +28,7 @@ import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/s
 import type { LinkRemover } from "./core/store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
+import { createCallTracker } from "./mcp/call-tracker.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import type { SqliteKeyStore } from "./store/key-store.js";
@@ -68,6 +70,7 @@ const CHECKED_PAGES = [
   "/connections/keys",
   "/connections/keys/turn-off",
   "/connections/keys/turn-on",
+  "/ai/chat",
   "/home/opened",
   "/home/snooze",
   "/home/unsnooze",
@@ -140,6 +143,8 @@ export type AppOptions = {
         copyLimitBytes?: number;
         readGate: ReadGate;
         exports: ExportBuilds;
+        /** The in-app AI; `POST /ai/chat` answers NO_AI without one. */
+        ai?: ChatModel | undefined;
       };
       auth: AuthDeps;
     }
@@ -149,6 +154,8 @@ export type AppOptions = {
  * The whole HTTP surface. Every door is mounted here, so tests drive the real composition. The
  * server always passes `auth`; without it, as in tests of the MCP door alone, the auth routes,
  * the root metadata and the web door are not mounted. `allowedHosts` covers every door.
+ * `stopTurns` aborts every in-app AI turn's model call and ends the turn at its next step; `close`
+ * does the same before closing the MCP handler.
  */
 export function createApp(options: AppOptions) {
   const { deps, identify, allowedHosts, rateLimit, log } = options;
@@ -158,8 +165,12 @@ export function createApp(options: AppOptions) {
   // First, so refusals by every check below are recorded too.
   if (log) app.use("*", requestLog(log));
   const baseUrl = auth?.auth.options.baseURL;
+  const tracker = createCallTracker();
+  const turns = new AbortController();
+  const stopTurns = () => turns.abort();
   const mcp = mcpApp({
     deps,
+    tracker,
     identify,
     allowedHosts,
     rateLimit,
@@ -216,8 +227,20 @@ export function createApp(options: AppOptions) {
           turnOff: (owner, id) => turnOffAgentKey(keys, owner, id),
           turnOn: (owner, id) => turnOnAgentKey(keys, owner, id),
         },
+        // The in-app AI is an agent, so its searches are logged as through `/mcp`; the web
+        // door's own searches above are not (#134).
+        ai: web.deps.ai && {
+          model: web.deps.ai,
+          deps: web.deps,
+          track: tracker.track,
+          signal: turns.signal,
+        },
       }),
     );
   }
-  return { app, close: mcp.close, calls: mcp.calls };
+  const close = async () => {
+    stopTurns();
+    await mcp.close();
+  };
+  return { app, close, stopTurns, calls: tracker.calls };
 }

@@ -7,6 +7,7 @@ import {
   sign,
 } from "node:crypto";
 import type Database from "better-sqlite3";
+import type { ChatModel } from "../ai/model.js";
 import { createApp } from "../app.js";
 import { createDeps } from "../deps.js";
 import type { RateLimitOptions } from "../http/rate-limit.js";
@@ -152,6 +153,7 @@ export class Agent {
       rawForm,
       multipart,
       origin = method === "POST",
+      signal,
     }: {
       method?: string;
       headers?: Record<string, string>;
@@ -162,6 +164,8 @@ export class Agent {
       /** A multipart form; its boundary header comes from the body. */
       multipart?: FormData;
       origin?: boolean;
+      /** Aborted to stand for the browser closing the connection. */
+      signal?: AbortSignal;
     } = {},
   ): Promise<Sent> {
     const h = new Headers(headers);
@@ -185,7 +189,7 @@ export class Agent {
     }
     const url = path.startsWith("http") ? path : `${TEST_BASE_URL}${path}`;
     if (!h.has("host")) h.set("host", new URL(url).host);
-    const res = await this.app.fetch(new Request(url, { method, headers: h, body }));
+    const res = await this.app.fetch(new Request(url, { method, headers: h, body, signal }));
     for (const cookie of res.headers.getSetCookie()) {
       const [pair = ""] = cookie.split(";");
       const at = pair.indexOf("=");
@@ -227,6 +231,7 @@ export async function oauthWorld({
   savedCopyDir,
   copyLimitBytes = 0,
   exportDir,
+  ai,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -241,6 +246,8 @@ export async function oauthWorld({
   copyLimitBytes?: number;
   /** The export folder, made ready as at start-up; without it, every export build fails. */
   exportDir?: string;
+  /** The in-app AI; without it, `POST /ai/chat` answers NO_AI. */
+  ai?: ChatModel;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -259,7 +266,7 @@ export async function oauthWorld({
   if (exportDir !== undefined) await deps.exportFolder.reset();
   deps.store.ensureUser("owner", "Owner");
   const { app } = createApp({
-    deps: { ...deps, copyLimitBytes },
+    deps: { ...deps, copyLimitBytes, ai },
     identify: auth.identify,
     auth: { ...auth, keys: keyStore, limits },
     allowedHosts: ["links.example"],
@@ -469,6 +476,26 @@ export async function connectClaude(world: World) {
   if (tokens.status !== 200) throw new Error(`token gave ${tokens.status}`);
   return { access: field(tokens, "access_token"), refresh: field(tokens, "refresh_token") };
 }
+
+/** The links database's tables that carry an `owner_id`. */
+export const ownedTablesOf = (world: World): string[] =>
+  (
+    world.links
+      .prepare(
+        `SELECT m.name AS name FROM sqlite_master m, pragma_table_info(m.name) c
+         WHERE m.type = 'table' AND c.name = 'owner_id' ORDER BY m.name`,
+      )
+      .all() as { name: string }[]
+  ).map((r) => r.name);
+
+/** One owner's rows in every owned table, so another owner's request can be shown to leave them alone. */
+export const rowsOf = (world: World, owner: string) =>
+  Object.fromEntries(
+    ownedTablesOf(world).map((t) => [
+      t,
+      world.links.prepare(`SELECT * FROM "${t}" WHERE owner_id = ? ORDER BY rowid`).all(owner),
+    ]),
+  );
 
 /** Every row of every table in the links database, so a request can be shown to have changed nothing. */
 export const allRows = (world: World) => {

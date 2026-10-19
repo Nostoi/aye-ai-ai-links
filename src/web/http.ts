@@ -1,5 +1,14 @@
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
+import {
+  runChatTurn,
+  SERVER_FAULT,
+  type TextTurn,
+  type TurnResult,
+  takeTurn,
+} from "../ai/chat-turn.js";
+import type { ChatModel } from "../ai/model.js";
+import { openToolSession, type ToolSession } from "../ai/tool-session.js";
 import { AgentKeyError } from "../auth/agent-keys.js";
 import type { WithAuthLock } from "../auth/auth-lock.js";
 import type { Auth } from "../auth/better-auth.js";
@@ -7,6 +16,7 @@ import type { ConsentDetails } from "../auth/consent.js";
 import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
+import { inAppCaller } from "../auth/session.js";
 import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
 import { removeSavedCopy, restoreSavedCopy } from "../core/copy-removal.js";
 import { readCopyNotice } from "../core/copy-usage.js";
@@ -71,6 +81,7 @@ import {
   type WorthDeps,
   worthALook,
 } from "../core/worth-a-look.js";
+import type { McpDeps, TrackCall } from "../mcp/server.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allHref, allPage } from "./all-page.js";
 import { bookmarkletCode } from "./bookmarklet.js";
@@ -149,6 +160,22 @@ type Shaped<S extends Record<string, Check<unknown>>> = {
   [K in keyof S]: S[K] extends Check<infer T> ? T : never;
 };
 
+/** The request's body parsed as JSON under `limit` (undefined when it isn't JSON), or the 413 answer. */
+async function readJson(c: Context, limit: number): Promise<{ value: unknown } | Response> {
+  let raw: Uint8Array | null;
+  try {
+    raw = await readCapped(c.req.raw, limit);
+  } catch (error) {
+    if (!(error instanceof BodyTooLarge)) throw error;
+    return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()));
+  } catch {}
+  return { value };
+}
+
 /**
  * Takes a JSON body under the auth body cap, so any client id that can connect fits, and sets
  * `body` to it when it is an object whose members pass each check in `shape`. Other members are
@@ -156,17 +183,9 @@ type Shaped<S extends Record<string, Check<unknown>>> = {
  */
 const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
   createMiddleware<{ Variables: { body: Shaped<S> } }>(async (c, next) => {
-    let raw: Uint8Array | null;
-    try {
-      raw = await readCapped(c.req.raw, AUTH_BODY_LIMIT);
-    } catch (error) {
-      if (!(error instanceof BodyTooLarge)) throw error;
-      return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(new TextDecoder().decode(raw ?? new Uint8Array()));
-    } catch {}
+    const read = await readJson(c, AUTH_BODY_LIMIT);
+    if (read instanceof Response) return read;
+    const { value } = read;
     const fits =
       typeof value === "object" &&
       value !== null &&
@@ -180,6 +199,31 @@ const jsonBody = <S extends Record<string, Check<unknown>>>(shape: S) =>
     c.set("body", value as Shaped<S>);
     await next();
   });
+
+/** The chat's cap: room for a full history of long turns. */
+export const CHAT_BODY_LIMIT = 512 * 1024;
+
+/**
+ * Takes a chat turn, a JSON body under `CHAT_BODY_LIMIT`, and sets `turn` to the history and
+ * text `takeTurn` accepts. Other members, such as an owner or a writer's name, are ignored.
+ */
+const chatBody = createMiddleware<{ Variables: { turn: { history: TextTurn[]; text: string } } }>(
+  async (c, next) => {
+    const read = await readJson(c, CHAT_BODY_LIMIT);
+    if (read instanceof Response) return read;
+    const value = read.value as { history?: unknown; text?: unknown } | null;
+    const turn =
+      typeof value === "object" && value !== null && !Array.isArray(value)
+        ? takeTurn({ history: value.history, text: value.text })
+        : null;
+    if (!turn) {
+      const message = "Send a JSON body with history and text, within the chat's limits.";
+      return c.json({ code: "BAD_REQUEST", message }, 400);
+    }
+    c.set("turn", turn);
+    await next();
+  },
+);
 
 /** The edit form's cap: the largest picture core keeps, plus the auth cap for the other fields. */
 const EDIT_BODY_LIMIT = MAX_IMAGE_BYTES + AUTH_BODY_LIMIT;
@@ -457,6 +501,7 @@ export function webApp({
   connections,
   keys,
   baseUrl,
+  ai,
 }: {
   deps: SearchLinksDeps &
     WorthDeps &
@@ -492,6 +537,12 @@ export function webApp({
   };
   /** The server's public origin (`AYE_BASE_URL`), which the bookmarklet opens. */
   baseUrl: string;
+  /**
+   * The in-app AI, when one is set up: its model, the MCP door's deps (with the search log, so
+   * its searches are logged like any agent's), the call tracker shutdown waits on, and the signal
+   * that stops every turn when the server stops.
+   */
+  ai?: { model: ChatModel; deps: McpDeps; track: TrackCall; signal: AbortSignal } | undefined;
 }) {
   const app = new Hono<SessionEnv>();
   const session = requireSession(auth, withAuthLock);
@@ -1117,6 +1168,56 @@ export function webApp({
   app.post("/profile/notes/restore", jsonBody({ id: isString }), session, (c) =>
     noteAction(c, () => restoreNote(deps, c.get("caller").owner, c.get("body").id)),
   );
+
+  // One turn of the in-app chat, run with the owner's own MCP tools as the in-app AI. The session
+  // comes first, as for the edit form: a signed-out caller has no large body read. The answer is
+  // 200 whether or not the AI answered, so a failed turn still lists the changes it made.
+  if (ai) {
+    app.post("/ai/chat", session, chatBody, async (c) => {
+      const { history, text } = c.get("turn");
+      const name = ai.model.name;
+      const answer = (result: TurnResult) => {
+        const { changes, seen } = result;
+        return c.json(
+          result.ok
+            ? { ok: true, ai: name, reply: result.reply, changes, seen }
+            : {
+                ok: false,
+                ai: name,
+                message: `${name} didn't answer: ${result.reason}.`,
+                changes,
+                seen,
+              },
+          200,
+          NO_STORE,
+        );
+      };
+      let tools: ToolSession;
+      try {
+        tools = await openToolSession(ai.deps, inAppCaller(c.get("caller"), name), ai.track);
+      } catch (error) {
+        console.error("[ai-chat] the tool session didn't open:", error);
+        return answer({ ok: false, reason: SERVER_FAULT, changes: [], seen: [] });
+      }
+      try {
+        // A turn stops when the server stops or when the browser drops this request (which
+        // @hono/node-server aborts), so a dropped request starts no more model or tool calls. Its
+        // answer then reaches no one, so the reason it gives doesn't matter.
+        const signal = AbortSignal.any([c.req.raw.signal, ai.signal]);
+        const turn = { model: ai.model, session: tools, history, text, signal };
+        return answer(await runChatTurn(turn));
+      } finally {
+        // A failed close must not lose the answer and its changes.
+        await tools
+          .close()
+          .catch((error: unknown) =>
+            console.error("[ai-chat] the tool session didn't close:", error),
+          );
+      }
+    });
+  } else {
+    app.post("/ai/chat", session, (c) => c.json({ code: "NO_AI" }, 404, NO_STORE));
+  }
 
   if (consent) {
     app.get("/consent", session, async (c) => {

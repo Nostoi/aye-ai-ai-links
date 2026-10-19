@@ -5,6 +5,12 @@ import type { Caller, Identify } from "./caller.js";
 /** What a browser session records as `savedBy` and `writtenBy`: the owner's own writes. */
 export const WEB_SAVED_BY = "web";
 
+/** The in-app AI's caller: the session's owner, recorded as `In-app AI (<aiName>)`. */
+export const inAppCaller = (caller: Caller, aiName: string): Caller => ({
+  owner: caller.owner,
+  savedBy: `In-app AI (${aiName})`,
+});
+
 /** Whether a writer's name would pass for the web session's; no agent or app may use it. */
 export const namesWeb = (name: string) => name.trim().toLowerCase() === WEB_SAVED_BY;
 

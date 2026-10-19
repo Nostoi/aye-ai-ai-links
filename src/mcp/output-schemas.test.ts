@@ -687,13 +687,14 @@ type Handied<T> = T extends Date
 type Returned<F extends (...args: never[]) => Promise<unknown>> = Awaited<ReturnType<F>>;
 
 describe("output schemas against core's types (checked by tsc)", () => {
+  // Each Omit is a fact core returns only for the in-app change record; the tool leaves it out.
   it("each schema's output type is the wire form of what its tool returns", () => {
     expectTypeOf<z.output<typeof linkOutput>>().toEqualTypeOf<Wire<Handied<Link>>>();
     expectTypeOf<z.output<typeof tagOutput>>().toEqualTypeOf<Wire<Tag>>();
     expectTypeOf<z.output<typeof saveLinkOutput>>().toEqualTypeOf<
       Wire<
         Handied<
-          Returned<typeof saveLink> & {
+          Omit<Returned<typeof saveLink>, "whyFilled"> & {
             filingContext: Returned<typeof filingContext>;
             profile: Returned<typeof profileContext>;
           }
@@ -701,13 +702,13 @@ describe("output schemas against core's types (checked by tsc)", () => {
       >
     >();
     expectTypeOf<z.output<typeof profileOutput>>().toEqualTypeOf<
-      Wire<Returned<typeof editProfile>>
+      Wire<Omit<Returned<typeof editProfile>, "removed">>
     >();
     expectTypeOf<z.output<typeof getProfileOutput>>().toEqualTypeOf<
       Wire<Returned<typeof getProfile>>
     >();
     expectTypeOf<z.output<typeof addProfileOutput>>().toEqualTypeOf<
-      Wire<Returned<typeof addProfile>>
+      Wire<Omit<Returned<typeof addProfile>, "added">>
     >();
     expectTypeOf<z.output<typeof linkResultOutput>>().toEqualTypeOf<
       Wire<Handied<{ link: Returned<typeof updateLink> }>>
@@ -731,7 +732,7 @@ describe("output schemas against core's types (checked by tsc)", () => {
       Wire<{ tag: Returned<typeof changeTagKind> }>
     >();
     expectTypeOf<z.output<typeof getDigestOutput>>().toEqualTypeOf<
-      Wire<Handied<Returned<typeof getDigest>>>
+      Wire<Handied<Omit<Returned<typeof getDigest>, "claimed">>>
     >();
   });
 });

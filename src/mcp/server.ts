@@ -12,7 +12,13 @@ import { filingContext } from "../core/filing-context.js";
 import type { LinkCheckStore } from "../core/link-check-store.js";
 import { getLinkWithText, normalizeTitle, saveLink, updateLink } from "../core/links.js";
 import { listLinks } from "../core/list-links.js";
-import { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
+import {
+  addProfile,
+  editProfile,
+  getProfile,
+  profileContext,
+  type WrittenEntry,
+} from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
 import type { SavedCopyReader } from "../core/saved-copy.js";
 import { LINK_ORDERS, type LinkCount, type LinkSearch } from "../core/search.js";
@@ -25,6 +31,7 @@ import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
 import { linkViews } from "../core/tools.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
+import type { ProfileEntry, RecordChange } from "./changes.js";
 import * as guidance from "./guidance.js";
 import {
   applyHandy,
@@ -161,6 +168,9 @@ const editProfileInput = z.object({
 
 const toDate = (s: string | undefined) => (s === undefined ? undefined : new Date(s));
 
+const entries = (entry: ProfileEntry["entry"], list: WrittenEntry[]): ProfileEntry[] =>
+  list.map(({ id, text, source }) => ({ entry, id, text, source }));
+
 function ok(payload: unknown) {
   // A JSON round trip turns Dates into ISO strings, for both content and structuredContent.
   const data = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
@@ -214,11 +224,15 @@ type ToolConfig<I extends StandardSchemaWithJSON> = {
   annotations: ToolAnnotations;
 };
 
-/** The caller comes from the authenticated request, never from tool arguments. */
+/**
+ * The caller comes from the authenticated request, never from tool arguments. `record` hears
+ * each write as it commits (the in-app AI's change list); it never changes a tool's result.
+ */
 export function buildMcpServer(
   deps: McpDeps,
   caller: Caller,
   track: TrackCall = (call) => call,
+  record: RecordChange = () => {},
 ): McpServer {
   const server = new McpServer(
     { name: "aye-ai-ai-links", version: deps.version ?? "dev" },
@@ -259,9 +273,17 @@ export function buildMcpServer(
       // One instant for the save and its keep, as getDigest and markOpened do.
       const now = deps.now();
       const at = { ...deps, now: () => now };
-      const saved = await saveLink(at, owner, { ...args, savedBy });
+      const { whyFilled, ...saved } = await saveLink(at, owner, { ...args, savedBy });
+      const linkId = saved.link.id;
+      if (saved.created || whyFilled) {
+        const fields = saved.created ? [] : ["why"];
+        record({ kind: "link", tool: "save_link", linkId, created: saved.created, fields });
+      }
       // A repeat save keeps its contract (only a missing why is filled), so handy is ignored.
-      if (handy && saved.created) await applyHandyToSaved(at, owner, saved.link.id, handy);
+      if (handy && saved.created) {
+        const change = await applyHandyToSaved(at, owner, linkId, handy);
+        record({ kind: "handy", linkId, change });
+      }
       return {
         ...saved,
         link: await linkWithHandy(at, owner, saved.link),
@@ -295,14 +317,19 @@ export function buildMcpServer(
       if (handy) {
         if (rest.tags) normalizeTags(rest.tags);
         if (rest.title !== undefined) normalizeTitle(rest.title);
-        await applyHandy(at, owner, id, handy);
+        record({ kind: "handy", linkId: id, change: await applyHandy(at, owner, id, handy) });
       }
-      const link = await updateLink(at, owner, id, {
+      const patch = {
         ...rest,
         ...(snoozedUntil !== undefined && {
           snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
         }),
-      });
+      };
+      const link = await updateLink(at, owner, id, patch);
+      const fields = Object.keys(patch).filter((k) => patch[k as keyof typeof patch] !== undefined);
+      if (fields.length > 0) {
+        record({ kind: "link", tool: "update_link", linkId: link.id, created: false, fields });
+      }
       return { link: await linkWithHandy(at, owner, link) };
     },
   );
@@ -320,7 +347,11 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ name, kind }) => ({ tag: await changeTagKind(deps, owner, { name, kind }) }),
+    async ({ name, kind }) => {
+      const tag = await changeTagKind(deps, owner, { name, kind });
+      record({ kind: "tag", name: tag.name, tagKind: tag.kind });
+      return { tag };
+    },
   );
 
   register(
@@ -418,7 +449,16 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    (args) => addProfile(deps, owner, savedBy, args),
+    async (args) => {
+      const { added, ...written } = await addProfile(deps, owner, savedBy, args);
+      record({
+        kind: "profile",
+        added: [...entries("note", added.notes), ...entries("focus", added.focus)],
+        edited: [],
+        removed: [],
+      });
+      return written;
+    },
   );
 
   register(
@@ -434,7 +474,20 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    (args) => editProfile(deps, owner, savedBy, args),
+    async (args) => {
+      const { removed, ...profile } = await editProfile(deps, owner, savedBy, args);
+      const edited = new Set(args.editNotes?.map((e) => e.id));
+      record({
+        kind: "profile",
+        added: [],
+        edited: entries(
+          "note",
+          profile.notes.filter((n) => edited.has(n.id)),
+        ),
+        removed: entries("note", removed),
+      });
+      return profile;
+    },
   );
 
   register(
@@ -455,7 +508,8 @@ export function buildMcpServer(
       // One instant: getDigest reads now once and claims at it, so each item's handy uses that now too.
       const now = deps.now();
       const at = { ...deps, now: () => now };
-      const { links } = await getDigest(at, owner);
+      const { links, claimed } = await getDigest(at, owner);
+      if (claimed.length > 0) record({ kind: "surfaced", linkIds: claimed });
       const views = await linkViews(
         at,
         owner,

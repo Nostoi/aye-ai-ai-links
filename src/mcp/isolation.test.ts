@@ -15,8 +15,10 @@ import {
   exchange,
   field,
   oauthWorld,
+  ownedTablesOf,
   pkce,
   refresh,
+  rowsOf,
   SECOND_USER,
   type Sent,
   saveLinkWith,
@@ -127,22 +129,6 @@ const KNOWN_OWNED_TABLES = [
   "snapshots",
   "tags",
 ];
-const ownedTablesOf = (world: World): string[] =>
-  (
-    world.links
-      .prepare(
-        `SELECT m.name AS name FROM sqlite_master m, pragma_table_info(m.name) c
-         WHERE m.type = 'table' AND c.name = 'owner_id' ORDER BY m.name`,
-      )
-      .all() as { name: string }[]
-  ).map((r) => r.name);
-const rowsOf = (world: World, owner: string) =>
-  Object.fromEntries(
-    ownedTablesOf(world).map((t) => [
-      t,
-      world.links.prepare(`SELECT * FROM "${t}" WHERE owner_id = ? ORDER BY rowid`).all(owner),
-    ]),
-  );
 const grantsOf = (world: World, userId: string) =>
   ["oauthAccessToken", "oauthRefreshToken", "oauthConsent"].map((t) =>
     world.db.prepare(`SELECT * FROM ${t} WHERE userId = ? ORDER BY id`).all(userId),
@@ -802,6 +788,7 @@ describe("owner isolation coverage", () => {
       "the two-owner tests of POST /links/restore in web/delete-routes.test.ts",
     "POST /export/prepare":
       "the two-owner test of POST /export/prepare in web/export-zip-routes.test.ts",
+    "POST /ai/chat": "the two-owner test of POST /ai/chat in web/ai-routes.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

@@ -341,6 +341,59 @@ describe("profile use cases", () => {
       ]);
     });
 
+    it("refuses a removal when the note changed since it was read", async () => {
+      const id = await addNote("training for a 10K", "stated");
+      const later = new Date(NOW.getTime() + 1000);
+      let reads = 0;
+      // Another agent rewrites the note, keeping its source, after this call has read it.
+      const racing: ProfileStore = {
+        listNotes: async (owner) => {
+          const seen = await profile.listNotes(owner);
+          if (reads++ === 0) {
+            await editProfile({ profile, now: () => later }, owner, "codex", {
+              editNotes: [{ id, text: "recovering from surgery", source: "stated" }],
+            });
+          }
+          return seen;
+        },
+        apply: (...args) => profile.apply(...args),
+        recentFocus: (...args) => profile.recentFocus(...args),
+        listFocus: (o) => profile.listFocus(o),
+        restoreNote: (...args) => profile.restoreNote(...args),
+      };
+
+      const err = await code(
+        editProfile({ profile: racing, now: () => NOW }, A, W, { removeNotes: [id] }),
+      );
+
+      expect(err?.code).toBe("conflict");
+      expect(await notes()).toEqual([
+        {
+          id,
+          text: "recovering from surgery",
+          source: "stated",
+          writtenBy: "codex",
+          updatedAt: later,
+        },
+      ]);
+    });
+
+    it("returns each note it removed as it was read, and adds return what they added", async () => {
+      const added = await addProfile(deps, A, W, {
+        addNotes: [{ text: " training for a 10K ", source: "stated" }],
+        addFocus: [{ text: "kitchen remodel", source: "inferred" }],
+      });
+      expect(added.added).toEqual({
+        notes: [{ id: "1", text: "training for a 10K", source: "stated" }],
+        focus: [{ id: "1", text: "kitchen remodel", source: "inferred" }],
+      });
+
+      const r = await editProfile(deps, A, W, { removeNotes: ["1"] });
+
+      expect(r.removed).toEqual([{ id: "1", text: "training for a 10K", source: "stated" }]);
+      expect(r.notes).toEqual([]);
+    });
+
     it("refuses blank or over-long edit text, bad sources, and an id used twice, writing nothing", async () => {
       const id = await addNote("keep");
       const other = await addNote("other", "inferred");

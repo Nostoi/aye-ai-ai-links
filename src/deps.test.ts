@@ -279,7 +279,7 @@ describe("the digest on createDeps", () => {
     });
     const when = { at: now, notSurfacedAfter: now, now, exceptGone: true };
     expect(await deps.store.claimSurfaced(OWNER, [link.id], when)).toEqual([]);
-    expect(await getDigest(deps, OWNER)).toEqual({ links: [] });
+    expect(await getDigest(deps, OWNER)).toEqual({ links: [], claimed: [] });
     db.close();
   });
 

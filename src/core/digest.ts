@@ -227,14 +227,15 @@ export async function previewDigest(
  * The claim re-checks eligibility in the store; a link it skips is left out, and the other reasons
  * are judged again from the link as claimed. The claim also skips a link kept handy, or flagged as gone, since
  * selection. A claimed link left with no reason is left out but
- * stays marked. A response lost after the claim still uses up its links.
+ * stays marked. A response lost after the claim still uses up its links. `claimed` is the id of
+ * every link this call marked, left out or not.
  */
 export async function getDigest(
   deps: DigestDeps,
   owner: OwnerId,
-): Promise<{ links: DigestLink[] }> {
+): Promise<{ links: DigestLink[]; claimed: string[] }> {
   const now = deps.now();
-  const check = await claimDueTool({ ...deps, now: () => now }, owner);
+  const { claimedId, due: check } = await claimDue({ ...deps, now: () => now }, owner);
   const { picked, focus } = await select(deps, owner, now, DIGEST_SIZE - (check ? 1 : 0));
   const claimed = await claimSurfaced(
     { store: deps.store, now: () => now },
@@ -254,7 +255,10 @@ export async function getDigest(
       reasons: [{ kind: "still_using_check", daysSinceOpened: check.daysSinceOpened }],
     });
   }
-  return { links };
+  return {
+    links,
+    claimed: [...(claimedId === null ? [] : [claimedId]), ...claimed.map((c) => c.link.id)],
+  };
 }
 
 /** A due kept tool for the digest's still-using check, with whole days since its last recorded opening (null: never opened). */
@@ -293,19 +297,30 @@ export async function claimDueTool(
   deps: Pick<DigestDeps, "store" | "tools" | "checks" | "now">,
   owner: OwnerId,
 ): Promise<DueTool | null> {
+  return (await claimDue(deps, owner)).due;
+}
+
+/** `claimDueTool`, with the id it marked (null: none), whether or not the tool stayed due. */
+async function claimDue(
+  deps: Pick<DigestDeps, "store" | "tools" | "checks" | "now">,
+  owner: OwnerId,
+): Promise<{ claimedId: string | null; due: DueTool | null }> {
   const now = deps.now();
   const picked = await dueTool({ ...deps, now: () => now }, owner);
-  if (!picked) return null;
+  if (!picked) return { claimedId: null, due: null };
   const [claim] = await claimSurfaced(
     { store: deps.store, now: () => now },
     owner,
     [picked.link.id],
     { exceptGone: true },
   );
-  if (!claim) return null;
+  if (!claim) return { claimedId: null, due: null };
   const tool = await deps.tools.getTool(owner, claim.link.id);
   const check = await deps.checks.getCheck(owner, claim.link.id);
-  return isDue(claim.link, tool, check, now) ? dueToolOf(claim.link, now) : null;
+  return {
+    claimedId: claim.link.id,
+    due: isDue(claim.link, tool, check, now) ? dueToolOf(claim.link, now) : null,
+  };
 }
 
 function dueToolOf(link: Link, now: Date): DueTool {

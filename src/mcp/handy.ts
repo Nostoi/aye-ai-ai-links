@@ -65,16 +65,17 @@ export function applyHandy(
 
 /**
  * `applyHandy` on a link `save_link` has just created. The link is stored by then, so a refusal
- * says so, with the id, rather than reading as a failed save the agent would retry.
+ * says so, with the id, rather than reading as a failed save the agent would retry. Returns the
+ * change it made.
  */
 export async function applyHandyToSaved(
   deps: ToolsDeps,
   owner: OwnerId,
   id: string,
   handy: HandyInput,
-): Promise<void> {
+): Promise<ToolChange> {
   try {
-    await applyHandy(deps, owner, id, handy);
+    return await applyHandy(deps, owner, id, handy);
   } catch (error) {
     if (!(error instanceof CoreError)) throw error;
     throw new CoreError(

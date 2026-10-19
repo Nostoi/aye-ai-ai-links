@@ -424,6 +424,47 @@ describe("getDigest claim", () => {
     expect((await store.get(OWNER, snoozed.id))?.lastSurfacedAt).toEqual(CUTOFF);
   });
 
+  it("returns every link it claimed, including one it left out, and none it skipped", async () => {
+    const filled = await link({ why: null });
+    const snoozed = await link({ why: null });
+    const kept = await link({ why: null });
+    const digest = await getDigest(
+      deps({
+        store: racing(async () => {
+          await store.update(OWNER, filled.id, { why: { text: "now", source: "asked" } });
+          await store.update(OWNER, snoozed.id, { snoozedUntil: at(DAY) });
+        }),
+      }),
+      OWNER,
+    );
+    expect(digest.links.map((l) => l.link.id)).toEqual([kept.id]);
+    expect([...digest.claimed].sort()).toEqual([filled.id, kept.id].sort());
+  });
+
+  it("claims the still-using check's link even when the check is then dropped", async () => {
+    const tool = await link({ lastOpenedAt: at(-45 * DAY) });
+    clock = at(-40 * DAY);
+    await keepHandy(deps(), OWNER, tool.id, "stated");
+    clock = NOW;
+    const digest = await getDigest(
+      deps({ store: racing(() => recordOpening(deps(), OWNER, tool.id)) }),
+      OWNER,
+    );
+    expect(digest.links).toEqual([]);
+    expect(digest.claimed).toEqual([tool.id]);
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
+  it("leaves a still-using check skipped at its claim out of claimed", async () => {
+    const tool = await link({ lastOpenedAt: at(-45 * DAY) });
+    clock = at(-40 * DAY);
+    await keepHandy(deps(), OWNER, tool.id, "stated");
+    clock = NOW;
+    const digest = await getDigest(deps({ store: racing(() => flag(tool.id)) }), OWNER);
+    expect(digest.claimed).toEqual([]);
+    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
+  });
+
   it("leaves out a link kept handy between selection and the claim, without marking it", async () => {
     const tool = await link({ why: null, savedAt: at(-100 * DAY), lastSurfacedAt: null });
     const other = await link({ why: null });
@@ -437,7 +478,7 @@ describe("getDigest claim", () => {
 
   it("returns an empty digest for an empty library without searching", async () => {
     await focus("topic", at(-DAY));
-    expect(await getDigest(deps(), OWNER)).toEqual({ links: [] });
+    expect(await getDigest(deps(), OWNER)).toEqual({ links: [], claimed: [] });
     expect(keyword.calls).toEqual([]);
   });
 });

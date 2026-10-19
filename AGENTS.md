@@ -45,7 +45,7 @@ Write a fact in its home and link to it from elsewhere; don't copy it.
 - **Core depends on interfaces.** `core/` uses `store/`, `search/` and `fetch/` through interfaces, never their implementations.
 - **Owner scoping lives in `store/`.** Every data call takes the owner; no door can skip it.
 - **A deleted link is hidden by `store/` and `search/`.** No door or core rule checks `deleted_at`, as `docs/specs/2026-10-19-delete-link-design.md` sets out; a new table keyed by link id registers in `src/store/hidden-link-coverage.test.ts`.
-- **The calling agent does the AI work.** The server never calls an AI model API and needs no API keys.
+- **One AI connection, and only when set up.** The server calls an AI model only through `src/ai/`, only when the `AYE_AI_` settings set one up, and everything else works without it. Agents connected through MCP still do their own AI work.
 - **Label guesses.** Anything an agent inferred (a why, a tag, a profile note) is stored with its source and shown as a guess. A tag's kind is the exception: only an inferred project is shown as a guess, since every tag starts as a topic (`ROADMAP.md`, 2026-10-14).
 - **Safe fetching.** The page fetcher refuses private, loopback and link-local addresses, including after redirects.
 - **Nothing public before auth.** The real app is not exposed to the internet until login and owner-isolation tests pass (phase 3). See `ROADMAP.md` for the one dated exception.
@@ -61,7 +61,7 @@ aye-ai-ai-links/
 ├─ AGENTS.md  README.md  ROADMAP.md  LICENSE
 ├─ docs/
 │  ├─ specs/      dated design records
-│  └─ design/     approved visual references (layout A only)
+│  └─ design/     approved visual references (layout A, and the Ask AI panel)
 ├─ .githooks/     pre-push runs `npm run check`
 ├─ .github/       CI: `npm run check` on pull requests
 ├─ deploy/        LaunchAgent plist, `deploy.sh`, and `release.sh` (names and publishes deploys; run where `gh` is signed in)
@@ -73,6 +73,7 @@ aye-ai-ai-links/
    ├─ auth/       agent keys, the caller identity, the web login and OAuth: better-auth, its lock, routes and client admission
    ├─ http/       request rate limiting and the request log
    ├─ cli/        the `keys` command for agent keys, the `owner` command for the web login, and the model prefetch
+   ├─ ai/         the one AI connection (OpenAI and Anthropic formats) and the in-app chat turn, which uses the MCP tools in process
    ├─ mcp/        AI connector door
    ├─ api/        JSON API door (planned)
    ├─ web/        web page door: login, home (the search question, the Handy shelf, its picks and your spaces), search results, space pages, all links, stored images, saved copies and their pictures, tags, the profile, apps and agent keys, and your data, the Save page and its bookmarklet, and the OAuth error page

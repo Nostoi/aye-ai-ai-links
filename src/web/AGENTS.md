@@ -1,6 +1,6 @@
 # src/web
 
-Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.html` (option A) and spec §6.
+Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.html` (option A) and spec §6. The Ask AI panel's reference is `docs/design/ask-ai-panel-mockup.html`, which governs over the text of its design (#159).
 
 ## Design rules (spec §6)
 

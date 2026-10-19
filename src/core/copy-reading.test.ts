@@ -189,6 +189,54 @@ describe("copy reader view", () => {
   }
 });
 
+describe("copy reader read", () => {
+  it("answers the copy", async () => {
+    const t = await setup();
+    const id = await t.save(1);
+    expect(await t.reader.read(OWNER, id)).toMatchObject({ markdown: "# Hi", finished: true });
+  });
+
+  it("answers unreadable, with one log line, when the read throws", async () => {
+    const t = await setup();
+    const id = await t.save(1);
+    vi.spyOn(t.copies, "readCopy").mockRejectedValue(new Error("EIO"));
+    expect(await t.reader.read(OWNER, id)).toBe("unreadable");
+    expect(t.logged).toEqual([`[saved copies] copy ${id} could not be read: EIO`]);
+  });
+
+  it("answers unreadable at 10 s for a read that never settles, not at 9.9 s", async () => {
+    const t = await setup();
+    const id = await t.save(1);
+    t.hold(id);
+    let answer: unknown;
+    void t.reader.read(OWNER, id).then((v) => (answer = v));
+    await vi.advanceTimersByTimeAsync(9_900);
+    expect(answer).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(answer).toBe("unreadable");
+    expect(t.logged).toEqual([`[saved copies] copy ${id} could not be read: timed out`]);
+  });
+
+  it("does not start a read while a view holds the gate", async () => {
+    const t = await setup();
+    const a = await t.save(1);
+    const b = await t.save(2);
+    const held = t.hold(a);
+    void t.reader.view(OWNER, a);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(held.spy).toHaveBeenCalledTimes(1);
+    let answer: unknown;
+    void t.reader.read(OWNER, b).then((v) => (answer = v));
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(held.spy).toHaveBeenCalledTimes(1);
+    expect(answer).toBeUndefined();
+    held.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(held.spy).toHaveBeenCalledTimes(2);
+    expect(answer).toMatchObject({ markdown: "# Hi" });
+  });
+});
+
 describe("copy reader image", () => {
   const withImage = async () => {
     const t = await setup();

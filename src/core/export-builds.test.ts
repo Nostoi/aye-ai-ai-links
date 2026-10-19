@@ -256,6 +256,24 @@ describe("export builds", () => {
     expect(b.count("remove")).toBe(1); // the flag was cleared
   });
 
+  it("a successful rebuild clears the expiry mark, so a later failed rebuild keeps the current file", async () => {
+    const b = setup();
+    await ready(b, A);
+    b.builds.start(A);
+    await flush();
+    vi.advanceTimersByTime(EXPORT_KEEP_MS); // the old file expires mid-rebuild
+    b.setNow(new Date(T0.getTime() + EXPORT_KEEP_MS));
+    b.finish(A);
+    await b.builds.settled(A);
+    b.builds.start(A);
+    await flush();
+    b.fail(A, new Error("x"));
+    await b.builds.settled(A);
+    expect(b.builds.view(A).state).toBe("failed");
+    expect(b.count("remove")).toBe(0);
+    expect(await b.builds.download(A)).not.toBeNull();
+  });
+
   it("a download answers with the date of the bytes it opened, even if a rebuild commits meanwhile", async () => {
     const b = setup();
     await ready(b, A);

@@ -7,6 +7,8 @@ export type CopyView = { link: Link; madeAt: Date; copy: ReadCopy | "missing" | 
 export type CopyReader = {
   /** null: not the owner's link, or no ok copy. */
   view(owner: OwnerId, linkId: string): Promise<CopyView | null>;
+  /** The gated file read alone, with no ledger lookup. null: no copy; "unreadable": a throw or the deadline. */
+  read(owner: OwnerId, linkId: string): Promise<ReadCopy | "missing" | "unreadable" | null>;
   /** null: no such ok image; "unreadable": a throw or the deadline. */
   image(owner: OwnerId, linkId: string, n: number): Promise<StoredImage | "unreadable" | null>;
 };
@@ -114,15 +116,19 @@ export function createCopyReader(o: {
     }
   }
 
+  const read: CopyReader["read"] = (owner, linkId) =>
+    limited(linkId, () => o.copies.readCopy(owner, linkId));
+
   return {
     async view(owner, linkId) {
       const link = await o.store.get(owner, linkId);
       if (!link) return null;
       const info = (await o.copies.copyInfo(owner, [linkId])).get(linkId);
       if (!info) return null;
-      const copy = await limited(linkId, () => o.copies.readCopy(owner, linkId));
+      const copy = await read(owner, linkId);
       return copy === null ? null : { link, madeAt: info.madeAt, copy };
     },
+    read,
     image: (owner, linkId, n) => limited(linkId, () => o.copies.copyImage(owner, linkId, n)),
   };
 }

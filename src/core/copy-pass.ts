@@ -1,4 +1,5 @@
 import type { ReadGate } from "./copy-reading.js";
+import { type CopyUsageLevel, copiesFull, copyUsageLevel } from "./copy-usage.js";
 import type { PageExtractor } from "./extract.js";
 import type { FetchOutcome, ImageFetcher, PageFetcher } from "./fetch.js";
 import { judgeImage, MAX_IMAGE_ATTEMPTS, RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
@@ -10,7 +11,6 @@ import {
   copyLimits,
   type FolderCheck,
   finishedMarkdown,
-  MAX_COPY_BYTES,
   type PendingCopyImage,
   pausedMessage,
   type SavedCopyMaintenance,
@@ -125,7 +125,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
   const finishFailures = new Map<string, { attempts: number; retryAt: number }>();
   const unknownLogged = new Set<string>();
   let lastOrphanSweep: number | undefined;
-  let level: "low" | "high" | "full" = "low";
+  let level: CopyUsageLevel = "low";
   const abort = new AbortController();
   let lastState = o.initialCheck.state;
   let started = false;
@@ -265,7 +265,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
 
   /** The backfill's page-through: at most one page fetch. */
   async function backfillPages(): Promise<boolean> {
-    const retryNoRoom = limitBytes - (await copies.usedBytes()) >= MAX_COPY_BYTES;
+    const retryNoRoom = !copiesFull(await copies.usedBytes(), limitBytes);
     let after: string | null = null;
     for (;;) {
       const rows = await copies.backfillCandidates(after, pageSize, { retryNoRoom });
@@ -470,8 +470,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
   async function usage(): Promise<void> {
     if (!keeper.wanted) return;
     const used = await copies.usedBytes();
-    const next =
-      limitBytes - used < MAX_COPY_BYTES ? "full" : used >= 0.8 * limitBytes ? "high" : "low";
+    const next = copyUsageLevel(used, limitBytes);
     if (next === level) return;
     level = next;
     if (next === "full") {

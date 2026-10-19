@@ -433,6 +433,28 @@ describe("copy pass backfill", () => {
     });
   });
 
+  describe("the full boundary", () => {
+    async function noRoomRetried(free: number): Promise<boolean> {
+      const limit = 2 * MAX_COPY_BYTES;
+      const t = setup({ limitBytes: limit, page: () => ({ kind: "http_error", status: 503 }) });
+      const id = await t.link(1);
+      const limits = { copyBytes: MAX_COPY_BYTES, totalBytes: 0 };
+      await t.copies.saveCopy(OWNER, id, draft(), limits, at(2));
+      expect(t.status(id)).toBe("no_room");
+      vi.spyOn(t.copies, "usedBytes").mockResolvedValue(limit - free);
+      await t.pass.sweep();
+      return t.pageCalls.length === 1;
+    }
+
+    it("retries a no_room link with exactly MAX_COPY_BYTES free", async () => {
+      expect(await noRoomRetried(MAX_COPY_BYTES)).toBe(true);
+    });
+
+    it("does not retry it with one byte less free", async () => {
+      expect(await noRoomRetried(MAX_COPY_BYTES - 1)).toBe(false);
+    });
+  });
+
   describe("folder state", () => {
     it("fetches nothing while paused, logs paused once, then resumed once and runs", async () => {
       const t = setup();

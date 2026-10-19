@@ -530,6 +530,20 @@ describe("openings on a space page (#124)", () => {
   });
 });
 
+describe("Remove saved copy on a space page", () => {
+  it("is on the cards in `copies` only, and the page script posts remove and restore", () => {
+    const html = space({
+      links: [link("1"), link("2")],
+      copies: new Map([["1", { madeAt: new Date(0) }]]),
+    });
+    const d = dom(html);
+    expect(d.querySelectorAll('[data-id="1"] button[data-act=remove-copy]')).toHaveLength(1);
+    expect(d.querySelectorAll('[data-id="2"] button[data-act=remove-copy]')).toHaveLength(0);
+    expect(html).toContain('"/links/copy/remove"');
+    expect(html).toContain('"/links/copy/restore"');
+  });
+});
+
 describe("Keep handy on a space page", () => {
   const kept = { status: "kept", source: "stated", due: false } as const;
   it("gives each active card the control, and the done view none and no Undo bar", () => {

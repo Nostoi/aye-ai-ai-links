@@ -4,6 +4,7 @@ import { linkSpace, type Space } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import { removeCopyScript } from "./copy-menu.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
@@ -230,6 +231,7 @@ ${editDialog()}
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}
 ${goneScript("results", "results-error")}
+${removeCopyScript("results", "results-error")}
 ${editLinkScript("results", "results-error")}
 </script>
 ${openedScript("results", "/links/opened")}`,

@@ -313,3 +313,38 @@ describe("Keep handy on All links", () => {
     ]);
   });
 });
+
+describe("the saved-copy usage line", () => {
+  const GIB = 1024 ** 3;
+  const FULL =
+    "Saved copies are almost full, so new links may not get one. Raise AYE_SAVED_COPY_LIMIT_GB or remove some copies.";
+  const notice = (html: string) => dom(html).querySelector(".all-foot .copy-notice");
+
+  it("says how much of the limit a high level uses, with no needs-you mark", () => {
+    const el = notice(all({ notice: { kind: "high", usedBytes: 1.5 * GIB, limitBytes: 2 * GIB } }));
+    expect(el?.textContent?.trim()).toBe("Saved copies use 1.5 of 2 GiB.");
+    expect(el?.getAttribute("class")).not.toContain("needs-you");
+  });
+
+  it("says full and paused in amber", () => {
+    const full = notice(all({ notice: { kind: "full" } }));
+    expect(full?.textContent?.trim()).toBe(FULL);
+    expect(full?.getAttribute("class")).toContain("needs-you");
+    const paused = notice(all({ notice: { kind: "paused" } }));
+    expect(paused?.textContent?.trim()).toBe(
+      "Saved copies are paused: the server can't write to its folder.",
+    );
+    expect(paused?.getAttribute("class")).toContain("needs-you");
+  });
+
+  it("shows nothing without a notice, on the done view or on a later page", () => {
+    expect(notice(all({ notice: null }))).toBeNull();
+    expect(notice(all())).toBeNull();
+    expect(notice(all({ notice: { kind: "full" }, done: true }))).toBeNull();
+    expect(notice(all({ notice: { kind: "full" }, later: true }))).toBeNull();
+  });
+
+  it("runs the Remove saved copy script on the card list", () => {
+    expect(all()).toContain("/links/copy/remove");
+  });
+});

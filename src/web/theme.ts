@@ -299,6 +299,8 @@ img.handy-image{background:#fff}
 .card-site{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
 .card-site .dot{flex:none;width:10px;height:10px;margin:0}
 .all-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px}
+.copy-notice{flex-basis:100%;margin:0;color:var(--soft);font-size:14px}
+.copy-notice.needs-you{padding:10px 14px;border-radius:12px}
 .edit-link{width:min(520px,calc(100% - 32px));max-height:calc(100% - 32px);padding:8px 24px 20px;border:0;border-radius:22px;background:var(--surface);color:var(--ink);box-shadow:0 24px 64px rgb(0 0 0 / .28)}
 .edit-link::backdrop{background:rgb(20 20 24 / .38)}
 .edit-grabber,.edit-top,.edit-hint-phone{display:none}

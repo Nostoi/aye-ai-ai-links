@@ -8,6 +8,7 @@ import { AUTH_BODY_LIMIT, BodyTooLarge, readCapped } from "../auth/http.js";
 import { loginRedirect, returnAfterLogin, SAVE_PATH } from "../auth/login-return.js";
 import { OAUTH_ERROR_PATH, oauthErrorMessage } from "../auth/oauth-error.js";
 import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
+import { removeSavedCopy, restoreSavedCopy } from "../core/copy-removal.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
@@ -27,7 +28,7 @@ import {
 import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
-import type { SavedCopyReader } from "../core/saved-copy.js";
+import type { SavedCopyReader, SavedCopyRemover } from "../core/saved-copy.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -383,6 +384,20 @@ async function noteAction(c: Context, act: () => Promise<void>): Promise<Respons
   }
 }
 
+/**
+ * Runs a copy action and answers 204. A refusal is core's own 404 wording, which is the owner's;
+ * `homeAction` would say the link is gone.
+ */
+async function copyAction(c: Context, act: () => Promise<void>): Promise<Response> {
+  try {
+    await act();
+    return c.body(null, 204, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError) || error.code !== "not_found") throw error;
+    return c.json({ code: error.code, message: error.message }, 404, NO_STORE);
+  }
+}
+
 /** A refused key action answers 400 with the rule's own message; anything else is thrown on. */
 function keyAction(c: Context, act: () => Response): Response {
   try {
@@ -434,7 +449,7 @@ export function webApp({
       images: LinkImageReader;
       edits: LinkEditStore;
       profile: ProfileStore;
-      savedCopies: SavedCopyReader;
+      savedCopies: SavedCopyReader & SavedCopyRemover;
       readGate: ReadGate;
     };
   auth: Auth;
@@ -743,6 +758,15 @@ export function webApp({
   // writes could be set off from another site.
   const linkId = { id: isLinkId };
   const done = (c: Context) => c.body(null, 204, NO_STORE);
+
+  app.post("/links/copy/remove", jsonBody(linkId), session, (c) =>
+    copyAction(c, () => removeSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+  );
+
+  // The Undo of a remove.
+  app.post("/links/copy/restore", jsonBody(linkId), session, (c) =>
+    copyAction(c, () => restoreSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+  );
 
   app.post("/home/opened", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {

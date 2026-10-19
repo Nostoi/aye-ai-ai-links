@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, unlinkSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseHTML } from "linkedom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { addSecondUser, oauthWorld } from "../auth/oauth-test-kit.js";
 import { png } from "../core/image-test-kit.js";
-import { saveLink } from "../core/links.js";
+import { getLinkWithText, saveLink } from "../core/links.js";
 import { copyLimits, finishedMarkdown, imageRef } from "../core/saved-copy.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -246,5 +246,101 @@ describe("the copy page", () => {
     const res = await owner.send(`/links/${id}/copy`, { headers: { host: "evil.example" } });
     expect(res.status).toBe(403);
     expect(res.bytes.toString("utf8")).not.toContain("Quokka");
+  });
+});
+
+const post = (id: string, origin = true) => ({ method: "POST", json: { id }, origin });
+const rowOf = (w: Awaited<ReturnType<typeof world>>["w"], id: string, owner = "owner") =>
+  w.links
+    .prepare("SELECT status FROM saved_copies WHERE owner_id = ? AND link_id = ?")
+    .get(owner, Number(id)) as { status: string } | undefined;
+const MISSING_COPY = {
+  code: "not_found",
+  message: "That saved copy is not there any more. Reload the page.",
+};
+const TOO_LATE = {
+  code: "not_found",
+  message: "It's too late to undo: the saved copy was removed for good.",
+};
+
+describe("POST /links/copy/remove and /links/copy/restore", () => {
+  it("removes the copy at once, hides it everywhere, and restores it within the window", async () => {
+    const { w, id, owner } = await world();
+    const deps = { ...createDeps(w.links, new FakeEmbedder(DIMS)), savedCopies: w.savedCopies };
+    const before = (await owner.send(`/links/${id}/copy`)).bytes.toString("utf8");
+    const removed = await owner.send("/links/copy/remove", post(id));
+    expect(removed.status).toBe(204);
+    expect(removed.headers.get("cache-control")).toBe("no-store");
+    expect((await owner.send(`/links/${id}/copy`)).status).toBe(404);
+    expect((await owner.send(`/links/${id}/copy/images/1`)).status).toBe(404);
+    expect((await w.savedCopies.copyInfo("owner", [id])).size).toBe(0);
+    expect((await getLinkWithText(deps, "owner", id, "t")).savedCopy).toBeNull();
+
+    expect((await owner.send("/links/copy/restore", post(id))).status).toBe(204);
+    const page = await owner.send(`/links/${id}/copy`);
+    expect(page.status).toBe(200);
+    expect(page.bytes.toString("utf8")).toBe(before);
+    const image = await owner.send(`/links/${id}/copy/images/1`);
+    expect(image.status).toBe(200);
+    expect(image.bytes.equals(COPY_IMAGE)).toBe(true);
+
+    const again = await owner.send("/links/copy/restore", post(id));
+    expect(again.status).toBe(404);
+    expect(again.body).toEqual(TOO_LATE);
+    expect(rowOf(w, id)?.status).toBe("ok");
+  });
+
+  it("answers the copy wording to a remove of a copy that is not there", async () => {
+    const { owner, id } = await world();
+    await owner.send("/links/copy/remove", post(id));
+    const res = await owner.send("/links/copy/remove", post(id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(MISSING_COPY);
+  });
+
+  it("refuses B's remove of A's copy and leaves it ok, on disk and on the page", async () => {
+    const { w, id, owner } = await world();
+    const browser = await addSecondUser(w);
+    const res = await browser.send("/links/copy/remove", post(id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(MISSING_COPY);
+    expect(rowOf(w, id)?.status).toBe("ok");
+    expect(existsSync(join(dirs[0] as string, id, "copy.md"))).toBe(true);
+    expect((await owner.send(`/links/${id}/copy`)).status).toBe(200);
+  });
+
+  it("refuses B's restore of A's removed copy and leaves it removed", async () => {
+    const { w, id, owner } = await world();
+    const browser = await addSecondUser(w);
+    expect((await owner.send("/links/copy/remove", post(id))).status).toBe(204);
+    const res = await browser.send("/links/copy/restore", post(id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(TOO_LATE);
+    expect(rowOf(w, id)?.status).toBe("removed");
+    expect((await owner.send(`/links/${id}/copy`)).status).toBe(404);
+  });
+
+  it("refuses a request without the site's Origin and changes nothing", async () => {
+    const { w, id, owner } = await world();
+    for (const path of ["/links/copy/remove", "/links/copy/restore"]) {
+      expect((await owner.send(path, post(id, false))).status).toBe(403);
+    }
+    expect(rowOf(w, id)?.status).toBe("ok");
+    await owner.send("/links/copy/remove", post(id));
+    expect((await owner.send("/links/copy/restore", post(id, false))).status).toBe(403);
+    expect(rowOf(w, id)?.status).toBe("removed");
+  });
+
+  it.skipIf(process.getuid?.() === 0)("still removes while saving is paused", async () => {
+    const { w, id, owner } = await world();
+    const root = dirs[0] as string;
+    chmodSync(root, 0o555);
+    try {
+      expect(await w.savedCopies.checkFolder()).toMatchObject({ state: "unwritable" });
+      expect((await owner.send("/links/copy/remove", post(id))).status).toBe(204);
+      expect(rowOf(w, id)?.status).toBe("removed");
+    } finally {
+      chmodSync(root, 0o755);
+    }
   });
 });

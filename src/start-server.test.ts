@@ -624,8 +624,8 @@ describe("startServer", () => {
       expect(authTables()).toEqual(expect.arrayContaining(["oauthClient", "session", "user"]));
     });
 
-    it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves the owner's links on /search with the session", async () => {
-      await seed("https://example.com/served-home");
+    /** Gives the owner a web login before the server starts. */
+    const ownerLogin = async () => {
       const auth = openAuthDatabase(authPath());
       const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
       await migrateAuth(options);
@@ -636,15 +636,22 @@ describe("startServer", () => {
         password: "Correct-horse-battery-1",
       });
       auth.close();
-
-      const { port, stop } = await start();
-      const signIn = await fetch(`http://127.0.0.1:${port}/api/auth/sign-in/email`, {
+    };
+    const signIn = (port: number) =>
+      fetch(`http://127.0.0.1:${port}/api/auth/sign-in/email`, {
         method: "POST",
         headers: { "content-type": "application/json", origin: BASE },
         body: JSON.stringify({ email: "you@example.com", password: "Correct-horse-battery-1" }),
       });
-      expect(signIn.status).toBe(200);
-      const [cookie] = signIn.headers.getSetCookie();
+
+    it("signs the owner in over loopback HTTP, as Tailscale Serve forwards it, and serves the owner's links on /search with the session", async () => {
+      await seed("https://example.com/served-home");
+      await ownerLogin();
+
+      const { port, stop } = await start();
+      const signedIn = await signIn(port);
+      expect(signedIn.status).toBe(200);
+      const [cookie] = signedIn.headers.getSetCookie();
       expect(cookie).toMatch(/; Secure/);
       const home = await fetch(`http://127.0.0.1:${port}/search`, {
         headers: { cookie: (cookie ?? "").split(";")[0] ?? "" },
@@ -655,6 +662,58 @@ describe("startServer", () => {
       await stop();
       expect(authRows("SELECT userId FROM session")).toEqual([{ userId: "owner" }]);
     });
+
+    it("stopping the server aborts a turn waiting on the model, before the drain", async () => {
+      await ownerLogin();
+      // An OpenAI-style AI that takes every request and never answers it.
+      let asked!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        asked = resolve;
+      });
+      const ai = http.createServer(() => asked());
+      await new Promise<void>((resolve) => ai.listen(0, "127.0.0.1", resolve));
+      const aiPort = (ai.address() as net.AddressInfo).port;
+      try {
+        const s = await startServer(
+          {
+            ...cfg(dbPath, 0),
+            ai: {
+              api: "openai",
+              url: `http://127.0.0.1:${aiPort}/v1`,
+              key: undefined,
+              model: "m",
+              name: "Fake",
+            },
+          },
+          { ...fakePipeline(), drainMs: 5_000, settleMs: 200, requestLog: () => {} },
+        );
+        started.push(s);
+        const cookie = ((await signIn(s.port)).headers.getSetCookie()[0] ?? "").split(";")[0] ?? "";
+        const answer = fetch(`http://127.0.0.1:${s.port}/ai/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: BASE, cookie },
+          body: JSON.stringify({ history: [], text: "Save example.com" }),
+        });
+        await waiting;
+        const stopAt = Date.now();
+        await s.stop();
+        expect(Date.now() - stopAt).toBeLessThan(2_000);
+        const res = await answer;
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({
+          ok: false,
+          ai: "Fake",
+          message: "Fake didn't answer: the server is stopping.",
+          changes: [],
+          seen: [],
+        });
+        expect(rows()).toEqual([]);
+      } finally {
+        ai.closeAllConnections();
+        await new Promise((resolve) => ai.close(resolve));
+      }
+      // Past the drain limit, so a stop that waits out the drain fails on the timing, not the timeout.
+    }, 15_000);
 
     const claudeBeforeStart = async () => {
       const authDb = openAuthDatabase(authPath());

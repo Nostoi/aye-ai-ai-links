@@ -2,6 +2,7 @@ import { createResourceServerChallenge } from "@better-auth/oauth-provider";
 import { hostHeaderValidation } from "@modelcontextprotocol/hono";
 import { APIError } from "better-auth/api";
 import { Hono } from "hono";
+import type { ChatModel } from "./ai/model.js";
 import {
   createAgentKey,
   listAgentKeys,
@@ -69,6 +70,7 @@ const CHECKED_PAGES = [
   "/connections/keys",
   "/connections/keys/turn-off",
   "/connections/keys/turn-on",
+  "/ai/chat",
   "/home/opened",
   "/home/snooze",
   "/home/unsnooze",
@@ -141,6 +143,8 @@ export type AppOptions = {
         copyLimitBytes?: number;
         readGate: ReadGate;
         exports: ExportBuilds;
+        /** The in-app AI; `POST /ai/chat` answers NO_AI without one. */
+        ai?: ChatModel | undefined;
       };
       auth: AuthDeps;
     }
@@ -150,6 +154,8 @@ export type AppOptions = {
  * The whole HTTP surface. Every door is mounted here, so tests drive the real composition. The
  * server always passes `auth`; without it, as in tests of the MCP door alone, the auth routes,
  * the root metadata and the web door are not mounted. `allowedHosts` covers every door.
+ * `stopTurns` aborts every in-app AI turn's model call and ends the turn at its next step; `close`
+ * does the same before closing the MCP handler.
  */
 export function createApp(options: AppOptions) {
   const { deps, identify, allowedHosts, rateLimit, log } = options;
@@ -160,6 +166,8 @@ export function createApp(options: AppOptions) {
   if (log) app.use("*", requestLog(log));
   const baseUrl = auth?.auth.options.baseURL;
   const tracker = createCallTracker();
+  const turns = new AbortController();
+  const stopTurns = () => turns.abort();
   const mcp = mcpApp({
     deps,
     tracker,
@@ -219,8 +227,13 @@ export function createApp(options: AppOptions) {
           turnOff: (owner, id) => turnOffAgentKey(keys, owner, id),
           turnOn: (owner, id) => turnOnAgentKey(keys, owner, id),
         },
+        ai: web.deps.ai && { model: web.deps.ai, track: tracker.track, signal: turns.signal },
       }),
     );
   }
-  return { app, close: mcp.close, calls: tracker.calls };
+  const close = async () => {
+    stopTurns();
+    await mcp.close();
+  };
+  return { app, close, stopTurns, calls: tracker.calls };
 }

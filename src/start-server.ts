@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
+import { createChatModel } from "./ai/create-model.js";
 import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
 import { openAuthDatabase } from "./auth/better-auth.js";
@@ -96,7 +97,10 @@ export type StartOptions = {
  * metadata refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
- * 1. The runner, the indexer, the image pass, the copy pass, the icon backfill and the check runner take no new work;
+ * 1. In-app AI turns are stopped first: a model call in flight is aborted and the turn answers
+ *    that the server is stopping, so its request ends before the drain; a tool call already
+ *    running carries on, and step 3 waits for it.
+ *    The runner, the indexer, the image pass, the copy pass, the icon backfill and the check runner take no new work;
  *    running jobs, an embedding, an image fetch, a copy in the making, a page being read for its icon
  *    and a link check in flight carry on.
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
@@ -181,6 +185,7 @@ export async function startServer(
   let runner: ReturnType<typeof createSnapshotRunner>;
   let indexer: ReturnType<typeof createVectorIndexer>;
   let calls: ReturnType<typeof createApp>["calls"];
+  let stopTurns: ReturnType<typeof createApp>["stopTurns"];
   let server: Server;
   try {
     db = openDatabase(config.dbPath);
@@ -277,6 +282,7 @@ export async function startServer(
         saveWaitMs,
         copyLimitBytes: config.savedCopies.limitBytes,
         version: config.version,
+        ai: config.ai && createChatModel(config.ai),
       },
       identify: auth.identify,
       auth: { ...auth, keys },
@@ -285,6 +291,7 @@ export async function startServer(
     });
     closeApp = built.close;
     calls = built.calls;
+    stopTurns = built.stopTurns;
     server = await new Promise<Server>((resolve, reject) => {
       const s = serve({
         fetch: built.app.fetch,
@@ -374,6 +381,7 @@ export async function startServer(
   };
 
   const shutdown = async () => {
+    stopTurns();
     runner.quiesce();
     indexer.quiesce();
     images?.quiesce();

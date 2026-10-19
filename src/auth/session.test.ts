@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { memoryAuth, TEST_BASE_URL, TEST_EMAIL, TEST_PASSWORD } from "./memory-auth.js";
-import { sessionIdentify } from "./session.js";
+import { inAppCaller, sessionIdentify } from "./session.js";
 
 async function setup() {
   const t = await memoryAuth();
@@ -40,5 +40,12 @@ describe("sessionIdentify", () => {
       .prepare(`UPDATE "session" SET expiresAt = ?`)
       .run(new Date(Date.now() - 1000).toISOString());
     expect(await t.ask({ cookie: t.cookie })).toBeNull();
+  });
+});
+
+describe("inAppCaller", () => {
+  it("keeps the session's owner and records the in-app AI by its name", () => {
+    const session = { owner: "owner-b", savedBy: "web", rateKey: "session:owner-b" };
+    expect(inAppCaller(session, "Fake")).toEqual({ owner: "owner-b", savedBy: "In-app AI (Fake)" });
   });
 });

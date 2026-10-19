@@ -33,7 +33,7 @@ export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app i
 const TOO_LONG = "it took too long";
 const STOPPING = "the server is stopping";
 const CUT_OFF = "its reply was cut off";
-const SERVER_FAULT = "something went wrong on the server";
+export const SERVER_FAULT = "something went wrong on the server";
 
 /** The posted history and text checked against the caps and order, with long assistant turns shortened; null when refused. */
 export function takeTurn(body: {

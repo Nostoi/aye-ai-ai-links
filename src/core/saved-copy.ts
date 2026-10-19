@@ -25,6 +25,8 @@ export type CopyImageEnd = "none" | "refused";
 export type ImageExt = "png" | "jpg" | "gif" | "webp";
 export type FinishImage = { n: number; ext: ImageExt | null }; // null: not stored
 export type CopyInfo = { madeAt: Date };
+/** A copy's ledger row as export reads it; no file is read. */
+export type CopyLedgerEntry = { status: "ok" | "removed"; madeAt: Date };
 export type CopyImageInfo = { contentType: ImageType; version: string };
 // nonce: the copy's image nonce (null when it has no images), so a reader can resolve unfinished references
 export type ReadCopy = {
@@ -94,6 +96,8 @@ export interface SavedCopyWriter {
 /** Reads copies for their owner. */
 export interface SavedCopyReader {
   copyInfo(owner: OwnerId, linkIds: string[]): Promise<Map<string, CopyInfo>>;
+  /** The owner's `ok` and `removed` rows (purged tombstones included), by link id; reads no file. */
+  listCopies(owner: OwnerId): Promise<Map<string, CopyLedgerEntry>>;
   /** "missing" when the folder check does not pass or the file is gone; null when the owner has no such copy. */
   readCopy(owner: OwnerId, linkId: string): Promise<ReadCopy | "missing" | null>;
   copyImage(owner: OwnerId, linkId: string, n: number): Promise<StoredImage | null>;

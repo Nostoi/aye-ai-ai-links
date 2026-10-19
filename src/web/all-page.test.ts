@@ -326,6 +326,11 @@ describe("the saved-copy usage line", () => {
     expect(el?.getAttribute("class")).not.toContain("needs-you");
   });
 
+  it("rounds the used amount down, so a high level never reads as the whole limit", () => {
+    const el = notice(all({ notice: { kind: "high", usedBytes: 0.96 * GIB, limitBytes: GIB } }));
+    expect(el?.textContent?.trim()).toBe("Saved copies use 0.9 of 1 GiB.");
+  });
+
   it("says full and paused in amber", () => {
     const full = notice(all({ notice: { kind: "full" } }));
     expect(full?.textContent?.trim()).toBe(FULL);

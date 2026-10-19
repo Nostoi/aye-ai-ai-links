@@ -61,8 +61,8 @@ type Input = {
   notice?: CopyNotice | null;
 };
 
-/** GiB to one decimal, with a trailing ".0" trimmed. */
-const gib = (bytes: number) => (bytes / 1024 ** 3).toFixed(1).replace(/\.0$/, "");
+/** GiB rounded down to one decimal, so a used amount below the limit never reads as all of it. */
+const gib = (bytes: number) => String(Math.floor((bytes / 1024 ** 3) * 10) / 10);
 
 const noticeText = (n: CopyNotice): string =>
   n.kind === "high"

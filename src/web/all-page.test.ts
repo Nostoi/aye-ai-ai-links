@@ -297,7 +297,7 @@ describe("Keep handy on All links", () => {
     expect((d.querySelector('[data-id="2"] .handy-on') as HTMLElement).hidden).toBe(false);
     const done = all({ links: [link("1", { state: "archived" })], done: true });
     expect(dom(done).querySelector("[data-handy]")).toBeNull();
-    expect(done).not.toContain('id="undo-bar"');
+    expect(done).toContain('id="undo-bar"');
   });
 
   it("works the control on a card Show older links appended", async () => {

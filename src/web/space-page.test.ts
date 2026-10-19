@@ -546,7 +546,7 @@ describe("Remove saved copy on a space page", () => {
 
 describe("Keep handy on a space page", () => {
   const kept = { status: "kept", source: "stated", due: false } as const;
-  it("gives each active card the control, and the done view none and no Undo bar", () => {
+  it("gives each active card the control, and the done view none but the Undo bar", () => {
     const html = space({ links: [link("1"), link("2")], handy: new Map([["2", kept]]) });
     const d = dom(html);
     expect((d.querySelector('[data-id="1"] button[data-act=keep]') as HTMLElement).hidden).toBe(
@@ -557,7 +557,7 @@ describe("Keep handy on a space page", () => {
     expect(html.match(/const post = /g)).toHaveLength(1);
     const done = space({ links: [link("1", { state: "archived" })], done: true });
     expect(dom(done).querySelector("[data-handy]")).toBeNull();
-    expect(done).not.toContain('id="undo-bar"');
+    expect(done).toContain('id="undo-bar"');
   });
 });
 

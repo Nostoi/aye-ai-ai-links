@@ -128,6 +128,22 @@ describe("Delete link from the ⋯ menu", () => {
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
+  it("after a refused delete the user can click Delete link again and a second post is sent", async () => {
+    const message = "That link is not there any more. Reload the page.";
+    let calls = 0;
+    const p = load(() =>
+      ++calls === 1 ? { status: 404, body: { code: "not_found", message } } : { status: 204 },
+    );
+    await click(p, DELETE);
+    expect(p.$("[data-id='7']")).not.toBeNull();
+    await click(p, DELETE);
+    expect(p.sent).toEqual([
+      post("/links/delete", { id: "7" }),
+      post("/links/delete", { id: "7" }),
+    ]);
+    expect(p.$("[data-id='7']")).toBeNull();
+  });
+
   it("deleting the only card of a month hides the month and Undo shows it again", async () => {
     const html = allPage({
       order: "newest",

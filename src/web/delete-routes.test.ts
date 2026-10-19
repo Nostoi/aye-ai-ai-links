@@ -121,6 +121,18 @@ describe("POST /links/delete and /links/restore", () => {
     expect(rowOf(w, id)?.deleted_at).toBeNull();
   });
 
+  it("/all/done and /spaces/done?tag=… delete a link and offer Undo", async () => {
+    const { deps, id, owner } = await world();
+    await deps.store.update("owner", id, { state: "archived" });
+    for (const path of ["/all/done", "/spaces/done?tag=kitchen"]) {
+      const html = String((await owner.send(path)).body);
+      expect(html, path).toContain(TITLE);
+      expect(html, path).toContain('data-act="delete-link"');
+      expect(html, path).toContain('id="undo-bar"');
+    }
+    expect((await owner.send("/links/delete", post(id))).status).toBe(204);
+  });
+
   it("answers 404 with the reload message to a delete of a link that is not there", async () => {
     const { id, owner } = await world();
     expect((await owner.send("/links/delete", post(id))).status).toBe(204);

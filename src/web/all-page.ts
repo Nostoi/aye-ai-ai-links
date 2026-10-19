@@ -115,9 +115,10 @@ function card(
 ): string {
   const space = linkSpace(link, catalog);
   const picture = images.get(link.id);
-  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, picture, pictures.get(link.id))}>
+  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
 ${tile(link, picture, "card-image")}
-${done ? "" : `${editMenu(link, copies.get(link.id))}\n`}<div class="card-body">
+${editMenu(link, copies.get(link.id))}
+<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 ${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}${handyControl(link, handy.get(link.id))}</div>
 </li>`;
@@ -186,11 +187,18 @@ export function allPage(input: Input): string {
 <a class="search-instead" href="/search">Search instead</a>
 </div>
 <nav class="orders" aria-label="Order">${choices}</nav>
-${done ? "" : '<p id="all-error" role="alert"></p>'}
+<p id="all-error" role="alert"></p>
 ${list}
 <div class="all-foot">${noticeLine(input)}${more}${other}</div>
 </main>
-${done ? "" : `${editDialog()}\n<script>\n${CARD_FETCH}\n${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n${editLinkScript("all-links", "all-error")}\n${removeCopyScript("all-links", "all-error")}\n${deleteLinkScript("all-links", "all-error")}\n</script>\n`}${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
-    { menu: true, undo: !done },
+${editDialog()}
+<script>
+${CARD_FETCH}
+${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${editLinkScript("all-links", "all-error")}
+${removeCopyScript("all-links", "all-error")}
+${deleteLinkScript("all-links", "all-error")}
+</script>
+${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+    { menu: true, undo: true },
   );
 }

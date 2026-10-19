@@ -94,9 +94,10 @@ function card(
       : `${whyAnswer("p", "Why: ", "card-why")}\n${askWhy(link)}`;
   const space = linkSpace(link, catalog, { within: tag.key });
   const picture = images.get(link.id);
-  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${done ? "" : editData(link, picture, pictures.get(link.id))}>
+  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
 ${tile(link, picture, "card-image")}
-${done ? "" : `${editMenu(link, copies.get(link.id))}\n`}<div class="card-body">
+${editMenu(link, copies.get(link.id))}
+<div class="card-body">
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
@@ -114,6 +115,15 @@ ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
+${removeCopyScript("space-links", "space-error")}
+${editLinkScript("space-links", "space-error")}
+${deleteLinkScript("space-links", "space-error")}
+</script>
+`;
+
+/** The edit dialog, Delete link and the saved copy's Remove on the done cards, including those Show older links appends. */
+const DONE_SCRIPT = `<script>
+${CARD_FETCH}
 ${removeCopyScript("space-links", "space-error")}
 ${editLinkScript("space-links", "space-error")}
 ${deleteLinkScript("space-links", "space-error")}
@@ -142,6 +152,7 @@ export function spacePage(input: Input): string {
   const body = done
     ? `<h2>Links you're done with</h2>
 <p class="small"><a class="back-link" href="${escapeHtml(spaceHref(tag.key))}">Back to ${escapeHtml(tag.name)}</a></p>
+<p id="space-error" role="alert"></p>
 ${list}
 ${more}`
     : `<h2>Newest first</h2>
@@ -154,8 +165,9 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${done ? "" : `${editDialog()}\n${CARDS_SCRIPT}`}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
-    { menu: true, undo: !done },
+${editDialog()}
+${done ? DONE_SCRIPT : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+    { menu: true, undo: true },
   );
 }
 

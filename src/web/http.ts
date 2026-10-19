@@ -621,12 +621,10 @@ export function webApp({
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
-      const pictures = done
-        ? new Map()
-        : await deps.images.pictureInfo(
-            owner,
-            page.links.map((l) => l.id),
-          );
+      const pictures = await deps.images.pictureInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const later = before !== undefined;
       const html = spacePage({
         tag,
@@ -682,12 +680,10 @@ export function webApp({
       const views = await linkViews(deps, owner, page.links);
       const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
       const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
-      const pictures = done
-        ? new Map()
-        : await deps.images.pictureInfo(
-            owner,
-            page.links.map((l) => l.id),
-          );
+      const pictures = await deps.images.pictureInfo(
+        owner,
+        page.links.map((l) => l.id),
+      );
       const later = before !== undefined;
       const notice =
         done || later ? null : await readCopyNotice(deps.savedCopies, deps.copyLimitBytes ?? 0);

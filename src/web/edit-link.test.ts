@@ -197,7 +197,7 @@ describe("the card menu and the card data", () => {
     expect(card?.querySelector("button[data-act=edit]")).not.toBeNull();
   });
 
-  it("leaves the menu and the data off the done pages", () => {
+  it("puts the menu and the data on the done pages too", () => {
     const done = {
       links: [link("1")],
       older: null,
@@ -211,8 +211,8 @@ describe("the card menu and the card data", () => {
       spacePage({ ...done, tag: KITCHEN, catalog: [KITCHEN] }),
     ]) {
       const [card] = cards(html);
-      expect(card?.querySelector("details.card-menu")).toBeNull();
-      expect(card?.hasAttribute("data-title")).toBe(false);
+      expect(card?.querySelector("details.card-menu")).not.toBeNull();
+      expect(card?.hasAttribute("data-title")).toBe(true);
     }
   });
 
@@ -242,7 +242,7 @@ describe("the card menu and the card data", () => {
 describe("the edit dialog", () => {
   const dialogs = (html: string) => parseHTML(html).document.querySelectorAll("dialog#edit-link");
 
-  it("is on each page with the menu once, and on no done page", () => {
+  it("is on each page with the menu once, done pages included", () => {
     for (const html of Object.values(pages({ links: [link("1")] })))
       expect(dialogs(html)).toHaveLength(1);
     const done = {
@@ -253,8 +253,8 @@ describe("the edit dialog", () => {
       now: NOW,
       done: true,
     };
-    expect(dialogs(allPage({ ...done, order: "newest", catalog: [KITCHEN] }))).toHaveLength(0);
-    expect(dialogs(spacePage({ ...done, tag: KITCHEN, catalog: [KITCHEN] }))).toHaveLength(0);
+    expect(dialogs(allPage({ ...done, order: "newest", catalog: [KITCHEN] }))).toHaveLength(1);
+    expect(dialogs(spacePage({ ...done, tag: KITCHEN, catalog: [KITCHEN] }))).toHaveLength(1);
   });
 
   it("has the canvas's heading, fields, picture controls and buttons", () => {

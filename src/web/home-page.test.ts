@@ -730,3 +730,25 @@ describe("the Worth a look gone card (#128)", () => {
     expect(gone().hidden).toBe(false);
   });
 });
+
+describe("the Worth a look cards' pictures", () => {
+  it.each([
+    ["cover", { version: "v1", fit: "cover" }, (c: string) => `img.${c}`],
+    [
+      "contain",
+      { version: "v1", fit: "contain" },
+      (c: string) => `div.${c}.icon-box > img.site-icon`,
+    ],
+    ["none", undefined, (c: string) => `div.${c}.initials-box > span.pic-initials`],
+  ] as const)("renders %s in the lead, a small card and the gone card", (_, picture, sel) => {
+    const lead = card([]);
+    const small = card([]);
+    const gone = link();
+    const images = new Map<string, ShownPicture>();
+    if (picture) for (const l of [lead.link, small.link, gone]) images.set(l.id, picture);
+    const d = dom(render([lead, small], images, [], gone));
+    expect(d.querySelector(`.worth-lead ${sel("worth-image")}`)).not.toBeNull();
+    expect(d.querySelector(`.worth-small:not(.worth-gone) ${sel("worth-tile")}`)).not.toBeNull();
+    expect(d.querySelector(`.worth-gone ${sel("worth-tile")}`)).not.toBeNull();
+  });
+});

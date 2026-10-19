@@ -378,3 +378,20 @@ describe("the saved-copy usage line", () => {
     expect(all()).toContain("/links/copy/remove");
   });
 });
+
+describe("the All links card's picture", () => {
+  it.each([
+    ["cover", { version: "v1", fit: "cover" }, "img.card-image"],
+    ["contain", { version: "v1", fit: "contain" }, "div.card-image.icon-box > img.site-icon"],
+    ["none", undefined, "div.card-image.initials-box > span.pic-initials"],
+  ] as const)("renders %s, on the done page too", (_, picture, selector) => {
+    for (const done of [false, true]) {
+      const html = all({
+        done,
+        links: [link("1", { state: done ? "archived" : "active" })],
+        images: new Map(picture ? [["1", picture]] : []),
+      });
+      expect(dom(html).querySelector(`.link-card ${selector}`), `done ${done}`).not.toBeNull();
+    }
+  });
+});

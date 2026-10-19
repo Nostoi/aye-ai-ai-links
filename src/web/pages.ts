@@ -8,6 +8,7 @@ import { removeCopyScript } from "./copy-menu.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
+import { initialsText } from "./initials.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -129,13 +130,20 @@ export function whyLine(why: Link["why"]): string {
 }
 
 /**
- * The link's stored image, served by this site, or the plain tile; never the page's own image URL.
- * `className` styles both.
+ * The link's stored image served by this site (a cover photo, or an icon shown whole), else its
+ * initials; `className` styles all three.
  */
-export const tile = (link: Link, picture: ShownPicture | undefined, className = "tile") =>
-  picture === undefined
-    ? `<div class="${className}" aria-hidden="true"></div>`
-    : `<img class="${className}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(picture.version)}" alt="" loading="lazy">`;
+export function tile(link: Link, picture: ShownPicture | undefined, className = "tile"): string {
+  if (!picture) {
+    const text = initialsText(link);
+    return `<div class="${className} initials-box" aria-hidden="true">${text ? `<span class="pic-initials">${escapeHtml(text)}</span>` : ""}</div>`;
+  }
+  const img = (cls: string) =>
+    `<img class="${cls}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(picture.version)}" alt="" loading="lazy">`;
+  return picture.fit === "cover"
+    ? img(className)
+    : `<div class="${className} icon-box" aria-hidden="true">${img("site-icon")}</div>`;
+}
 
 /** The ` space-<color>` class of a space, or nothing for neutral. */
 export const spaceClass = (space: Pick<Space, "color"> | null) =>

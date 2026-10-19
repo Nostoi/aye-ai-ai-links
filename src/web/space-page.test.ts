@@ -560,3 +560,20 @@ describe("Keep handy on a space page", () => {
     expect(done).not.toContain('id="undo-bar"');
   });
 });
+
+describe("the space card's picture", () => {
+  it.each([
+    ["cover", { version: "v1", fit: "cover" }, "img.card-image"],
+    ["contain", { version: "v1", fit: "contain" }, "div.card-image.icon-box > img.site-icon"],
+    ["none", undefined, "div.card-image.initials-box > span.pic-initials"],
+  ] as const)("renders %s, on the done page too", (_, picture, selector) => {
+    for (const done of [false, true]) {
+      const html = space({
+        done,
+        links: [link("1", { state: done ? "archived" : "active" })],
+        images: new Map(picture ? [["1", picture]] : []),
+      });
+      expect(dom(html).querySelector(`#space-links ${selector}`), `done ${done}`).not.toBeNull();
+    }
+  });
+});

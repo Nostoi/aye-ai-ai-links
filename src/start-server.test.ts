@@ -29,6 +29,7 @@ import type {
   LinkCheckOutcome,
   PageFetcher,
 } from "./core/fetch.js";
+import { png } from "./core/image-test-kit.js";
 import { saveLink } from "./core/links.js";
 import { imageRef } from "./core/saved-copy.js";
 import { at, record } from "./core/snapshot-store-contract.js";
@@ -64,7 +65,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const PAGE: ExtractOutcome = {
   kind: "ok",
-  metadata: { title: "Page title", description: null, imageUrl: null },
+  metadata: { title: "Page title", description: null, imageUrl: null, iconUrls: [] },
   text: "page text",
 };
 
@@ -72,7 +73,7 @@ const IMAGE_URL = "https://example.com/preview.png";
 /** A page whose metadata names a preview image. */
 const PAGE_WITH_IMAGE: ExtractOutcome = {
   ...PAGE,
-  metadata: { title: "Page title", description: null, imageUrl: IMAGE_URL },
+  metadata: { title: "Page title", description: null, imageUrl: IMAGE_URL, iconUrls: [] },
 };
 const PNG: ImageOutcome = {
   kind: "ok",
@@ -1267,6 +1268,49 @@ describe("startServer", () => {
       expect((await post(port, SAVE)).status).toBe(200);
       await until(() => images()[0]?.status === "ok", "a stored image");
       expect(images()).toEqual([{ status: "ok", stored: 1 }]);
+    });
+
+    const ICON_URL = "https://example.com/icon.png";
+    const PAGE_WITH_ICON: ExtractOutcome = {
+      kind: "ok",
+      metadata: { title: "Page title", description: null, imageUrl: null, iconUrls: [ICON_URL] },
+      text: "page text",
+    };
+
+    it("stores a saved page's site icon, as an icon, through the image fetcher", async () => {
+      const asked: string[] = [];
+      const { port } = await start({
+        ...fakePipeline({
+          extract: async () => PAGE_WITH_ICON,
+          fetchImage: async (url) => {
+            asked.push(url);
+            return { kind: "ok", contentType: "image/png", bytes: new Uint8Array(png(128, 128)) };
+          },
+        }),
+        imagePollMs: 20,
+      });
+      expect((await post(port, SAVE)).status).toBe(200);
+      await until(() => images()[0]?.status === "ok", "a stored icon");
+      expect(read<{ role: string }>("SELECT role FROM link_images")).toEqual([{ role: "icon" }]);
+      expect(asked).toEqual([ICON_URL]);
+    });
+
+    it("records none for a saved page that names no picture, and fetches no image", async () => {
+      const asked: string[] = [];
+      const { port } = await start({
+        ...fakePipeline({
+          extract: async () => PAGE,
+          fetchImage: async (url) => {
+            asked.push(url);
+            return PNG;
+          },
+        }),
+        imagePollMs: 20,
+      });
+      expect((await post(port, SAVE)).status).toBe(200);
+      await until(() => images()[0]?.status === "none", "the snapshot recorded");
+      expect(images()).toEqual([{ status: "none", stored: 0 }]);
+      expect(asked).toEqual([]);
     });
 
     it("answers save_link with the fetched page while the image fetch hangs", async () => {

@@ -14,7 +14,12 @@ import type { SnapshotRecord } from "./snapshot-store.js";
 const now = new Date("2026-10-11T12:00:00.000Z");
 const MIN = 60_000;
 const HOUR = 60 * MIN;
-const meta: PageMetadata = { title: "T", description: "D", imageUrl: "https://x.test/i.png" };
+const meta: PageMetadata = {
+  title: "T",
+  description: "D",
+  imageUrl: "https://x.test/i.png",
+  iconUrls: ["https://x.test/a.png", "https://x.test/b.png"],
+};
 
 type FailedFetch = Exclude<FetchOutcome, { kind: "ok" }>;
 const fetchOf = (fetch: FailedFetch): AttemptOutcome => ({ stage: "fetch", fetch });
@@ -201,11 +206,38 @@ describe("snapshotRecord", () => {
       title: "T",
       description: "D",
       imageUrl: "https://x.test/i.png",
-      iconUrls: [],
+      iconUrls: meta.iconUrls,
       text: "body",
       lastError: null,
     });
     expectConsistent(r);
+  });
+
+  it("★ keeps at most MAX_ICON_URLS icons, and reads a missing list as none (R2)", () => {
+    // [Handing the store a record it refuses, which ends a good page as failed.]
+    const three = {
+      ...meta,
+      iconUrls: ["https://x.test/1.png", "https://x.test/2.png", "https://x.test/3.png"],
+    };
+    expect(map(extractOf({ kind: "ok", metadata: three, text: "b" })).iconUrls).toEqual([
+      "https://x.test/1.png",
+      "https://x.test/2.png",
+    ]);
+    const { iconUrls: _, ...old } = meta;
+    expect(
+      map(extractOf({ kind: "ok", metadata: old as PageMetadata, text: "b" })).iconUrls,
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["a number", 5, []],
+    ["an object", {}, []],
+    ["a string", "abc", []],
+    ["null", null, []],
+    ["an array with non-strings", [1, {}, "https://a/x.png"], ["https://a/x.png"]],
+  ])("reads iconUrls that is %s without throwing, keeping only string icons", (_n, bad, want) => {
+    const metadata = { ...meta, iconUrls: bad } as unknown as PageMetadata;
+    expect(map(extractOf({ kind: "ok", metadata, text: "b" })).iconUrls).toEqual(want);
   });
 
   it("ok with no text stores null text", () => {
@@ -239,7 +271,7 @@ describe("snapshotRecord", () => {
         title: "T",
         description: "D",
         imageUrl: "https://x.test/i.png",
-        iconUrls: [],
+        iconUrls: meta.iconUrls,
         text: null,
         lastError,
       });

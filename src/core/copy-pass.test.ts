@@ -21,7 +21,7 @@ import type { ToolRecord } from "./tool-store.js";
 const OWNER = "o";
 const NONCE = "0".repeat(32);
 const draft = (markdown = "# Hi"): CopyDraft => ({ markdown, imageUrls: [], nonce: NONCE });
-const META = { title: null, description: null, imageUrl: null };
+const META = { title: null, description: null, imageUrl: null, iconUrls: [] };
 const okPage = (url: string): FetchOutcome => ({
   kind: "ok",
   finalUrl: url,

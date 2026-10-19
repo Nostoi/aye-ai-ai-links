@@ -8,8 +8,16 @@ import {
   purgeDeletedLinks,
   restoreLink,
 } from "./link-removal.js";
+import { createDeps } from "../deps.js";
+import { FakeEmbedder } from "../search/embedder.js";
+import { DIMS } from "../search/model.js";
+import { openDatabase } from "../store/database.js";
+import { getLinkWithText, saveLink } from "./links.js";
+import { listLinks } from "./list-links.js";
 import { COPY_UNDO_WINDOW_MS } from "./saved-copy.js";
+import { searchLinks } from "./search-links.js";
 import { at, newLink } from "./snapshot-store-contract.js";
+import { keepHandy, listShelf } from "./tools.js";
 
 const OWNER = "o";
 const T0 = 1_000_000;
@@ -80,6 +88,34 @@ describe("purgeDeletedLinks", () => {
 
   it("the link window equals the copy window", () => {
     expect(LINK_UNDO_WINDOW_MS).toBe(COPY_UNDO_WINDOW_MS);
+  });
+});
+
+describe("a deleted link, through SQLite and core", () => {
+  it("after deleteLink the link is gone from get, listLinks, search, count, digest, Handy, list_links and get_link", async () => {
+    const deps = createDeps(openDatabase(":memory:"), new FakeEmbedder(DIMS));
+    deps.store.ensureUser(OWNER, OWNER);
+    const { link } = await saveLink(deps, OWNER, {
+      url: "https://ex.com/quokka",
+      title: "quokka",
+      savedBy: "t",
+    });
+    await keepHandy(deps, OWNER, link.id, "stated");
+    const before = await listLinks(deps, OWNER, {});
+    expect(before.links.map((l) => l.id)).toContain(link.id);
+    expect((await listShelf(deps, OWNER)).map((s) => s.link.id)).toEqual([link.id]);
+
+    await deleteLink(deps, OWNER, link.id);
+
+    await expect(getLinkWithText(deps, OWNER, link.id, "t")).rejects.toMatchObject({
+      code: "not_found",
+    });
+    const after = await listLinks(deps, OWNER, {});
+    expect(after.links.map((l) => l.id)).not.toContain(link.id);
+    expect(after.total).toBe(before.total - 1);
+    const found = await searchLinks(deps, OWNER, { query: "quokka" }, "t");
+    expect(found.map((l) => l.id)).not.toContain(link.id);
+    expect(await listShelf(deps, OWNER)).toEqual([]);
   });
 });
 

@@ -28,15 +28,21 @@ const link = (id: string): Link => ({
   snapshot: null,
 });
 
-/** A search page with a gone link "7" that has a saved copy. */
+/** A search page with gone links "7" and "8", both with a saved copy. */
 const load = (answer: (sent: Post) => Answer) =>
   runPage(
     searchPage({
       query: "",
       links: [link("7"), link("8")],
       now: NOW,
-      gone: new Map([["7", GONE]]),
-      copies: new Map([["7", INFO]]),
+      gone: new Map([
+        ["7", GONE],
+        ["8", GONE],
+      ]),
+      copies: new Map([
+        ["7", INFO],
+        ["8", INFO],
+      ]),
     }),
     answer,
   );
@@ -55,6 +61,33 @@ const READ = "[data-id='7'] .card-menu-list a[data-act=read-copy]";
 const GONE_READ = "[data-id='7'] [data-gone] a[data-act=read-copy]";
 
 describe("the Remove saved copy row's script", () => {
+  it("leaves another card's rows and gone link alone, through remove and Undo", async () => {
+    const p = load(() => ({ status: 204 }));
+    const others = [
+      "[data-id='8'] button[data-act=remove-copy]",
+      "[data-id='8'] .card-menu-list a[data-act=read-copy]",
+      "[data-id='8'] [data-gone] a[data-act=read-copy]",
+    ];
+    await click(p, REMOVE);
+    expect(p.$(REMOVE).hidden).toBe(true);
+    for (const s of others) expect(p.$(s).hidden).toBe(false);
+    await click(p, "#undo-bar button");
+    for (const s of others) expect(p.$(s).hidden).toBe(false);
+  });
+
+  it("sends one request for a second click while the first is waiting", async () => {
+    let release: () => void = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const p = load(() => ({ status: 204, wait }));
+    p.dispatch(p.$(REMOVE), "click");
+    p.dispatch(p.$(REMOVE), "click");
+    release();
+    await p.settle();
+    expect(p.sent).toEqual([post("/links/copy/remove", { id: "7" })]);
+  });
+
   it("a 204 posts the id, hides both rows and the gone link, and offers Undo", async () => {
     const p = load(() => ({ status: 204 }));
     const menu = p.$("[data-id='7'] details.card-menu");

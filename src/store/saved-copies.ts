@@ -852,7 +852,7 @@ export class SqliteSavedCopyStore
         `SELECT l.owner_id, l.id, l.url FROM snapshots s
          JOIN links l ON l.owner_id = s.owner_id AND l.id = s.link_id
          LEFT JOIN saved_copies c ON c.owner_id = l.owner_id AND c.link_id = l.id
-         WHERE s.fetch_status = 'ok' AND s.text IS NOT NULL
+         WHERE l.deleted_at IS NULL AND s.fetch_status = 'ok' AND s.text IS NOT NULL
            AND (c.link_id IS NULL OR (? = 1 AND c.status = 'no_room'))
            AND NOT EXISTS (SELECT 1 FROM link_checks k WHERE k.owner_id = l.owner_id
              AND k.link_id = l.id AND k.flagged_at IS NOT NULL)

@@ -82,6 +82,7 @@ export class FakeStore
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
   private tokens = new Map<OwnerId, Map<string, number>>();
   private links = new Map<OwnerId, Map<string, Link>>();
+  private hidden = new Map<OwnerId, Map<string, { link: Link; at: Date }>>();
   private tags = new Map<OwnerId, Map<string, Tag>>();
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
@@ -260,7 +261,25 @@ export class FakeStore
     return next;
   }
 
+  /** Test-only: moves the link out of `links`, as a deleted one is out of every read. */
+  hide(owner: OwnerId, id: string, at: Date): void {
+    const link = this.owned(owner).get(id);
+    if (!link) return;
+    this.owned(owner).delete(id);
+    let mine = this.hidden.get(owner);
+    if (!mine) {
+      mine = new Map();
+      this.hidden.set(owner, mine);
+    }
+    mine.set(id, { link, at });
+  }
+
+  private isHidden(owner: OwnerId, id: string): boolean {
+    return this.hidden.get(owner)?.has(id) === true;
+  }
+
   async getSnapshotText(owner: OwnerId, linkId: string) {
+    if (this.isHidden(owner, linkId)) return null;
     return this.snapshots.get(owner)?.get(linkId)?.text ?? null;
   }
 
@@ -541,6 +560,7 @@ export class FakeStore
   async imageVersions(owner: OwnerId, linkIds: string[]) {
     const versions = new Map<string, ShownPicture>();
     for (const id of linkIds) {
+      if (this.isHidden(owner, id)) continue;
       const own = this.ownerImages.get(imageKey(owner, id));
       const page = this.storedImages.get(imageKey(owner, id));
       if (own) versions.set(id, { version: imageVersion(own.sha256), fit: "cover" });
@@ -554,6 +574,7 @@ export class FakeStore
     linkId: string,
     which?: "page" | "own",
   ): Promise<(StoredImage & { role?: ImageRole }) | null> {
+    if (this.isHidden(owner, linkId)) return null;
     const key = imageKey(owner, linkId);
     const own = which === "page" ? undefined : this.ownerImages.get(key);
     if (own) return stored(own);
@@ -572,6 +593,7 @@ export class FakeStore
   async pictureInfo(owner: OwnerId, linkIds: string[]) {
     const info = new Map<string, PictureInfo>();
     for (const id of linkIds) {
+      if (this.isHidden(owner, id)) continue;
       const own = this.ownerImages.has(imageKey(owner, id));
       const page = this.storedImages.get(imageKey(owner, id));
       if (own || page)
@@ -676,7 +698,7 @@ export class FakeStore
     const found: IconCandidate[] = [];
     for (const [owner, mine] of this.snapshots) {
       for (const [linkId, s] of mine) {
-        if (!this.iconOpen(owner, linkId, s)) continue;
+        if (this.isHidden(owner, linkId) || !this.iconOpen(owner, linkId, s)) continue;
         if (afterId !== null && order(linkId) <= order(afterId)) continue;
         found.push({ owner, linkId, url: (this.owned(owner).get(linkId) as Link).url });
       }

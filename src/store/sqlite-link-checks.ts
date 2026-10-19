@@ -44,7 +44,8 @@ export class SqliteLinkCheckStore implements LinkCheckStore {
       .prepare(
         `SELECT l.owner_id, l.id, l.url FROM links l
          LEFT JOIN link_checks c ON c.owner_id = l.owner_id AND c.link_id = l.id
-         WHERE coalesce(c.checked_at, l.saved_at) <= CASE l.state WHEN 'active' THEN ? ELSE ? END
+         WHERE l.deleted_at IS NULL
+           AND coalesce(c.checked_at, l.saved_at) <= CASE l.state WHEN 'active' THEN ? ELSE ? END
          ORDER BY coalesce(c.checked_at, l.saved_at), l.id LIMIT ?`,
       )
       .all(toMs(cutoffs.active), toMs(cutoffs.archived), limit) as {

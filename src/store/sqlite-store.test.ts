@@ -44,6 +44,13 @@ function harnessFor(db: Db): StoreHarness {
         )
         .all(owner)
         .map((r) => ({ ...(r as Tag), pinned: (r as { pinned: number }).pinned === 1 })),
+    hide: (owner, id, at) => {
+      db.prepare("UPDATE links SET deleted_at = ? WHERE owner_id = ? AND id = ?").run(
+        at.getTime(),
+        owner,
+        Number(id),
+      );
+    },
     seedTag: (owner, t) => {
       db.prepare(
         "INSERT INTO tags (owner_id, key, name, kind, kind_source, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

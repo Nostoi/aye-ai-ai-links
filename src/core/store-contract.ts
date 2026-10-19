@@ -21,6 +21,8 @@ export type StoreHarness = {
   /** The owner's tag catalog, in creation order. */
   catalog(owner: string): MaybeAsync<Tag[]>;
   seedTag(owner: string, tag: Tag): MaybeAsync<void>;
+  /** Hide the link as a deleted one. Test-only. */
+  hide(owner: string, id: string, at: Date): MaybeAsync<void>;
 };
 
 const A = "owner-a";
@@ -1784,6 +1786,28 @@ export function describeStoreContract(
           expect(await h.all(A)).toEqual(before);
           expect(await h.all(B)).toHaveLength(1);
         });
+      });
+    });
+
+    describe("deleted links", () => {
+      const twoLinks = async () => {
+        const gone = await saveLink(deps(), A, { url: "https://ex.com/gone", savedBy: "t" });
+        const kept = await saveLink(deps(), A, { url: "https://ex.com/kept", savedBy: "t" });
+        await h.hide(A, gone.link.id, clock);
+        return { gone: gone.link.id, kept: kept.link.id };
+      };
+
+      it("a hidden link is absent from get and listLinks, and other links are not", async () => {
+        const { gone, kept } = await twoLinks();
+        expect(await h.store.get(A, gone)).toBeNull();
+        expect((await h.store.listLinks(A)).map((l) => l.id)).toEqual([kept]);
+        expect(await h.store.get(A, kept)).not.toBeNull();
+      });
+
+      it("getLink and updateLink answer not_found for a hidden link", async () => {
+        const { gone } = await twoLinks();
+        expect(await code(getLink(deps(), A, gone))).toBe("not_found");
+        expect(await code(updateLink(deps(), A, gone, { title: "x" }))).toBe("not_found");
       });
     });
   });

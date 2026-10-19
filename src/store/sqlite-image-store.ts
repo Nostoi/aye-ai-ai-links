@@ -93,11 +93,12 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
         `SELECT j.value AS link_id, coalesce(o.sha256, f.sha256) AS sha256,
            CASE WHEN o.sha256 IS NULL AND f.role = 'icon' THEN 'contain' ELSE 'cover' END AS fit
          FROM json_each(?) j
+         JOIN links l ON l.owner_id = ? AND l.id = j.value AND l.deleted_at IS NULL
          LEFT JOIN owner_images o ON o.owner_id = ? AND o.link_id = j.value
          LEFT JOIN link_images f ON f.owner_id = ? AND f.link_id = j.value
          WHERE coalesce(o.sha256, f.sha256) IS NOT NULL`,
       )
-      .all(SqliteImageStore.ids(linkIds), owner, owner) as {
+      .all(SqliteImageStore.ids(linkIds), owner, owner, owner) as {
       link_id: number;
       sha256: string;
       fit: PictureFit;
@@ -114,6 +115,10 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
   ): Promise<(StoredImage & { role?: ImageRole }) | null> {
     const n = parseId(linkId);
     if (n === null) return null;
+    const live = this.db
+      .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
+      .get(n, owner);
+    if (!live) return null;
     const read = (table: "owner_images" | "link_images") =>
       this.db
         .prepare(
@@ -142,11 +147,12 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
         `SELECT j.value AS link_id, o.link_id IS NOT NULL AS own, f.sha256 AS page,
            CASE WHEN f.link_id IS NULL THEN NULL WHEN f.role = 'icon' THEN 'contain' ELSE 'cover' END AS page_fit
          FROM json_each(?) j
+         JOIN links l ON l.owner_id = ? AND l.id = j.value AND l.deleted_at IS NULL
          LEFT JOIN owner_images o ON o.owner_id = ? AND o.link_id = j.value
          LEFT JOIN link_images f ON f.owner_id = ? AND f.link_id = j.value
          WHERE o.link_id IS NOT NULL OR f.link_id IS NOT NULL`,
       )
-      .all(SqliteImageStore.ids(linkIds), owner, owner) as {
+      .all(SqliteImageStore.ids(linkIds), owner, owner, owner) as {
       link_id: number;
       own: number;
       page: string | null;
@@ -171,7 +177,8 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
       .prepare(
         `SELECT l.owner_id, l.id, l.url FROM snapshots s
          JOIN links l ON l.owner_id = s.owner_id AND l.id = s.link_id
-         WHERE s.fetch_status = 'ok' AND s.image_url IS NULL AND s.image_status IS NULL
+         WHERE l.deleted_at IS NULL AND s.fetch_status = 'ok' AND s.image_url IS NULL
+           AND s.image_status IS NULL
            AND NOT EXISTS (SELECT 1 FROM link_images f
              WHERE f.owner_id = l.owner_id AND f.link_id = l.id)
            AND NOT EXISTS (SELECT 1 FROM link_checks k WHERE k.owner_id = l.owner_id

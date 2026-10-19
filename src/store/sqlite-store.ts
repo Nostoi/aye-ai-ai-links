@@ -320,7 +320,11 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
     const n = parseId(linkId);
     if (n === null) return null;
     const row = this.db
-      .prepare("SELECT text FROM snapshots WHERE link_id = ? AND owner_id = ?")
+      .prepare(
+        `SELECT s.text FROM snapshots s
+         JOIN links l ON l.id = s.link_id AND l.owner_id = s.owner_id AND l.deleted_at IS NULL
+         WHERE s.link_id = ? AND s.owner_id = ?`,
+      )
       .get(n, owner) as { text: string | null } | undefined;
     return row?.text ?? null;
   }
@@ -509,7 +513,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   ): SurfacedClaim[] {
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
-       WHERE id = ? AND owner_id = ? AND state = 'active'
+       WHERE id = ? AND owner_id = ? AND state = 'active' AND deleted_at IS NULL
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
          AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
@@ -570,7 +574,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
 
   private read(owner: OwnerId, id: number): Link | null {
     const row = this.db
-      .prepare("SELECT * FROM links WHERE id = ? AND owner_id = ?")
+      .prepare("SELECT * FROM links WHERE id = ? AND owner_id = ? AND deleted_at IS NULL")
       .get(id, owner) as LinkRow | undefined;
     if (!row) return null;
     const tags = this.db
@@ -585,7 +589,7 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   /** The owner's links in three queries, not three per link. */
   private readAll(owner: OwnerId): Link[] {
     const rows = this.db
-      .prepare("SELECT * FROM links WHERE owner_id = ? ORDER BY id")
+      .prepare("SELECT * FROM links WHERE owner_id = ? AND deleted_at IS NULL ORDER BY id")
       .all(owner) as LinkRow[];
     const tags = new Map<number, LinkTag[]>();
     const tagRows = this.db

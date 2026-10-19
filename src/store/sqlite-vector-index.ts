@@ -31,7 +31,7 @@ export class SqliteVectorIndex implements VectorIndexStore {
          FROM links l
          LEFT JOIN snapshots s ON s.link_id = l.id AND s.owner_id = l.owner_id
          LEFT JOIN link_vectors v ON v.link_id = l.id AND v.model_key = ?
-         WHERE l.id > ? ORDER BY l.id LIMIT ?`,
+         WHERE l.id > ? AND l.deleted_at IS NULL ORDER BY l.id LIMIT ?`,
       )
       .all(PAGE_CHARS, modelKey, after, limit) as PageRow[];
     return rows.map((r) => ({

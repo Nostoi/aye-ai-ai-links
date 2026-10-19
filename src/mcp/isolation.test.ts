@@ -542,7 +542,7 @@ describe("owner isolation coverage", () => {
     ).toBe(true);
   };
 
-  type Marker = string | Buffer | string[];
+  type Marker = string | Buffer | (string | Buffer)[];
   type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
     // A's titled link has no why, so it is one of A's picks on home; A's pinned space and kept tool show too.
@@ -573,6 +573,8 @@ describe("owner isolation coverage", () => {
       request: "/export.json",
       marker: () => [A_URL, A_TAG_NAME, A_TOOL_TITLE, "A private note for the route guard"],
     },
+    // Entries are stored, so the copy's text and the picture's bytes appear raw in the zip.
+    "GET /export.zip": { request: "/export.zip", marker: () => [A_URL, A_COPY_TEXT, A_IMAGE] },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
@@ -615,7 +617,8 @@ describe("owner isolation coverage", () => {
     }
   });
 
-  const textOf = (marker: Marker) => (Array.isArray(marker) ? marker : [marker]);
+  const textOf = (marker: Marker): (string | Buffer)[] =>
+    Array.isArray(marker) ? marker : [marker];
   const holds = (sent: Sent, marker: string | Buffer) =>
     typeof marker === "string"
       ? sent.bytes.toString("utf8").includes(marker)
@@ -623,8 +626,9 @@ describe("owner isolation coverage", () => {
 
   it("a signed-in B reaches none of A's data through any web path", async () => {
     const copyDir = mkdtempSync(join(tmpdir(), "aye-isolation-"));
-    copyDirs.push(copyDir);
-    const world = await oauthWorld({ savedCopyDir: copyDir });
+    const exportDir = mkdtempSync(join(tmpdir(), "aye-isolation-exports-"));
+    copyDirs.push(copyDir, exportDir);
+    const world = await oauthWorld({ savedCopyDir: copyDir, exportDir });
     const a = await connectClaude(world);
     await saveLinkWith(world, a.access, A_URL);
     createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: A_KEY_NAME });
@@ -677,6 +681,8 @@ describe("owner isolation coverage", () => {
     });
     const owner = world.agent();
     await owner.signIn();
+    expect((await owner.send("/export/prepare", { method: "POST" })).status).toBe(202);
+    await world.exports.settled(A);
     const aSearch = await owner.send("/search?q=quokka");
     expect(aSearch.status).toBe(200);
     expect(String(aSearch.body)).toContain(A_URL);
@@ -791,6 +797,8 @@ describe("owner isolation coverage", () => {
       "the two-owner tests of POST /links/copy/remove in web/copy-routes.test.ts",
     "POST /links/copy/restore":
       "the two-owner tests of POST /links/copy/restore in web/copy-routes.test.ts",
+    "POST /export/prepare":
+      "the two-owner test of POST /export/prepare in web/export-zip-routes.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

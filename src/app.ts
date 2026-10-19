@@ -20,6 +20,7 @@ import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { ReadGate } from "./core/copy-reading.js";
+import type { ExportBuilds } from "./core/export-builds.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
@@ -32,6 +33,8 @@ import {
   COPY_IMAGE_ROUTE,
   COPY_ROUTE,
   EXPORT_JSON_ROUTE,
+  EXPORT_PREPARE_ROUTE,
+  EXPORT_ZIP_ROUTE,
   IMAGE_ROUTE,
   webApp,
 } from "./web/http.js";
@@ -99,6 +102,8 @@ const CHECKED_PAGES = [
   COPY_ROUTE,
   COPY_IMAGE_ROUTE,
   EXPORT_JSON_ROUTE,
+  EXPORT_ZIP_ROUTE,
+  EXPORT_PREPARE_ROUTE,
 ];
 
 /** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
@@ -130,6 +135,7 @@ export type AppOptions = {
           Pick<SavedCopyUsage, "usedBytes" | "lastCheck">;
         copyLimitBytes?: number;
         readGate: ReadGate;
+        exports: ExportBuilds;
       };
       auth: AuthDeps;
     }

@@ -229,6 +229,17 @@ describe("snapshotRecord", () => {
     ).toEqual([]);
   });
 
+  it.each([
+    ["a number", 5, []],
+    ["an object", {}, []],
+    ["a string", "abc", []],
+    ["null", null, []],
+    ["an array with non-strings", [1, {}, "https://a/x.png"], ["https://a/x.png"]],
+  ])("reads iconUrls that is %s without throwing, keeping only string icons", (_n, bad, want) => {
+    const metadata = { ...meta, iconUrls: bad } as unknown as PageMetadata;
+    expect(map(extractOf({ kind: "ok", metadata, text: "b" })).iconUrls).toEqual(want);
+  });
+
   it("ok with no text stores null text", () => {
     expect(map(extractOf({ kind: "ok", metadata: meta, text: null })).text).toBeNull();
   });

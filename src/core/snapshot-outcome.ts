@@ -148,7 +148,9 @@ export function snapshotRecord(input: {
     description: v.metadata?.description ?? null,
     imageUrl: v.metadata?.imageUrl ?? null,
     // The child's message is not validated, and a store refuses more than MAX_ICON_URLS (R2).
-    iconUrls: (v.metadata?.iconUrls ?? []).slice(0, MAX_ICON_URLS),
+    iconUrls: Array.isArray(v.metadata?.iconUrls)
+      ? v.metadata.iconUrls.filter((u) => typeof u === "string").slice(0, MAX_ICON_URLS)
+      : [],
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,
   };

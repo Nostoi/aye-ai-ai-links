@@ -51,6 +51,19 @@ const load = (answer: (sent: Post) => Answer = () => ({ status: 204 })) => {
   const p = runPage(searchPage({ query: "", links: [link("7"), link("8")], now: NOW }), answer);
   return { ...p, dialog: stubDialog(p) };
 };
+const SEPTEMBER = new Date("2026-09-10T12:00:00Z");
+/** An All links page, newest first, one month section per month. */
+const allLinks = (links: Link[]) =>
+  allPage({
+    order: "newest",
+    links,
+    older: null,
+    catalog: [KITCHEN],
+    images: new Map(),
+    handy: new Map(),
+    now: NOW,
+    done: false,
+  });
 const click = async (p: ReturnType<typeof runPage>, selector: string) => {
   p.dispatch(p.$(selector), "click");
   await p.settle();
@@ -145,6 +158,30 @@ describe("Delete link from the ⋯ menu", () => {
     expect(h1.getAttribute("tabindex")).toBe("-1");
     expect(p.focused().at(-2)).toBe(h1);
   });
+
+  it("focuses the next month's first card when the month's last card is deleted", async () => {
+    const p = runPage(allLinks([link("7"), link("9", SEPTEMBER)]));
+    await click(p, DELETE);
+    expect(p.focused().at(-2)).toBe(p.$("[data-id='9'] .card-menu summary"));
+  });
+
+  // `hidden` as goneScript leaves a card moved out of the list ("I'm done with it").
+  it("skips a hidden card when it moves focus on", async () => {
+    const p = runPage(allLinks([link("7"), link("8"), link("9")]));
+    p.$("[data-id='8']").hidden = true;
+    await click(p, DELETE);
+    expect(p.focused().at(-2)).toBe(p.$("[data-id='9'] .card-menu summary"));
+  });
+
+  it("hides a month left with only hidden cards, and Undo shows it again", async () => {
+    const p = runPage(allLinks([link("7"), link("8"), link("9", SEPTEMBER)]));
+    p.$("[data-id='8']").hidden = true;
+    const month = p.$("[data-id='7']").closest("section.month") as HTMLElement;
+    await click(p, DELETE);
+    expect(month.hidden).toBe(true);
+    await click(p, "#undo-bar button");
+    expect(month.hidden).toBe(false);
+  });
 });
 
 describe("Delete link in the edit dialog", () => {
@@ -181,6 +218,22 @@ describe("Delete link in the edit dialog", () => {
     release();
     await p.settle();
     expect(button.disabled).toBe(false);
+  });
+
+  it("while the dialog's Delete is answered, the card's menu row sends nothing", async () => {
+    let release: () => void = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const p = load(() => ({ status: 204, wait }));
+    open(p);
+    await click(p, "#edit-link [data-edit=delete]");
+    await click(p, DELETE);
+    expect(p.sent).toEqual([post("/links/delete", { id: "7" })]);
+    release();
+    await p.settle();
+    expect(p.sent).toEqual([post("/links/delete", { id: "7" })]);
+    expect(p.$("[data-id='7']")).toBeNull();
   });
 
   it("the dialog's Delete is outside .edit-foot", () => {

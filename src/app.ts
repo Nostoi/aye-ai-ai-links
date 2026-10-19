@@ -27,6 +27,7 @@ import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/s
 import type { LinkRemover } from "./core/store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
+import { createCallTracker } from "./mcp/call-tracker.js";
 import { mcpApp } from "./mcp/http.js";
 import type { McpDeps } from "./mcp/server.js";
 import type { SqliteKeyStore } from "./store/key-store.js";
@@ -158,8 +159,10 @@ export function createApp(options: AppOptions) {
   // First, so refusals by every check below are recorded too.
   if (log) app.use("*", requestLog(log));
   const baseUrl = auth?.auth.options.baseURL;
+  const tracker = createCallTracker();
   const mcp = mcpApp({
     deps,
+    tracker,
     identify,
     allowedHosts,
     rateLimit,
@@ -219,5 +222,5 @@ export function createApp(options: AppOptions) {
       }),
     );
   }
-  return { app, close: mcp.close, calls: mcp.calls };
+  return { app, close: mcp.close, calls: tracker.calls };
 }

@@ -776,6 +776,10 @@ describe("owner isolation coverage", () => {
     "POST /profile/notes/remove": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/restore": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /save": "the two-owner test of POST /save in web/save-routes.test.ts",
+    "POST /links/copy/remove":
+      "the two-owner tests of POST /links/copy/remove in web/copy-routes.test.ts",
+    "POST /links/copy/restore":
+      "the two-owner tests of POST /links/copy/restore in web/copy-routes.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {

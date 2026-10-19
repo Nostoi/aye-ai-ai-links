@@ -22,7 +22,7 @@ import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { ReadGate } from "./core/copy-reading.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
-import type { SavedCopyReader } from "./core/saved-copy.js";
+import type { SavedCopyReader, SavedCopyRemover } from "./core/saved-copy.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
@@ -69,6 +69,8 @@ const CHECKED_PAGES = [
   "/links/edit/undo",
   "/links/still-works",
   "/links/still-works/undo",
+  "/links/copy/remove",
+  "/links/copy/restore",
   "/tools/keep",
   "/tools/not-handy",
   "/tools/still-using",
@@ -116,7 +118,7 @@ export type AppOptions = {
       deps: McpDeps & {
         images: LinkImageReader;
         edits: LinkEditStore;
-        savedCopies: SavedCopyReader;
+        savedCopies: SavedCopyReader & SavedCopyRemover;
         readGate: ReadGate;
       };
       auth: AuthDeps;

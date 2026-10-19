@@ -163,6 +163,16 @@ export function describeSnapshotStoreContract(
       });
     });
 
+    describe("leaseSnapshot on a hidden link", () => {
+      it("still leases and records, so runner work finishes inside the Undo window", async () => {
+        const link = await save(A, at(0));
+        expect(await store.markDeleted(A, link.id, at(1))).toBe(true);
+        const l = await lease(A, link, at(2), at(100));
+        expect(l).toEqual({ url: link.url, attempts: 1, claim: expect.any(Number) });
+        expect(await store.recordSnapshot(A, link.id, l.claim, record())).toBe(true);
+      });
+    });
+
     describe("dueSnapshots", () => {
       it("lists due snapshots across owners, soonest first, up to the limit", async () => {
         const a1 = await save(A, at(5));

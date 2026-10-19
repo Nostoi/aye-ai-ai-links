@@ -245,7 +245,8 @@ export class FakeStore
     if (!s || !due || !["pending", "retrying"].includes(s.status)) return null;
     s.nextFetchAt = new Date(until);
     s.attempts += 1;
-    const url = (this.owned(owner).get(linkId) as Link).url;
+    const url = (this.owned(owner).get(linkId) ?? this.hidden.get(owner)?.get(linkId)?.link)?.url;
+    if (url === undefined) throw new Error(`Snapshot ${linkId} has no link`);
     return { url, attempts: s.attempts, claim: this.bumpToken(owner, linkId) };
   }
 

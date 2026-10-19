@@ -529,32 +529,40 @@ describe("writeExport", () => {
     );
   });
 
-  it("a copy image read that times out is left out and the copy stays ok with its text", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+  it("a copy image read that times out skips the copy's remaining images; the copy stays ok with its text, logged once", async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
     const real = createReadGate();
     let runs = 0;
-    // Gate runs in order: copy.md, then image 01 (answered "timeout"), then image 02.
+    // Gate runs in order: copy.md, then image 01, answered "timeout".
     const gate: ReadGate = {
       run: (read, ms) => (++runs === 2 ? Promise.resolve("timeout" as const) : real.run(read, ms)),
     };
     const h = setup(gate);
-    const IMG2 = pic("image/png", "kept-2");
     const id1 = await h.save(A, 1);
-    await h.finishedCopy(A, id1, [pic("image/png", "slow-1"), IMG2]);
+    await h.finishedCopy(A, id1, [
+      pic("image/png", "slow-1"),
+      pic("image/png", "img-2"),
+      pic("image/png", "img-3"),
+    ]);
     const md = await h.storedMarkdown(A, id1);
     const link1 = (await h.store.get(A, id1)) as Link;
 
     const { files, manifest } = await built(h.deps, A);
 
-    expect(runs).toBe(3);
+    expect(runs).toBe(2);
     expect(manifest.links[0]?.copy).toEqual({
       status: "ok",
       madeAt: MADE.toISOString(),
       file: "copies/1/copy.md",
-      images: ["copies/1/images/02.png"],
+      images: [],
     });
-    expect(copyFiles(files, 1).sort()).toEqual(["copies/1/copy.md", "copies/1/images/02.png"]);
-    expect(files.get("copies/1/images/02.png")).toEqual(IMG2.bytes);
+    expect(copyFiles(files, 1)).toEqual(["copies/1/copy.md"]);
+    expect(lines.filter((l) => l.includes("could not be read"))).toEqual([
+      `[saved copies] copy ${id1} could not be read: timed out`,
+    ]);
     expect(utf8(files.get("copies/1/copy.md") as Uint8Array)).toBe(
       copyWithFrontMatter(link1, MADE, md),
     );

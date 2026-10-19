@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  aiConfig,
   appVersion,
   authConfig,
   databasePath,
@@ -207,6 +208,75 @@ describe("authConfig", () => {
   );
 });
 
+describe("aiConfig", () => {
+  it("is off with no AYE_AI_ setting", () => {
+    expect(aiConfig({})).toBeUndefined();
+  });
+
+  it("refuses AI settings without AYE_AI_API, naming it", () => {
+    expect(() => aiConfig({ AYE_AI_MODEL: "x" })).toThrow(/AYE_AI_API/);
+  });
+
+  it("refuses an API it doesn't know", () => {
+    expect(() => aiConfig({ AYE_AI_API: "gemini", AYE_AI_MODEL: "x" })).toThrow(
+      /openai or anthropic/,
+    );
+  });
+
+  it("needs a model", () => {
+    expect(() => aiConfig({ AYE_AI_API: "anthropic", AYE_AI_KEY: "k" })).toThrow(/AYE_AI_MODEL/);
+  });
+
+  it("needs a key for Claude and for OpenAI's own URL", () => {
+    expect(() => aiConfig({ AYE_AI_API: "anthropic", AYE_AI_MODEL: "m" })).toThrow(/AYE_AI_KEY/);
+    expect(() => aiConfig({ AYE_AI_API: "openai", AYE_AI_MODEL: "m" })).toThrow(/AYE_AI_KEY/);
+  });
+
+  it("needs no key for a local AI", () => {
+    expect(
+      aiConfig({
+        AYE_AI_API: "openai",
+        AYE_AI_URL: "http://127.0.0.1:11434/v1",
+        AYE_AI_MODEL: "qwen3.5:9b",
+      }),
+    ).toEqual({
+      api: "openai",
+      url: "http://127.0.0.1:11434/v1",
+      key: undefined,
+      model: "qwen3.5:9b",
+      name: "qwen3.5:9b",
+    });
+  });
+
+  it("defaults the URL and name per API", () => {
+    expect(aiConfig({ AYE_AI_API: "anthropic", AYE_AI_KEY: "k", AYE_AI_MODEL: "m" })).toMatchObject(
+      { url: "https://api.anthropic.com", name: "Claude" },
+    );
+    expect(
+      aiConfig({ AYE_AI_API: "openai", AYE_AI_KEY: "k", AYE_AI_MODEL: "gpt-x" }),
+    ).toMatchObject({ url: "https://api.openai.com/v1", name: "gpt-x" });
+  });
+
+  it("takes AYE_AI_NAME over the default", () => {
+    expect(
+      aiConfig({ AYE_AI_API: "anthropic", AYE_AI_KEY: "k", AYE_AI_MODEL: "m", AYE_AI_NAME: "Sage" })
+        ?.name,
+    ).toBe("Sage");
+  });
+
+  it.each(["ftp://x", "not a url"])("refuses a URL that isn't http or https: %s", (url) => {
+    expect(() => aiConfig({ AYE_AI_API: "openai", AYE_AI_URL: url, AYE_AI_MODEL: "m" })).toThrow(
+      /AYE_AI_URL/,
+    );
+  });
+
+  it("drops a trailing slash from the URL", () => {
+    expect(
+      aiConfig({ AYE_AI_API: "openai", AYE_AI_URL: "http://h:1/v1/", AYE_AI_MODEL: "m" })?.url,
+    ).toBe("http://h:1/v1");
+  });
+});
+
 describe("serverConfig", () => {
   const base = AUTH;
   const auth = authConfig(AUTH);
@@ -219,6 +289,12 @@ describe("serverConfig", () => {
       savedCopies: savedCopyConfig({}),
       version: appVersion(),
     });
+  });
+
+  it("has no ai without AYE_AI_ settings, and has it when they are set", () => {
+    expect(serverConfig(base)).not.toHaveProperty("ai");
+    const ai = { AYE_AI_API: "anthropic", AYE_AI_KEY: "k", AYE_AI_MODEL: "m" };
+    expect(serverConfig({ ...base, ...ai }).ai).toEqual(aiConfig(ai));
   });
 
   it("refuses a missing database like the key CLI does", () => {

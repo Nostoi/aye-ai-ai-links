@@ -82,6 +82,11 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    AYE_BASE_URL=https://links.<your-domain>
    # AYE_SAVED_COPY_DIR=/Users/<you>/.aye-links/saved-copies
    # AYE_SAVED_COPY_LIMIT_GB=1
+   # AYE_AI_API=anthropic
+   # AYE_AI_URL=https://api.anthropic.com
+   # AYE_AI_KEY=<your API key>
+   # AYE_AI_MODEL=<a model name>
+   # AYE_AI_NAME=Claude
    ```
 
    `AYE_DB` is required and must be an absolute path. `AYE_PORT` defaults to 3002. `AYE_ALLOWED_HOSTS` is a comma-separated list of the host names the server answers to; `localhost` and `127.0.0.1` are always allowed.
@@ -101,6 +106,8 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
    Don't set any `BETTER_AUTH_` variable. The login library reads them, so the server and the `owner` command refuse to run while one is set.
 
    Upgrading an install from before the web login? Add these three settings first, then deploy, then set your login (step 4). Without `AYE_AUTH_DB`, the deploy refuses before it stops anything. Without the secret or the base URL, the new release refuses to start and the deploy rolls back.
+
+   The five `AYE_AI_` settings are optional and turn on the server's side of an AI that works inside the app. The Ask AI panel arrives in a later release; for now these settings only switch on the server's part of it. `AYE_AI_API` is `openai` (any server that speaks OpenAI's chat format, including local ones) or `anthropic`; with it unset the AI is off. `AYE_AI_MODEL` is the model to use. `AYE_AI_URL` is the address to talk to; it defaults to OpenAI's or Anthropic's own. `AYE_AI_NAME` is what the app calls the AI: it defaults to `Claude` for `anthropic` and to the model name otherwise. `AYE_AI_KEY` is your API key. It is required for `anthropic` and for `openai` at its default address; only an `openai` server at an `AYE_AI_URL` of your own, such as one on your Mac, can go without. For example, a local AI served by Ollama needs only `AYE_AI_API=openai`, `AYE_AI_URL=http://127.0.0.1:11434/v1` and `AYE_AI_MODEL=qwen3.5:9b`. If `AYE_AI_API` is missing while another `AYE_AI_` setting is set, or a needed setting is missing or the address is not `http` or `https`, the server refuses to start and names the setting. A cloud AI bills you for every turn of a conversation. The server talks to this one address and no other AI service.
 
 2. Deploy a commit from `main`:
 

@@ -175,23 +175,80 @@ export function savedCopyConfig(env: Env, home: string = homedir()): SavedCopyCo
   return { dir, limitBytes: Math.floor(gib * 1024 ** 3) };
 }
 
+export type AiApi = "openai" | "anthropic";
+
+export type AiConfig = {
+  api: AiApi;
+  url: string;
+  key: string | undefined;
+  model: string;
+  name: string;
+};
+
+const AI_DEFAULT_URL: Record<AiApi, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com",
+};
+
+function aiUrl(raw: string | undefined, api: AiApi): string {
+  if (raw === undefined) return AI_DEFAULT_URL[api];
+  let url: URL | undefined;
+  try {
+    url = new URL(raw);
+  } catch {}
+  if (url?.protocol !== "http:" && url?.protocol !== "https:") {
+    throw new Error(
+      "Set AYE_AI_URL to an http or https address, such as http://127.0.0.1:11434/v1.",
+    );
+  }
+  return raw.replace(/\/$/, "");
+}
+
+/**
+ * The in-app AI's connection, or undefined when no `AYE_AI_` setting is present. Any such
+ * setting without `AYE_AI_API`, or an incomplete setup, refuses the start. A key is optional
+ * only for an OpenAI-style server at a URL of your own (a local AI).
+ */
+export function aiConfig(env: Env): AiConfig | undefined {
+  if (!Object.keys(env).some((name) => name.startsWith("AYE_AI_"))) return undefined;
+  const api = env.AYE_AI_API;
+  if (api === undefined) {
+    throw new Error("Set AYE_AI_API to openai or anthropic, or unset the other AYE_AI_ settings.");
+  }
+  if (api !== "openai" && api !== "anthropic") {
+    throw new Error("Set AYE_AI_API to openai or anthropic.");
+  }
+  const model = env.AYE_AI_MODEL;
+  if (!model) throw new Error("Set AYE_AI_MODEL to the name of the model to use.");
+  const url = aiUrl(env.AYE_AI_URL, api);
+  const key = env.AYE_AI_KEY || undefined;
+  if (key === undefined && (api === "anthropic" || env.AYE_AI_URL === undefined)) {
+    throw new Error("Set AYE_AI_KEY to your API key. Only a local OpenAI-style AI needs none.");
+  }
+  const name = env.AYE_AI_NAME || (api === "anthropic" ? "Claude" : model);
+  return { api, url, key, model, name };
+}
+
 export type ServerConfig = {
   dbPath: string;
   port: number;
   allowedHosts?: string[];
   auth: AuthConfig;
   savedCopies: SavedCopyConfig;
+  ai?: AiConfig;
   version: string;
 };
 
 export function serverConfig(env: Env): ServerConfig {
   const hosts = allowedHosts(env.AYE_ALLOWED_HOSTS);
+  const ai = aiConfig(env);
   return {
     dbPath: databasePath(env),
     port: port(env.AYE_PORT),
     ...(hosts && { allowedHosts: hosts }),
     auth: authConfig(env),
     savedCopies: savedCopyConfig(env),
+    ...(ai && { ai }),
     version: appVersion(),
   };
 }

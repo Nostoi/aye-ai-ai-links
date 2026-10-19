@@ -294,6 +294,34 @@ describe("toNewLink", () => {
   });
 });
 
+describe("every address and date the library can hold", () => {
+  const odd = (url: string, snoozedUntil: Date | null = null) => {
+    const r = reads();
+    r.links = [link(9, { url, snoozedUntil })];
+    return r;
+  };
+  const written = (r: ManifestReads) => JSON.parse(JSON.stringify(buildManifest(r)));
+  const roundTrip = (r: ManifestReads) => {
+    const parsed = manifestSchema.parse(written(r));
+    return toNewLink(parsed.links[0] as ManifestLink, parsed.tags);
+  };
+  it.each(["https:example.com/page", "https:/x", "https:\\x"])(
+    "round-trips the address %s",
+    (url) => {
+      expect(roundTrip(odd(url)).url).toBe(url);
+    },
+  );
+  it.each([new Date("+010000-01-01T04:30:00.000Z"), new Date("-000001-12-31T23:30:00.000Z")])(
+    "round-trips the date %s",
+    (when) => {
+      expect(roundTrip(odd("https://ex.com/9", when)).snoozedUntil).toEqual(when);
+    },
+  );
+  it.each(["ftp://x", "not a url"])("still refuses the address %s", (url) => {
+    expect(manifestSchema.safeParse(written(odd(url))).success).toBe(false);
+  });
+});
+
 describe("exportFilename", () => {
   it("names the file by the UTC date of the export", () => {
     expect(exportFilename(new Date("2026-10-18T23:30:00-05:00"), "json")).toBe(

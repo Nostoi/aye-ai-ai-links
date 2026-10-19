@@ -16,12 +16,26 @@ import {
   type Tag,
   TOOL_STATUSES,
 } from "./types.js";
-import { isWebUrl, urlKey } from "./url-key.js";
+import { urlKey } from "./url-key.js";
 
 export const EXPORT_FORMAT = "aye-links-export";
 export const EXPORT_VERSION = 1;
 
-const date = z.iso.datetime({ precision: 3 });
+/** Exactly what `toISOString` writes for a finite date, extended years (`+010000-...`) included: the store keeps any instant. */
+const isStoredDate = (s: string) => {
+  const t = new Date(s);
+  return !Number.isNaN(t.getTime()) && t.toISOString() === s;
+};
+const date = z.string().refine(isStoredDate, "an ISO timestamp with milliseconds, in UTC");
+/** The rule `urlKey` saves by: WHATWG parsing, http or https. It accepts `https:example.com`, which `isWebUrl` refuses. */
+const isSavedUrl = (s: string) => {
+  try {
+    const { protocol } = new URL(s);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+};
 const source = z.enum(SOURCES);
 /** A path inside the zip: ASCII digits, fixed words and an image extension (spec, "The zip layout"). */
 const zipPath = z.string().regex(/^[a-z0-9]+(\/[a-z0-9.-]+)+$/);
@@ -38,7 +52,7 @@ const copySchema = z
   )
   .refine((c) => c.status !== "ok" || c.madeAt !== null, "an ok copy has madeAt");
 const linkSchema = z.strictObject({
-  url: z.string().refine(isWebUrl, "only http and https"),
+  url: z.string().refine(isSavedUrl, "only http and https"),
   title: z.string().nullable(),
   summary: z.string().nullable(),
   why: z.strictObject({ text: z.string(), source }).nullable(),

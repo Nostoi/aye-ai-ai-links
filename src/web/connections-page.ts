@@ -2,9 +2,13 @@ import type { ExportView } from "../core/export-types.js";
 import type { KeyInfo } from "../store/key-store.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 
-/** Decimal MB or GB with one decimal, as phones show sizes (#130). */
+/** Decimal MB or GB with one decimal, as phones show sizes; under 50,000 bytes would print 0.0 MB (#130). */
 const bytesText = (bytes: number) =>
-  bytes >= 999_950_000 ? `${(bytes / 1e9).toFixed(1)} GB` : `${(bytes / 1e6).toFixed(1)} MB`;
+  bytes < 50_000
+    ? "under 0.1 MB"
+    : bytes >= 999_950_000
+      ? `${(bytes / 1e9).toFixed(1)} GB`
+      : `${(bytes / 1e6).toFixed(1)} MB`;
 
 const utcText = (at: Date) =>
   `${at

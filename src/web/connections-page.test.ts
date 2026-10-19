@@ -443,9 +443,12 @@ describe("Your data", () => {
     expect(ready(2_000_000_000)).toContain("2.0 GB, prepared");
   });
 
-  it("sizes at the MB/GB edge never read as 1000.0 MB", () => {
+  it("sizes at the edges never read as 0.0 MB or 1000.0 MB", () => {
     const ready = (bytes: number) => view({ state: "ready", exportedAt: NOW, bytes });
-    expect(ready(0)).toContain("0.0 MB, prepared");
+    expect(ready(0)).toContain("under 0.1 MB, prepared");
+    expect(ready(49_999)).toContain("under 0.1 MB, prepared");
+    expect(ready(50_000)).toContain("0.1 MB, prepared");
+    expect(ready(50_000)).not.toContain("under 0.1");
     expect(ready(999_949_999)).toContain("999.9 MB, prepared");
     expect(ready(999_999_999)).toContain("1.0 GB, prepared");
     expect(ready(1_000_000_000)).toContain("1.0 GB, prepared");

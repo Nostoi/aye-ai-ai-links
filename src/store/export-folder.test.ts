@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExportFolder } from "./export-folder.js";
 
 const name = (owner: string) =>
@@ -127,6 +127,29 @@ describe("ExportFolder", () => {
     mkdirSync(real);
     symlinkSync(real, join(dir, "link"));
     await expect(new ExportFolder(join(dir, "link")).reset()).rejects.toThrow();
+  });
+
+  it("open does not serve the bytes a symlinked export name points at", async () => {
+    const f = await folder();
+    writeFileSync(join(dir, "secret.txt"), "SECRET");
+    symlinkSync(join(dir, "secret.txt"), join(dir, "exports", name("A")));
+    const served = await f.open("A").then(
+      async (d) => (d ? (await readAll(d.body)).toString() : null),
+      () => null,
+    );
+    expect(served).toBeNull();
+  });
+
+  it("cancelling a download closes its file handle", async () => {
+    const f = await folder();
+    await commit(f, "A", Buffer.alloc(200 * 1024, 1));
+    const fds = () => readdirSync("/dev/fd").length;
+    const before = fds();
+    const reader = (await opened(f, "A")).body.getReader();
+    await reader.read();
+    expect(fds()).toBeGreaterThan(before);
+    await reader.cancel();
+    await vi.waitFor(() => expect(fds()).toBe(before));
   });
 
   it("with no folder, create rejects and open answers null", async () => {

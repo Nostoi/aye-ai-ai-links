@@ -169,6 +169,52 @@ describe("POST /ai/chat", () => {
     expect(body.changes[0]).toMatchObject({ kind: "link", tool: "save_link", created: true });
   });
 
+  describe("a request the browser drops stops its turn", () => {
+    const linkCount = (world: World) =>
+      world.links.prepare("SELECT COUNT(*) AS n FROM links").get() as { n: number };
+    const save = calls(["save_link", { url: "https://ex.com/dropped" }]);
+
+    it("ends the model call waiting on its signal, and makes no further call", async () => {
+      const dropped = new AbortController();
+      const { world, browser, model } = await chatting([
+        // As the connectors do: an aborted call fails, and an unaborted one goes on to save.
+        ({ signal }) =>
+          new Promise<ModelReply>((resolve, reject) => {
+            const timer = setTimeout(() => resolve(save), 200);
+            signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new AiUnavailable("it timed out"));
+            });
+            dropped.abort();
+          }),
+        says("Saved."),
+      ]);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        await browser.send("/ai/chat", { ...ask("Save it"), signal: dropped.signal });
+        expect(model.requests).toHaveLength(1);
+        expect(linkCount(world)).toEqual({ n: 0 });
+        expect(errors).not.toHaveBeenCalled();
+      } finally {
+        errors.mockRestore();
+      }
+    });
+
+    it("starts no tool call the model asked for after the drop", async () => {
+      const dropped = new AbortController();
+      const { world, browser, model } = await chatting([
+        () => {
+          dropped.abort();
+          return save;
+        },
+        says("Saved."),
+      ]);
+      await browser.send("/ai/chat", { ...ask("Save it"), signal: dropped.signal });
+      expect(model.requests).toHaveLength(1);
+      expect(linkCount(world)).toEqual({ n: 0 });
+    });
+  });
+
   it("answers ok:false with no changes when the tool session can't open, and logs it", async () => {
     const { browser, model } = await chatting([says("never")]);
     vi.mocked(openToolSession).mockRejectedValueOnce(new Error("no session"));

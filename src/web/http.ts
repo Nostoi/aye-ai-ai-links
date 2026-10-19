@@ -1200,7 +1200,11 @@ export function webApp({
         return answer({ ok: false, reason: SERVER_FAULT, changes: [], seen: [] });
       }
       try {
-        const turn = { model: ai.model, session: tools, history, text, signal: ai.signal };
+        // A turn stops when the server stops or when the browser drops this request (which
+        // @hono/node-server aborts), so a dropped request starts no more model or tool calls. Its
+        // answer then reaches no one, so the reason it gives doesn't matter.
+        const signal = AbortSignal.any([c.req.raw.signal, ai.signal]);
+        const turn = { model: ai.model, session: tools, history, text, signal };
         return answer(await runChatTurn(turn));
       } finally {
         // A failed close must not lose the answer and its changes.

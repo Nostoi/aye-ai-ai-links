@@ -153,6 +153,7 @@ export class Agent {
       rawForm,
       multipart,
       origin = method === "POST",
+      signal,
     }: {
       method?: string;
       headers?: Record<string, string>;
@@ -163,6 +164,8 @@ export class Agent {
       /** A multipart form; its boundary header comes from the body. */
       multipart?: FormData;
       origin?: boolean;
+      /** Aborted to stand for the browser closing the connection. */
+      signal?: AbortSignal;
     } = {},
   ): Promise<Sent> {
     const h = new Headers(headers);
@@ -186,7 +189,7 @@ export class Agent {
     }
     const url = path.startsWith("http") ? path : `${TEST_BASE_URL}${path}`;
     if (!h.has("host")) h.set("host", new URL(url).host);
-    const res = await this.app.fetch(new Request(url, { method, headers: h, body }));
+    const res = await this.app.fetch(new Request(url, { method, headers: h, body, signal }));
     for (const cookie of res.headers.getSetCookie()) {
       const [pair = ""] = cookie.split(";");
       const at = pair.indexOf("=");

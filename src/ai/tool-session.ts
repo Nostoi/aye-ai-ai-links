@@ -5,6 +5,7 @@ import {
   LATEST_PROTOCOL_VERSION,
 } from "@modelcontextprotocol/server";
 import type { Caller } from "../auth/caller.js";
+import type { Change } from "../mcp/changes.js";
 import { buildMcpServer, type McpDeps, type TrackCall } from "../mcp/server.js";
 import type { ToolSpec } from "./model.js";
 
@@ -17,6 +18,8 @@ export type ToolSession = {
   tools: ToolSpec[];
   /** A refusal comes back as `isError: true`; a call that can't be made at all rejects. */
   call(name: string, args: unknown): Promise<ToolResult>;
+  /** What the calls committed so far, in commit order, including calls that then failed. A copy. */
+  changes(): Change[];
   close(): Promise<void>;
 };
 
@@ -34,7 +37,8 @@ export async function openToolSession(
   caller: Caller,
   track: TrackCall,
 ): Promise<ToolSession> {
-  const server = buildMcpServer(deps, caller, track);
+  const changes: Change[] = [];
+  const server = buildMcpServer(deps, caller, track, (change) => changes.push(change));
   const [client, serverEnd] = InMemoryTransport.createLinkedPair();
   await server.connect(serverEnd);
 
@@ -106,6 +110,7 @@ export async function openToolSession(
           throw error;
         }
       },
+      changes: () => [...changes],
       close: () => client.close(),
     };
   } catch (error) {

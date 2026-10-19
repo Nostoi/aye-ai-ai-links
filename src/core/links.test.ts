@@ -451,6 +451,42 @@ describe("recordOpening", () => {
   });
 });
 
+describe("saveLink's whyFilled", () => {
+  it("is true for the repeat save that filled a missing why, and false for the same save again", async () => {
+    const deps = { store: new FakeStore(), now: () => T0 };
+    const url = "https://ex.com/tiles";
+    const repeat = {
+      url,
+      savedBy: "agent",
+      why: { text: " choosing kitchen tiles ", source: "stated" as const },
+    };
+
+    const created = await saveLink(deps, "a", { url, savedBy: "agent" });
+    const filled = await saveLink(deps, "a", repeat);
+    const again = await saveLink(deps, "a", repeat);
+
+    expect(created.whyFilled).toBe(false);
+    expect(filled.whyFilled).toBe(true);
+    expect(filled.link.why).toEqual({ text: "choosing kitchen tiles", source: "stated" });
+    expect(again.whyFilled).toBe(false);
+  });
+
+  it("is false when the link already had another why", async () => {
+    const deps = { store: new FakeStore(), now: () => T0 };
+    const url = "https://ex.com/tiles";
+    await saveLink(deps, "a", { url, savedBy: "agent", why: { text: "first", source: "asked" } });
+
+    const repeat = await saveLink(deps, "a", {
+      url,
+      savedBy: "agent",
+      why: { text: "second", source: "stated" },
+    });
+
+    expect(repeat.whyFilled).toBe(false);
+    expect(repeat.link.why).toEqual({ text: "first", source: "asked" });
+  });
+});
+
 describe("normalizeTitle", () => {
   it("trims, reads blank as no title, takes 200 characters and refuses 201", () => {
     expect(normalizeTitle("  Quokka notes \n")).toBe("Quokka notes");

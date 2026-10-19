@@ -119,6 +119,24 @@ describe("openToolSession", () => {
     expect(tracker.calls().running).toBe(0);
   });
 
+  it("lists its changes in commit order, as a copy", async () => {
+    const { deps, entry } = setup();
+    entry.session = await openToolSession(deps, CALLER, createCallTracker().track);
+
+    await entry.session.call("save_link", {
+      url: "https://example.com/a",
+      tags: [{ name: "kitchen", source: "stated" }],
+    });
+    await entry.session.call("update_tag", { name: "kitchen", kind: "project" });
+    const listed = entry.session.changes();
+    listed.pop();
+
+    expect(entry.session.changes()).toEqual([
+      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] },
+      { kind: "tag", name: "kitchen", tagKind: "project" },
+    ]);
+  });
+
   it("rejects a call still waiting when the session closes", async () => {
     const { deps, entry } = setup({
       snapshots: { kick: () => new Promise<void>(() => {}) },

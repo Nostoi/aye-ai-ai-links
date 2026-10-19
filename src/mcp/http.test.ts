@@ -344,7 +344,11 @@ describe("MCP door over HTTP", () => {
       tags: [{ name: "Alpha", source: "stated" as const, kind: "project" as const }],
     };
     const viaDoor = await call(app, "key-a", "save_link", input);
-    const saved = await saveLink(direct, A.owner, { ...input, savedBy: A.savedBy });
+    // whyFilled is for the in-app change record; the door leaves it out.
+    const { whyFilled: _, ...saved } = await saveLink(direct, A.owner, {
+      ...input,
+      savedBy: A.savedBy,
+    });
     expect(viaDoor.body.result.structuredContent).toEqual(
       wire({
         ...saved,
@@ -405,6 +409,32 @@ describe("MCP door over HTTP", () => {
     expect(b.body.result.structuredContent.links.map((l: Json) => l.reasons)).toEqual([
       [{ kind: "no_why" }, { kind: "never_surfaced" }],
     ]);
+  });
+
+  it("keeps the facts core returns for the in-app change record out of tool results", async () => {
+    const keys = (res: Rpc) => {
+      expect(res.body.result.isError).toBeUndefined();
+      return Object.keys(res.body.result.structuredContent).sort();
+    };
+    await call(app, "key-a", "save_link", { url: "https://example.com/r" });
+    // This repeat save fills the missing why, so core reports whyFilled.
+    const filled = await call(app, "key-a", "save_link", {
+      url: "https://example.com/r",
+      why: { text: "w", source: "stated" },
+    });
+    expect(keys(filled)).toEqual(["created", "filingContext", "link", "profile", "snapshotText"]);
+
+    // It claims the link, never surfaced before, so core reports it in claimed.
+    const digest = await call(app, "key-a", "get_digest", {});
+    expect(keys(digest)).toEqual(["links"]);
+    expect(digest.body.result.structuredContent.links).toHaveLength(1);
+
+    const added = await call(app, "key-a", "add_profile", {
+      addNotes: [{ text: "training for a 10K", source: "stated" }],
+    });
+    expect(keys(added)).toEqual(["addedFocusIds", "addedNoteIds", "notes", "recentFocus"]);
+    const removed = await call(app, "key-a", "edit_profile", { removeNotes: ["1"] });
+    expect(keys(removed)).toEqual(["notes", "recentFocus"]);
   });
 
   it("ignores owner and savedBy arguments", async () => {
@@ -898,7 +928,8 @@ describe("MCP door over HTTP", () => {
         addFocus: [{ text: "heat pumps", source: "asked" as const }],
       };
       const viaDoor = await call(app, "key-a", "add_profile", add);
-      const direct1 = await addProfile(direct, A.owner, A.savedBy, add);
+      // added and removed are for the in-app change record; the door leaves them out.
+      const { added: _added, ...direct1 } = await addProfile(direct, A.owner, A.savedBy, add);
       expect(viaDoor.body.result.structuredContent).toEqual(wire(direct1));
       expect(Object.keys(viaDoor.body.result.structuredContent).sort()).toEqual([
         "addedFocusIds",
@@ -912,7 +943,7 @@ describe("MCP door over HTTP", () => {
         removeNotes: ["2"],
       };
       const edited = await call(app, "key-a", "edit_profile", edit);
-      const direct2 = await editProfile(direct, A.owner, A.savedBy, edit);
+      const { removed: _removed, ...direct2 } = await editProfile(direct, A.owner, A.savedBy, edit);
       expect(edited.body.result.structuredContent).toEqual(wire(direct2));
       expect(Object.keys(edited.body.result.structuredContent).sort()).toEqual([
         "notes",

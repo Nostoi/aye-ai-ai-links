@@ -120,13 +120,20 @@ async function settledWithin(job: Promise<void>, ms: number): Promise<void> {
 /**
  * Saves a link, or returns the one already saved. Only a new link's page is fetched; the save
  * waits up to `saveWaitMs` for it, so the result can show the page. A repeat save never waits.
- * `snapshotText` is the page's opening text, up to `EXCERPT_CHARS`.
+ * `snapshotText` is the page's opening text, up to `EXCERPT_CHARS`. `whyFilled`: this repeat save
+ * filled the missing why, and the link now holds that why. Two identical repeat saves racing can
+ * both say so.
  */
 export async function saveLink(
   { store, now, snapshots, pages, saveWaitMs = SAVE_WAIT_MS }: Deps,
   owner: OwnerId,
   input: SaveLinkInput,
-): Promise<{ link: Link; created: boolean; snapshotText: SnapshotText | null }> {
+): Promise<{
+  link: Link;
+  created: boolean;
+  snapshotText: SnapshotText | null;
+  whyFilled: boolean;
+}> {
   const key = urlKey(input.url);
   checkSources(input.why, input.tags);
   const tags = normalizeTags(input.tags ?? []);
@@ -147,6 +154,7 @@ export async function saveLink(
     state: "active",
   });
   let link = result.link;
+  let whyFilled = false;
   if (result.created) {
     // The save has committed; `kick` never rejects, so the background fetch cannot fail it.
     const job = snapshots?.kick(owner, link.id);
@@ -154,12 +162,15 @@ export async function saveLink(
     // Read again for the page, and for any edit made while waiting.
     link = (await store.get(owner, link.id)) ?? link;
   } else if (why && !link.why) {
-    link = (await store.fillWhyIfMissing(owner, link.id, why)) ?? link;
+    const filled = await store.fillWhyIfMissing(owner, link.id, why);
+    whyFilled = filled?.why?.text === why.text && filled.why.source === why.source;
+    link = filled ?? link;
   }
   return {
     link,
     created: result.created,
     snapshotText: await readSnapshotText(pages, owner, link, EXCERPT_CHARS),
+    whyFilled,
   };
 }
 

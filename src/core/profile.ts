@@ -125,12 +125,16 @@ async function write(
   return result;
 }
 
+/** A note or focus entry as one write added or removed it. */
+export type WrittenEntry = { id: string; text: string; source: Source };
+
+/** `added` is each note and focus entry as stored, with its id; `recentFocus` may not hold them all. */
 export async function addProfile(
   deps: ProfileDeps,
   owner: OwnerId,
   writtenBy: string,
   input: { addNotes?: Labelled[]; addFocus?: Labelled[] },
-): Promise<ProfileWrite> {
+): Promise<ProfileWrite & { added: { notes: WrittenEntry[]; focus: WrittenEntry[] } }> {
   if (!input.addNotes?.length && !input.addFocus?.length) {
     throw invalid(
       "Nothing was given to add: send addNotes or addFocus. To edit or remove notes, use edit_profile. Nothing was changed.",
@@ -140,15 +144,27 @@ export async function addProfile(
   changes.addNotes = (input.addNotes ?? []).map((n) => labelled(n, MAX_NOTE_CHARS, "profile note"));
   changes.addFocus = (input.addFocus ?? []).map((f) => labelled(f, MAX_FOCUS_CHARS, "focus entry"));
   const { ok: _ok, ...written } = await write(deps, owner, writtenBy, changes);
-  return written;
+  const withIds = (entries: Labelled[], ids: string[]) =>
+    entries.map((e, i) => ({ id: ids[i] as string, ...e }));
+  return {
+    ...written,
+    added: {
+      notes: withIds(changes.addNotes, written.addedNoteIds),
+      focus: withIds(changes.addFocus, written.addedFocusIds),
+    },
+  };
 }
 
+/**
+ * An edit applies only while the note keeps the source this call read; a removal, only while the
+ * note is as read, so a note changed since is a conflict. `removed` is each note as removed.
+ */
 export async function editProfile(
   deps: ProfileDeps,
   owner: OwnerId,
   writtenBy: string,
   input: { editNotes?: { id: string; text: string; source: Source }[]; removeNotes?: string[] },
-): Promise<Profile> {
+): Promise<Profile & { removed: WrittenEntry[] }> {
   if (!input.editNotes?.length && !input.removeNotes?.length) {
     throw invalid(
       "Nothing was given to change: send editNotes or removeNotes. To add notes or focus, use add_profile. Nothing was changed.",
@@ -163,16 +179,20 @@ export async function editProfile(
   if (new Set(ids).size !== ids.length) {
     throw invalid("Edit or remove each note once per call. An id appears more than once.");
   }
-  const read = new Map((await deps.profile.listNotes(owner)).map((n) => [n.id, n.source]));
-  const sourceOf = (id: string): Source => {
-    const source = read.get(id);
-    if (source === undefined) throw notFound(id);
-    return source;
+  const read = new Map((await deps.profile.listNotes(owner)).map((n) => [n.id, n]));
+  const noteOf = (id: string) => {
+    const note = read.get(id);
+    if (note === undefined) throw notFound(id);
+    return note;
   };
   const changes: ProfileChanges = {
     ...noChanges(),
-    editNotes: edits.map((e) => ({ ...e, expectedSource: sourceOf(e.id) })),
-    removeNotes: removes.map((id) => ({ id, expectedSource: sourceOf(id) })),
+    editNotes: edits.map((e) => ({ ...e, expectedSource: noteOf(e.id).source })),
+    removeNotes: removes.map((id) => ({
+      id,
+      expectedSource: noteOf(id).source,
+      expectedUpdatedAt: noteOf(id).updatedAt,
+    })),
   };
   for (const e of changes.editNotes) {
     if (e.source !== "stated" && e.expectedSource === "stated") {
@@ -182,7 +202,11 @@ export async function editProfile(
     }
   }
   const result = await write(deps, owner, writtenBy, changes);
-  return { notes: result.notes, recentFocus: result.recentFocus };
+  const removed = removes.map((id) => {
+    const { text, source } = noteOf(id);
+    return { id, text, source };
+  });
+  return { notes: result.notes, recentFocus: result.recentFocus, removed };
 }
 
 /** A note the owner adds in their own words is stated. */

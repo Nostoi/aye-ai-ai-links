@@ -119,7 +119,8 @@ export const SHRINK_SIDE = 1600;
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
  *   Save stays off until its answer comes. An answer that comes after the dialog closed or reopened
- *   still updates its own card and offers Undo, but leaves the dialog alone; a refusal that comes then
+ *   still updates its own card and offers Undo, unless another action offered its own Undo while the
+ *   Save was out (`showUndo.offers()`); it leaves the dialog alone, and a refusal that comes then
  *   shows in the page's alert.
  * - Focus goes back to the card's ⋯ when the dialog closes.
  * - Delete link drops the unsaved change, closes the dialog and calls `deleteLinkScript`'s

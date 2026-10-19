@@ -1,6 +1,9 @@
 process.once("message", () => {
   process.send?.({ type: "received" });
-  process.send({ type: "metadata", metadata: { title: "m", description: null, imageUrl: null, iconUrls: [] } });
+  process.send({
+    type: "metadata",
+    metadata: { title: "m", description: null, imageUrl: null, iconUrls: [] },
+  });
   process.disconnect();
   setInterval(() => {}, 1000);
 });

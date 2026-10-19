@@ -13,6 +13,8 @@ export type ImageHarness = {
   images: ImageStore & LinkImageReader;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
+  /** The snapshot's `image_status` as stored: pending, ok, none, refused, or null. Test inspection only. */
+  imageStatus(owner: string, linkId: string): MaybeAsync<string | null>;
 };
 
 const IMG = "https://ex.com/i.png";
@@ -294,6 +296,95 @@ export function describeImageStoreContract(
       expect(await h.images.endImage(B, id, ICON, "icon", "none")).toBe(false);
       expect(await pending()).toEqual([id]);
       expect(await h.images.image(A, id)).toMatchObject({ bytes: pngBytes(7).bytes });
+    });
+
+    const ICON2 = "https://ex.com/icon2.png";
+    /** A link of `owner` whose fetched page named only these icons. */
+    const iconsOnly = async (owner: string, iconUrls: string[]): Promise<string> => {
+      const { link } = await h.links.insertIfAbsent(owner, newLink(++n, at(0)));
+      await recordAt(owner, link.id, at(1), record({ imageUrl: null, iconUrls }));
+      return link.id;
+    };
+
+    it.each(["none", "refused"] as const)(
+      "★ ending the first icon as %s makes the second pending, once; ending that ends the picture",
+      async (end) => {
+        // [No fallback, a fallback that loops, or a stale first-icon result accepted after it.]
+        const id = await iconsOnly(A, [ICON, ICON2]);
+        expect(await h.images.endImage(A, id, ICON, "icon", end)).toBe(true);
+        expect(await h.images.pendingImages(null, 100)).toEqual([
+          { owner: A, linkId: id, imageUrl: ICON2, role: "icon" },
+        ]);
+        expect(await h.images.endImage(A, id, ICON, "icon", end)).toBe(false);
+        expect(await h.images.writeImage(A, id, ICON, "icon", pngBytes(1), at(5))).toBe(false);
+        expect(await h.images.endImage(A, id, ICON2, "icon", end)).toBe(true);
+        expect(await pending()).toEqual([]);
+        expect(await h.imageStatus(A, id)).toBe(end);
+        expect(await h.images.image(A, id)).toBeNull();
+      },
+    );
+
+    it("stores the second icon after the first ends, as an icon", async () => {
+      const id = await iconsOnly(A, [ICON, ICON2]);
+      await h.images.endImage(A, id, ICON, "icon", "none");
+      expect(await h.images.writeImage(A, id, ICON2, "icon", pngBytes(2), at(5))).toBe(true);
+      expect((await h.images.imageVersions(A, [id])).get(id)?.fit).toBe("contain");
+      expect(await h.imageStatus(A, id)).toBe("ok");
+    });
+
+    it("ends a lone icon with its own end, promoting nothing", async () => {
+      const id = await iconsOnly(A, [ICON]);
+      expect(await h.images.endImage(A, id, ICON, "icon", "refused")).toBe(true);
+      expect(await pending()).toEqual([]);
+      expect(await h.imageStatus(A, id)).toBe("refused");
+    });
+
+    it("★ never falls back to an icon when the named preview ends (owner ruling)", async () => {
+      // [Promoting on a preview's end.]
+      const { link } = await h.links.insertIfAbsent(A, newLink(++n, at(0)));
+      await recordAt(A, link.id, at(1), record({ imageUrl: IMG, iconUrls: [ICON, ICON2] }));
+      expect(await h.images.endImage(A, link.id, IMG, "preview", "none")).toBe(true);
+      expect(await pending()).toEqual([]);
+      expect(await h.imageStatus(A, link.id)).toBe("none");
+    });
+
+    it("never lets B end A's first icon, so nothing is promoted", async () => {
+      const id = await iconsOnly(A, [ICON, ICON2]);
+      expect(await h.images.endImage(B, id, ICON, "icon", "none")).toBe(false);
+      expect(await h.images.pendingImages(null, 100)).toEqual([
+        { owner: A, linkId: id, imageUrl: ICON, role: "icon" },
+      ]);
+    });
+
+    it("★ records none for a fetched page that names no picture, and nothing for one not fetched", async () => {
+      // [Leaving it NULL, which PR C reads as "never looked at".]
+      const looked = await recorded(A, null);
+      expect(await h.imageStatus(A, looked)).toBe("none");
+      const failed = (await h.links.insertIfAbsent(A, newLink(++n, at(0)))).link.id;
+      await recordAt(
+        A,
+        failed,
+        at(1),
+        record({
+          status: "failed",
+          fetchedAt: null,
+          title: null,
+          description: null,
+          imageUrl: null,
+          text: null,
+          lastError: "fetch:http:404",
+        }),
+      );
+      expect(await h.imageStatus(A, failed)).toBeNull();
+      const retrying = (await h.links.insertIfAbsent(A, newLink(++n, at(0)))).link.id;
+      await recordAt(
+        A,
+        retrying,
+        at(1),
+        record({ status: "retrying", nextFetchAt: at(50), fetchedAt: null, imageUrl: null }),
+      );
+      expect(await h.imageStatus(A, retrying)).toBeNull();
+      expect(await pending()).toEqual([]);
     });
   });
 }

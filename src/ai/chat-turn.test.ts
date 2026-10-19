@@ -7,6 +7,7 @@ import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import {
+  EMPTY_REPLY_NUDGE,
   IN_APP_INSTRUCTIONS,
   MAX_HISTORY,
   MAX_MODEL_CALLS,
@@ -353,8 +354,69 @@ describe("runChatTurn", () => {
     expect(logged).toHaveBeenCalledOnce();
   });
 
+  it("asks once more when the reply is empty, and answers with the second reply", async () => {
+    const model = scriptedModel("Fake", [text("  "), text("Saved it.")]);
+    const { session } = fakeSession();
+
+    const result = await runChatTurn({ model, session, history: [], text: "s" });
+
+    expect(result).toMatchObject({ ok: true, reply: "Saved it." });
+    expect(model.requests).toHaveLength(2);
+    const second = model.requests[1]?.messages ?? [];
+    expect(second.at(-1)).toEqual({ role: "user", text: EMPTY_REPLY_NUDGE });
+    expect(second).toEqual([
+      ...(model.requests[0]?.messages ?? []),
+      { role: "user", text: EMPTY_REPLY_NUDGE },
+    ]);
+    expect(second.every((m) => m.text.trim() !== "")).toBe(true);
+  });
+
+  it("asks only once", async () => {
+    const model = scriptedModel("Fake", [text(""), text(" "), text("never")]);
+    const { session } = fakeSession();
+
+    const result = await runChatTurn({ model, session, history: [], text: "s" });
+
+    expect(result).toMatchObject({ ok: true, changes: [] });
+    expect(result).toHaveProperty("reply", expect.stringMatching(/Fake gave no answer/));
+    expect(model.requests).toHaveLength(2);
+  });
+
+  it("handles tool calls asked for after the nudge", async () => {
+    const model = scriptedModel("Fake", [
+      text(""),
+      calls(save("https://example.com/a")),
+      text("Done."),
+    ]);
+    const { session } = fakeSession();
+
+    const result = await runChatTurn({ model, session, history: [], text: "s" });
+
+    expect(result).toMatchObject({ ok: true, reply: "Done." });
+    expect(result.changes).toHaveLength(1);
+    expect(model.requests).toHaveLength(3);
+  });
+
+  it("doesn't ask again after the step limit", async () => {
+    const steps = [
+      ...Array.from({ length: MAX_MODEL_CALLS - 1 }, (_, i) =>
+        calls(save(`https://example.com/${i}`)),
+      ),
+      text(""),
+      text("never"),
+    ];
+    const model = scriptedModel("Fake", steps);
+    const { session } = fakeSession();
+
+    const result = await runChatTurn({ model, session, history: [], text: "s" });
+
+    expect(result.ok).toBe(false);
+    expect(result).toHaveProperty("reason", expect.stringContaining(`${MAX_MODEL_CALLS} steps`));
+    expect(model.requests).toHaveLength(MAX_MODEL_CALLS);
+  });
+
   it("says so when the model answers with nothing", async () => {
-    const model = scriptedModel("Fake", [text("  ")]);
+    const model = scriptedModel("Fake", [text("  "), text("")]);
     const { session } = fakeSession();
 
     const result = await runChatTurn({ model, session, history: [], text: "s" });

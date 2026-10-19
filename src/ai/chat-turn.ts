@@ -19,6 +19,9 @@ export const TOOL_CALL_MS = 5_000;
 export const MAX_TURN_CHARS = 8_000;
 export const MAX_TEXT_CHARS = 4_000;
 export const MAX_HISTORY = 40;
+/** Sent once, in place of the empty reply, when a model ends a turn with no text and no tool calls. */
+export const EMPTY_REPLY_NUDGE =
+  "Please answer the owner now in a sentence or two, based on what you have done and found.";
 
 export type TextTurn = { role: "user" | "assistant"; text: string };
 
@@ -150,6 +153,7 @@ export async function runChatTurn(input: {
     return answer(result.text, result.isError);
   };
 
+  let nudged = false;
   try {
     for (let step = 0; step < limits.calls; step++) {
       if (signal?.aborted) return fail(STOPPING);
@@ -158,7 +162,12 @@ export async function runChatTurn(input: {
       // A cut-off tool call could carry partial input, so none of them runs.
       if (reply.truncated) return fail(CUT_OFF);
       if (reply.toolCalls.length === 0) {
-        return ok(reply.text.trim() === "" ? `${model.name} gave no answer.` : reply.text);
+        if (reply.text.trim() !== "") return ok(reply.text);
+        if (nudged) return ok(`${model.name} gave no answer.`);
+        // Both APIs refuse an empty assistant message, so only the nudge follows the history.
+        nudged = true;
+        messages.push({ role: "user", text: EMPTY_REPLY_NUDGE });
+        continue;
       }
       messages.push({ role: "assistant", text: reply.text, toolCalls: reply.toolCalls });
       for (const call of reply.toolCalls) {

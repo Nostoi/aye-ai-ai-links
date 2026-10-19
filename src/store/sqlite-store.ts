@@ -6,7 +6,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "../core/snapshot-store.js";
-import type { LinkExpectation, LinkStore, SurfacedClaim } from "../core/store.js";
+import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "../core/store.js";
 import {
   sameTool,
   type ToolRecord,
@@ -28,6 +28,7 @@ import type {
   TagPatch,
   ToolStatus,
 } from "../core/types.js";
+import { TOMBSTONE } from "./saved-copies.js";
 
 export class StoreError extends Error {
   constructor(
@@ -84,7 +85,7 @@ type SnapshotRow = {
   image_url: string | null;
 };
 
-export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
+export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolStore {
   constructor(private readonly db: Database) {}
 
   /** Idempotent. Owners are created here, outside LinkStore. */
@@ -115,6 +116,72 @@ export class SqliteStore implements LinkStore, SnapshotStore, ToolStore {
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const n = parseId(id);
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();
+  }
+
+  async markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean> {
+    const n = parseId(id);
+    if (n === null) return false;
+    const ms = toMs(at);
+    return this.db
+      .transaction(() => {
+        const hidden = this.db
+          .prepare(
+            "UPDATE links SET deleted_at = ? WHERE id = ? AND owner_id = ? AND deleted_at IS NULL",
+          )
+          .run(ms, n, owner).changes;
+        if (hidden !== 1) return false;
+        this.db
+          .prepare(
+            `UPDATE saved_copies SET status = 'removed', removed_at = ?
+             WHERE owner_id = ? AND link_id = ? AND status = 'ok'`,
+          )
+          .run(ms, owner, n);
+        return true;
+      })
+      .immediate();
+  }
+
+  async unmarkDeleted(owner: OwnerId, id: string, since: Date): Promise<boolean> {
+    const n = parseId(id);
+    if (n === null) return false;
+    const from = toMs(since);
+    return this.db
+      .transaction(() => {
+        const deletedAt = this.db
+          .prepare("SELECT deleted_at FROM links WHERE id = ? AND owner_id = ? AND deleted_at >= ?")
+          .pluck()
+          .get(n, owner, from) as number | undefined;
+        if (deletedAt === undefined) return false;
+        this.db
+          .prepare("UPDATE links SET deleted_at = NULL WHERE id = ? AND owner_id = ?")
+          .run(n, owner);
+        this.db
+          .prepare(
+            `UPDATE saved_copies SET status = 'ok', removed_at = NULL
+             WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND removed_at = ?
+               AND NOT ${TOMBSTONE}`,
+          )
+          .run(owner, n, deletedAt);
+        return true;
+      })
+      .immediate();
+  }
+
+  async purgeDeleted(before: Date): Promise<number> {
+    const cutoff = toMs(before);
+    return this.db
+      .transaction(
+        () =>
+          this.db
+            .prepare(
+              `DELETE FROM links WHERE deleted_at IS NOT NULL AND deleted_at < ?
+                 AND NOT EXISTS (SELECT 1 FROM saved_copies c WHERE c.owner_id = links.owner_id
+                   AND c.link_id = links.id AND c.status IN ('saving', 'ok', 'removed')
+                   AND NOT (${TOMBSTONE} AND c.bytes = 0))`,
+            )
+            .run(cutoff).changes,
+      )
+      .immediate();
   }
 
   async listTags(owner: OwnerId) {

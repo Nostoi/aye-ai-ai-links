@@ -29,6 +29,8 @@ import type {
  *   with an Error whose `code` is "unknown_owner".
  * - Ids: a store may issue any id format. An id it never issued (any string,
  *   including empty, malformed or out of range) yields null, never an error.
+ * - Deleted links: a link hidden by `LinkRemover.markDeleted` is absent from every read and
+ *   refused by every write here, as an absent one is, until it is restored or purged.
  */
 export interface LinkStore {
   /**
@@ -144,6 +146,19 @@ export interface LinkStore {
     expected: LinkExpectation,
     patch: LinkPatch,
   ): Promise<{ link: Link; applied: boolean } | null>;
+}
+
+/**
+ * Deleting a link (#126). A deleted link is hidden from every LinkStore read and write and from
+ * every per-link read of the other stores until it is restored or purged. Ids are never issued twice.
+ */
+export interface LinkRemover {
+  /** Hide a live link at `at`; an `ok` saved copy becomes `removed` with removed_at = at, in the same step. False when absent, foreign or already hidden. */
+  markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean>;
+  /** Unhide a link hidden at or after `since`; its copy comes back only if removed_at equals deleted_at and it is not a tombstone. False, changing nothing, otherwise. */
+  unmarkDeleted(owner: OwnerId, id: string, since: Date): Promise<boolean>;
+  /** All owners: delete links hidden before `before` whose copy is absent or a 0-byte tombstone. Returns how many. */
+  purgeDeleted(before: Date): Promise<number>;
 }
 
 /**

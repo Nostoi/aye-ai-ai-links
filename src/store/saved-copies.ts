@@ -37,7 +37,7 @@ const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error
  * A removed row whose purge has begun. An unpurged removed row always has a nonce or a finish
  * time, since `confirmCopy` sets `finished_at` exactly when there is no nonce.
  */
-const TOMBSTONE = "(status = 'removed' AND image_nonce IS NULL AND finished_at IS NULL)";
+export const TOMBSTONE = "(status = 'removed' AND image_nonce IS NULL AND finished_at IS NULL)";
 
 /** In an UPDATE of `saved_copies`: the row's link is not deleted. */
 const LINK_LIVE = `EXISTS (SELECT 1 FROM links l WHERE l.owner_id = saved_copies.owner_id

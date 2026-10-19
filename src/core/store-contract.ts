@@ -4,7 +4,7 @@ import { filingContext } from "./filing-context.js";
 import { getLink, saveLink, updateLink } from "./links.js";
 import { setProjectStatus } from "./project-status.js";
 import { type SavePageInput, savePage } from "./save-page.js";
-import type { LinkStore } from "./store.js";
+import type { LinkRemover, LinkStore } from "./store.js";
 import { changeTagKind } from "./tag-kind.js";
 import { SPACE_COLORS, setTagColor, setTagPinned } from "./tag-space.js";
 import type { Labelled, Link, Tag, TagKind } from "./types.js";
@@ -13,7 +13,7 @@ type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. */
 export type StoreHarness = {
-  store: LinkStore;
+  store: LinkStore & LinkRemover;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
   /** Every link the owner has, bypassing the LinkStore interface. */
@@ -21,14 +21,11 @@ export type StoreHarness = {
   /** The owner's tag catalog, in creation order. */
   catalog(owner: string): MaybeAsync<Tag[]>;
   seedTag(owner: string, tag: Tag): MaybeAsync<void>;
-  /** Hide the link as a deleted one. Test-only. */
-  hide(owner: string, id: string, at: Date): MaybeAsync<void>;
-  /** Undo `hide`. Test-only. */
-  unhide(owner: string, id: string): MaybeAsync<void>;
 };
 
 const A = "owner-a";
 const B = "owner-b";
+const EPOCH = new Date(0);
 
 async function code(p: Promise<unknown>): Promise<string> {
   try {
@@ -896,7 +893,7 @@ export function describeStoreContract(
     });
 
     describe("setTagPinned", () => {
-      const pin = (name: string, store = h.store) =>
+      const pin = (name: string, store: LinkStore = h.store) =>
         setTagPinned({ store }, A, { name, pinned: true });
       const unpin = (name: string) => setTagPinned(deps(), A, { name, pinned: false });
 
@@ -967,7 +964,7 @@ export function describeStoreContract(
 
     describe("setProjectStatus", () => {
       const project = tagOf("solar", { kind: "project", kindSource: "stated" });
-      const status = (s: "active" | "done", store = h.store) =>
+      const status = (s: "active" | "done", store: LinkStore = h.store) =>
         setProjectStatus({ store }, A, { name: "Solar", status: s });
 
       it("marks a project done, which takes it out of active projects, and reopens it", async () => {
@@ -1795,7 +1792,7 @@ export function describeStoreContract(
       const twoLinks = async () => {
         const gone = await saveLink(deps(), A, { url: "https://ex.com/gone", savedBy: "t" });
         const kept = await saveLink(deps(), A, { url: "https://ex.com/kept", savedBy: "t" });
-        await h.hide(A, gone.link.id, clock);
+        await h.store.markDeleted(A, gone.link.id, clock);
         return { gone: gone.link.id, kept: kept.link.id };
       };
 
@@ -1821,10 +1818,10 @@ export function describeStoreContract(
         const { gone } = await twoLinks();
         const at = new Date("2026-03-01T00:00:00Z");
         const later = new Date("2026-04-01T00:00:00Z");
-        await h.unhide(A, gone);
+        await h.store.unmarkDeleted(A, gone, EPOCH);
         await h.store.claimSurfaced(A, [gone], { at, notSurfacedAfter: at, now: at });
         const before = await h.store.get(A, gone);
-        await h.hide(A, gone, clock);
+        await h.store.markDeleted(A, gone, clock);
 
         expect(await h.store.update(A, gone, { title: "x", tags: [] })).toBeNull();
         expect(await h.store.updateIf(A, gone, {}, { title: "x" })).toBeNull();
@@ -1838,7 +1835,7 @@ export function describeStoreContract(
         ).toEqual([]);
         expect(await h.store.unclaimSurfaced(A, gone, { at, previous: null })).toBe(false);
 
-        await h.unhide(A, gone);
+        await h.store.unmarkDeleted(A, gone, EPOCH);
         expect(await h.store.get(A, gone)).toEqual(before);
       });
 
@@ -1850,7 +1847,7 @@ export function describeStoreContract(
         const sameKey = async () =>
           (await h.store.listLinks(A)).filter((l) => l.urlKey === again.link.urlKey);
         expect((await sameKey()).map((l) => l.id)).toEqual([again.link.id]);
-        await h.unhide(A, gone);
+        await h.store.unmarkDeleted(A, gone, EPOCH);
         expect((await sameKey()).map((l) => l.id)).toEqual([again.link.id]);
       });
 
@@ -1858,6 +1855,94 @@ export function describeStoreContract(
         const { gone } = await twoLinks();
         expect(await code(getLink(deps(), A, gone))).toBe("not_found");
         expect(await code(updateLink(deps(), A, gone, { title: "x" }))).toBe("not_found");
+      });
+
+      const t = (ms: number) => new Date(clock.getTime() + ms);
+      const save = async (owner: string, url: string) =>
+        (await saveLink(deps(), owner, { url, savedBy: "t" })).link.id;
+
+      it("markDeleted hides a live link once; a second call, a foreign id and a never-issued id are false", async () => {
+        const id = await save(A, "https://ex.com/1");
+        expect(await h.store.markDeleted(B, id, t(0))).toBe(false);
+        expect(await h.store.get(A, id)).not.toBeNull();
+        expect(await h.store.markDeleted(A, id, t(0))).toBe(true);
+        expect(await h.store.get(A, id)).toBeNull();
+        expect(await h.store.markDeleted(A, id, t(1))).toBe(false);
+        for (const never of ["", "nope", "999999", "-1"]) {
+          expect(await h.store.markDeleted(A, never, t(0))).toBe(false);
+        }
+        // The second call left the deletion time alone, so a restore from t(0) still works.
+        expect(await h.store.unmarkDeleted(A, id, t(0))).toBe(true);
+      });
+
+      it("unmarkDeleted inside the window brings the link back exactly as it was", async () => {
+        const { link } = await saveLink(deps(), A, {
+          url: "https://ex.com/1",
+          savedBy: "t",
+          why: { text: "for the trip", source: "stated" },
+          tags: [{ name: "travel", source: "stated" }],
+        });
+        await updateLink(deps(), A, link.id, { state: "archived" });
+        const before = await h.store.get(A, link.id);
+        expect(before).toMatchObject({ state: "archived", why: { text: "for the trip" } });
+        expect(before?.tags.map((x) => x.key)).toEqual(["travel"]);
+        expect(await h.store.markDeleted(A, link.id, t(10))).toBe(true);
+        expect(await h.store.unmarkDeleted(A, link.id, t(5))).toBe(true);
+        expect(await h.store.get(A, link.id)).toEqual(before);
+        expect((await h.store.listLinks(A)).map((l) => l.id)).toEqual([link.id]);
+      });
+
+      it("unmarkDeleted before 'since' or after a purge is false and changes nothing", async () => {
+        const id = await save(A, "https://ex.com/1");
+        expect(await h.store.unmarkDeleted(A, id, EPOCH)).toBe(false);
+        expect(await h.store.get(A, id)).not.toBeNull();
+        await h.store.markDeleted(A, id, t(10));
+        expect(await h.store.unmarkDeleted(A, id, t(11))).toBe(false);
+        expect(await h.store.unmarkDeleted(B, id, EPOCH)).toBe(false);
+        expect(await h.store.get(A, id)).toBeNull();
+        expect(await h.store.purgeDeleted(t(11))).toBe(1);
+        expect(await h.store.unmarkDeleted(A, id, EPOCH)).toBe(false);
+        expect(await h.store.get(A, id)).toBeNull();
+        expect(await h.store.listLinks(A)).toEqual([]);
+      });
+
+      it("purgeDeleted removes only links hidden before the cutoff, for every owner, and leaves live ones", async () => {
+        const a1 = await save(A, "https://ex.com/1");
+        const a2 = await save(A, "https://ex.com/2");
+        const live = await save(A, "https://ex.com/3");
+        const b1 = await save(B, "https://ex.com/1");
+        await h.store.markDeleted(A, a1, t(0));
+        await h.store.markDeleted(A, a2, t(100));
+        await h.store.markDeleted(B, b1, t(0));
+        expect(await h.store.purgeDeleted(t(50))).toBe(2);
+        expect(await h.store.purgeDeleted(t(50))).toBe(0);
+        expect(await h.store.unmarkDeleted(A, a1, EPOCH)).toBe(false);
+        expect(await h.store.unmarkDeleted(B, b1, EPOCH)).toBe(false);
+        expect(await h.store.unmarkDeleted(A, a2, EPOCH)).toBe(true);
+        expect((await h.store.listLinks(A)).map((l) => l.id).sort()).toEqual([a2, live].sort());
+        expect(await h.store.listLinks(B)).toEqual([]);
+      });
+
+      it("never issues a purged link's id again", async () => {
+        const earlier = [
+          await save(A, "https://ex.com/1"),
+          await save(A, "https://ex.com/2"),
+          await save(A, "https://ex.com/3"),
+        ];
+        await h.store.markDeleted(A, earlier[2] as string, t(0));
+        expect(await h.store.purgeDeleted(t(1))).toBe(1);
+        const next = await save(A, "https://ex.com/4");
+        expect(earlier).not.toContain(next);
+      });
+
+      it("a restore after a re-save of the same address is false", async () => {
+        const old = await save(A, "https://ex.com/1");
+        await h.store.markDeleted(A, old, t(0));
+        const fresh = await save(A, "https://ex.com/1");
+        expect(fresh).not.toBe(old);
+        expect(await h.store.unmarkDeleted(A, old, EPOCH)).toBe(false);
+        expect((await h.store.listLinks(A)).map((l) => l.id)).toEqual([fresh]);
+        expect(await h.store.get(A, old)).toBeNull();
       });
     });
   });

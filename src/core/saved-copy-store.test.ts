@@ -71,13 +71,13 @@ describe("FakeSavedCopies fault injection", () => {
   it("refuses to remove or restore the copy of a hidden link", async () => {
     const { store, copies, id } = await setup();
     await copies.saveCopy(A, id, draft(0), limits, at(5));
-    store.hide(A, id, at(6));
+    await store.markDeleted(A, id, at(6));
     expect(await copies.removeCopy(A, id, at(7))).toBe(false);
-    store.unhide(A, id);
+    await store.unmarkDeleted(A, id, at(0));
     expect(await copies.removeCopy(A, id, at(8))).toBe(true);
-    store.hide(A, id, at(9));
+    await store.markDeleted(A, id, at(9));
     expect(await copies.restoreCopy(A, id, at(0))).toBe(false);
-    store.unhide(A, id);
+    await store.unmarkDeleted(A, id, at(0));
     expect(await copies.restoreCopy(A, id, at(0))).toBe(true);
   });
 

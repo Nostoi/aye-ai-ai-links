@@ -30,7 +30,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
-import type { LinkExpectation, LinkStore, SurfacedClaim } from "./store.js";
+import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "./store.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
@@ -59,6 +59,14 @@ type EditRecord = {
   prior: OwnRecord | null;
   writtenSha: string | null;
 };
+/** What a delete, Undo and purge do to the link's saved copy, as SQLite does in the same step. */
+type CopyHooks = {
+  removeForDelete(owner: OwnerId, id: string, at: Date): void;
+  restoreForUndo(owner: OwnerId, id: string, deletedAt: Date): void;
+  /** The copy is not absent and not a 0-byte tombstone, so its files may still exist. */
+  holdsFiles(owner: OwnerId, id: string): boolean;
+  purged(owner: OwnerId, id: string): void;
+};
 const sha256Hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const stored = (own: OwnRecord): StoredImage => ({
   contentType: own.contentType,
@@ -70,6 +78,7 @@ const stored = (own: OwnRecord): StoredImage => ({
 export class FakeStore
   implements
     LinkStore,
+    LinkRemover,
     SnapshotStore,
     ToolStore,
     LinkCheckStore,
@@ -92,6 +101,7 @@ export class FakeStore
   private editRecords = new Map<string, EditRecord>();
   private toolRows = new Map<OwnerId, Map<string, ToolRecord>>();
   private checkRows = new Map<OwnerId, Map<string, LinkCheck>>();
+  private copies: CopyHooks | null = null;
   private nextId = 1;
 
   private owned(owner: OwnerId): Map<string, Link> {
@@ -169,6 +179,7 @@ export class FakeStore
     ]) {
       perLink.delete(key);
     }
+    this.copies?.purged(owner, id);
   }
 
   async insertIfAbsent(owner: OwnerId, link: NewLink) {
@@ -283,25 +294,46 @@ export class FakeStore
     return next;
   }
 
-  /** Test-only: moves the link out of `links`, as a deleted one is out of every read. */
-  hide(owner: OwnerId, id: string, at: Date): void {
+  /** Called by the saved copies built on this store, so a delete, restore and purge reach them. */
+  attachCopies(copies: CopyHooks): void {
+    this.copies = copies;
+  }
+
+  /** A deleted link moves out of `links`, so it is out of every read. */
+  async markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean> {
     const link = this.owned(owner).get(id);
-    if (!link) return;
+    if (!link) return false;
     this.owned(owner).delete(id);
     let mine = this.hidden.get(owner);
     if (!mine) {
       mine = new Map();
       this.hidden.set(owner, mine);
     }
-    mine.set(id, { link, at });
+    mine.set(id, { link, at: new Date(at) });
+    this.copies?.removeForDelete(owner, id, at);
+    return true;
   }
 
-  /** Test-only: puts a hidden link back. */
-  unhide(owner: OwnerId, id: string): void {
+  async unmarkDeleted(owner: OwnerId, id: string, since: Date): Promise<boolean> {
     const entry = this.hidden.get(owner)?.get(id);
-    if (!entry) return;
+    if (!entry || entry.at.getTime() < since.getTime()) return false;
     this.hidden.get(owner)?.delete(id);
     this.owned(owner).set(id, entry.link);
+    this.copies?.restoreForUndo(owner, id, entry.at);
+    return true;
+  }
+
+  async purgeDeleted(before: Date): Promise<number> {
+    let purged = 0;
+    for (const [owner, mine] of this.hidden) {
+      for (const [id, entry] of mine) {
+        if (entry.at.getTime() >= before.getTime()) continue;
+        if (this.copies?.holdsFiles(owner, id)) continue;
+        this.cascade(owner, id);
+        purged++;
+      }
+    }
+    return purged;
   }
 
   private isHidden(owner: OwnerId, id: string): boolean {

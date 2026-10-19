@@ -15,13 +15,13 @@ import {
 } from "./saved-copy.js";
 import type { SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
-import type { LinkStore } from "./store.js";
+import type { LinkRemover, LinkStore } from "./store.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. All stores share one database. */
 export type CopyHarness = {
-  links: LinkStore & SnapshotStore;
+  links: LinkStore & LinkRemover & SnapshotStore;
   checks: LinkCheckStore;
   copies: SavedCopyWriter &
     SavedCopyReader &
@@ -523,6 +523,75 @@ export function describeSavedCopyStoreContract(
         expect(await h.copies.restoreCopy(A, id, T)).toBe(true);
         expect((await h.copies.pendingCopyImages(null, 50)).map((p) => p.n)).toEqual([1, 2]);
         expect(await h.copies.copyImage(A, id, 1)).toBeNull();
+      });
+    });
+
+    describe("deleting the link", () => {
+      const T = at(10);
+      const saved = async (owner: string, markdown = "body") => {
+        const id = await save(owner);
+        await h.copies.saveCopy(owner, id, draft(markdown), LIMITS, at(5));
+        return id;
+      };
+
+      it("removes the ok copy with the link, and Undo brings back only that one", async () => {
+        const id = await saved(A);
+        const earlier = await saved(A, "earlier");
+        const before = await h.copies.readCopy(A, id);
+        await h.copies.removeCopy(A, earlier, at(8));
+        expect(await h.links.markDeleted(A, id, T)).toBe(true);
+        expect(await h.links.markDeleted(A, earlier, T)).toBe(true);
+        expect(await h.copies.listCopies(A)).toEqual(
+          new Map([
+            [id, { status: "removed", madeAt: at(5) }],
+            [earlier, { status: "removed", madeAt: at(5) }],
+          ]),
+        );
+        expect(await h.links.unmarkDeleted(A, id, T)).toBe(true);
+        expect(await h.links.unmarkDeleted(A, earlier, T)).toBe(true);
+        expect(await h.copies.readCopy(A, id)).toEqual(before);
+        expect(await h.copies.readCopy(A, earlier)).toBeNull();
+        expect(await h.copies.restoreCopy(A, earlier, at(8))).toBe(true);
+      });
+
+      it("purges the link only once purgeRemoved has retired its copy", async () => {
+        const id = await saved(A);
+        const used = await h.copies.usedBytes();
+        await h.links.markDeleted(A, id, T);
+        expect(await h.links.purgeDeleted(at(20))).toBe(0);
+        expect(await h.copies.usedBytes()).toBe(used);
+        expect(await h.copies.purgeRemoved(at(20))).toBe(1);
+        expect(await h.links.purgeDeleted(at(20))).toBe(1);
+        expect(await h.copies.usedBytes()).toBe(0);
+        expect(await h.copies.listCopies(A)).toEqual(new Map());
+      });
+
+      it("Undo after the copy was retired brings the link back without it", async () => {
+        const id = await saved(A);
+        await h.links.markDeleted(A, id, T);
+        expect(await h.copies.purgeRemoved(at(20))).toBe(1);
+        expect(await h.links.unmarkDeleted(A, id, T)).toBe(true);
+        expect(await h.links.get(A, id)).not.toBeNull();
+        expect(await h.copies.readCopy(A, id)).toBeNull();
+        expect(await h.copies.listCopies(A)).toEqual(
+          new Map([[id, { status: "removed", madeAt: at(5) }]]),
+        );
+      });
+
+      it("a re-save of the address drops the hidden link's copy and its bytes", async () => {
+        const id = await saved(A);
+        const theirs = await saved(B);
+        const used = await h.copies.usedBytes();
+        const link = await h.links.get(A, id);
+        await h.links.markDeleted(A, id, T);
+        const again = await h.links.insertIfAbsent(A, {
+          ...newLink(999, at(0)),
+          urlKey: link?.urlKey as string,
+        });
+        expect(again.created).toBe(true);
+        expect(await h.copies.listCopies(A)).toEqual(new Map());
+        expect(await h.copies.usedBytes()).toBe(used - bytes("body"));
+        expect(await h.copies.readCopy(B, theirs)).toMatchObject({ markdown: "body" });
       });
     });
   });

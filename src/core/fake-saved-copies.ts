@@ -64,7 +64,35 @@ export class FakeSavedCopies
   private nextFailure: Error | null = null;
   private last: FolderCheck = { state: "ready" };
 
-  constructor(private readonly store: FakeStore) {}
+  constructor(private readonly store: FakeStore) {
+    store.attachCopies({
+      removeForDelete: (owner, id, at) => {
+        const row = this.rowOf(owner, id);
+        if (row?.status !== "ok") return;
+        row.status = "removed";
+        row.removedAt = new Date(at);
+      },
+      restoreForUndo: (owner, id, deletedAt) => {
+        const row = this.rowOf(owner, id);
+        if (row?.status !== "removed" || row.removedAt?.getTime() !== deletedAt.getTime()) return;
+        if (this.tombstone(row)) return;
+        row.status = "ok";
+        row.removedAt = null;
+      },
+      holdsFiles: (owner, id) => {
+        const row = this.rowOf(owner, id);
+        return (
+          row !== undefined &&
+          ["saving", "ok", "removed"].includes(row.status) &&
+          !(this.tombstone(row) && row.bytes === 0)
+        );
+      },
+      purged: (owner, id) => {
+        this.rows.delete(key(owner, id));
+        this.files.delete(key(owner, id));
+      },
+    });
+  }
 
   /** Make the folder check report this state from now on. */
   fail(state: "unwritable" | "mismatch"): void {

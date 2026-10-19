@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEST_BASE_URL } from "../auth/memory-auth.js";
 import { type Agent, addSecondUser, oauthWorld, SECOND_USER } from "../auth/oauth-test-kit.js";
 import { png } from "../core/image-test-kit.js";
@@ -211,6 +211,26 @@ describe("POST /export/prepare and GET /export.zip", () => {
     for (const m of everyMark(mA)) expect(zip.bytes.includes(m), String(m)).toBe(true);
     for (const m of everyMark(mB)) expect(zip.bytes.includes(m), String(m)).toBe(false);
     expect(zip.bytes.toString("latin1").toLowerCase()).not.toContain("zebra");
+  });
+
+  it("HEAD /export.zip answers GET's headers with no body and leaves no file open", async () => {
+    const { w, deps } = await world();
+    await seed(w, deps, A, marks("quokka", Buffer.alloc(1024 * 1024, 7)));
+    const owner = await signedIn(w);
+    expect((await prepare(owner)).status).toBe(202);
+    await w.exports.settled(A);
+    const get = await owner.send("/export.zip");
+    expect(get.status).toBe(200);
+    const fds = () => readdirSync("/dev/fd").length;
+    const before = fds();
+    for (let i = 0; i < 20; i++) {
+      const head = await owner.send("/export.zip", { method: "HEAD" });
+      expect([head.status, head.bytes.length]).toEqual([200, 0]);
+      for (const h of ["content-length", "content-disposition", "content-type"]) {
+        expect(head.headers.get(h), h).toBe(get.headers.get(h));
+      }
+    }
+    await vi.waitFor(() => expect(fds()).toBe(before));
   });
 
   it("GET /export.zip with nothing prepared is 404 no-store", async () => {

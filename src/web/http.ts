@@ -775,13 +775,18 @@ export function webApp({
   app.get(EXPORT_ZIP_ROUTE, session, async (c) => {
     const file = await deps.exports.download(c.get("caller").owner);
     if (!file) return c.text("Not found.", 404, NO_STORE);
-    return c.body(file.body, 200, {
+    const headers = {
       ...NO_STORE,
       "Content-Type": "application/zip",
       "Content-Length": String(file.size),
       "X-Content-Type-Options": "nosniff",
       "Content-Disposition": `attachment; filename="${exportFilename(file.exportedAt, "zip")}"`,
-    });
+    };
+    if (c.req.method === "HEAD") {
+      await file.body.cancel();
+      return c.body(null, 200, headers);
+    }
+    return c.body(file.body, 200, headers);
   });
 
   // The Save page (#129). Any site can open it, and the Lax cookie comes along, so it never

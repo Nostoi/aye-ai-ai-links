@@ -1186,6 +1186,7 @@ describe("startServer", () => {
       let time = Date.now();
       const clock = () => new Date(time);
       let captured: AppDeps | undefined;
+      let purges = 0;
       const s = await startServer(
         { ...cfg(dbPath, 0), savedCopies: { dir: copiesDir(), limitBytes: 0 } },
         {
@@ -1195,6 +1196,12 @@ describe("startServer", () => {
           copyPollMs: 20,
           decorateDeps: (d) => {
             captured = d;
+            const real = d.savedCopies.purgeRemoved.bind(d.savedCopies);
+            vi.spyOn(d.savedCopies, "purgeRemoved").mockImplementation(async (before) => {
+              const purged = await real(before);
+              purges++;
+              return purged;
+            });
             return { ...d, now: clock };
           },
         },
@@ -1202,7 +1209,8 @@ describe("startServer", () => {
       started.push(s);
       const folder = join(copiesDir(), id);
       expect(await captured?.savedCopies.removeCopy("owner", id, clock())).toBe(true);
-      await sleep(100);
+      const atRemove = purges;
+      await until(() => purges > atRemove, "a purge after the removal");
       expect(existsSync(folder)).toBe(true);
       time += 61_000;
       await until(() => !existsSync(folder), "the removed copy's deletion");

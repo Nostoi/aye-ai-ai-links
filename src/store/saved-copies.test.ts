@@ -24,7 +24,7 @@ import {
 } from "../core/saved-copy.js";
 import { describeSavedCopyStoreContract } from "../core/saved-copy-store-contract.js";
 import { at, newLink } from "../core/snapshot-store-contract.js";
-import { CopyFileTooLarge, CopyFolder, MARKER } from "./copy-folder.js";
+import { CopyFileTooLarge, CopyFolder, CopyFolderMissing, MARKER } from "./copy-folder.js";
 import { openDatabase } from "./database.js";
 import { SqliteSavedCopyStore } from "./saved-copies.js";
 import { SqliteLinkCheckStore } from "./sqlite-link-checks.js";
@@ -631,5 +631,255 @@ describe("sweep", () => {
     expect(await copies.sweep(HOUR, now)).toEqual({ ...ZERO, unknown: [`${id}/notes.txt`] });
     expect(readFileSync(join(root, id, "copy.md"), "utf8")).toBe("new");
     expect(readFileSync(join(root, id, "notes.txt"), "utf8")).toBe("mine");
+  });
+
+  it("deletes a folder that reappears beside a purged copy, once it is old", async () => {
+    const { root, copies, id } = await ready();
+    const now = new Date();
+    await copies.saveCopy("o", id, draft("body"), LIMITS, at(1));
+    await copies.removeCopy("o", id, at(10));
+    expect(await copies.purgeRemoved(at(11))).toBe(1);
+    orphan(root, id, now);
+    expect(await copies.sweep(HOUR, now)).toEqual({ ...ZERO, folders: 1 });
+    expect(existsSync(join(root, id))).toBe(false);
+  });
+});
+
+/** Makes the next folder read wait, after reading, until released; `read` settles once it has read. */
+function holdRead(method: "readMarkdown" | "readImage") {
+  let release = () => {};
+  let reached = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const read = new Promise<void>((r) => {
+    reached = r;
+  });
+  const real = CopyFolder.prototype[method] as (...args: unknown[]) => Promise<unknown>;
+  vi.spyOn(CopyFolder.prototype, method).mockImplementationOnce(async function (
+    this: CopyFolder,
+    ...args: unknown[]
+  ) {
+    const value = await real.apply(this, args);
+    reached();
+    await gate;
+    return value;
+  } as never);
+  return { read, release };
+}
+
+describe("removing and purging", () => {
+  const url = "https://i.example/1.png";
+  const png = { contentType: "image/png" as const, bytes: new Uint8Array([1, 2, 3]) };
+  const copyRow = (db: Db, id: string) =>
+    db
+      .prepare(
+        "SELECT status, bytes, md_bytes, image_nonce, finished_at FROM saved_copies WHERE link_id = ?",
+      )
+      .get(Number(id));
+  const imageRows = (db: Db, id: string) =>
+    db.prepare("SELECT count(*) FROM saved_copy_images WHERE link_id = ?").pluck().get(Number(id));
+  const TOMBSTONE = {
+    status: "removed",
+    bytes: 0,
+    md_bytes: 0,
+    image_nonce: null,
+    finished_at: null,
+  };
+  /** A copy with one stored picture, removed at at(10). */
+  const removed = async () => {
+    const s = await ready();
+    await s.copies.saveCopy("o", s.id, draft("body", [url]), LIMITS, at(1));
+    expect(await s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).toBe("saved");
+    expect(await s.copies.removeCopy("o", s.id, at(10))).toBe(true);
+    return s;
+  };
+  const pause = async (root: string, copies: SqliteSavedCopyStore) => {
+    rmSync(join(root, MARKER));
+    expect(await copies.checkFolder()).toMatchObject({ state: "mismatch" });
+  };
+
+  it("deletes the files, leaves a 0-byte row with no pictures, and keeps foreign files", async () => {
+    const s = await removed();
+    writeFileSync(join(s.root, s.id, "notes.txt"), "mine");
+    expect(await s.copies.purgeRemoved(at(11))).toBe(1);
+    expect(copyRow(s.db, s.id)).toEqual(TOMBSTONE);
+    expect(imageRows(s.db, s.id)).toBe(0);
+    expect(readdirSync(join(s.root, s.id))).toEqual(["notes.txt"]);
+    expect(await s.copies.usedBytes()).toBe(0);
+  });
+
+  it("deletes the whole folder when it holds only the copy", async () => {
+    const s = await removed();
+    expect(await s.copies.purgeRemoved(at(11))).toBe(1);
+    expect(existsSync(join(s.root, s.id))).toBe(false);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "keeps the bytes counted while copy.md cannot be deleted, and purges on a later try",
+    async () => {
+      const s = await removed();
+      const used = await s.copies.usedBytes();
+      chmodSync(join(s.root, s.id), 0o500);
+      try {
+        expect(await s.copies.purgeRemoved(at(11))).toBe(0);
+      } finally {
+        chmodSync(join(s.root, s.id), 0o700);
+      }
+      expect(await s.copies.usedBytes()).toBe(used);
+      expect(existsSync(join(s.root, s.id, "copy.md"))).toBe(true);
+      expect(await s.copies.purgeRemoved(at(11))).toBe(1);
+      expect(copyRow(s.db, s.id)).toEqual(TOMBSTONE);
+    },
+  );
+
+  it.skipIf(process.getuid?.() === 0)(
+    "marks the row before deleting, so a copy whose pictures stay is never restored",
+    async () => {
+      const s = await removed();
+      const used = await s.copies.usedBytes();
+      const images = join(s.root, s.id, "images");
+      chmodSync(images, 0o500);
+      try {
+        expect(await s.copies.purgeRemoved(at(11))).toBe(0);
+      } finally {
+        chmodSync(images, 0o700);
+      }
+      expect(existsSync(join(s.root, s.id, "copy.md"))).toBe(false);
+      expect(copyRow(s.db, s.id)).toMatchObject({ image_nonce: null, finished_at: null });
+      expect(await s.copies.usedBytes()).toBe(used);
+      expect(imageRows(s.db, s.id)).toBe(1);
+      expect(await s.copies.restoreCopy("o", s.id, new Date(0))).toBe(false);
+      expect(await s.copies.purgeRemoved(at(11))).toBe(1);
+      expect(copyRow(s.db, s.id)).toEqual(TOMBSTONE);
+      expect(existsSync(join(s.root, s.id))).toBe(false);
+    },
+  );
+
+  it("deletes nothing while paused", async () => {
+    const s = await removed();
+    await pause(s.root, s.copies);
+    expect(await s.copies.purgeRemoved(at(11))).toBe(0);
+    expect(existsSync(join(s.root, s.id, "copy.md"))).toBe(true);
+    expect(copyRow(s.db, s.id)).toMatchObject({ status: "removed", image_nonce: N });
+  });
+
+  it("removes and restores while paused", async () => {
+    const s = await ready();
+    await s.copies.saveCopy("o", s.id, draft("body"), LIMITS, at(1));
+    await pause(s.root, s.copies);
+    expect(await s.copies.removeCopy("o", s.id, at(10))).toBe(true);
+    expect(await s.copies.restoreCopy("o", s.id, at(10))).toBe(true);
+  });
+
+  it("answers null to a copy read that a removal or purge overtakes", async () => {
+    const s = await removed();
+    await s.copies.restoreCopy("o", s.id, at(10));
+    let held = holdRead("readMarkdown");
+    let reading = s.copies.readCopy("o", s.id);
+    await held.read;
+    await s.copies.removeCopy("o", s.id, at(10));
+    held.release();
+    expect(await reading).toBeNull();
+    await s.copies.restoreCopy("o", s.id, at(10));
+    held = holdRead("readMarkdown");
+    reading = s.copies.readCopy("o", s.id);
+    await held.read;
+    await s.copies.removeCopy("o", s.id, at(10));
+    expect(await s.copies.purgeRemoved(at(11))).toBe(1);
+    held.release();
+    expect(await reading).toBeNull();
+  });
+
+  it("answers null to a picture read that a removal or purge overtakes", async () => {
+    const s = await removed();
+    await s.copies.restoreCopy("o", s.id, at(10));
+    let held = holdRead("readImage");
+    let reading = s.copies.copyImage("o", s.id, 1);
+    await held.read;
+    await s.copies.removeCopy("o", s.id, at(10));
+    held.release();
+    expect(await reading).toBeNull();
+    await s.copies.restoreCopy("o", s.id, at(10));
+    held = holdRead("readImage");
+    reading = s.copies.copyImage("o", s.id, 1);
+    await held.read;
+    await s.copies.removeCopy("o", s.id, at(10));
+    expect(await s.copies.purgeRemoved(at(11))).toBe(1);
+    held.release();
+    expect(await reading).toBeNull();
+  });
+});
+
+describe("lastCheck", () => {
+  it("is not checked before the first check, then the check's result", async () => {
+    const { root, copies } = setup();
+    expect(copies.lastCheck()).toEqual({
+      state: "mismatch",
+      detail: "The saved-copy folder is not checked",
+    });
+    expect(await copies.checkFolder()).toEqual({ state: "ready" });
+    expect(copies.lastCheck()).toEqual({ state: "ready" });
+    writeFileSync(join(root, "stray.txt"), "x");
+    rmSync(join(root, MARKER));
+    const paused = await copies.checkFolder();
+    expect(paused).toMatchObject({ state: "mismatch" });
+    expect(copies.lastCheck()).toEqual(paused);
+  });
+});
+
+describe("a copy whose files were deleted by hand", () => {
+  const url = "https://i.example/1.png";
+  const png = { contentType: "image/png" as const, bytes: new Uint8Array([1, 2, 3]) };
+  const withImage = async () => {
+    const s = await ready();
+    await s.copies.saveCopy("o", s.id, draft(`![a](${imageRef(1, N)})`, [url]), LIMITS, at(1));
+    return s;
+  };
+
+  it("is missing only for its owner, while the folder is the store's", async () => {
+    const s = await withImage();
+    await s.links.ensureUser("p", "p");
+    expect(await s.copies.copyFileMissing("o", s.id)).toBe(false);
+    rmSync(join(s.root, s.id), { recursive: true });
+    expect(await s.copies.copyFileMissing("o", s.id)).toBe(true);
+    expect(await s.copies.copyFileMissing("p", s.id)).toBe(false);
+    expect(await s.copies.copyFileMissing("o", "999999")).toBe(false);
+    writeFileSync(join(s.root, "stray.txt"), "x");
+    rmSync(join(s.root, MARKER));
+    expect(await s.copies.checkFolder()).toMatchObject({ state: "mismatch" });
+    expect(await s.copies.copyFileMissing("o", s.id)).toBe(false);
+  });
+
+  it("is not missing once removed", async () => {
+    const s = await withImage();
+    rmSync(join(s.root, s.id), { recursive: true });
+    await s.copies.removeCopy("o", s.id, at(10));
+    expect(await s.copies.copyFileMissing("o", s.id)).toBe(false);
+  });
+
+  it("stores no picture and rebuilds no folder", async () => {
+    const s = await withImage();
+    const used = await s.copies.usedBytes();
+    rmSync(join(s.root, s.id), { recursive: true });
+    await expect(s.copies.saveCopyImage("o", s.id, 1, url, png, LIMITS)).rejects.toBeInstanceOf(
+      CopyFolderMissing,
+    );
+    expect(existsSync(join(s.root, s.id))).toBe(false);
+    expect(s.db.prepare("SELECT status FROM saved_copy_images").pluck().get()).toBe("pending");
+    expect(await s.copies.usedBytes()).toBe(used);
+  });
+
+  it("is not finished into a rebuilt folder when it goes during the finish", async () => {
+    const s = await withImage();
+    await s.copies.endCopyImage("o", s.id, 1, url, "none");
+    const held = holdRead("readMarkdown");
+    const finishing = s.copies.finishCopy("o", s.id, finishedMarkdown, at(2));
+    await held.read;
+    rmSync(join(s.root, s.id), { recursive: true });
+    held.release();
+    expect(await finishing).toBe(false);
+    expect(existsSync(join(s.root, s.id))).toBe(false);
+    expect(s.db.prepare("SELECT finished_at FROM saved_copies").pluck().get()).toBeNull();
   });
 });

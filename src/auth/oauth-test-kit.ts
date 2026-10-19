@@ -225,6 +225,7 @@ export async function oauthWorld({
   net = fakeNetwork(),
   log,
   savedCopyDir,
+  copyLimitBytes = 0,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -235,6 +236,8 @@ export async function oauthWorld({
   log?: (line: string) => void;
   /** A folder for saved copies; without it, copies read as missing and none are written. */
   savedCopyDir?: string;
+  /** The saved-copy limit the web door shows on All links; 0 shows no line. */
+  copyLimitBytes?: number;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -252,7 +255,7 @@ export async function oauthWorld({
   }
   deps.store.ensureUser("owner", "Owner");
   const { app } = createApp({
-    deps,
+    deps: { ...deps, copyLimitBytes },
     identify: auth.identify,
     auth: { ...auth, keys: keyStore, limits },
     allowedHosts: ["links.example"],

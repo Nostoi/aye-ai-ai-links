@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { MAX_COPY_MARKDOWN_BYTES } from "../core/saved-copy.js";
-import { CopyFileTooLarge, CopyFolder, MARKER, TMP } from "./copy-folder.js";
+import {
+  CopyFileTooLarge,
+  CopyFolder,
+  CopyFolderMissing,
+  MARKER,
+  madeByStore,
+  TMP,
+} from "./copy-folder.js";
 
 const HEX = "0123456789abcdef0123456789abcdef";
 const stage = `tmp-${HEX}`;
@@ -206,6 +213,70 @@ describe("images", () => {
     expect(() => folder.writeImage("12", "01.png", new Uint8Array([1]))).toThrow();
     expect(fs.readdirSync(target)).toEqual([]);
     expect(await folder.readImage("12", "01.png")).toBeNull();
+  });
+
+  it("creates a missing images folder inside a link folder that holds copy.md", async () => {
+    folder.writeCopy("12", "x");
+    fs.rmdirSync(join(root, "12", "images"));
+    folder.writeImage("12", "01.png", new Uint8Array([1]));
+    expect([...((await folder.readImage("12", "01.png")) ?? [])]).toEqual([1]);
+  });
+
+  it("refuses an image for an absent link folder, and creates nothing", () => {
+    expect(() => folder.writeImage("12", "01.png", new Uint8Array([1]))).toThrow(CopyFolderMissing);
+    expect(fs.existsSync(join(root, "12"))).toBe(false);
+  });
+
+  it("refuses an image for a link folder whose copy.md is gone, and creates nothing", () => {
+    folder.writeCopy("12", "x");
+    fs.rmSync(join(root, "12", "copy.md"));
+    fs.rmdirSync(join(root, "12", "images"));
+    expect(() => folder.writeImage("12", "01.png", new Uint8Array([1]))).toThrow(CopyFolderMissing);
+    expect(fs.readdirSync(join(root, "12"))).toEqual([]);
+  });
+});
+
+describe("hasCopyFile", () => {
+  it("is true only for a regular copy.md", () => {
+    expect(folder.hasCopyFile("12")).toBe(false);
+    folder.writeCopy("12", "x");
+    expect(folder.hasCopyFile("12")).toBe(true);
+    const outside = join(fresh(), "copy.md");
+    fs.writeFileSync(outside, "theirs");
+    fs.rmSync(join(root, "12", "copy.md"));
+    fs.symlinkSync(outside, join(root, "12", "copy.md"));
+    expect(folder.hasCopyFile("12")).toBe(false);
+    fs.rmSync(join(root, "12", "copy.md"));
+    fs.mkdirSync(join(root, "12", "copy.md"));
+    expect(folder.hasCopyFile("12")).toBe(false);
+  });
+});
+
+describe("madeByStore", () => {
+  it("names copy.md and image files, relative to the link folder, and nothing else", () => {
+    for (const name of ["copy.md", "images/01.png", "images/30.webp"]) {
+      expect(madeByStore(name)).toBe(true);
+    }
+    for (const name of ["images", "notes.txt", "images/notes.txt", "copy.md.bak", "01.png"]) {
+      expect(madeByStore(name)).toBe(false);
+    }
+  });
+});
+
+describe("replaceMarkdown", () => {
+  it("replaces copy.md and answers true", async () => {
+    folder.writeCopy("12", "x");
+    expect(folder.replaceMarkdown("12", "fresh")).toBe(true);
+    expect(await folder.readMarkdown("12")).toBe("fresh");
+  });
+
+  it("answers false and creates nothing when the folder or its copy.md is gone", () => {
+    expect(folder.replaceMarkdown("12", "fresh")).toBe(false);
+    expect(fs.existsSync(join(root, "12"))).toBe(false);
+    folder.writeCopy("13", "x");
+    fs.rmSync(join(root, "13", "copy.md"));
+    expect(folder.replaceMarkdown("13", "fresh")).toBe(false);
+    expect(fs.existsSync(join(root, "13", "copy.md"))).toBe(false);
   });
 });
 

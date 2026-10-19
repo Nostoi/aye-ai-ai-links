@@ -1,16 +1,17 @@
 import type { ReadGate } from "./copy-reading.js";
+import { type CopyUsageLevel, copiesFull, copyUsageLevel } from "./copy-usage.js";
 import type { PageExtractor } from "./extract.js";
 import type { FetchOutcome, ImageFetcher, PageFetcher } from "./fetch.js";
 import { judgeImage, MAX_IMAGE_ATTEMPTS, RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
 import type { CopyKeeper } from "./keep-copy.js";
 import {
   COPY_READ_TIMEOUT_MS,
+  COPY_UNDO_WINDOW_MS,
   type CopyCandidate,
   type CopyRef,
   copyLimits,
   type FolderCheck,
   finishedMarkdown,
-  MAX_COPY_BYTES,
   type PendingCopyImage,
   pausedMessage,
   type SavedCopyMaintenance,
@@ -19,7 +20,7 @@ import {
 } from "./saved-copy.js";
 
 export type CopyPassOptions = {
-  copies: SavedCopyWriter & Omit<SavedCopyMaintenance, "purgeRemoved"> & SavedCopyUsage;
+  copies: SavedCopyWriter & SavedCopyMaintenance & SavedCopyUsage;
   keeper: CopyKeeper;
   pages: PageFetcher;
   /** The pass's own extractor. */
@@ -28,8 +29,6 @@ export type CopyPassOptions = {
   limitBytes: number;
   /** The saved-copy folder, for log lines only. */
   dir: string;
-  /** The start-up folder check, so a folder paused at start is not logged twice. */
-  initialCheck: FolderCheck;
   now: () => Date;
   canResolve: (signal?: AbortSignal) => Promise<boolean>;
   /** The process's one saved-copy read gate: finishing reads copy.md through it. */
@@ -98,7 +97,8 @@ function judgePage(page: Exclude<FetchOutcome, { kind: "ok" }>): "none" | "trans
 }
 
 /**
- * Finishes what a save started, in the background. Each sweep re-checks the folder, backfills a
+ * Finishes what a save started, in the background. Each sweep re-checks the folder, deletes
+ * copies removed longer than the Undo window ago, backfills a
  * copy for a link saved without one, fetches the images of saved copies, finishes copies whose
  * images have settled, sweeps orphans every `sweepEveryMs`, and logs usage thresholds.
  *
@@ -125,9 +125,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
   const finishFailures = new Map<string, { attempts: number; retryAt: number }>();
   const unknownLogged = new Set<string>();
   let lastOrphanSweep: number | undefined;
-  let level: "low" | "high" | "full" = "low";
+  let level: CopyUsageLevel = "low";
   const abort = new AbortController();
-  let lastState = o.initialCheck.state;
+  /** Seeded from the store's last check, so a folder paused at start is not logged twice. */
+  let lastState = copies.lastCheck().state;
   let started = false;
   let quiet = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -265,7 +266,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
 
   /** The backfill's page-through: at most one page fetch. */
   async function backfillPages(): Promise<boolean> {
-    const retryNoRoom = limitBytes - (await copies.usedBytes()) >= MAX_COPY_BYTES;
+    const retryNoRoom = !copiesFull(await copies.usedBytes(), limitBytes);
     let after: string | null = null;
     for (;;) {
       const rows = await copies.backfillCandidates(after, pageSize, { retryNoRoom });
@@ -343,9 +344,25 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
     );
   }
 
-  /** The image phase, one image at a time. True when the sweep must end. */
+  /** Whether a copy's files are gone, asked once per copy per sweep; logs it the first time. */
+  async function filesMissing(p: PendingCopyImage, asked: Map<string, boolean>): Promise<boolean> {
+    const copy = JSON.stringify([p.owner, p.linkId]);
+    let missing = asked.get(copy);
+    if (missing === undefined) {
+      missing = await copies.copyFileMissing(p.owner, p.linkId);
+      asked.set(copy, missing);
+      if (missing) log(`[saved copies] copy ${copy} has no files, so its pictures are not fetched`);
+    }
+    return missing;
+  }
+
+  /**
+   * The image phase, one image at a time. A copy whose files are missing has its pictures ended
+   * without a fetch. True when the sweep must end.
+   */
   async function imagePages(): Promise<boolean> {
     const seen = new Set<string>();
+    const asked = new Map<string, boolean>();
     let after: { linkId: string; n: number } | null = null;
     for (;;) {
       const rows = await copies.pendingCopyImages(after, pageSize);
@@ -354,6 +371,10 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
         const key = JSON.stringify([p.owner, p.linkId, p.n]);
         seen.add(key);
         try {
+          if (await filesMissing(p, asked)) {
+            await finish(imageFailures, key, settleImage(p));
+            continue;
+          }
           if ((await takeImage(p, key)) === "unavailable") return true;
         } catch (error) {
           const settle = settleImage(p);
@@ -470,8 +491,7 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
   async function usage(): Promise<void> {
     if (!keeper.wanted) return;
     const used = await copies.usedBytes();
-    const next =
-      limitBytes - used < MAX_COPY_BYTES ? "full" : used >= 0.8 * limitBytes ? "high" : "low";
+    const next = copyUsageLevel(used, limitBytes);
     if (next === level) return;
     level = next;
     if (next === "full") {
@@ -500,6 +520,12 @@ export function createCopyPass(o: CopyPassOptions): CopyPass {
       ready = observe(await copies.checkFolder());
     });
     if (!ready) return;
+    // Before the backfill, so the room it frees counts in the same sweep; limit 0 still purges.
+    const purge = async () => {
+      await copies.purgeRemoved(new Date(now().getTime() - COPY_UNDO_WINDOW_MS));
+      return false;
+    };
+    if (await guarded("purge", purge)) return;
     if (keeper.wanted) {
       if (await guarded("backfill", backfillPages)) return;
       if (quiet || (await guarded("images", imagePages))) return;

@@ -21,6 +21,7 @@ import {
   type SaveCopyResult,
   type SavedCopyMaintenance,
   type SavedCopyReader,
+  type SavedCopyRemover,
   type SavedCopyUsage,
   type SavedCopyWriter,
 } from "./saved-copy.js";
@@ -39,6 +40,7 @@ type Row = {
   nonce: string | null;
   mdBytes: number;
   bytes: number;
+  removedAt: Date | null;
   images: Map<number, ImageRow>;
 };
 
@@ -51,13 +53,15 @@ export class FakeSavedCopies
     SavedCopyWriter,
     SavedCopyReader,
     SavedCopyUsage,
-    Omit<SavedCopyMaintenance, "purgeRemoved">
+    SavedCopyMaintenance,
+    SavedCopyRemover
 {
   private rows = new Map<string, Row & { owner: OwnerId; linkId: string }>();
   /** The Markdown file of each copy; its images are held on the image rows. */
   private files = new Map<string, { markdown: string }>();
   private broken: "unwritable" | "mismatch" | null = null;
   private nextFailure: Error | null = null;
+  private last: FolderCheck = { state: "ready" };
 
   constructor(private readonly store: FakeStore) {}
 
@@ -116,6 +120,7 @@ export class FakeSavedCopies
       nonce: null,
       mdBytes: 0,
       bytes: 0,
+      removedAt: null,
       images: new Map<number, ImageRow>(),
       ...rest,
     };
@@ -124,9 +129,15 @@ export class FakeSavedCopies
   }
 
   async checkFolder(): Promise<FolderCheck> {
-    return this.broken === null
-      ? { state: "ready" }
-      : { state: this.broken, detail: "The saved-copy folder was broken by the test" };
+    this.last =
+      this.broken === null
+        ? { state: "ready" }
+        : { state: this.broken, detail: "The saved-copy folder was broken by the test" };
+    return this.last;
+  }
+
+  lastCheck(): FolderCheck {
+    return this.last;
   }
 
   private used(): number {
@@ -216,6 +227,7 @@ export class FakeSavedCopies
     slot.status = "saving";
     try {
       this.writeFile(() => {
+        if (!this.files.has(key(owner, linkId))) throw new Error("The copy's files are missing");
         slot.image = { contentType: image.contentType, bytes: new Uint8Array(image.bytes) };
         slot.sha256 = createHash("sha256").update(image.bytes).digest("hex");
       });
@@ -235,8 +247,9 @@ export class FakeSavedCopies
     url: string,
     end: CopyImageEnd,
   ): Promise<boolean> {
-    const slot = this.rowOf(owner, linkId)?.images.get(n);
-    if (slot?.status !== "pending" || slot.url !== url) return false;
+    const row = this.rowOf(owner, linkId);
+    const slot = row?.images.get(n);
+    if (row?.status !== "ok" || slot?.status !== "pending" || slot.url !== url) return false;
     slot.status = end;
     return true;
   }
@@ -376,6 +389,58 @@ export class FakeSavedCopies
 
   async undoUnconfirmed(): Promise<{ copies: number; images: number }> {
     return { copies: 0, images: 0 };
+  }
+
+  /** Drop a copy's Markdown file, as a hand deletion would. */
+  loseFiles(owner: OwnerId, linkId: string): void {
+    this.files.delete(key(owner, linkId));
+  }
+
+  /** A removed row whose purge has begun. */
+  private tombstone(row: Row): boolean {
+    return row.status === "removed" && row.nonce === null && !row.finished;
+  }
+
+  async removeCopy(owner: OwnerId, linkId: string, at: Date): Promise<boolean> {
+    const row = this.rowOf(owner, linkId);
+    if (row?.status !== "ok") return false;
+    row.status = "removed";
+    row.removedAt = at;
+    return true;
+  }
+
+  async restoreCopy(owner: OwnerId, linkId: string, since: Date): Promise<boolean> {
+    const row = this.rowOf(owner, linkId);
+    if (row?.status !== "removed" || !row.removedAt || row.removedAt < since) return false;
+    if (this.tombstone(row)) return false;
+    row.status = "ok";
+    row.removedAt = null;
+    return true;
+  }
+
+  async purgeRemoved(before: Date): Promise<number> {
+    if (!this.ready) return 0;
+    let purged = 0;
+    for (const [k, row] of this.rows) {
+      if (row.status !== "removed" || !row.removedAt || row.removedAt >= before) continue;
+      if (this.tombstone(row) && row.bytes === 0) continue;
+      row.nonce = null;
+      row.finished = false;
+      this.files.delete(k);
+      row.images = new Map();
+      row.bytes = 0;
+      row.mdBytes = 0;
+      purged++;
+    }
+    return purged;
+  }
+
+  async copyFileMissing(owner: OwnerId, linkId: string): Promise<boolean> {
+    return (
+      this.ready &&
+      this.rowOf(owner, linkId)?.status === "ok" &&
+      !this.files.has(key(owner, linkId))
+    );
   }
 
   async sweep(): Promise<{ folders: number; temp: number; images: number; unknown: string[] }> {

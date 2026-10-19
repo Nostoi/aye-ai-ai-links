@@ -201,7 +201,6 @@ export async function startServer(
       images: imageFetcher,
       limitBytes: config.savedCopies.limitBytes,
       dir: config.savedCopies.dir,
-      initialCheck: folder,
       now: deps.now,
       gate: deps.readGate,
       canResolve: (signal) => linkChecker.canResolve(signal),
@@ -226,7 +225,13 @@ export async function startServer(
     });
     refresher = auth.refresher;
     const built = createApp({
-      deps: { ...deps, snapshots: runner, saveWaitMs, version: config.version },
+      deps: {
+        ...deps,
+        snapshots: runner,
+        saveWaitMs,
+        copyLimitBytes: config.savedCopies.limitBytes,
+        version: config.version,
+      },
       identify: auth.identify,
       auth: { ...auth, keys },
       allowedHosts: config.allowedHosts,

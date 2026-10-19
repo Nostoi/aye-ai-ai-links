@@ -4,6 +4,7 @@ import { titleFits } from "../core/links.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { Link } from "../core/types.js";
 import { cardMenu, type MenuItem } from "./card-menu.js";
+import { removeCopyItem } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
 import { initialsText } from "./initials.js";
 import { escapeHtml } from "./page.js";
@@ -27,7 +28,7 @@ export const readCopyItem = (linkId: string): MenuItem => ({
 export const editMenu = (link: Link, copy?: CopyInfo) =>
   cardMenu(`More for ${link.title ?? link.url}`, [
     EDIT_ITEM,
-    ...(copy ? [readCopyItem(link.id)] : []),
+    ...(copy ? [readCopyItem(link.id), removeCopyItem] : []),
   ]);
 
 /**

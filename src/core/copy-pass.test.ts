@@ -68,7 +68,6 @@ afterEach(async () => {
 function setup(
   o: {
     limitBytes?: number;
-    initialCheck?: FolderCheck;
     page?: Answer<FetchOutcome>;
     image?: Answer<ImageOutcome>;
     sweepEveryMs?: number;
@@ -118,7 +117,6 @@ function setup(
     images,
     limitBytes,
     dir: "/saved",
-    initialCheck: o.initialCheck ?? ready,
     now,
     log: (message) => logged.push(message),
     sweepEveryMs: o.sweepEveryMs,
@@ -433,6 +431,28 @@ describe("copy pass backfill", () => {
     });
   });
 
+  describe("the full boundary", () => {
+    async function noRoomRetried(free: number): Promise<boolean> {
+      const limit = 2 * MAX_COPY_BYTES;
+      const t = setup({ limitBytes: limit, page: () => ({ kind: "http_error", status: 503 }) });
+      const id = await t.link(1);
+      const limits = { copyBytes: MAX_COPY_BYTES, totalBytes: 0 };
+      await t.copies.saveCopy(OWNER, id, draft(), limits, at(2));
+      expect(t.status(id)).toBe("no_room");
+      vi.spyOn(t.copies, "usedBytes").mockResolvedValue(limit - free);
+      await t.pass.sweep();
+      return t.pageCalls.length === 1;
+    }
+
+    it("retries a no_room link with exactly MAX_COPY_BYTES free", async () => {
+      expect(await noRoomRetried(MAX_COPY_BYTES)).toBe(true);
+    });
+
+    it("does not retry it with one byte less free", async () => {
+      expect(await noRoomRetried(MAX_COPY_BYTES - 1)).toBe(false);
+    });
+  });
+
   describe("folder state", () => {
     it("fetches nothing while paused, logs paused once, then resumed once and runs", async () => {
       const t = setup();
@@ -449,9 +469,12 @@ describe("copy pass backfill", () => {
       expect(t.pageCalls).toHaveLength(1);
     });
 
-    it("does not log paused again when the start-up check already found it", async () => {
-      const t = setup({ initialCheck: { state: "unwritable", detail: "EACCES" } });
-      t.copies.fail("unwritable");
+    it("does not log paused again when the store's last check already found it", async () => {
+      const store = new FakeStore();
+      const copies = new FakeSavedCopies(store);
+      copies.fail("unwritable");
+      await copies.checkFolder();
+      const t = setup({ store, copies });
       await t.pass.sweep();
       expect(t.logged.filter((m) => m.includes("paused"))).toHaveLength(0);
     });
@@ -1424,5 +1447,160 @@ describe("copy pass network outage", () => {
     t.advance(1);
     await t.pass.sweep();
     expect(t.pageCalls).toHaveLength(2);
+  });
+});
+
+/** A copy of `bytes` bytes, removed `agoMs` before the pass's clock. */
+async function removedCopy(t: ReturnType<typeof setup>, n: number, bytes: number, agoMs: number) {
+  const { link } = await t.store.insertIfAbsent(OWNER, newLink(n, at(0)));
+  const limits = { copyBytes: MAX_COPY_BYTES, totalBytes: 100 * MAX_COPY_BYTES };
+  await t.copies.saveCopy(OWNER, link.id, draft("x".repeat(bytes)), limits, at(2));
+  await t.copies.removeCopy(OWNER, link.id, new Date(t.now().getTime() - agoMs));
+  return link.id;
+}
+
+describe("copy pass purge", () => {
+  it("purges first, with before an Undo window (60 s) ago, then backfills", async () => {
+    const t = setup();
+    await t.link(1);
+    const purge = vi.spyOn(t.copies, "purgeRemoved");
+    const backfill = vi.spyOn(t.copies, "backfillCandidates");
+    await t.pass.sweep();
+    expect(purge).toHaveBeenCalledTimes(1);
+    expect(purge).toHaveBeenCalledWith(new Date(t.now().getTime() - 60_000));
+    expect(backfill).toHaveBeenCalled();
+    expect(purge.mock.invocationCallOrder[0]).toBeLessThan(
+      backfill.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it("still purges at limit 0", async () => {
+    const t = setup({ limitBytes: 0 });
+    const purge = vi.spyOn(t.copies, "purgeRemoved");
+    await t.pass.sweep();
+    expect(purge).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not purge while paused", async () => {
+    const t = setup();
+    const purge = vi.spyOn(t.copies, "purgeRemoved");
+    t.copies.fail("unwritable");
+    await t.pass.sweep();
+    expect(purge).not.toHaveBeenCalled();
+  });
+
+  it("frees a removed copy's room in time for the same sweep's backfill", async () => {
+    const t = setup({ limitBytes: MAX_COPY_BYTES + MiB });
+    const removed = await removedCopy(t, 50, MAX_COPY_BYTES, 61_000);
+    const id = await t.link(1);
+    await t.copies.saveCopy(
+      OWNER,
+      id,
+      draft(),
+      { copyBytes: MAX_COPY_BYTES, totalBytes: 0 },
+      at(2),
+    );
+    expect(t.status(id)).toBe("no_room");
+    expect(await t.copies.usedBytes()).toBe(MAX_COPY_BYTES);
+    await t.pass.sweep();
+    expect(t.status(removed)).toBe("removed");
+    expect(await t.copies.restoreCopy(OWNER, removed, at(0))).toBe(false);
+    expect(t.status(id)).toBe("ok");
+    expect(await t.copies.usedBytes()).toBe(Buffer.byteLength("# Hi"));
+  });
+
+  it("a purge that throws with the folder ready ends only that phase", async () => {
+    const t = setup();
+    const id = await t.link(1);
+    vi.spyOn(t.copies, "purgeRemoved").mockRejectedValueOnce(new Error("busy"));
+    await t.pass.sweep();
+    expect(t.logged).toContain("copy pass purge failed");
+    expect(t.logged.some((m) => m.includes("paused"))).toBe(false);
+    expect(t.status(id)).toBe("ok");
+  });
+});
+
+describe("copy pass, a copy whose files are missing", () => {
+  const noFiles = (id: string) =>
+    `[saved copies] copy ${ID(id)} has no files, so its pictures are not fetched`;
+
+  it("ends its pictures as none without fetching them, and logs it once", async () => {
+    const t = setup({ image: () => okImage() });
+    const id = await t.copyWith(1, [IMG(1), IMG(2), IMG(3)]);
+    t.copies.loseFiles(OWNER, id);
+    const end = vi.spyOn(t.copies, "endCopyImage");
+    const used = await t.copies.usedBytes();
+    await t.pass.sweep();
+    expect(t.imageCalls).toEqual([]);
+    expect(end.mock.calls.map((c) => [c[2], c[4]])).toEqual([
+      [1, "none"],
+      [2, "none"],
+      [3, "none"],
+    ]);
+    expect(await pendingImages(t)).toEqual([]);
+    expect(t.logged.filter((m) => m.includes("has no files"))).toEqual([noFiles(id)]);
+    expect(await t.copies.usedBytes()).toBe(used);
+    await t.sweeps(2);
+    expect(t.logged.filter((m) => m.includes("has no files"))).toEqual([noFiles(id)]);
+  });
+
+  it("asks once per copy per sweep, and still fetches a present copy's picture", async () => {
+    const t = setup({ image: () => okImage() });
+    const lost = await t.copyWith(1, [IMG(1), IMG(2)]);
+    const present = await t.copyWith(2, [IMG(3)]);
+    t.copies.loseFiles(OWNER, lost);
+    const missing = vi.spyOn(t.copies, "copyFileMissing");
+    await t.pass.sweep();
+    expect(missing.mock.calls.map((c) => c[1])).toEqual([lost, present]);
+    expect(t.imageCalls).toEqual([IMG(3)]);
+    expect(await isFinished(t, present)).toBe(true);
+  });
+
+  it("leaves a picture pending when its files go during the fetch, and ends it next sweep", async () => {
+    let id = "";
+    const t = setup({
+      image: () => {
+        t.copies.loseFiles(OWNER, id);
+        return okImage();
+      },
+    });
+    id = await t.copyWith(1, [IMG(1)]);
+    await t.pass.sweep();
+    expect(t.imageCalls).toEqual([IMG(1)]);
+    expect(await pendingImages(t)).toHaveLength(1);
+    expect(t.logged.some((m) => m.includes("paused"))).toBe(false);
+    await t.pass.sweep();
+    expect(t.imageCalls).toEqual([IMG(1)]);
+    expect(await pendingImages(t)).toEqual([]);
+    expect(t.logged).toContain(noFiles(id));
+  });
+});
+
+describe("copy pass, a copy removed during a picture fetch", () => {
+  it("leaves its pictures pending, so a restore gets them fetched", async () => {
+    let release!: (outcome: ImageOutcome) => void;
+    let held = true;
+    const t = setup({
+      image: () => {
+        if (!held) return okImage();
+        held = false;
+        return new Promise<ImageOutcome>((resolve) => {
+          release = resolve;
+        });
+      },
+    });
+    const id = await t.copyWith(1, [IMG(1), IMG(2)]);
+    const sweeping = t.pass.sweep();
+    await vi.waitFor(() => expect(t.imageCalls).toHaveLength(1));
+    expect(await t.copies.removeCopy(OWNER, id, t.now())).toBe(true);
+    release(okImage());
+    await sweeping;
+    expect(t.imageCalls).toEqual([IMG(1), IMG(2)]);
+    expect(await t.copies.restoreCopy(OWNER, id, new Date(t.now().getTime() - 60_000))).toBe(true);
+    expect(await pendingImages(t)).toHaveLength(2);
+    await t.pass.sweep();
+    expect(t.imageCalls).toEqual([IMG(1), IMG(2), IMG(1), IMG(2)]);
+    expect(await pendingImages(t)).toEqual([]);
+    expect(await isFinished(t, id)).toBe(true);
   });
 });

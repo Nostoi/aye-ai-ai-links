@@ -64,7 +64,12 @@ describe("anthropicModel", () => {
     expect(seen[0]?.init.redirect).toBe("error");
     const body = sentBody(seen);
     expect(body.model).toBe("m1");
-    expect(body.system).toBe("S");
+    // A cache mark on system covers the tools and system for every call; the top-level mark
+    // caches the turn's growing conversation for its next call.
+    expect(body.system).toEqual([
+      { type: "text", text: "S", cache_control: { type: "ephemeral" } },
+    ]);
+    expect(body.cache_control).toEqual({ type: "ephemeral" });
     // Thinking counts toward max_tokens, and above 21,333 the docs ask for streaming.
     expect(body.max_tokens).toBe(16_000);
     expect(body.messages).toEqual([{ role: "user", content: "hi" }]);
@@ -162,6 +167,22 @@ describe("anthropicModel", () => {
     const without = fake(200, reply([{ type: "text", text: "a" }]));
     const b = await anthropicModel(CONFIG, without.fetchImpl).reply(request());
     expect(b).not.toHaveProperty("usage");
+  });
+
+  it("counts cached input tokens as input", async () => {
+    const cached = fake(
+      200,
+      reply([{ type: "text", text: "a" }], {
+        usage: {
+          input_tokens: 7,
+          cache_creation_input_tokens: 100,
+          cache_read_input_tokens: 2000,
+          output_tokens: 3,
+        },
+      }),
+    );
+    const a = await anthropicModel(CONFIG, cached.fetchImpl).reply(request());
+    expect(a.usage).toEqual({ input: 2107, output: 3 });
   });
 
   it("marks a reply cut off at max_tokens as truncated", async () => {

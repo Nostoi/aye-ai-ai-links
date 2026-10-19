@@ -16,12 +16,26 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), import (#131), scheduled digests and notifications (#132); delete (#126) fits anywhere. Unordered: AI-chat openings through a redirect link (#133), web search logging (#134), AI endpoints for a local AI, ChatGPT and Claude (#159), saved summaries (#160), stats and what they say about you (#161), a site's icon when a page names no preview image (#149) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), saved summaries (#160), stats and what they say about you (#161), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-19:** Deleting a link, with Undo (#126).
+  - **Design:** `docs/specs/2026-10-19-delete-link-design.md`, revised after the solution challenge. Two PRs: (1) migration, store, core and purge; (2) web controls, done pages, cursors and README.
+  - **Later order** (owner, 2026-10-19, #126 comment 6268810403): #126, #159, #160, #161, then #133, then #131 and #132. The owner confirmed that moving import and digests after the AI group is intended.
+  - **Ids are never reused:** `links` is rebuilt with `AUTOINCREMENT`. This is the first shipped table rebuild, and it closes #126 comment 6263878763.
+  - **Done pages get the ⋯ menu, the edit dialog and the Undo bar** (lands in PR 2). This replaces the 2026-10-17 ruling "not on the done pages".
+  - **Saving an address whose link is deleted** inside the window makes a new link, so the old Undo ends early (owner, in session).
+  - **A ready export is a snapshot** kept until its 24-hour expiry; deleting a link does not revoke it.
+  - **Controller rulings in this plan:**
+    - function migrations;
+    - `LINK_UNDO_WINDOW_MS = COPY_UNDO_WINDOW_MS`;
+    - a link deleted mid-export carries copy status `removed`;
+    - a stale cursor on `/spaces` redirects to the first page, so a missing tag answers 404 there;
+    - a link with a saved copy is gone within about two minutes while saved copies are ready, because `purgeRemoved` runs every copy-pass poll;
+    - a re-save during the window over a link whose copy still has files leaves an orphan folder for the sweep (Discrepancy 13).
 - **2026-10-19:** Export (#130) PR 2 is done: Prepare export, the zip and `bookmarks.html`. Rulings that change `docs/specs/2026-10-18-export-design.md` (controller, 2026-10-19):
   - **R1a:** v1's `picture` gains `pageRole` (`preview` or `icon`, null when `page` is), read with the page picture's bytes. It is still version 1, because no manifest with `picture` was written before PR 2 (after #168).
   - **R2:** `ExportDeps` uses AppDeps' names (`savedCopies`, `readGate`), not the spec's sketch names.

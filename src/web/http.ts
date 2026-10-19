@@ -20,6 +20,7 @@ import { CHECK_RESULTS, type LinkCheck } from "../core/link-check-store.js";
 import { editLink, undoEdit } from "../core/link-edit.js";
 import type { LinkEditStore } from "../core/link-edit-store.js";
 import { checkedOrder, linkPage } from "../core/link-pages.js";
+import { deleteLink, restoreLink } from "../core/link-removal.js";
 import { getLink, recordOpening } from "../core/links.js";
 import {
   addOwnerNote,
@@ -35,6 +36,7 @@ import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/
 import type { LinkOrder } from "../core/search.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { homeSpaces, openSpace } from "../core/spaces.js";
+import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
@@ -398,10 +400,10 @@ async function noteAction(c: Context, act: () => Promise<void>): Promise<Respons
 }
 
 /**
- * Runs a copy action and answers 204. A refusal is core's own 404 wording, which is the owner's;
- * `homeAction` would say the link is gone.
+ * Runs a removal or its Undo (of a saved copy or a link) and answers 204. A refusal is core's own
+ * 404 wording, which is the owner's; `homeAction` would say the link is gone.
  */
-async function copyAction(c: Context, act: () => Promise<void>): Promise<Response> {
+async function removalAction(c: Context, act: () => Promise<void>): Promise<Response> {
   try {
     await act();
     return c.body(null, 204, NO_STORE);
@@ -459,6 +461,7 @@ export function webApp({
   deps: SearchLinksDeps &
     WorthDeps &
     LinkCheckDeps & {
+      store: LinkRemover;
       images: LinkImageReader;
       edits: LinkEditStore;
       profile: ProfileStore;
@@ -833,12 +836,21 @@ export function webApp({
   const done = (c: Context) => c.body(null, 204, NO_STORE);
 
   app.post("/links/copy/remove", jsonBody(linkId), session, (c) =>
-    copyAction(c, () => removeSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+    removalAction(c, () => removeSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
   );
 
   // The Undo of a remove.
   app.post("/links/copy/restore", jsonBody(linkId), session, (c) =>
-    copyAction(c, () => restoreSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+    removalAction(c, () => restoreSavedCopy(deps, c.get("caller").owner, c.get("body").id)),
+  );
+
+  app.post("/links/delete", jsonBody(linkId), session, (c) =>
+    removalAction(c, () => deleteLink(deps, c.get("caller").owner, c.get("body").id)),
+  );
+
+  // The Undo of a delete.
+  app.post("/links/restore", jsonBody(linkId), session, (c) =>
+    removalAction(c, () => restoreLink(deps, c.get("caller").owner, c.get("body").id)),
   );
 
   app.post("/home/opened", jsonBody(linkId), session, (c) =>

@@ -5,9 +5,10 @@ import { png } from "../core/image-test-kit.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { cardMenu } from "./card-menu.js";
+import { deleteLinkItem } from "./delete-link.js";
 import { EDIT_ITEM, editDialog, editMenu } from "./edit-link.js";
 import { handyShelf, NOT_HANDY } from "./handy-shelf.js";
-import { type Answer, type Post, runPage } from "./opened-test-kit.js";
+import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage, tile } from "./pages.js";
 import { spacePage } from "./space-page.js";
@@ -98,17 +99,21 @@ const data = (el: Element | undefined) =>
   );
 
 describe("the card menu and the card data", () => {
-  it("offers Read then Remove saved copy only with a copy, Remove being a button", () => {
+  it("offers Read then Remove saved copy only with a copy, Remove being a button, and Delete link last", () => {
     const labels = (html: string) =>
       [...parseHTML(html).document.querySelectorAll(".card-menu-list > *")].map(
         (e) => `${e.tagName} ${e.getAttribute("data-act")} ${e.textContent}`,
       );
     const withCopy = editMenu(link("7"), { madeAt: new Date(0) });
-    expect(labels(editMenu(link("7")))).toEqual(["BUTTON edit Edit title and picture…"]);
+    expect(labels(editMenu(link("7")))).toEqual([
+      "BUTTON edit Edit title and picture…",
+      "BUTTON delete-link Delete link",
+    ]);
     expect(labels(withCopy)).toEqual([
       "BUTTON edit Edit title and picture…",
       "A read-copy Read saved copy",
       "BUTTON remove-copy Remove saved copy",
+      "BUTTON delete-link Delete link",
     ]);
     expect(
       parseHTML(withCopy).document.querySelector("button[data-act=remove-copy] svg"),
@@ -230,7 +235,7 @@ describe("the card menu and the card data", () => {
       parseHTML(cardMenu("More for Link 1", [NOT_HANDY])).document.querySelector("details")
         ?.outerHTML,
     );
-    expect(editMenu(link("1"))).toBe(cardMenu("More for Link 1", [EDIT_ITEM]));
+    expect(editMenu(link("1"))).toBe(cardMenu("More for Link 1", [EDIT_ITEM, deleteLinkItem]));
   });
 });
 
@@ -329,19 +334,7 @@ function opened(
 ) {
   const html = pages({ links, pictures, images })[where];
   const page = runPage(html, reply);
-  const dialog = page.$("#edit-link") as HTMLElement & {
-    open?: boolean;
-    showModal(): void;
-    close(): void;
-  };
-  dialog.showModal = () => {
-    dialog.open = true;
-  };
-  dialog.close = () => {
-    if (!dialog.open) return;
-    dialog.open = false;
-    page.dispatch(dialog, "close");
-  };
+  const dialog = stubDialog(page);
   const open = () => page.dispatch(page.$('[data-id="1"] button[data-act=edit]'), "click");
   const pick = (file: File) => {
     const input = page.$("[data-edit=file]");

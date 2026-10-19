@@ -87,6 +87,7 @@ describe("a card menu row with an href", () => {
       "Edit title and picture…",
       "Read saved copy",
       "Remove saved copy",
+      "Delete link",
     ]);
     const a = d.querySelector("a");
     expect(a?.getAttribute("href")).toBe(copyHref("7"));

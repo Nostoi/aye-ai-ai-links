@@ -5,6 +5,7 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { removeCopyScript } from "./copy-menu.js";
+import { deleteLinkScript } from "./delete-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
@@ -105,7 +106,7 @@ ${done ? "" : handyControl(link, handy.get(link.id))}</div>
 }
 
 /**
- * Tell me why, Keep handy and the edit dialog on the active cards, including those Show older
+ * Tell me why, Keep handy, the edit dialog and Delete link on the active cards, including those Show older
  * links appends.
  */
 const CARDS_SCRIPT = `<script>
@@ -115,6 +116,7 @@ ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
 ${removeCopyScript("space-links", "space-error")}
 ${editLinkScript("space-links", "space-error")}
+${deleteLinkScript("space-links", "space-error")}
 </script>
 `;
 

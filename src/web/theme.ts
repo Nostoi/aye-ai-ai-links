@@ -339,6 +339,8 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .edit-hint{margin:0;font-size:13px;color:var(--soft);text-align:center}
 .edit-types{margin:12px 0 0;font-size:13.5px;color:var(--soft)}
 .edit-error{margin:12px 0 0}
+.edit-delete-row{margin:16px 0 0}
+.edit-delete{min-height:44px;padding:0;border:0;background:none;color:var(--soft)}
 .edit-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .edit-foot button{min-height:44px}
 ${spaceClasses}

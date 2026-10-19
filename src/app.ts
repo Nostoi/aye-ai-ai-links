@@ -24,6 +24,7 @@ import type { ExportBuilds } from "./core/export-builds.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
+import type { LinkRemover } from "./core/store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { mcpApp } from "./mcp/http.js";
@@ -80,6 +81,8 @@ const CHECKED_PAGES = [
   "/links/still-works/undo",
   "/links/copy/remove",
   "/links/copy/restore",
+  "/links/delete",
+  "/links/restore",
   "/tools/keep",
   "/tools/not-handy",
   "/tools/still-using",
@@ -125,9 +128,10 @@ export type AppOptions = {
   log?: ((line: string) => void) | undefined;
 } & (
   | { deps: McpDeps; auth?: undefined }
-  /** The web door also reads stored pictures and writes the owner's edits. */
+  /** The web door also reads stored pictures, writes the owner's edits and deletes links. */
   | {
       deps: McpDeps & {
+        store: LinkRemover;
         images: LinkImageReader;
         edits: LinkEditStore;
         savedCopies: SavedCopyReader &

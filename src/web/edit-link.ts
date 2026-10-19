@@ -448,7 +448,7 @@ form.addEventListener("submit", async (event) => {
   showCard(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => showUndo(${JSON.stringify("Link updated")}, async () => {
+  const offer = () => target.isConnected && showUndo(${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
     if (undone) showCard(target, undone);

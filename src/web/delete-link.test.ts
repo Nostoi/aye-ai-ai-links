@@ -259,6 +259,54 @@ describe("Delete link in the edit dialog", () => {
   });
 });
 
+describe("Delete link beside other scripts", () => {
+  it("Show older reveals a month that a delete hid, so the appended cards are shown", async () => {
+    const base = { catalog: [KITCHEN], images: new Map(), handy: new Map(), now: NOW, done: false };
+    const first = allPage({ ...base, order: "newest", links: [link("7"), link("8")], older: "c" });
+    const next = allPage({ ...base, order: "newest", links: [link("9")], older: null });
+    const p = runPage(first, (s) =>
+      s.url === "/links/delete" ? { status: 204 } : { status: 200, text: next },
+    );
+    p.$("[data-id='8']").hidden = true;
+    const month = p.$("[data-id='8']").closest("section.month") as HTMLElement;
+    await click(p, DELETE);
+    expect(month.hidden).toBe(true);
+    await click(p, "#older");
+    const added = p.$("[data-id='9']");
+    expect(added).not.toBeNull();
+    expect(added.closest("[hidden]")).toBeNull();
+  });
+
+  it("a late edit answer leaves the Undo bar of a delete made meanwhile", async () => {
+    let release: () => void = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const edited = {
+      title: "Edited",
+      url: "https://ex.com/7",
+      initials: "E",
+      version: "v",
+      fit: "cover",
+      picture: { own: false, pageVersion: "v", pageFit: "cover" },
+      editId: "e1",
+    };
+    const p = load((s) =>
+      s.url === "/links/edit" ? { status: 200, wait, body: edited } : { status: 204 },
+    );
+    p.dispatch(p.$("[data-id='7'] button[data-act=edit]"), "click");
+    (p.$("#edit-title") as HTMLInputElement).value = "Edited";
+    p.dispatch(p.$("#edit-link form"), "submit");
+    await p.settle();
+    p.dialog.close();
+    await click(p, DELETE);
+    expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+    release();
+    await p.settle();
+    expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+  });
+});
+
 describe("the menu's Delete link row", () => {
   const lastRows = (html: string) =>
     [...runPage(html).document.querySelectorAll(".card-menu-list")].map((list) => {

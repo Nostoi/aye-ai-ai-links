@@ -97,7 +97,7 @@ export type StartOptions = {
  *    link stays due. Stop waits for them, for the indexer's sweep and for any tool call still
  *    running, up to the settle limit.
  * 4. Export builds are told to stop, before any wait: a running build stops at its next read and
- *    discards its temporary file, so the page shows Prepare again after the restart.
+ *    discards its temporary file, or the next start deletes it.
  *    The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
  *    The image pass's, the copy pass's and the check runner's stops are awaited again. Then the
  *    JSON fetcher closes, the image fetcher, the link checker, the page fetcher, and the two

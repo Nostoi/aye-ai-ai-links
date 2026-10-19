@@ -191,6 +191,167 @@ describe("image urls", () => {
   });
 });
 
+describe("icon urls", () => {
+  const icons = (head: string, url = URL0) => extractSnapshot(page("", head), url).iconUrls;
+  const link = (attrs: string) => `<link ${attrs}>`;
+
+  it("takes Photopea's real head as one candidate: both declarations name the same file", () => {
+    const head =
+      link('rel="apple-touch-icon" href="promo/icon512.png"') +
+      link('rel="icon" sizes="512x512" href="promo/icon512.png"');
+    expect(icons(head, "https://www.photopea.com/")).toEqual([
+      "https://www.photopea.com/promo/icon512.png",
+    ]);
+  });
+
+  it("puts a sized declaration before an unsized one", () => {
+    const head =
+      link('rel="apple-touch-icon" href="/touch.png"') +
+      link('rel="icon" sizes="512x512" href="/icon512.png"');
+    expect(icons(head)).toEqual([
+      "https://example.com/icon512.png",
+      "https://example.com/touch.png",
+    ]);
+  });
+
+  it("★ puts Apple's later 180×180 icon before its earlier unsized one", () => {
+    // [An invented default size for an unsized declaration.]
+    const head =
+      link('rel="apple-touch-icon" href="/iphone.png"') +
+      link('rel="apple-touch-icon" sizes="180x180" href="/180.png"');
+    expect(icons(head)).toEqual(["https://example.com/180.png", "https://example.com/iphone.png"]);
+  });
+
+  it("★ filters before ranking: an SVG declared sizes=any never takes a slot", () => {
+    // [Ranking, or keeping the top two, before filtering.]
+    const head =
+      link('rel="icon" type="image/svg+xml" sizes="any" href="/i.svg"') +
+      link('rel="icon" type="image/png" sizes="32x32" href="/32.png"') +
+      link('rel="icon" type="image/png" sizes="16x16" href="/16.png"');
+    expect(icons(head)).toEqual(["https://example.com/32.png", "https://example.com/16.png"]);
+  });
+
+  it("puts the later of two unsized declarations first, and the later of two equal sizes first", () => {
+    expect(icons(link('rel="icon" href="/a.png"') + link('rel="icon" href="/b.png"'))).toEqual([
+      "https://example.com/b.png",
+      "https://example.com/a.png",
+    ]);
+    expect(
+      icons(
+        link('rel="icon" sizes="64x64" href="/a.png"') +
+          link('rel="icon" sizes="64x64" href="/b.png"'),
+      ),
+    ).toEqual(["https://example.com/b.png", "https://example.com/a.png"]);
+  });
+
+  it("counts icon, shortcut icon, apple-touch-icon-precomposed and any case; not mask-icon", () => {
+    expect(icons(link('rel="shortcut icon" href="/s.png"'))).toEqual(["https://example.com/s.png"]);
+    expect(icons(link('rel="apple-touch-icon-precomposed" href="/p.png"'))).toEqual([
+      "https://example.com/p.png",
+    ]);
+    expect(icons(link('rel="ICON" href="/u.png"'))).toEqual(["https://example.com/u.png"]);
+    expect(icons(link('rel="mask-icon" href="/m.png"'))).toEqual([]);
+    expect(icons(link('rel="stylesheet" href="/x.png"'))).toEqual([]);
+  });
+
+  it("skips a declaration with a media attribute, even an empty one", () => {
+    const head =
+      link('rel="icon" media="(prefers-color-scheme: dark)" sizes="512x512" href="/dark.png"') +
+      link('rel="icon" media="" href="/empty.png"') +
+      link('rel="icon" sizes="32x32" href="/light.png"');
+    expect(icons(head)).toEqual(["https://example.com/light.png"]);
+  });
+
+  it.each([
+    'type="image/x-icon" href="/a.png"',
+    'type="image/vnd.microsoft.icon" href="/a.png"',
+    'type="image/svg+xml" href="/a.png"',
+    'type="" href="/a.png"',
+    'href="/favicon.ICO"',
+    'href="/logo.svg"',
+    'href="/favicon.ico?v=2"',
+  ])("refuses %s", (attrs) => {
+    expect(icons(link(`rel="icon" ${attrs}`))).toEqual([]);
+  });
+
+  it.each([
+    ['type="image/PNG; q=1" href="/a.ico"', "https://example.com/a.ico"],
+    ['href="/icon"', "https://example.com/icon"],
+    ['href="/icon.png?x=.ico"', "https://example.com/icon.png?x=.ico"],
+    ['type="image/webp" href="/i.webp"', "https://example.com/i.webp"],
+  ])("keeps %s", (attrs, want) => {
+    expect(icons(link(`rel="icon" ${attrs}`))).toEqual([want]);
+  });
+
+  it("resolves against <base href> and refuses what the image URL rule refuses", () => {
+    expect(icons(`<base href="/assets/">${link('rel="icon" href="i.png"')}`)).toEqual([
+      "https://example.com/assets/i.png",
+    ]);
+    const ok = `https://example.com/${"a".repeat(2_048 - "https://example.com/".length)}`;
+    expect(icons(link(`rel="icon" href="${ok}"`))).toEqual([ok]);
+    for (const href of [
+      "javascript:alert(1)",
+      "data:image/png;base64,AAAA",
+      "https://u:p@example.com/i.png",
+      `${ok}a`,
+    ]) {
+      expect(icons(link(`rel="icon" href="${href}"`)), href).toEqual([]);
+    }
+    expect(icons(link('rel="icon"'))).toEqual([]);
+  });
+
+  it("counts a repeated URL once, at its best rank, and keeps at most two", () => {
+    const head =
+      link('rel="icon" href="/a.png"') +
+      link('rel="icon" sizes="16x16" href="/b.png"') +
+      link('rel="icon" sizes="96x96" href="/a.png"') +
+      link('rel="icon" sizes="48x48" href="/c.png"');
+    expect(icons(head)).toEqual(["https://example.com/a.png", "https://example.com/c.png"]);
+  });
+
+  it("★ treats a data: og:image as no preview and still finds the icon", () => {
+    // [Treating a rejected preview as a named one.]
+    const head =
+      '<meta property="og:image" content="data:image/png;base64,AAAA">' +
+      link('rel="icon" type="image/png" href="/i.png"');
+    const s = extractSnapshot(page("", head), URL0);
+    expect(s.imageUrl).toBeNull();
+    expect(s.iconUrls).toEqual(["https://example.com/i.png"]);
+  });
+
+  it("returns the icons beside a usable preview: the store decides which is fetched (R6)", () => {
+    const head = `<meta property="og:image" content="/og.png">${link('rel="icon" href="/i.png"')}`;
+    const s = extractSnapshot(page("", head), URL0);
+    expect(s.imageUrl).toBe("https://example.com/og.png");
+    expect(s.iconUrls).toEqual(["https://example.com/i.png"]);
+  });
+
+  it("reads unusual sizes values (R8)", () => {
+    const rank = (sizes: string) =>
+      icons(
+        link(`rel="icon" sizes="${sizes}" href="/x.png"`) +
+          link('rel="icon" sizes="100x100" href="/h.png"'),
+      )[0];
+    expect(rank("16x16 32x32 64x64 128x128")).toBe("https://example.com/x.png");
+    expect(rank("512X512")).toBe("https://example.com/x.png");
+    expect(rank("any 32x32")).toBe("https://example.com/h.png");
+    expect(rank("99999999999999999999x99999999999999999999")).toBe("https://example.com/x.png");
+    for (const unsized of ["0x0", "064x064", "16x", "any", ""]) {
+      expect(rank(unsized), unsized).toBe("https://example.com/h.png");
+    }
+  });
+
+  it("ranks 5,000 declarations into the best two", () => {
+    const small = Array.from({ length: 2_500 }, (_, i) =>
+      link(`rel="icon" sizes="16x16" href="/s${i}.png"`),
+    ).join("");
+    const head = `${small}${link('rel="icon" sizes="192x192" href="/big.png"')}${small.replaceAll("/s", "/t")}`;
+    const start = performance.now();
+    expect(icons(head)).toEqual(["https://example.com/big.png", "https://example.com/t2499.png"]);
+    expect(performance.now() - start).toBeLessThan(5_000);
+  });
+});
+
 describe("text", () => {
   it("returns article text, and null for a page with no article", () => {
     const s = extractSnapshot(article(""), URL0);
@@ -302,13 +463,14 @@ describe("degenerate input", () => {
       title: null,
       description: null,
       imageUrl: null,
+      iconUrls: [],
       text: null,
     });
   });
 });
 
 describe("extraction never throws and keeps the metadata", () => {
-  const NULLS = { title: null, description: null, imageUrl: null, text: null };
+  const NULLS = { title: null, description: null, imageUrl: null, iconUrls: [], text: null };
 
   it.each([
     "<template>x</template>",
@@ -349,6 +511,7 @@ describe("extraction never throws and keeps the metadata", () => {
       title: "t",
       description: null,
       imageUrl: "https://example.com/og.png",
+      iconUrls: [],
       text: null,
     });
   });

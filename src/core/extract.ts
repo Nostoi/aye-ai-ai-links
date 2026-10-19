@@ -5,6 +5,8 @@ export type PageMetadata = {
   title: string | null;
   description: string | null;
   imageUrl: string | null;
+  /** The site's icon candidates, best first; at most MAX_ICON_URLS. */
+  iconUrls: string[];
 };
 
 /**

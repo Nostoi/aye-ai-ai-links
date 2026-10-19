@@ -553,3 +553,108 @@ describe("deleting, restoring and purging a link", () => {
     expect(existsSync(folderOf(id))).toBe(false);
   });
 });
+
+describe("a runner's next write after its link was purged", () => {
+  /** A link with a snapshot lease, a vector, a check and a copy with pending images, then hidden and purged. */
+  async function purged() {
+    const root = mkdtempSync(join(tmpdir(), "aye-removal-"));
+    roots.push(root);
+    const s = setup(root);
+    const { deps, db, embedder } = s;
+    expect(await deps.savedCopies.checkFolder()).toEqual({ state: "ready" });
+    const id = await s.save();
+    const lease = await deps.store.leaseSnapshot(A, id, at(1), at(100));
+    if (!lease) throw new Error("expected a lease");
+    expect(await deps.savedCopies.saveCopy(A, id, copyDraft(2), LIMITS, at(5))).toBe("saved");
+    const vector = await embedder.embedQuery("x");
+    expect(await deps.vectorIndex.writeVector(A, id, MODEL_KEY, "h", vector, at(2))).toBe(true);
+    expect(await deps.checks.updateCheckIf(A, id, null, flagged)).not.toBeNull();
+    expect(await deps.store.markDeleted(A, id, at(10))).toBe(true);
+    expect(await deps.savedCopies.purgeRemoved(at(100))).toBe(1);
+    expect(await deps.store.purgeDeleted(at(100))).toBe(1);
+    expect(await deps.store.get(A, id)).toBeNull();
+    const rows = (table: string) =>
+      db.prepare(`SELECT count(*) FROM ${table} WHERE link_id = ?`).pluck().get(Number(id));
+    return { deps, id, claim: lease.claim, vector, rows };
+  }
+
+  type Purged = Awaited<ReturnType<typeof purged>>;
+  const cases: [string, string, unknown, (p: Purged) => Promise<unknown>][] = [
+    [
+      "recordSnapshot",
+      "snapshots",
+      false,
+      (p) => p.deps.store.recordSnapshot(A, p.id, p.claim, record({ text: "t" })),
+    ],
+    [
+      "releaseSnapshot",
+      "snapshots",
+      false,
+      (p) => p.deps.store.releaseSnapshot(A, p.id, p.claim, at(20)),
+    ],
+    [
+      "writeImage",
+      "link_images",
+      false,
+      (p) => p.deps.images.writeImage(A, p.id, ICON, "preview", PNG, at(20)),
+    ],
+    [
+      "endImage",
+      "link_images",
+      false,
+      (p) => p.deps.images.endImage(A, p.id, ICON, "preview", "none"),
+    ],
+    ["recordIconCheck", "snapshots", false, (p) => p.deps.images.recordIconCheck(A, p.id, [ICON])],
+    [
+      "updateCheckIf",
+      "link_checks",
+      null,
+      (p) => p.deps.checks.updateCheckIf(A, p.id, null, flagged),
+    ],
+    [
+      "writeVector",
+      "link_vectors",
+      false,
+      (p) => p.deps.vectorIndex.writeVector(A, p.id, MODEL_KEY, "h2", p.vector, at(20)),
+    ],
+    [
+      "saveCopy",
+      "saved_copies",
+      null,
+      (p) => p.deps.savedCopies.saveCopy(A, p.id, copyDraft(), LIMITS, at(20)),
+    ],
+    [
+      "saveCopyImage",
+      "saved_copy_images",
+      false,
+      (p) => p.deps.savedCopies.saveCopyImage(A, p.id, 1, imageUrl(1), PNG, LIMITS),
+    ],
+    [
+      "endCopyImage",
+      "saved_copy_images",
+      false,
+      (p) => p.deps.savedCopies.endCopyImage(A, p.id, 1, imageUrl(1), "none"),
+    ],
+    [
+      "finishCopy",
+      "saved_copies",
+      false,
+      (p) => p.deps.savedCopies.finishCopy(A, p.id, finishedMarkdown, at(20)),
+    ],
+    [
+      "recordNoCopy",
+      "saved_copies",
+      false,
+      (p) => p.deps.savedCopies.recordNoCopy(A, p.id, "none"),
+    ],
+  ];
+
+  it.each(cases)(
+    "%s is refused without throwing and writes no row",
+    async (_, table, refusal, write) => {
+      const p = await purged();
+      expect(await write(p)).toBe(refusal);
+      expect(p.rows(table)).toBe(0);
+    },
+  );
+});

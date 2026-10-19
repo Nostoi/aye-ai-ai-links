@@ -425,6 +425,7 @@ describe("the image pass: a purged link", () => {
     expect(t.calls.filter((u) => u === "https://ex.com/1.png")).toHaveLength(1);
     expect(await t.store.image(OWNER, next)).toMatchObject({ contentType: "image/png" });
     expect(await t.pending()).toEqual([]);
+    expect(await t.store.image(OWNER, doomed)).toBeNull();
     expect(t.logged).toEqual([]);
   });
 });

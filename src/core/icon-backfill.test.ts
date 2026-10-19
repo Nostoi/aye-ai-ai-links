@@ -452,6 +452,7 @@ describe("icon backfill", () => {
 
     expect(t.pageCalls.filter((u) => u === doomedUrl)).toHaveLength(1);
     expect(t.status(next)).not.toBeNull();
+    expect(t.status(doomed)).toBeNull();
     expect(t.logged.length).toBeLessThanOrEqual(1);
   });
 });

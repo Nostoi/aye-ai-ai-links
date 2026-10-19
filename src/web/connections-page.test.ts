@@ -443,6 +443,30 @@ describe("Your data", () => {
     expect(ready(2_000_000_000)).toContain("2.0 GB, prepared");
   });
 
+  it("sizes at the MB/GB edge never read as 1000.0 MB", () => {
+    const ready = (bytes: number) => view({ state: "ready", exportedAt: NOW, bytes });
+    expect(ready(0)).toContain("0.0 MB, prepared");
+    expect(ready(999_949_999)).toContain("999.9 MB, prepared");
+    expect(ready(999_999_999)).toContain("1.0 GB, prepared");
+    expect(ready(1_000_000_000)).toContain("1.0 GB, prepared");
+  });
+
+  it("a non-200 answer from /connections is never swapped in, even with a #your-data in it", async () => {
+    const page = load(
+      answerBy({
+        "/export/prepare": { status: 202 },
+        "/connections": { status: 500, text: view({ state: "failed", at: NOW }) },
+      }),
+      undefined,
+      {},
+      { state: "idle" },
+    );
+    page.click(prepare);
+    await page.settle();
+    expect(page.$("#your-data").dataset.state).toBe("idle");
+    expect(page.$("#export-error").textContent).toMatch(/Reload the page/);
+  });
+
   it("Prepare posts once, then swaps in the fresh section from /connections without reloading", async () => {
     const page = load(
       answerBy({

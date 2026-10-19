@@ -46,6 +46,10 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - `/export.json` keeps tags, notes and focus;
     - a ready zip is kept 24 hours.
   - **Lands in two PRs:** the manifest and the JSON download, then builds and the zip, which closes #130.
+- **2026-10-19:** Finding icons on new saves (#149, PR B). Controller rulings:
+  - **`MAX_ICON_URLS` is shared with the extraction child** (R1). This departs from spec §2's "no new import enters the child"; `src/fetch/AGENTS.md` lists the file.
+  - **A duplicate icon URL keeps its best-ranked occurrence** (R3), so Photopea gives one candidate.
+  - **`snapshotRecord` accepts only string arrays for `iconUrls`,** capped at two (R2).
 - **2026-10-19:** A site's icon when a page names no preview image (#149). Owner rulings: 2026-10-17 (#149 body), 2026-10-18 (#149 comment 6259932087) and 2026-10-19 (comment 6260957774). The design is `docs/specs/2026-10-18-site-icon-design.md`, approved by the owner on 2026-10-19 after an independent challenge.
   - **The order:**
     1. the owner's picture;

@@ -122,3 +122,12 @@ export function checkImage(bytes: Uint8Array): ImageCheck {
   if (header.width * header.height > MAX_IMAGE_PIXELS) return { ok: false, reason: "too_large" };
   return { ok: true, type: header.type };
 }
+
+/** The shortest side, in pixels, a site's icon must have to be kept (#149). */
+export const ICON_MIN_PX = 64;
+
+/** Whether an icon's header declares at least ICON_MIN_PX on its shorter side; false when it can't be read. */
+export function iconBigEnough(bytes: Uint8Array): boolean {
+  const header = readImageHeader(bytes);
+  return header !== null && Math.min(header.width, header.height) >= ICON_MIN_PX;
+}

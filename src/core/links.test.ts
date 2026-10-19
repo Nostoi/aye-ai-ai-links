@@ -270,7 +270,7 @@ describe("saveLink with the real snapshot runner", () => {
 
   const PAGE: ExtractOutcome = {
     kind: "ok",
-    metadata: { title: "Page title", description: null, imageUrl: null },
+    metadata: { title: "Page title", description: null, imageUrl: null, iconUrls: [] },
     text: "page text",
   };
 

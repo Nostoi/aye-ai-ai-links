@@ -218,8 +218,13 @@ export class FakeStore
     if (!hasConsistentSchedule(result) || !hasValidIcons(result)) return false;
     mine.set(linkId, structuredClone(result));
     const key = imageKey(owner, linkId);
-    if ((result.imageUrl ?? result.iconUrls[0] ?? null) === null) this.imageStates.delete(key);
-    else this.imageStates.set(key, { status: "pending" });
+    if ((result.imageUrl ?? result.iconUrls[0] ?? null) !== null) {
+      this.imageStates.set(key, { status: "pending" });
+    } else if (result.fetchedAt !== null) {
+      this.imageStates.set(key, { status: "none" });
+    } else {
+      this.imageStates.delete(key);
+    }
     if (result.imageUrl !== null && this.storedImages.get(key)?.role === "icon") {
       this.storedImages.delete(key);
     }
@@ -520,7 +525,14 @@ export class FakeStore
   }
 
   async endImage(owner: OwnerId, linkId: string, imageUrl: string, role: ImageRole, end: ImageEnd) {
-    return this.settle(owner, linkId, imageUrl, role, end);
+    if (!this.settle(owner, linkId, imageUrl, role, end)) return false;
+    const s = this.snapshots.get(owner)?.get(linkId);
+    const next = role === "icon" ? s?.iconUrls[1] : undefined;
+    if (s && next !== undefined) {
+      s.iconUrls = [next];
+      this.imageStates.set(imageKey(owner, linkId), { status: "pending" });
+    }
+    return true;
   }
 
   async imageVersions(owner: OwnerId, linkIds: string[]) {
@@ -649,6 +661,11 @@ export class FakeStore
 
   catalog(owner: OwnerId): Tag[] {
     return [...this.catalogOf(owner).values()].map((t) => structuredClone(t));
+  }
+
+  /** Test inspection: the snapshot's image status, as SQLite's `image_status` would read. */
+  imageStatusOf(owner: OwnerId, linkId: string): string | null {
+    return this.imageStates.get(imageKey(owner, linkId))?.status ?? null;
   }
 
   /** Test inspection: all of an owner's links. */

@@ -11,7 +11,7 @@ import { A, at, B, newLink } from "./snapshot-store-contract.js";
 
 const pageOk: ExtractOutcome = {
   kind: "ok",
-  metadata: { title: "T", description: null, imageUrl: null },
+  metadata: { title: "T", description: null, imageUrl: null, iconUrls: [] },
   text: "body",
 };
 
@@ -440,7 +440,7 @@ describe("snapshot runner", () => {
         .find((c) => c.arg === url)
         ?.finish({
           kind: "ok",
-          metadata: { title: `title of ${url}`, description: null, imageUrl: null },
+          metadata: { title: `title of ${url}`, description: null, imageUrl: null, iconUrls: [] },
           text: `text of ${url}`,
         });
     };

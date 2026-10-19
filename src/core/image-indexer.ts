@@ -1,5 +1,6 @@
 import type { ImageFetcher, ImageOutcome } from "./fetch.js";
 import type { ImageEnd, ImageStore, PendingImage } from "./image-store.js";
+import { iconBigEnough } from "./image-type.js";
 
 /** The wait before a failed image is tried again, doubling per failure up to `RETRY_MAX_MS`. */
 export const RETRY_BASE_MS = 60_000;
@@ -73,7 +74,9 @@ const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
  * too large or a 4xx ends it at once; a network error, timeout, 408, 429 or 5xx is tried again
  * after a backoff, and ends as `none` on its `MAX_IMAGE_ATTEMPTS`th failure. Backoffs are kept
  * in memory, so a restart tries every pending image again. A fetch aborted by `stop` leaves its
- * image pending.
+ * image pending. An icon smaller than `ICON_MIN_PX` on its shorter side ends as `none`. When an
+ * icon ends, the store makes the snapshot's second icon pending, which a later sweep fetches with
+ * a fresh backoff.
  */
 export function createImageIndexer(o: ImageIndexerOptions): ImageIndexer {
   const { store, fetcher, now } = o;
@@ -102,7 +105,18 @@ export function createImageIndexer(o: ImageIndexerOptions): ImageIndexer {
     if ("abandon" in verdict) return;
     if ("store" in verdict && outcome.kind === "ok") {
       const { contentType, bytes } = outcome;
-      await store.writeImage(p.owner, p.linkId, p.imageUrl, p.role, { contentType, bytes }, now());
+      if (p.role === "icon" && !iconBigEnough(bytes)) {
+        await store.endImage(p.owner, p.linkId, p.imageUrl, p.role, "none");
+      } else {
+        await store.writeImage(
+          p.owner,
+          p.linkId,
+          p.imageUrl,
+          p.role,
+          { contentType, bytes },
+          now(),
+        );
+      }
       failures.delete(key);
       return;
     }

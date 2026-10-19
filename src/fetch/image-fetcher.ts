@@ -25,7 +25,7 @@ const READABLE_TYPE =
   /^\s*(image\/[^\s;]+|application\/octet-stream|binary\/octet-stream)\s*(;|$)/i;
 
 /**
- * Fetches preview images through the guarded request (`guarded-request.ts`), so pages and images
+ * Fetches preview images and site icons through the guarded request (`guarded-request.ts`), so pages and images
  * share one address rule. The kept type is the one the magic bytes name (PNG, JPEG, GIF or WebP),
  * never the server's; SVG and AVIF are refused.
  */

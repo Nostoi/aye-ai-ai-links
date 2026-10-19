@@ -3,7 +3,7 @@ process.once("message", () => {
   process.send?.({ type: "received" });
   process.send?.({
     type: "metadata",
-    metadata: { title: "Posted first", description: null, imageUrl: null },
+    metadata: { title: "Posted first", description: null, imageUrl: null, iconUrls: [] },
   });
   process.send?.({ type: "text", text: "Kept text" });
   process.send?.({ type: "copy", copy: { markdown: "# x", imageUrls: [], nonce: "x" } }, () =>

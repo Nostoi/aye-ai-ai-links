@@ -80,7 +80,7 @@ function testSink({ hold = false, failAt = 0 } = {}) {
 describe("the DOS stamp, with a non-UTC zone in effect", () => {
   const oldTz = process.env.TZ;
   beforeAll(() => {
-    process.env.TZ = "America/Chicago";
+    process.env.TZ = "Asia/Kolkata";
   });
   afterAll(() => {
     if (oldTz === undefined) delete process.env.TZ;
@@ -89,7 +89,8 @@ describe("the DOS stamp, with a non-UTC zone in effect", () => {
 
   it("stamps the modified time in DOS form, in UTC, seconds halved", async () => {
     const at = new Date("2026-10-19T23:59:59Z");
-    expect(at.getHours()).not.toBe(at.getUTCHours()); // the zone is really in effect
+    // The zone is really in effect: local is 05:29:59 on Oct 20, so date, hours and minutes differ.
+    expect([at.getDate(), at.getHours(), at.getMinutes()]).toEqual([20, 5, 29]);
     const sink = testSink();
     const zip = createZipWriter(sink, at);
     await zip.add("a.txt", Buffer.from("x"));

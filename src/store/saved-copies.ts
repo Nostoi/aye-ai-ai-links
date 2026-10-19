@@ -29,7 +29,7 @@ import {
 } from "../core/saved-copy.js";
 import type { OwnerId } from "../core/types.js";
 import { CopyFolder, madeByStore, TMP } from "./copy-folder.js";
-import { parseId, toMs } from "./sqlite-store.js";
+import { parseId, toMs } from "./sql-values.js";
 
 const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
 
@@ -37,11 +37,41 @@ const failure = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error
  * A removed row whose purge has begun. An unpurged removed row always has a nonce or a finish
  * time, since `confirmCopy` sets `finished_at` exactly when there is no nonce.
  */
-export const TOMBSTONE = "(status = 'removed' AND image_nonce IS NULL AND finished_at IS NULL)";
+const TOMBSTONE = "(status = 'removed' AND image_nonce IS NULL AND finished_at IS NULL)";
 
 /** In an UPDATE of `saved_copies`: the row's link is not deleted. */
 const LINK_LIVE = `EXISTS (SELECT 1 FROM links l WHERE l.owner_id = saved_copies.owner_id
   AND l.id = saved_copies.link_id AND l.deleted_at IS NULL)`;
+
+const REMOVE_OK_COPY = `UPDATE saved_copies SET status = 'removed', removed_at = ?
+  WHERE owner_id = ? AND link_id = ? AND status = 'ok'`;
+
+const RESTORE_REMOVED_COPY = `UPDATE saved_copies SET status = 'ok', removed_at = NULL
+  WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND NOT ${TOMBSTONE}`;
+
+/** Inside a query on `saved_copies c`: the copy may still have files, so its link must not be purged. */
+export const COPY_MAY_HOLD_FILES = `(c.status IN ('saving', 'ok', 'removed')
+  AND NOT (${TOMBSTONE} AND c.bytes = 0))`;
+
+/** Deleting a link takes its `ok` copy down with it, stamped with the link's `deleted_at`. */
+export function removeCopyWithLink(
+  db: Database,
+  owner: OwnerId,
+  linkId: number,
+  at: number | null,
+) {
+  db.prepare(REMOVE_OK_COPY).run(at, owner, linkId);
+}
+
+/** Undoing a delete brings back only a copy that went down with the link, not one removed earlier. */
+export function restoreCopyWithLink(
+  db: Database,
+  owner: OwnerId,
+  linkId: number,
+  deletedAt: number,
+) {
+  db.prepare(`${RESTORE_REMOVED_COPY} AND removed_at = ?`).run(owner, linkId, deletedAt);
+}
 
 const imageName = (n: number, type: ImageType) =>
   `${String(n).padStart(2, "0")}.${IMAGE_EXT[type]}`;
@@ -760,22 +790,14 @@ export class SqliteSavedCopyStore
   async removeCopy(owner: OwnerId, linkId: string, at: Date): Promise<boolean> {
     const id = parseId(linkId);
     if (id === null) return false;
-    return this.change(
-      `UPDATE saved_copies SET status = 'removed', removed_at = ?
-       WHERE owner_id = ? AND link_id = ? AND status = 'ok' AND ${LINK_LIVE}`,
-      toMs(at),
-      owner,
-      id,
-    );
+    return this.change(`${REMOVE_OK_COPY} AND ${LINK_LIVE}`, toMs(at), owner, id);
   }
 
   async restoreCopy(owner: OwnerId, linkId: string, since: Date): Promise<boolean> {
     const id = parseId(linkId);
     if (id === null) return false;
     return this.change(
-      `UPDATE saved_copies SET status = 'ok', removed_at = NULL
-       WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND removed_at >= ?
-         AND NOT ${TOMBSTONE} AND ${LINK_LIVE}`,
+      `${RESTORE_REMOVED_COPY} AND removed_at >= ? AND ${LINK_LIVE}`,
       owner,
       id,
       toMs(since),

@@ -17,7 +17,7 @@ import {
 } from "../core/image-store.js";
 import { MAX_ICON_URLS } from "../core/snapshot-store.js";
 import type { OwnerId } from "../core/types.js";
-import { parseId } from "./sqlite-store.js";
+import { parseId } from "./sql-values.js";
 
 /** Fetched pictures, a page's preview or a site's icon (`link_images`, pending in `snapshots.image_status`), the one-time icon check of links snapshotted before icons were looked for, and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
 export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfillStore {

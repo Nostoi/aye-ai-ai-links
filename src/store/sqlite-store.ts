@@ -28,7 +28,8 @@ import type {
   TagPatch,
   ToolStatus,
 } from "../core/types.js";
-import { TOMBSTONE } from "./saved-copies.js";
+import { COPY_MAY_HOLD_FILES, removeCopyWithLink, restoreCopyWithLink } from "./saved-copies.js";
+import { fromMs, parseId, toMs } from "./sql-values.js";
 
 export class StoreError extends Error {
   constructor(
@@ -60,22 +61,6 @@ type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 
 const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
   project_status AS projectStatus`;
-
-export function toMs(d: Date | null): number | null {
-  if (d === null) return null;
-  const ms = d.getTime();
-  if (!Number.isFinite(ms)) throw new RangeError("Cannot store an invalid date.");
-  return ms;
-}
-
-export const fromMs = (ms: number | null): Date | null => (ms === null ? null : new Date(ms));
-
-/** Canonical decimal ids in 1..MAX_SAFE_INTEGER; anything else was never issued. */
-export function parseId(id: string): number | null {
-  if (!/^[1-9][0-9]*$/.test(id)) return null;
-  const n = Number(id);
-  return Number.isSafeInteger(n) ? n : null;
-}
 
 type SnapshotRow = {
   fetch_status: SnapshotStatus;
@@ -130,12 +115,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
           )
           .run(ms, n, owner).changes;
         if (hidden !== 1) return false;
-        this.db
-          .prepare(
-            `UPDATE saved_copies SET status = 'removed', removed_at = ?
-             WHERE owner_id = ? AND link_id = ? AND status = 'ok'`,
-          )
-          .run(ms, owner, n);
+        removeCopyWithLink(this.db, owner, n, ms);
         return true;
       })
       .immediate();
@@ -155,13 +135,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
         this.db
           .prepare("UPDATE links SET deleted_at = NULL WHERE id = ? AND owner_id = ?")
           .run(n, owner);
-        this.db
-          .prepare(
-            `UPDATE saved_copies SET status = 'ok', removed_at = NULL
-             WHERE owner_id = ? AND link_id = ? AND status = 'removed' AND removed_at = ?
-               AND NOT ${TOMBSTONE}`,
-          )
-          .run(owner, n, deletedAt);
+        restoreCopyWithLink(this.db, owner, n, deletedAt);
         return true;
       })
       .immediate();
@@ -176,8 +150,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
             .prepare(
               `DELETE FROM links WHERE deleted_at IS NOT NULL AND deleted_at < ?
                  AND NOT EXISTS (SELECT 1 FROM saved_copies c WHERE c.owner_id = links.owner_id
-                   AND c.link_id = links.id AND c.status IN ('saving', 'ok', 'removed')
-                   AND NOT (${TOMBSTONE} AND c.bytes = 0))`,
+                   AND c.link_id = links.id AND ${COPY_MAY_HOLD_FILES})`,
             )
             .run(cutoff).changes,
       )

@@ -2,7 +2,7 @@ import type { Database } from "better-sqlite3";
 import { PAGE_CHARS } from "../core/link-document.js";
 import type { OwnerId } from "../core/types.js";
 import type { IndexRow, VectorIndexStore } from "../core/vector-index-store.js";
-import { parseId } from "./sqlite-store.js";
+import { parseId } from "./sql-values.js";
 
 /** Largest allowed distance of a stored vector's length from 1, as the model canary allows. */
 const NORM_TOLERANCE = 1e-3;

@@ -1,7 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type { SearchLog, SearchLogEntry } from "../core/search-log.js";
 import type { OwnerId } from "../core/types.js";
-import { parseId } from "./sqlite-store.js";
+import { parseId } from "./sql-values.js";
 
 /** Dates become epoch milliseconds, like every other date in the database. */
 const filtersJson = ({ savedFrom, savedTo, ...rest }: SearchLogEntry["filters"]): string =>

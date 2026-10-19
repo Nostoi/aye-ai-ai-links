@@ -9,7 +9,7 @@ import {
   sameCheck,
 } from "../core/link-check-store.js";
 import type { OwnerId } from "../core/types.js";
-import { fromMs, parseId, toMs } from "./sqlite-store.js";
+import { fromMs, parseId, toMs } from "./sql-values.js";
 
 type CheckRow = {
   link_id: number;

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
 import {
   type ImageBytes,
   type ImageEnd,
@@ -24,6 +25,7 @@ import type { LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js"
 import {
   hasConsistentSchedule,
   hasValidIcons,
+  MAX_ICON_URLS,
   type SnapshotLease,
   type SnapshotRecord,
   type SnapshotStore,
@@ -73,7 +75,8 @@ export class FakeStore
     LinkCheckStore,
     ImageStore,
     LinkImageReader,
-    LinkEditStore
+    LinkEditStore,
+    IconBackfillStore
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -660,6 +663,52 @@ export class FakeStore
   /** Test inspection: the snapshot's image status, as SQLite's `image_status` would read. */
   imageStatusOf(owner: OwnerId, linkId: string): string | null {
     return this.imageStates.get(imageKey(owner, linkId))?.status ?? null;
+  }
+
+  async iconCandidates(afterId: string | null, limit: number): Promise<IconCandidate[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const found: IconCandidate[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [linkId, s] of mine) {
+        if (!this.iconOpen(owner, linkId, s)) continue;
+        if (afterId !== null && order(linkId) <= order(afterId)) continue;
+        found.push({ owner, linkId, url: (this.owned(owner).get(linkId) as Link).url });
+      }
+    }
+    return found.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
+  }
+
+  async recordIconCheck(owner: OwnerId, linkId: string, iconUrls: string[]): Promise<boolean> {
+    const s = this.snapshots.get(owner)?.get(linkId);
+    if (!s || !this.iconOpen(owner, linkId, s) || iconUrls.length > MAX_ICON_URLS) {
+      return false;
+    }
+    s.iconUrls = [...iconUrls];
+    this.imageStates.set(imageKey(owner, linkId), {
+      status: iconUrls.length > 0 ? "pending" : "none",
+    });
+    return true;
+  }
+
+  /** Test seeding: the image status a snapshot recorded before PR B has (NULL). */
+  forgetIconCheck(owner: OwnerId, linkId: string): void {
+    this.imageStates.delete(imageKey(owner, linkId));
+  }
+
+  /** An icon check may be recorded: unchecked, no fetched picture, and the link not flagged gone. */
+  private iconOpen(owner: OwnerId, linkId: string, s: SnapshotRecord): boolean {
+    return (
+      this.iconUnchecked(owner, linkId, s) &&
+      !this.storedImages.has(imageKey(owner, linkId)) &&
+      (this.checkRows.get(owner)?.get(linkId)?.flaggedAt ?? null) === null
+    );
+  }
+
+  /** The snapshot is ok, names no preview, and was never looked at for an icon. */
+  private iconUnchecked(owner: OwnerId, linkId: string, s: SnapshotRecord): boolean {
+    return (
+      s.status === "ok" && s.imageUrl === null && !this.imageStates.has(imageKey(owner, linkId))
+    );
   }
 
   /** Test inspection: all of an owner's links. */

@@ -453,21 +453,15 @@ describe("writeExport", () => {
     ]);
   });
 
-  it("missing and unreadable: a gone copy.md, a gone image, a gate timeout; the zip validates each time", async () => {
+  it("missing and unreadable copy.md: a gone file, a read timeout; no copy files, and the zip validates each time", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const cases = [
       ["missing", (h: ReturnType<typeof setup>, id: string) => h.savedCopies.loseFiles(A, id)],
-      [
-        "missing",
-        (h: ReturnType<typeof setup>) => {
-          vi.spyOn(h.savedCopies, "copyImage").mockResolvedValue(null);
-        },
-      ],
       ["unreadable", () => {}],
     ] as const;
     for (const [k, [status, breakIt]] of cases.entries()) {
       const timeout: ReadGate = { run: async () => "timeout" as const };
-      const h = setup(k === 2 ? timeout : createReadGate());
+      const h = setup(k === 1 ? timeout : createReadGate());
       const id1 = await h.save(A, 1);
       await h.finishedCopy(A, id1, [pic("image/png", "c1")]);
       breakIt(h, id1);
@@ -486,6 +480,84 @@ describe("writeExport", () => {
       );
     }
     expect(errors.mock.calls.flat().join(" ")).not.toContain("ex.com");
+  });
+
+  it("a gone copy image is left out and the copy stays ok: a finished copy.md unchanged, an unfinished one with the alt text", async () => {
+    const h = setup();
+    const IMG2 = pic("image/gif", "kept-2");
+    const id1 = await h.save(A, 1);
+    await h.finishedCopy(A, id1, [pic("image/png", "gone-1"), IMG2]);
+    const id2 = await h.save(A, 2);
+    const unfinished = `![one](${imageRef(1, NONCE)}) ![two](${imageRef(2, NONCE)})`;
+    await h.addCopy(A, id2, unfinished, ["https://ex.com/img/1", "https://ex.com/img/2"]);
+    await h.storeImage(A, id2, 1, pic("image/png", "gone-2"));
+    await h.storeImage(A, id2, 2, pic("image/png", "kept-3"));
+    const finishedMd = await h.storedMarkdown(A, id1);
+    const real = h.savedCopies.copyImage.bind(h.savedCopies);
+    vi.spyOn(h.savedCopies, "copyImage").mockImplementation(async (o, id, n) =>
+      n === 1 ? null : real(o, id, n),
+    );
+    const [link1, link2] = [
+      (await h.store.get(A, id1)) as Link,
+      (await h.store.get(A, id2)) as Link,
+    ];
+
+    const { files, manifest } = await built(h.deps, A);
+
+    expect(manifest.links.map((l) => l.copy)).toEqual([
+      {
+        status: "ok",
+        madeAt: MADE.toISOString(),
+        file: "copies/1/copy.md",
+        images: ["copies/1/images/02.gif"],
+      },
+      {
+        status: "ok",
+        madeAt: MADE.toISOString(),
+        file: "copies/2/copy.md",
+        images: ["copies/2/images/02.png"],
+      },
+    ]);
+    expect(copyFiles(files, 1).sort()).toEqual(["copies/1/copy.md", "copies/1/images/02.gif"]);
+    expect(files.get("copies/1/images/02.gif")).toEqual(IMG2.bytes);
+    expect(utf8(files.get("copies/1/copy.md") as Uint8Array)).toBe(
+      copyWithFrontMatter(link1, MADE, finishedMd),
+    );
+    expect(finishedMd).toContain("![alt 1](images/01.png)");
+    expect(utf8(files.get("copies/2/copy.md") as Uint8Array)).toBe(
+      copyWithFrontMatter(link2, MADE, "one ![two](images/02.png)"),
+    );
+  });
+
+  it("a copy image read that times out is left out and the copy stays ok with its text", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const real = createReadGate();
+    let runs = 0;
+    // Gate runs in order: copy.md, then image 01 (answered "timeout"), then image 02.
+    const gate: ReadGate = {
+      run: (read, ms) => (++runs === 2 ? Promise.resolve("timeout" as const) : real.run(read, ms)),
+    };
+    const h = setup(gate);
+    const IMG2 = pic("image/png", "kept-2");
+    const id1 = await h.save(A, 1);
+    await h.finishedCopy(A, id1, [pic("image/png", "slow-1"), IMG2]);
+    const md = await h.storedMarkdown(A, id1);
+    const link1 = (await h.store.get(A, id1)) as Link;
+
+    const { files, manifest } = await built(h.deps, A);
+
+    expect(runs).toBe(3);
+    expect(manifest.links[0]?.copy).toEqual({
+      status: "ok",
+      madeAt: MADE.toISOString(),
+      file: "copies/1/copy.md",
+      images: ["copies/1/images/02.png"],
+    });
+    expect(copyFiles(files, 1).sort()).toEqual(["copies/1/copy.md", "copies/1/images/02.png"]);
+    expect(files.get("copies/1/images/02.png")).toEqual(IMG2.bytes);
+    expect(utf8(files.get("copies/1/copy.md") as Uint8Array)).toBe(
+      copyWithFrontMatter(link1, MADE, md),
+    );
   });
 
   it("an unfinished copy is finished in memory: one ok and one pending image, no nonce left", async () => {

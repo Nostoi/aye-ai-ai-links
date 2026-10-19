@@ -120,7 +120,11 @@ export async function writeExport(
     return picture;
   }
 
-  /** The link's `ok` copy, taken at one point in time; `ledgerMadeAt` dates any other outcome (R8). */
+  /**
+   * The link's `ok` copy, taken at one point in time; `ledgerMadeAt` dates any other outcome (R8).
+   * An image that cannot be read is left out and the text kept: a finished copy.md is written
+   * unchanged, and an unfinished one gets the image's alt text (spec, "copy.md with front matter").
+   */
   async function copy(link: Link, n: number, ledgerMadeAt: Date): Promise<ManifestCopy> {
     const without = (status: "removed" | "missing" | "unreadable"): ManifestCopy => ({
       status,
@@ -141,7 +145,6 @@ export async function writeExport(
     if (read === "missing" || read === "unreadable") return without(read);
     if (read.madeAt.getTime() !== before) return without("removed");
     const got: { nn: number; image: StoredImage }[] = [];
-    let gone = false;
     const readImage = async (nn: number) => {
       check();
       const image = await reader.image(owner, link.id, nn);
@@ -151,15 +154,9 @@ export async function writeExport(
     for (const nn of [...read.images.keys()].sort((a, b) => a - b)) {
       // A Remove then Undo during the read answers null for a copy that is whole again: read once more.
       const image = (await readImage(nn)) ?? (await readImage(nn));
-      if (image === "unreadable") return without("unreadable");
-      if (image === null) {
-        gone = true;
-        break;
-      }
-      got.push({ nn, image });
+      if (image !== null && image !== "unreadable") got.push({ nn, image });
     }
     if ((await madeAt()) !== read.madeAt.getTime()) return without("removed");
-    if (gone) return without("missing");
     const images: string[] = [];
     for (const { nn, image } of got) {
       const path = copyImagePath(n, nn, image.contentType);

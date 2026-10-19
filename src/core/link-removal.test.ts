@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDeps } from "../deps.js";
+import { FakeEmbedder } from "../search/embedder.js";
+import { DIMS } from "../search/model.js";
+import { openDatabase } from "../store/database.js";
 import { CoreError } from "./errors.js";
 import { FakeStore } from "./fake-store.js";
 import {
@@ -8,10 +12,6 @@ import {
   purgeDeletedLinks,
   restoreLink,
 } from "./link-removal.js";
-import { createDeps } from "../deps.js";
-import { FakeEmbedder } from "../search/embedder.js";
-import { DIMS } from "../search/model.js";
-import { openDatabase } from "../store/database.js";
 import { getLinkWithText, saveLink } from "./links.js";
 import { listLinks } from "./list-links.js";
 import { COPY_UNDO_WINDOW_MS } from "./saved-copy.js";
@@ -145,5 +145,35 @@ describe("createLinkPurger", () => {
     purger.stop();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(purge).toHaveBeenCalledTimes(2);
+  });
+
+  it("stop() during an in-flight purge leaves no further purge", async () => {
+    vi.useFakeTimers();
+    const store = new FakeStore();
+    let finish: (n: number) => void = () => {};
+    const purge = vi.spyOn(store, "purgeDeleted").mockReturnValue(
+      new Promise<number>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const purger = createLinkPurger({ store, now: () => new Date(T0) });
+
+    purger.start();
+    purger.stop();
+    finish(0);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(purge).toHaveBeenCalledTimes(1);
+  });
+
+  it("never overlaps: a purge still pending across several intervals is not joined by another", async () => {
+    vi.useFakeTimers();
+    const store = new FakeStore();
+    const purge = vi.spyOn(store, "purgeDeleted").mockReturnValue(new Promise<number>(() => {}));
+    const purger = createLinkPurger({ store, now: () => new Date(T0), everyMs: 1000 });
+
+    purger.start();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(purge).toHaveBeenCalledTimes(1);
+    purger.stop();
   });
 });

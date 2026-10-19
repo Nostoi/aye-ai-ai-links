@@ -577,3 +577,24 @@ describe("createVectorIndexer: lifecycle", () => {
     expect(seen.length).toBeGreaterThan(2);
   });
 });
+
+describe("createVectorIndexer: a purged link", () => {
+  it("survives its link being purged mid-embed, and still handles the next link", async () => {
+    const h = setup();
+    h.store.add(1);
+    h.store.add(2);
+    h.embedder.hold = "ex.com/1";
+    const first = h.indexer.sweep();
+    await vi.waitFor(() => expect(h.embedder.held).not.toBeNull());
+    h.store.remove(1);
+    h.embedder.hold = null;
+    h.embedder.release();
+    await expect(first).resolves.toBeUndefined();
+    await expect(h.indexer.sweep()).resolves.toBeUndefined();
+
+    expect(h.embedded().filter(([id]) => id === "1")).toHaveLength(1);
+    expect(h.store.vectors.has("1")).toBe(false);
+    expect(h.store.vectors.get("2")?.hash).toBe(h.hashOf(2));
+    expect(h.log).not.toHaveBeenCalled();
+  });
+});

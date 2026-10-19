@@ -1604,3 +1604,29 @@ describe("copy pass, a copy removed during a picture fetch", () => {
     expect(await isFinished(t, id)).toBe(true);
   });
 });
+
+describe("copy pass, a purged link", () => {
+  it("survives its link being purged mid-fetch, and still handles the next link", async () => {
+    let doomed = "";
+    const t: ReturnType<typeof setup> = setup({
+      page: async (url) => {
+        if (url === "https://ex.com/1") {
+          await t.store.markDeleted(OWNER, doomed, at(0));
+          await t.store.purgeDeleted(at(1));
+        }
+        return okPage(url);
+      },
+    });
+    doomed = await t.link(1);
+    const next = await t.link(2);
+
+    await expect(t.pass.sweep()).resolves.toBeUndefined();
+    await expect(t.pass.sweep()).resolves.toBeUndefined();
+    await expect(t.pass.sweep()).resolves.toBeUndefined();
+
+    expect(t.pageCalls.filter((u) => u.endsWith("/1"))).toHaveLength(1);
+    expect(t.status(next)).toBe("ok");
+    expect(t.status(doomed)).toBeNull();
+    expect(t.logged).toEqual([]);
+  });
+});

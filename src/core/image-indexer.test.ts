@@ -405,3 +405,26 @@ describe("icons", () => {
     expect(t.calls).toEqual([I, I]);
   });
 });
+
+describe("the image pass: a purged link", () => {
+  it("survives its link being purged mid-fetch, and still handles the next link", async () => {
+    let doomed = "";
+    const t: ReturnType<typeof setup> = setup(async (url) => {
+      if (url === "https://ex.com/1.png") {
+        await t.store.markDeleted(OWNER, doomed, at(0));
+        await t.store.purgeDeleted(at(1));
+      }
+      return PNG;
+    });
+    doomed = await linkWithImage(t.store, 1);
+    const next = await linkWithImage(t.store, 2);
+
+    await expect(t.indexer.sweep()).resolves.toBeUndefined();
+    await expect(t.indexer.sweep()).resolves.toBeUndefined();
+
+    expect(t.calls.filter((u) => u === "https://ex.com/1.png")).toHaveLength(1);
+    expect(await t.store.image(OWNER, next)).toMatchObject({ contentType: "image/png" });
+    expect(await t.pending()).toEqual([]);
+    expect(t.logged).toEqual([]);
+  });
+});

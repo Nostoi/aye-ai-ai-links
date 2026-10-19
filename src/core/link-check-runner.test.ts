@@ -465,4 +465,25 @@ describe("the check runner", () => {
     expect(readsSaw).toEqual([0, 2]);
     expect(t.most()).toBe(1);
   });
+
+  it("survives its link being purged mid-check, and still handles the next link", async () => {
+    let doomed = "";
+    const t: ReturnType<typeof setup> = setup(async (url) => {
+      if (url === "https://a.test/") {
+        await t.store.markDeleted(OWNER, doomed, at(0));
+        await t.store.purgeDeleted(at(1));
+      }
+      return okFor(url);
+    });
+    doomed = await save(t.store, "https://a.test/");
+    const next = await save(t.store, "https://b.test/");
+
+    await expect(t.runner.sweep()).resolves.toBeUndefined();
+    await expect(t.runner.sweep()).resolves.toBeUndefined();
+
+    expect(t.urls().filter((u) => u === "https://a.test/")).toHaveLength(1);
+    expect(await t.store.getCheck(OWNER, next)).toMatchObject({ result: "alive" });
+    expect(await t.store.getCheck(OWNER, doomed)).toBeNull();
+    expect(t.logged.filter((l) => /fail|error/i.test(l))).toEqual([]);
+  });
 });

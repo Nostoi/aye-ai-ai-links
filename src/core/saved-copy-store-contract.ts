@@ -400,6 +400,34 @@ export function describeSavedCopyStoreContract(
       };
       const ids = (refs: { linkId: string }[]) => refs.map((r) => r.linkId);
 
+      it("lists the owner's ok and removed rows with when each was made, from the ledger alone", async () => {
+        const ok = await saved(A, "ok");
+        const removed = await saved(A, "gone");
+        const purged = await saved(A, "purged");
+        const none = await save(A);
+        await h.copies.recordNoCopy(A, none, "none");
+        await save(A); // no row
+        const theirs = await saved(B, "theirs");
+        await h.copies.removeCopy(A, purged, T);
+        expect(await h.copies.purgeRemoved(at(11))).toBe(1);
+        await h.copies.removeCopy(A, removed, at(12));
+        const undone = await saved(A, "undone");
+        await h.copies.removeCopy(A, undone, at(13));
+        expect(await h.copies.restoreCopy(A, undone, at(13))).toBe(true);
+        await h.breakFolder();
+        const entry = (status: "ok" | "removed") => ({ status, madeAt: at(5) });
+        expect(await h.copies.listCopies(A)).toEqual(
+          new Map([
+            [ok, entry("ok")],
+            [removed, entry("removed")],
+            [purged, entry("removed")],
+            [undone, entry("ok")],
+          ]),
+        );
+        expect(await h.copies.listCopies(B)).toEqual(new Map([[theirs, entry("ok")]]));
+        expect(await h.copies.listCopies("nobody")).toEqual(new Map());
+      });
+
       it("hides a removed copy from every read and every pass, and keeps its bytes counted", async () => {
         const unfinished = await saved(A, "pics", 2);
         await h.copies.saveCopyImage(A, unfinished, 1, urlOf(1), img(4), LIMITS);

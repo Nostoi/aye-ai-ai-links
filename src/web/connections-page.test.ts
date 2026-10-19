@@ -370,3 +370,18 @@ describe("Save from your browser", () => {
     expect(page.$("#bookmarklet-status").textContent).toBe("");
   });
 });
+
+describe("Your data", () => {
+  const html = connectionsPage({ connections: [], keys: [], now: NOW, bookmarklet: CODE });
+  it("is the page's last section, with a button-sized link to the JSON download and nothing about the zip yet", () => {
+    const { document } = parseHTML(html);
+    const last = [...document.querySelectorAll("main > section")].at(-1);
+    expect(last?.id).toBe("your-data");
+    expect(last?.querySelector("h2")?.textContent).toBe("Your data");
+    const link = last?.querySelector('a[href="/export.json"]');
+    expect(link?.textContent).toBe("Links only (.json)");
+    expect(link?.classList.contains("button")).toBe(true);
+    expect(last?.textContent).not.toMatch(/prepare|zip|picture|bookmarks/i);
+    expect(outsideRefs(html)).toEqual([]);
+  });
+});

@@ -11,6 +11,7 @@ import { createCopyReader, type ReadGate } from "../core/copy-reading.js";
 import { removeSavedCopy, restoreSavedCopy } from "../core/copy-removal.js";
 import { readCopyNotice } from "../core/copy-usage.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
+import { exportFilename, exportManifest } from "../core/export-format.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { type LinkCheckDeps, restoreCheck, stillWorks } from "../core/link-check.js";
@@ -100,6 +101,9 @@ export const COPY_ROUTE = "/links/:id{[0-9]+}/copy";
 
 /** A picture of a link's saved copy: `n` is one or two digits, as the copy numbers them. */
 export const COPY_IMAGE_ROUTE = "/links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}";
+
+/** The links-only export download (#130). */
+export const EXPORT_JSON_ROUTE = "/export.json";
 
 /**
  * Headers for a stored image. It is served as an image only, never sniffed or run as a document.
@@ -735,6 +739,20 @@ export function webApp({
       bookmarklet,
     });
     return c.html(page, 200, NO_STORE);
+  });
+
+  // The links-only export (#130): built at once, sent as a download, never cached.
+  app.get(EXPORT_JSON_ROUTE, session, async (c) => {
+    const manifest = await exportManifest(
+      { ...deps, now: deps.now ?? (() => new Date()) },
+      c.get("caller").owner,
+    );
+    return c.body(JSON.stringify(manifest), 200, {
+      ...NO_STORE,
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": `attachment; filename="${exportFilename(new Date(manifest.exportedAt), "json")}"`,
+    });
   });
 
   // The Save page (#129). Any site can open it, and the Lax cookie comes along, so it never

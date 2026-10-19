@@ -42,6 +42,12 @@ export class FakeProfileStore implements ProfileStore {
     return this.newestFocus(owner, limit);
   }
 
+  async listFocus(owner: OwnerId) {
+    return [...(this.focus.get(owner) ?? [])]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || Number(a.id) - Number(b.id))
+      .map((f) => structuredClone(f));
+  }
+
   async apply(
     owner: OwnerId,
     changes: ProfileChanges,

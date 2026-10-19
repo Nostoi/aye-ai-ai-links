@@ -9,6 +9,7 @@ import {
   type CopyImageEnd,
   type CopyImageResult,
   type CopyInfo,
+  type CopyLedgerEntry,
   type CopyLimits,
   type CopyRef,
   type FinishImage,
@@ -643,6 +644,18 @@ export class SqliteSavedCopyStore
       )
       .all(JSON.stringify(ids), owner) as { link_id: number; made_at: number }[];
     return new Map(rows.map((r) => [String(r.link_id), { madeAt: new Date(r.made_at) }]));
+  }
+
+  async listCopies(owner: OwnerId): Promise<Map<string, CopyLedgerEntry>> {
+    const rows = this.db
+      .prepare(
+        `SELECT link_id, status, made_at FROM saved_copies
+         WHERE owner_id = ? AND status IN ('ok', 'removed')`,
+      )
+      .all(owner) as { link_id: number; status: "ok" | "removed"; made_at: number }[];
+    return new Map(
+      rows.map((r) => [String(r.link_id), { status: r.status, madeAt: new Date(r.made_at) }]),
+    );
   }
 
   async readCopy(owner: OwnerId, linkId: string): Promise<ReadCopy | "missing" | null> {

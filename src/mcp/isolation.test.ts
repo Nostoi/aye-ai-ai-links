@@ -569,6 +569,10 @@ describe("owner isolation coverage", () => {
       request: "/profile",
       marker: () => "A private note for the route guard",
     },
+    "GET /export.json": {
+      request: "/export.json",
+      marker: () => [A_URL, A_TAG_NAME, A_TOOL_TITLE, "A private note for the route guard"],
+    },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",

@@ -73,6 +73,7 @@ aye-ai-ai-links/
    ├─ auth/       agent keys, the caller identity, the web login and OAuth: better-auth, its lock, routes and client admission
    ├─ http/       request rate limiting and the request log
    ├─ cli/        the `keys` command for agent keys, the `owner` command for the web login, and the model prefetch
+   ├─ ai/         the one AI connection (OpenAI and Anthropic formats) and the in-app chat turn, which uses the MCP tools in process
    ├─ mcp/        AI connector door
    ├─ api/        JSON API door (planned)
    ├─ web/        web page door: login, home (the search question, the Handy shelf, its picks and your spaces), search results, space pages, all links, stored images, saved copies and their pictures, tags, the profile, apps and agent keys, and your data, the Save page and its bookmarklet, and the OAuth error page

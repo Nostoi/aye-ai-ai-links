@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   buildManifest,
   exportFilename,
+  exportManifest,
   type ManifestLink,
   type ManifestReads,
   manifestSchema,
   toNewLink,
 } from "./export-format.js";
+import { FakeProfileStore } from "./fake-profile-store.js";
+import { FakeSavedCopies } from "./fake-saved-copies.js";
+import { FakeStore } from "./fake-store.js";
+import { copyLimits } from "./saved-copy.js";
+import { A, at, B, newLink } from "./snapshot-store-contract.js";
 import type { Link, LinkTag, Source, Tag, TagKind } from "./types.js";
 import { urlKey } from "./url-key.js";
 
@@ -296,5 +302,123 @@ describe("exportFilename", () => {
     expect(exportFilename(new Date("2026-10-18T00:00:00.000Z"), "zip")).toBe(
       "aye-links-2026-10-18.zip",
     );
+  });
+});
+
+describe("exportManifest", () => {
+  const NOW = new Date("2026-10-19T08:00:00.250Z");
+  const NONCE = "0123456789abcdef0123456789abcdef";
+  const setup = () => {
+    const store = new FakeStore();
+    const profile = new FakeProfileStore();
+    const savedCopies = new FakeSavedCopies(store);
+    const deps = { store, tools: store, checks: store, profile, savedCopies, now: () => NOW };
+    const save = async (owner: string, n: number) =>
+      (await store.insertIfAbsent(owner, newLink(n, at(n)))).link.id;
+    const addCopy = async (owner: string, id: string) =>
+      expect(
+        await savedCopies.saveCopy(
+          owner,
+          id,
+          { markdown: "body", imageUrls: [], nonce: NONCE },
+          copyLimits(10_000),
+          at(50),
+        ),
+      ).toBe("saved");
+    return { deps, profile, savedCopies, save, addCopy };
+  };
+
+  it("gives a new owner a valid, empty manifest stamped with the clock (Review Focus 2)", async () => {
+    const m = await exportManifest(setup().deps, "nobody");
+    expect(manifestSchema.safeParse(m).success).toBe(true);
+    expect(m).toMatchObject({
+      exportedAt: NOW.toISOString(),
+      includesFiles: false,
+      links: [],
+      tags: [],
+      notes: [],
+      focus: [],
+    });
+  });
+
+  it("keeps removed and purged copies as tombstones with the ledger's madeAt (R2), and an undone removal as ok", async () => {
+    const { deps, savedCopies, save, addCopy } = setup();
+    const ids = [
+      await save(A, 1),
+      await save(A, 2),
+      await save(A, 3),
+      await save(A, 4),
+      await save(A, 5),
+    ];
+    const [ok, removed, purged, undone, none] = ids as [string, string, string, string, string];
+    for (const id of [ok, removed, purged, undone]) await addCopy(A, id);
+    await savedCopies.recordNoCopy(A, none, "none");
+    await savedCopies.removeCopy(A, purged, at(60));
+    await savedCopies.purgeRemoved(at(61));
+    await savedCopies.removeCopy(A, removed, at(62));
+    await savedCopies.removeCopy(A, undone, at(63));
+    await savedCopies.restoreCopy(A, undone, at(63));
+    const m = await exportManifest(deps, A);
+    const entry = (status: string) => ({
+      status,
+      madeAt: at(50).toISOString(),
+      file: null,
+      images: [],
+    });
+    expect(m.links.map((l) => l.copy)).toEqual([
+      entry("ok"),
+      entry("removed"),
+      entry("removed"),
+      entry("ok"),
+      null,
+    ]);
+    for (const l of m.links) expect("picture" in l).toBe(false);
+  });
+
+  it("lists live notes only, the whole focus log oldest first, and none of another owner's", async () => {
+    const { deps, profile, save } = setup();
+    await save(A, 1);
+    await save(B, 2);
+    const ctx = (when: Date) => ({
+      writtenBy: "x",
+      at: when,
+      focusLimit: 5,
+      purgeBefore: new Date(0),
+    });
+    const notes = [
+      { text: "kept", source: "stated" as const },
+      { text: "removed", source: "stated" as const },
+    ];
+    const addFocus = [...Array(7)].map((_, k) => ({ text: `f${k}`, source: "stated" as const }));
+    const r = await profile.apply(
+      A,
+      { addNotes: notes, editNotes: [], removeNotes: [], addFocus },
+      ctx(at(1)),
+    );
+    if (!r.ok) throw new Error("seed failed");
+    await profile.apply(
+      A,
+      {
+        addNotes: [],
+        editNotes: [],
+        addFocus: [],
+        removeNotes: [{ id: r.addedNoteIds[1] as string, expectedSource: "stated" }],
+      },
+      ctx(at(2)),
+    );
+    await profile.apply(
+      B,
+      {
+        addNotes: [{ text: "B's note", source: "stated" }],
+        editNotes: [],
+        removeNotes: [],
+        addFocus: [{ text: "B's focus", source: "stated" }],
+      },
+      ctx(at(3)),
+    );
+    const m = await exportManifest(deps, A);
+    expect(m.notes.map((n) => n.text)).toEqual(["kept"]);
+    expect(m.focus.map((f) => f.text)).toEqual(["f0", "f1", "f2", "f3", "f4", "f5", "f6"]);
+    expect(m.links).toHaveLength(1);
   });
 });

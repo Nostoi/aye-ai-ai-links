@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { CHECK_RESULTS, type LinkCheck } from "./link-check-store.js";
-import type { ToolRecord } from "./tool-store.js";
+import { CHECK_RESULTS, type LinkCheck, type LinkCheckStore } from "./link-check-store.js";
+import type { ProfileStore } from "./profile-store.js";
+import type { SavedCopyReader } from "./saved-copy.js";
+import type { LinkStore } from "./store.js";
+import type { ToolRecord, ToolStore } from "./tool-store.js";
 import {
   type FocusEntry,
   type Link,
   type NewLink,
+  type OwnerId,
   type ProfileNote,
   SOURCES,
   STATES,
@@ -250,3 +254,31 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
 /** `aye-links-<UTC date of the export>.<ext>`. */
 export const exportFilename = (exportedAt: Date, ext: "json" | "zip") =>
   `aye-links-${exportedAt.toISOString().slice(0, 10)}.${ext}`;
+
+export type ManifestDeps = {
+  store: Pick<LinkStore, "listLinks" | "listTags">;
+  tools: Pick<ToolStore, "listTools">;
+  checks: Pick<LinkCheckStore, "listChecks">;
+  profile: Pick<ProfileStore, "listNotes" | "listFocus">;
+  savedCopies: Pick<SavedCopyReader, "listCopies">;
+  now: () => Date;
+};
+
+/** Reads the owner's library, clock first, one owner-scoped read per collection, and builds the links-only manifest. */
+export async function exportManifest(deps: ManifestDeps, owner: OwnerId): Promise<ExportManifest> {
+  const exportedAt = deps.now();
+  const links = await deps.store.listLinks(owner);
+  const catalog = await deps.store.listTags(owner);
+  const tools = await deps.tools.listTools(owner);
+  const checks = await deps.checks.listChecks(owner);
+  const notes = await deps.profile.listNotes(owner);
+  const focus = await deps.profile.listFocus(owner);
+  const ledger = await deps.savedCopies.listCopies(owner);
+  const copies = new Map<string, ManifestCopy>(
+    [...ledger].map(([id, row]) => [
+      id,
+      { status: row.status, madeAt: iso(row.madeAt), file: null, images: [] },
+    ]),
+  );
+  return buildManifest({ exportedAt, links, catalog, tools, checks, notes, focus, copies });
+}

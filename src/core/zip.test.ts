@@ -65,6 +65,8 @@ it("stamps the modified time in DOS form, in UTC", async () => {
   const time = (8 << 11) | (0 << 5) | 0;
   const date = ((2026 - 1980) << 9) | (10 << 5) | 19;
   expect([b.readUInt16LE(10), b.readUInt16LE(12)]).toEqual([time, date]);
+  const at = b.indexOf(Buffer.from("PK\x01\x02"));
+  expect([b.readUInt16LE(at + 12), b.readUInt16LE(at + 14)]).toEqual([time, date]);
 });
 
 it.each(["", "café.txt"])("refuses the name %j", async (name) => {

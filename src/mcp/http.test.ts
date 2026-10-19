@@ -1057,6 +1057,9 @@ describe("MCP door over HTTP", () => {
         recentFocus: async () => {
           throw new Error("read after write");
         },
+        listFocus: async () => {
+          throw new Error("read after write");
+        },
       };
       const broken = appFor({ deps: { ...deps, profile: failing }, identify });
       const spy = vi.spyOn(console, "error").mockImplementation(() => {});

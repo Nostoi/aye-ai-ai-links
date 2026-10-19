@@ -189,6 +189,9 @@ describe("profile use cases", () => {
         recentFocus: async () => {
           throw new Error("read after write");
         },
+        listFocus: async () => {
+          throw new Error("read after write");
+        },
       };
       const r = await addProfile({ profile: readsFail, now: () => NOW }, A, W, {
         addNotes: [{ text: "n", source: "stated" }],
@@ -324,6 +327,7 @@ describe("profile use cases", () => {
           return profile.apply(...args);
         },
         recentFocus: (...args) => profile.recentFocus(...args),
+        listFocus: (o) => profile.listFocus(o),
         restoreNote: (...args) => profile.restoreNote(...args),
       };
       const err = await code(
@@ -379,6 +383,7 @@ describe("profile use cases", () => {
         let applies = 0;
         const stub: ProfileStore = {
           recentFocus: (o, l) => profile.recentFocus(o, l),
+          listFocus: (o) => profile.listFocus(o),
           restoreNote: (...args) => profile.restoreNote(...args),
           listNotes: async (o) => {
             const seen = await profile.listNotes(o);
@@ -446,6 +451,7 @@ describe("profile use cases", () => {
           );
         const stub: ProfileStore = {
           recentFocus: (o, l) => profile.recentFocus(o, l),
+          listFocus: (o) => profile.listFocus(o),
           restoreNote: (...args) => profile.restoreNote(...args),
           listNotes: async (o) => {
             const seen = await profile.listNotes(o);

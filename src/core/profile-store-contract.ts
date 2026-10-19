@@ -323,6 +323,18 @@ export function describeProfileStoreContract(
       expect((await store.recentFocus(A, 3)).map((f) => f.text)).toEqual(["f11", "f10", "f9"]);
     });
 
+    it("lists the whole focus log oldest first, ties by id, uncapped, and only the owner's", async () => {
+      await applyOk(A, { addFocus: [{ text: "late", source: "stated" }] }, "x", T3);
+      await applyOk(A, { addFocus: [{ text: "early", source: "inferred" }] }, "x", T1);
+      const ties = [...Array(11)].map((_, k) => ({ text: `tie-${k}`, source: "stated" as const }));
+      await applyOk(A, { addFocus: ties }, "x", T2);
+      await applyOk(B, { addFocus: [{ text: "b-focus", source: "stated" }] }, "x", T1);
+      const all = await store.listFocus(A);
+      expect(all.map((f) => f.text)).toEqual(["early", ...ties.map((t) => t.text), "late"]);
+      expect(all[0]).toMatchObject({ source: "inferred", writtenBy: "x", createdAt: T1 });
+      expect(await store.listFocus("nobody")).toEqual([]);
+    });
+
     describe("when a note's source is no longer the one that was read", () => {
       async function seed() {
         const added = await applyOk(A, {

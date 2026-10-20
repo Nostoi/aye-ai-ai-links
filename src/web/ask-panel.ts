@@ -460,6 +460,9 @@ export const ASK_SCRIPT = `<script>
   };
   const editNotes = new Map();
   let presses = 0;
+  document.addEventListener("aye-editing", () => {
+    presses += 1;
+  });
   const runEdit = async (id, button, note, block) => {
     const press = ++presses;
     note.textContent = "";
@@ -489,7 +492,7 @@ export const ASK_SCRIPT = `<script>
     if (!drawn) return;
     const note = editNotes.get(id);
     if ((await refreshCard(id)) === "failed" && note) {
-      note.textContent = "Saved, but this card couldn't be refreshed. Reload to see it.";
+      note.textContent = "This card couldn't be refreshed. Reload to see the change.";
     }
   });
 

@@ -302,6 +302,7 @@ const held = () => {
 };
 const REFUSED = { code: "invalid_input", message: "A title can be at most 200 characters." };
 const CONFLICT = { code: "conflict", message: "This link changed since. Your edit stays." };
+const REFRESH_FAILED = "This card couldn't be refreshed. Reload to see the change.";
 
 describe("Edit in the panel, on Home", () => {
   it("reads the card again first, then opens the dialog on it, without Delete", async () => {
@@ -478,6 +479,31 @@ describe("Edit with the page awareness of #159", () => {
     expect(dialog.open).toBe(true);
     expect(titleField(page).value).toBe("Fresh");
     expect(box.querySelector('.ask-card[data-id="1"] h3')?.textContent).toBe("Fresh");
+  });
+
+  it("opens the Earlier box again to show a refusal for a line inside it", async () => {
+    const { page } = onPage(
+      home(),
+      {
+        "/ai/card/1": fresh(),
+        "/links/edit": { status: 200, body: editAnswer("New") },
+        "/links/edit/undo": { status: 409, body: CONFLICT },
+      },
+      elsewhere(savedOne().entries as Record<string, unknown>[]),
+    );
+    const toggle = page.$("#ask-messages .ask-earlier");
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    page.dispatch(toggle, "click");
+    page.dispatch(box.querySelector(".ask-edit") as Element, "click");
+    await page.settle();
+    await save(page, "New");
+    page.dispatch(toggle, "click");
+    expect(box.hidden).toBe(true);
+    page.dispatch(page.$("#undo-bar button"), "click");
+    await page.settle();
+    expect(box.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(box.querySelector(".ask-note")?.textContent).toBe(CONFLICT.message);
   });
 
   it("gives Edit to a line behind the Earlier line whose card is only in its reply", async () => {
@@ -693,9 +719,47 @@ describe("the panel's card reads, per link", () => {
     await pressEdit(page);
     await save(page, "New");
     expect(page.$("#undo-bar span").textContent).toBe("Link updated");
-    expect(note(page).textContent).toBe(
-      "Saved, but this card couldn't be refreshed. Reload to see it.",
-    );
+    expect(note(page).textContent).toBe(REFRESH_FAILED);
+  });
+
+  it("says the card couldn't be refreshed, without saying Saved, when an Undo worked but the read after it failed", async () => {
+    let reads = 0;
+    const { page } = onPage(home(), {
+      "/ai/card/1": () => {
+        reads += 1;
+        return reads < 3 ? fresh() : { status: 500 };
+      },
+      "/links/edit": { status: 200, body: editAnswer("New") },
+      "/links/edit/undo": { status: 200, body: editAnswer("Fresh", null) },
+    });
+    await pressEdit(page);
+    await save(page, "New");
+    expect(note(page).textContent).toBe("");
+    page.dispatch(page.$("#undo-bar button"), "click");
+    await page.settle();
+    expect(reads).toBe(3);
+    expect(note(page).textContent).toBe(REFRESH_FAILED);
+  });
+
+  it("a ⋯ Edit opened on the page cancels a panel Edit still waiting for its read", async () => {
+    const { wait, release } = held();
+    const html = allPage({
+      ...list,
+      links: [link("1"), link("2")],
+      done: false,
+      pictures: new Map([
+        ["1", { own: false, pageVersion: null, pageFit: null }],
+        ["2", { own: false, pageVersion: null, pageFit: null }],
+      ]),
+    });
+    const { page, dialog } = onPage(html, { "/ai/card/1": { ...fresh(), wait } });
+    page.dispatch(editButton(page), "click");
+    page.dispatch(page.$('#all-links [data-id="2"] button[data-act=edit]'), "click");
+    expect(dialog.open).toBe(true);
+    cancel(page);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
   });
 
   it("offers a late Save's Undo for its link after the dialog moved to another link and closed", async () => {

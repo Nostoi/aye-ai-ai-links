@@ -436,9 +436,16 @@ const shown = (target, answer) => {
 };
 const tell = (target, message) => {
   const note = notes.get(target);
+  const box = note ? note.closest(".ask-earlier-entries") : null;
+  if (box && box.hidden) box.previousElementSibling.click();
   if (note) note.textContent = message;
   else if (editAlert) editAlert.textContent = message;
 };
+if (editRoot) {
+  editRoot.addEventListener("click", (event) => {
+    if (event.target.closest(".card-menu button[data-act=edit]")) document.dispatchEvent(new CustomEvent("aye-editing"));
+  });
+}
 document.addEventListener("aye-edit", (event) => {
   if (dialog.open) return;
   const { card: from, opener: by, note } = event.detail;

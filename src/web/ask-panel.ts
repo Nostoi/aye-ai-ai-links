@@ -689,12 +689,12 @@ export const ASK_SCRIPT = `<script>
         box.hidden = !box.hidden;
         toggle.setAttribute("aria-expanded", box.hidden ? "false" : "true");
       });
+      messages.appendChild(toggle);
+      messages.appendChild(box);
       for (const entry of group) {
         const node = drawEntry(entry);
         if (node) box.appendChild(node);
       }
-      messages.appendChild(toggle);
-      messages.appendChild(box);
     }
     for (const entry of state.entries.slice(from)) {
       const node = drawEntry(entry);

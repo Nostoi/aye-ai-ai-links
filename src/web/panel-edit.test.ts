@@ -453,6 +453,98 @@ describe("Edit in the panel, on the AI-on All page", () => {
   });
 });
 
+describe("Edit with the page awareness of #159", () => {
+  const elsewhere = (entries: Record<string, unknown>[]) => ({
+    ...savedOne(),
+    entries: entries.map((e) => ({ ...e, path: "/tags", place: "Tags" })),
+  });
+  const saveLine = {
+    text: "Saved.",
+    linkId: "1",
+    undo: { kind: "save", url: "/links/delete", body: { id: "1" } },
+  };
+
+  it("opens the dialog from a line behind the Earlier line, and swaps the card there", async () => {
+    const { page, dialog } = onPage(
+      home(),
+      { "/ai/card/1": fresh() },
+      elsewhere(savedOne().entries as Record<string, unknown>[]),
+    );
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    page.dispatch(page.$("#ask-messages .ask-earlier"), "click");
+    expect(box.hidden).toBe(false);
+    page.dispatch(box.querySelector(".ask-edit") as Element, "click");
+    await page.settle();
+    expect(dialog.open).toBe(true);
+    expect(titleField(page).value).toBe("Fresh");
+    expect(box.querySelector('.ask-card[data-id="1"] h3')?.textContent).toBe("Fresh");
+  });
+
+  it("gives Edit to a line behind the Earlier line whose card is only in its reply", async () => {
+    const { page } = onPage(
+      home(),
+      {},
+      elsewhere([
+        { kind: "reply", segments: [{ card: panelCard("1", "Link 1", "v1") }] },
+        { kind: "changes", lines: [saveLine], cards: {} },
+      ]),
+    );
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    expect(box.querySelectorAll(".ask-edit")).toHaveLength(1);
+  });
+
+  it("keeps the page's fade when Edit swaps the panel's card and Save updates the page's", async () => {
+    const html = allPage({
+      ...list,
+      links: [link("1"), link("2")],
+      done: false,
+      pictures: new Map([
+        ["1", { own: false, pageVersion: null, pageFit: null }],
+        ["2", { own: false, pageVersion: null, pageFit: null }],
+      ]),
+    });
+    const change = {
+      kind: "link",
+      tool: "update_link",
+      linkId: "1",
+      created: false,
+      fields: [],
+      editId: "e9",
+    };
+    const { page } = onPage(
+      html,
+      {
+        "/ai/chat": {
+          status: 200,
+          body: {
+            ok: true,
+            ai: "Fake",
+            segments: [{ text: "This one." }, { card: panelCard("1", "Link 1", "v1") }],
+            remember: "This one.",
+            cards: {},
+            changes: [change],
+          },
+        },
+        "/ai/card/1": fresh(),
+        "/links/edit": { status: 200, body: editAnswer("New") },
+      },
+      { ...savedOne(), entries: [] },
+    );
+    (page.$("#ask-text") as HTMLTextAreaElement).value = "which one?";
+    page.dispatch(page.$("#ask-form"), "submit");
+    await page.settle();
+    const pageCard = (id: string) => page.$(`#all-links [data-id="${id}"]`);
+    expect(pageCard("2").classList.contains("ask-dim")).toBe(true);
+    expect(pageCard("1").classList.contains("ask-dim")).toBe(false);
+    await pressEdit(page);
+    await save(page, "New");
+    expect(pageCard("1").querySelector("h3")?.textContent).toBe("New");
+    expect(pageCard("2").classList.contains("ask-dim")).toBe(true);
+    expect(pageCard("1").classList.contains("ask-dim")).toBe(false);
+    expect(page.document.querySelectorAll("#ask-messages .ask-dim")).toHaveLength(0);
+  });
+});
+
 describe("the panel's card reads, per link", () => {
   it("keeps the latest read when two answer out of order, on the page and in the stored state", async () => {
     const releases: (() => void)[] = [];

@@ -22,9 +22,25 @@ export type ChatAnswer =
       changes: Change[];
     };
 
+/** The most cards one reply shows; a later marker is named in the text instead. */
+export const MAX_CARDS = 5;
 const MARKER = /\[\[link:(\d+)\]\]/g;
 const edgeBlanks = (text: string) =>
   text.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
+
+/** Markdown the panel can't render, as plain text. Applied between markers, never to them. */
+export function tidy(text: string): string {
+  return text
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/\*\*(\S(?:[^*]*\S)?)\*\*/g, "$1")
+        .replace(/^#{1,6} /, "")
+        .replace(/^(\s*)[-*] /, "$1• "),
+    )
+    .filter((line) => !/^\s*[-*•]\s*$/.test(line))
+    .join("\n");
+}
 
 /** A card that can't be read is left out; the answer and its changes still reach the owner. */
 async function readCard(deps: AskCardDeps, owner: OwnerId, id: string) {
@@ -59,12 +75,14 @@ const changeSubject = (change: Change): string => {
 
 /**
  * The reply split at its `[[link:ID]]` markers. A marker for a link the turn saw and the owner's
- * store returns becomes a card, the first time only; any other marker is removed. `remember` is
- * the same reply as plain text for the panel's history.
+ * store returns becomes a card, the first time only, up to `MAX_CARDS`; past that it becomes the
+ * link's title. Any other marker is removed. `remember` is the same reply, tidied, for the panel's
+ * history.
  */
 async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set<string>) {
   const segments: Segment[] = [];
   const shown = new Set<string>();
+  const cited = new Set<string>();
   let text = "";
   let remembered = "";
   const flush = () => {
@@ -76,19 +94,24 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
   for (const match of reply.matchAll(MARKER)) {
     const between = reply.slice(end, match.index);
     end = match.index + match[0].length;
-    text += between;
-    remembered += between;
+    text += tidy(between);
+    remembered += tidy(between);
     const id = match[1] ?? "";
-    if (!seen.has(id) || shown.has(id)) continue;
+    if (!seen.has(id) || cited.has(id)) continue;
     const loaded = await readCard(deps, owner, id);
     if (!loaded) continue;
+    cited.add(id);
+    remembered += match[0];
+    if (shown.size >= MAX_CARDS) {
+      text += loaded.link.title ?? loaded.link.url;
+      continue;
+    }
     shown.add(id);
     flush();
     segments.push({ card: loaded.html });
-    remembered += match[0];
   }
-  text += reply.slice(end);
-  remembered += reply.slice(end);
+  text += tidy(reply.slice(end));
+  remembered += tidy(reply.slice(end));
   flush();
   return { segments, shown, remembered };
 }

@@ -30,7 +30,25 @@ export type TurnResult =
   | { ok: false; reason: string; changes: Change[]; seen: string[] };
 
 /** Added to the MCP door's instructions for the AI in the app's own panel. */
-export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app itself. What they write here is in their own words, so record it as "stated", or as "asked" when it answers a question you asked. Keep your replies short, and name each link you saved or changed. To show the owner a link, write [[link:ID]] on its own line, using the link's id, then a short note about it; the app shows its card there.`;
+export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app itself. What they write here is in their own words, so record it as "stated", or as "asked" when it answers a question you asked.
+
+<panel>
+Your reply appears in a narrow chat panel beside the owner's links. The panel shows plain text only: it does not render Markdown, so asterisks, dashes and hashes appear exactly as typed. A link is shown as a picture card with its title, so the owner sees the links rather than reads about them.
+</panel>
+
+<reply_format>
+Write one or two short sentences of plain prose. Then, for each link worth showing, put [[link:ID]] on its own line, using the link's id from a tool result, and on the next line a few words on why it fits; the card already shows the title, so don't repeat it. Show at most 5 links, best first. When more links match, say so and offer to narrow them down; give a number only when a tool told you the total. After saving or changing links, say what you did in a sentence; the app lists each change below your reply.
+</reply_format>
+
+<example>
+The owner asks: what's in here about tiles?
+Your reply:
+Two of your kitchen remodel links are about tile.
+[[link:912]]
+Compares cost and how each handles grease.
+[[link:913]]
+The floor, not the backsplash.
+</example>`;
 
 // Each reason finishes "<name> didn't answer: …".
 const TOO_LONG = "it took too long";

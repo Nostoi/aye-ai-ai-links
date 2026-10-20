@@ -122,18 +122,27 @@ async function settledWithin(job: Promise<void>, ms: number): Promise<void> {
  * waits up to `saveWaitMs` for it, so the result can show the page. A repeat save never waits.
  * `snapshotText` is the page's opening text, up to `EXCERPT_CHARS`. `whyFilled`: this repeat save
  * filled the missing why, and the link now holds that why. Two identical repeat saves racing can
- * both say so.
+ * both say so. With `{ receipt: true }` (the in-app AI), a fill also writes a receipt for Undo, and
+ * `whyEditId` is its id, or null when this call wrote none. Without it, there is no `whyEditId`.
  */
+export async function saveLink(
+  deps: Deps,
+  owner: OwnerId,
+  input: SaveLinkInput,
+  options: { receipt: true },
+): Promise<SaveLinkResult & { whyEditId: string | null }>;
+export async function saveLink(
+  deps: Deps,
+  owner: OwnerId,
+  input: SaveLinkInput,
+  options?: { receipt?: undefined },
+): Promise<SaveLinkResult>;
 export async function saveLink(
   { store, now, snapshots, pages, saveWaitMs = SAVE_WAIT_MS }: Deps,
   owner: OwnerId,
   input: SaveLinkInput,
-): Promise<{
-  link: Link;
-  created: boolean;
-  snapshotText: SnapshotText | null;
-  whyFilled: boolean;
-}> {
+  options: { receipt?: true } = {},
+): Promise<SaveLinkResult & { whyEditId?: string | null }> {
   const key = urlKey(input.url);
   checkSources(input.why, input.tags);
   const tags = normalizeTags(input.tags ?? []);
@@ -155,6 +164,7 @@ export async function saveLink(
   });
   let link = result.link;
   let whyFilled = false;
+  let whyEditId: string | null = null;
   if (result.created) {
     // The save has committed; `kick` never rejects, so the background fetch cannot fail it.
     const job = snapshots?.kick(owner, link.id);
@@ -162,17 +172,31 @@ export async function saveLink(
     // Read again for the page, and for any edit made while waiting.
     link = (await store.get(owner, link.id)) ?? link;
   } else if (why && !link.why) {
-    const filled = await store.fillWhyIfMissing(owner, link.id, why);
-    whyFilled = filled?.why?.text === why.text && filled.why.source === why.source;
-    link = filled ?? link;
+    const filled = options.receipt
+      ? await store.fillWhyWithReceipt(owner, link.id, why, now())
+      : await store
+          .fillWhyIfMissing(owner, link.id, why)
+          .then((l) => l && { link: l, editId: null });
+    const after = filled?.link;
+    whyFilled = after?.why?.text === why.text && after.why.source === why.source;
+    whyEditId = filled?.editId ?? null;
+    link = after ?? link;
   }
-  return {
+  const saved = {
     link,
     created: result.created,
     snapshotText: await readSnapshotText(pages, owner, link, EXCERPT_CHARS),
     whyFilled,
   };
+  return options.receipt ? { ...saved, whyEditId } : saved;
 }
+
+type SaveLinkResult = {
+  link: Link;
+  created: boolean;
+  snapshotText: SnapshotText | null;
+  whyFilled: boolean;
+};
 
 export async function getLink({ store }: Deps, owner: OwnerId, id: string): Promise<Link> {
   const link = await store.get(owner, id);
@@ -197,12 +221,8 @@ export async function getLinkWithText(
   return { link, snapshotText, savedCopy };
 }
 
-export async function updateLink(
-  { store, now }: Deps,
-  owner: OwnerId,
-  id: string,
-  input: UpdateLinkInput,
-): Promise<Link> {
+/** Checks the input and builds the patch; throws before anything is written. */
+function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   const { tags, why, title, summary, state, snoozedUntil, opened } = input;
   if (state !== undefined && !isState(state)) {
     throw invalid(`The state "${state}" is not valid. Use active or archived.`);
@@ -223,9 +243,30 @@ export async function updateLink(
   if (opened === true) patch.lastOpenedAt = now();
   if (tags !== undefined) patch.tags = normalizeTags(tags);
   if (why !== undefined) patch.why = cleanWhy(why);
-  const link = await store.update(owner, id, patch);
+  return patch;
+}
+
+export async function updateLink(
+  { store, now }: Deps,
+  owner: OwnerId,
+  id: string,
+  input: UpdateLinkInput,
+): Promise<Link> {
+  const link = await store.update(owner, id, buildPatch(now, input));
   if (!link) throw notFound(id);
   return link;
+}
+
+/** `updateLink` for the in-app AI: the store also records what the edit replaced, and `editId` is its id for Undo (null when no covered field changed). */
+export async function updateLinkWithReceipt(
+  { store, now }: Deps,
+  owner: OwnerId,
+  id: string,
+  input: UpdateLinkInput,
+): Promise<{ link: Link; editId: string | null }> {
+  const result = await store.updateWithReceipt(owner, id, buildPatch(now, input), now());
+  if (!result) throw notFound(id);
+  return result;
 }
 
 /**

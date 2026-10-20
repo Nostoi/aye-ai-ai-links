@@ -23,7 +23,15 @@ export const MAX_HISTORY = 40;
 export const EMPTY_REPLY_NUDGE =
   "Please answer the owner now in a sentence or two, based on what you have done and found.";
 
+/** The most link ids the page tells a turn about; `shown` counts the rest. */
+export const MAX_PAGE_IDS = 60;
+const MAX_PAGE_TEXT = 300;
+const MAX_PAGE_SHOWN = 100_000;
+
 export type TextTurn = { role: "user" | "assistant"; text: string };
+
+/** The page the owner is on: its address and name, the link ids it shows (the first `MAX_PAGE_IDS`) and how many links it shows. */
+export type PageContext = { path: string; place: string; ids: string[]; shown: number };
 
 export type TurnResult =
   | { ok: true; reply: string; changes: Change[]; seen: string[] }
@@ -59,12 +67,36 @@ const STOPPING = "the server is stopping";
 const CUT_OFF = "its reply was cut off";
 export const SERVER_FAULT = "something went wrong on the server";
 
-/** The posted history and text checked against the caps and order, with long assistant turns shortened; null when refused. */
+/** The posted page checked against the page caps; null when anything is off. */
+function takePage(given: unknown): PageContext | null {
+  if (typeof given !== "object" || given === null || Array.isArray(given)) return null;
+  const { path, place, ids, shown } = given as Record<string, unknown>;
+  if (typeof path !== "string" || path.length < 1 || path.length > MAX_PAGE_TEXT) return null;
+  if (!path.startsWith("/")) return null;
+  if (typeof place !== "string" || place.length > MAX_PAGE_TEXT) return null;
+  if (!Array.isArray(ids) || ids.length > MAX_PAGE_IDS) return null;
+  if (!ids.every((id): id is string => typeof id === "string" && /^[0-9]+$/.test(id))) return null;
+  if (!Number.isInteger(shown) || (shown as number) < ids.length) return null;
+  if ((shown as number) > MAX_PAGE_SHOWN) return null;
+  return { path, place, ids, shown: shown as number };
+}
+
+/**
+ * The posted history and text checked against the caps and order, with long assistant turns
+ * shortened, and the page if one was sent; null when refused. `page` is in the result only when given.
+ */
 export function takeTurn(body: {
   history: unknown;
   text: unknown;
-}): { history: TextTurn[]; text: string } | null {
+  page?: unknown;
+}): { history: TextTurn[]; text: string; page?: PageContext } | null {
   const { history, text } = body;
+  let page: PageContext | undefined;
+  if (body.page !== undefined) {
+    const taken = takePage(body.page);
+    if (!taken) return null;
+    page = taken;
+  }
   if (typeof text !== "string" || text.trim() === "" || text.length > MAX_TEXT_CHARS) return null;
   if (!Array.isArray(history) || history.length > MAX_HISTORY || history.length % 2 !== 0) {
     return null;
@@ -80,7 +112,22 @@ export function takeTurn(body: {
     else if (role === "assistant") turns.push({ role, text: `${said.slice(0, MAX_TURN_CHARS)}…` });
     else return null;
   }
-  return { history: turns, text };
+  return page ? { history: turns, text, page } : { history: turns, text };
+}
+
+/** The system block about the page; page text goes in as JSON strings, so none of it can close the block. */
+function pageBlock({ path, place, ids, shown }: PageContext): string {
+  const quoted = (value: string) =>
+    JSON.stringify(value.replace(/\p{Cc}/gu, " ")).replace(/</g, "\\u003c");
+  const links =
+    shown === 0
+      ? "It shows no links."
+      : `${
+          ids.length < shown
+            ? `It shows ${shown} links; the first ${ids.length}, in order, have these ids: ${ids.join(", ")}.`
+            : `It shows ${shown} links; their ids, in order: ${ids.join(", ")}.`
+        } When they say "here", "this page" or "these", they mean the links shown there; read them with a tool before you describe them.`;
+  return `<page>\nThe owner is looking at the page ${quoted(place)} (${quoted(path)}). ${links}\n</page>`;
 }
 
 /** The ids of the links a tool's structured output names, in order. */
@@ -106,6 +153,8 @@ export async function runChatTurn(input: {
   session: ToolSession;
   history: TextTurn[];
   text: string;
+  /** The page the owner is on, if the browser said; its ids are not added to what the turn has seen. */
+  page?: PageContext;
   now?: () => number;
   signal?: AbortSignal;
   limits?: { calls: number; ms: number };
@@ -113,7 +162,8 @@ export async function runChatTurn(input: {
   const { model, session, signal, now = Date.now } = input;
   const limits = input.limits ?? { calls: MAX_MODEL_CALLS, ms: TURN_MS };
   const deadline = now() + limits.ms;
-  const system = `${session.instructions}\n\n${IN_APP_INSTRUCTIONS}`;
+  const base = `${session.instructions}\n\n${IN_APP_INSTRUCTIONS}`;
+  const system = input.page ? `${base}\n\n${pageBlock(input.page)}` : base;
   const messages: ChatMessage[] = [...input.history, { role: "user", text: input.text }];
   const seen = new Set<string>();
   const known = session.tools.map((tool) => tool.name);

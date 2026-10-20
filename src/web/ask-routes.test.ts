@@ -39,6 +39,7 @@ describe("the Ask AI panel on the menu pages", () => {
         `Using Fake, on ${place}`,
       );
       expect(document.getElementById("ask-panel")?.getAttribute("data-owner"), path).toBe("owner");
+      expect(document.getElementById("ask-panel")?.getAttribute("data-place"), path).toBe(place);
     }
   });
 
@@ -68,6 +69,7 @@ describe("the Ask AI panel on the menu pages", () => {
     const res = await browser.send("/spaces?tag=kitchen <b>");
     expect(res.status).toBe(200);
     expect(String(res.body)).not.toContain("on Kitchen <b>");
+    expect(String(res.body)).toContain('data-place="Kitchen &lt;b&gt;"');
     expect(parseHTML(String(res.body)).document.querySelector(".ask-title p")?.textContent).toBe(
       "Using Fake, on Kitchen <b>",
     );

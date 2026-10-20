@@ -1,6 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
-import { MAX_TEXT_CHARS } from "../ai/chat-turn.js";
+import { MAX_PAGE_IDS, MAX_TEXT_CHARS } from "../ai/chat-turn.js";
 import { ASK_KEY } from "./ask-panel.js";
 import { isToolJson, isToolJsonOrNull } from "./http.js";
 import { PAGE_STYLE, page } from "./page.js";
@@ -9,7 +9,8 @@ import { askCss, themeCss } from "./theme.js";
 const ASK = { ai: "Fake", place: "Home", owner: "owner-a" };
 const HOSTILE = "<b>x</b>";
 
-const withAsk = (ask = ASK) => page("t", "<main>body</main>", { menu: true, undo: true, ask });
+const withAsk = (ask = ASK, body = "<main>body</main>") =>
+  page("t", body, { menu: true, undo: true, ask });
 
 describe("the Ask AI panel's markup", () => {
   const { document } = parseHTML(withAsk({ ai: HOSTILE, place: HOSTILE, owner: HOSTILE }));
@@ -70,6 +71,13 @@ describe("the Ask AI panel's markup", () => {
     expect(askCss).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i);
   });
 
+  it("styles the Earlier line as a 44px control, keeps its box hidden, and dims by opacity only", () => {
+    expect(askCss).toMatch(/\.ask-earlier\{[^}]*min-height:44px/);
+    expect(askCss).toContain(".ask-earlier-entries[hidden]{display:none}");
+    expect(askCss).toMatch(/\.ask-dim\{opacity:\.4\}/);
+    expect(themeCss).not.toContain("ask-dim");
+  });
+
   it("makes no outside requests", () => {
     expect(html).not.toMatch(/(?:src|href)="https?:/);
   });
@@ -80,6 +88,8 @@ function load({
   stored,
   storage,
   phone = false,
+  body,
+  url = "/",
   fetch = (async () => {
     throw new Error("no fetch expected");
   }) as unknown as typeof globalThis.fetch,
@@ -87,9 +97,13 @@ function load({
   stored?: unknown;
   storage?: Partial<Storage>;
   phone?: boolean;
+  /** The page's own markup, around the panel. */
+  body?: string;
+  /** The page's address: path and query. */
+  url?: string;
   fetch?: typeof globalThis.fetch;
 } = {}) {
-  const html = withAsk();
+  const html = withAsk(ASK, body);
   const { document, window } = parseHTML(html);
   const items = new Map<string, string>();
   if (stored !== undefined) {
@@ -113,13 +127,35 @@ function load({
     .filter((s) => s.includes(ASK_KEY) || s.includes("recordOpen"))
     .join("\n");
   const matchMedia = () => ({ matches: phone, addEventListener: () => {} });
-  new Function("document", "window", "sessionStorage", "matchMedia", "fetch", code)(
-    document,
-    window,
-    sessionStorage,
-    matchMedia,
-    fetch,
-  );
+  // linkedom's MutationObserver never fires, so tests fire the callbacks themselves.
+  type Watch = { callback: () => void; connected: boolean; target?: unknown; options?: unknown };
+  const observers: Watch[] = [];
+  class FakeObserver {
+    entry: Watch;
+    constructor(callback: () => void) {
+      this.entry = { callback, connected: false };
+      observers.push(this.entry);
+    }
+    observe(target: unknown, options: unknown) {
+      this.entry.connected = true;
+      this.entry.target = target;
+      this.entry.options = options;
+    }
+    disconnect() {
+      this.entry.connected = false;
+    }
+  }
+  const [pathname = "/", search = ""] = url.split(/(?=\?)/);
+  new Function(
+    "document",
+    "window",
+    "sessionStorage",
+    "matchMedia",
+    "fetch",
+    "location",
+    "MutationObserver",
+    code,
+  )(document, window, sessionStorage, matchMedia, fetch, { pathname, search }, FakeObserver);
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const click = (id: string) => el(id).dispatchEvent(new window.Event("click", { bubbles: true }));
   const pressEscape = () =>
@@ -135,6 +171,14 @@ function load({
     pressEscape,
     stateNow,
     items,
+    /** Runs the callbacks of the observers that are watching the page. */
+    mutate: () => {
+      for (const o of observers) if (o.connected) o.callback();
+    },
+    watching: () => observers.filter((o) => o.connected).length,
+    /** What each connected observer was told to watch. */
+    watched: () =>
+      observers.filter((o) => o.connected).map((o) => ({ target: o.target, options: o.options })),
     /** What the script exposes for the sending code. */
     panel: () =>
       (
@@ -356,7 +400,10 @@ const okAnswer = (over: Record<string, unknown> = {}) => ({
 });
 
 /** Loads the panel with `handler` answering every request, and lets the test send and click. */
-function talk(handler: (call: Call) => Reply | Promise<Reply>, options: { stored?: unknown } = {}) {
+function talk(
+  handler: (call: Call) => Reply | Promise<Reply>,
+  options: { stored?: unknown; body?: string; url?: string } = {},
+) {
   const net = fakeFetch(handler);
   const p = load({ ...options, fetch: net.fn });
   const say = async (text: string) => {
@@ -452,13 +499,14 @@ describe("sending a message", () => {
             { role: "assistant", text: "hi there" },
           ],
           text: "find my batteries",
+          page: { path: "/", place: "Home", ids: [], shown: 0 },
         },
       },
     ]);
     expect(t.messages().querySelector(".ask-me:last-of-type, .ask-me")?.textContent).toBeTruthy();
     expect(t.messages().textContent).toContain("find my batteries");
     expect(t.messages().textContent).toContain("Thinking…");
-    expect(t.stateNow().pending).toEqual({ text: "find my batteries" });
+    expect(t.stateNow().pending).toEqual({ text: "find my batteries", path: "/", place: "Home" });
     release(okAnswer());
     await flush();
     expect(t.messages().textContent).not.toContain("Thinking…");
@@ -906,7 +954,12 @@ describe("redrawing the conversation", () => {
       { role: "user", text: "hello" },
       { role: "assistant", text: "hi there" },
     ]);
-    expect(p.stateNow().entries.at(-1)).toEqual({ kind: "notice", text: notice });
+    expect(p.stateNow().entries.at(-1)).toEqual({
+      kind: "notice",
+      text: notice,
+      path: "/",
+      place: "Home",
+    });
     const next = load({ stored: p.stateNow() });
     expect(next.panel().messages.textContent?.split(notice)).toHaveLength(2);
   });
@@ -950,5 +1003,485 @@ describe("opening a saved link from the panel", () => {
     await t.say("show");
     await t.clickEl(t.messages().querySelector("a[data-open]"));
     expect(t.net.calls.at(-1)).toEqual({ url: "/links/opened", method: "POST", body: { id: "7" } });
+  });
+});
+
+/** A page of link cards, as the pages draw them: `data-id` on each card. */
+const pageOf = (...ids: string[]) =>
+  `<main>${ids.map((id) => `<article class="card" data-id="${id}">c${id}</article>`).join("")}</main>`;
+
+describe("telling the AI which page the owner is on", () => {
+  const sentPage = async (body: string, url = "/all?order=new", stored?: unknown) => {
+    const t = talk(() => okAnswer(), { body, url, stored });
+    await t.say("what is here");
+    return posted(t).page;
+  };
+  const posted = (t: { net: { calls: Call[] } }) =>
+    (t.net.calls[0]?.body ?? {}) as { page?: unknown; [key: string]: unknown };
+
+  it("sends the address, the place and the link ids in page order, once each", async () => {
+    expect(await sentPage(pageOf("4", "2", "4", "9"))).toEqual({
+      path: "/all?order=new",
+      place: "Home",
+      ids: ["4", "2", "9"],
+      shown: 3,
+    });
+  });
+
+  it("skips hidden cards, the panel's own cards and ids that are not numbers", async () => {
+    const body = `<main>${'<article data-id="1"></article>'}<div hidden><section><article data-id="2"></article></section></div><article data-id="x7"></article><article data-id=""></article><article data-id="3"></article></main>`;
+    const stored = saved({
+      entries: [{ kind: "reply", segments: [{ card: CARD("8") }] }],
+    });
+    expect(await sentPage(body, "/", stored)).toMatchObject({ ids: ["1", "3"], shown: 2 });
+  });
+
+  it("sends the first 60 ids and counts all of them in shown", async () => {
+    const all = Array.from({ length: 70 }, (_, i) => String(i + 1));
+    const page = (await sentPage(pageOf(...all))) as { ids: string[]; shown: number };
+    expect(page.ids).toEqual(all.slice(0, MAX_PAGE_IDS));
+    expect(page.shown).toBe(70);
+  });
+
+  it("cuts a long address to 300 characters", async () => {
+    const page = (await sentPage(pageOf(), `/all?q=${"a".repeat(400)}`)) as { path: string };
+    expect(page.path).toBe(`/all?q=${"a".repeat(400)}`.slice(0, 300));
+  });
+
+  it("reads the page when it sends, so cards added since the panel loaded count", async () => {
+    const t = talk(() => okAnswer(), { body: pageOf("1") });
+    t.document
+      .querySelector("main")
+      ?.insertAdjacentHTML("beforeend", '<article data-id="2"></article>');
+    await t.say("x");
+    expect(posted(t).page).toMatchObject({ ids: ["1", "2"] });
+  });
+
+  it("counts the page against the 400 KiB budget when it trims the history", () => {
+    const p = load();
+    const trim = p.panel().trimHistory as (
+      history: unknown[],
+      text: string,
+      page?: unknown,
+    ) => { role: string; text: string }[];
+    const budget = 400 * 1024;
+    const body = (h: unknown[]) =>
+      new TextEncoder().encode(JSON.stringify({ history: h, text: "next" })).length;
+    const make = (len: number) =>
+      Array.from({ length: 8 }, (_, i) =>
+        i % 2 === 0 ? { role: "user", text: "u".repeat(len) } : { role: "assistant", text: "a" },
+      );
+    // Four pairs that fit with a few bytes to spare.
+    const len = Math.floor((budget - body(make(0))) / 4);
+    expect(body(make(len))).toBeLessThanOrEqual(budget);
+    expect(trim(make(len), "next")).toHaveLength(8);
+    const page = { path: "/all", place: "All links", ids: ["1", "2", "3"], shown: 3 };
+    expect(trim(make(len), "next", page)).toHaveLength(6);
+  });
+});
+
+describe("what a page card can mean to the fade", () => {
+  const FADE_PAGE = pageOf("1", "2", "3");
+  const dimmed = (t: { document: Document }) =>
+    [...t.document.querySelectorAll("[data-id].ask-dim")].map((n) => n.getAttribute("data-id"));
+  const cited = (...ids: string[]) =>
+    okAnswer({ segments: ids.map((id) => ({ card: CARD(id) })), cards: {} });
+  const fading = (reply: Reply = cited("2")) => {
+    const t = talk(() => reply, { body: FADE_PAGE });
+    t.click("ask-open");
+    return t;
+  };
+
+  it("dims the page's other cards when a reply names a card on the page", async () => {
+    const t = fading();
+    await t.say("which");
+    expect(dimmed(t)).toEqual(["1", "3"]);
+    expect(t.document.querySelector("main [data-id='2']")?.classList.contains("ask-dim")).toBe(
+      false,
+    );
+  });
+
+  it("never dims the panel's own cards", async () => {
+    const t = fading(cited("2", "8"));
+    await t.say("which");
+    expect(t.messages().querySelector(".ask-dim")).toBeNull();
+    expect(dimmed(t)).toEqual(["1", "3"]);
+  });
+
+  it("dims nothing when the reply names no card on the page", async () => {
+    const t = fading(cited("8"));
+    await t.say("which");
+    expect(dimmed(t)).toEqual([]);
+    expect(t.watching()).toBe(0);
+  });
+
+  it("dims nothing for a reply with no cards, or a failed turn", async () => {
+    const none = fading(okAnswer());
+    await none.say("which");
+    expect(dimmed(none)).toEqual([]);
+    const failed = fading({ status: 500, body: { code: "X", message: "no" } });
+    await failed.say("which");
+    expect(dimmed(failed)).toEqual([]);
+  });
+
+  it("dims nothing while the panel is closed", async () => {
+    const t = talk(() => cited("2"), { body: FADE_PAGE });
+    await t.say("which");
+    expect(dimmed(t)).toEqual([]);
+  });
+
+  it("clears at the next send, and again when that reply names nothing on the page", async () => {
+    let reply: Reply | Promise<Reply> = cited("2");
+    const t = talk(() => reply, { body: FADE_PAGE });
+    t.click("ask-open");
+    await t.say("which");
+    expect(dimmed(t)).toEqual(["1", "3"]);
+    let release: (r: Reply) => void = () => {};
+    reply = new Promise<Reply>((resolve) => {
+      release = resolve;
+    });
+    await t.say("and now");
+    expect(dimmed(t)).toEqual([]);
+    expect(t.watching()).toBe(0);
+    release(cited("8"));
+    await flush();
+    expect(dimmed(t)).toEqual([]);
+  });
+
+  it("clears on Start over and on close, and stops watching the page", async () => {
+    const restarted = fading();
+    await restarted.say("which");
+    expect(restarted.watching()).toBe(1);
+    restarted.click("ask-restart");
+    expect(dimmed(restarted)).toEqual([]);
+    expect(restarted.watching()).toBe(0);
+
+    const closed = fading();
+    await closed.say("which");
+    closed.click("ask-close");
+    expect(dimmed(closed)).toEqual([]);
+    expect(closed.watching()).toBe(0);
+  });
+
+  it("dims nothing for a reply that arrives after close or Start over", async () => {
+    for (const leave of ["ask-close", "ask-restart"]) {
+      let release: (r: Reply) => void = () => {};
+      const waiting = new Promise<Reply>((resolve) => {
+        release = resolve;
+      });
+      const t = talk(() => waiting, { body: FADE_PAGE });
+      t.click("ask-open");
+      await t.say("which");
+      t.click(leave);
+      release(cited("2"));
+      await flush();
+      expect(dimmed(t), leave).toEqual([]);
+      expect(t.watching(), leave).toBe(0);
+    }
+  });
+
+  it("dims a card that appears while the fade is on, unless it is a named one", async () => {
+    const t = fading();
+    await t.say("which");
+    t.document
+      .querySelector("main")
+      ?.insertAdjacentHTML("beforeend", '<article data-id="5"></article>');
+    t.document
+      .querySelector("main")
+      ?.insertAdjacentHTML("beforeend", '<article data-id="2" class="again"></article>');
+    t.mutate();
+    expect(dimmed(t)).toEqual(["1", "3", "5"]);
+    expect(t.document.querySelector(".again")?.classList.contains("ask-dim")).toBe(false);
+  });
+
+  it("watches the whole page for added cards", async () => {
+    const t = fading();
+    await t.say("which");
+    expect(t.watched()).toEqual([
+      { target: t.document.body, options: { childList: true, subtree: true } },
+    ]);
+  });
+
+  it("clears a card that was taken off the page during the fade and put back", async () => {
+    const t = fading();
+    await t.say("which");
+    const card = t.document.querySelector("main [data-id='1']") as Element;
+    expect(card.classList.contains("ask-dim")).toBe(true);
+    const parent = card.parentElement as Element;
+    card.remove();
+    t.click("ask-close");
+    parent.appendChild(card);
+    expect(card.classList.contains("ask-dim")).toBe(false);
+  });
+
+  it("does not keep the fade in the stored state", async () => {
+    const t = fading();
+    await t.say("which");
+    expect(JSON.stringify(t.stateNow())).not.toContain("ask-dim");
+  });
+});
+
+describe("the page each entry was made on", () => {
+  it("stores the address and the place on the entries it adds", async () => {
+    const t = talk(
+      () => okAnswer({ changes: [link("5", { created: true })], cards: { "5": CARD("5") } }),
+      {
+        url: "/spaces?tag=kitchen",
+      },
+    );
+    await t.say("save it");
+    const entries = t.stateNow().entries as { kind: string; path: string; place: string }[];
+    expect(entries.map((e) => e.kind)).toEqual(["me", "reply", "changes"]);
+    for (const e of entries)
+      expect(e).toMatchObject({ path: "/spaces?tag=kitchen", place: "Home" });
+  });
+
+  it("stores them on a failure's alert too", async () => {
+    const t = talk(() => ({ status: 500, body: { message: "Broke" } }), { url: "/all" });
+    await t.say("hi");
+    const entries = t.stateNow().entries as { kind: string; path: string }[];
+    expect(entries.map((e) => e.kind)).toEqual(["me", "alert"]);
+    for (const e of entries) expect(e.path).toBe("/all");
+  });
+
+  it("keeps the version at 1", async () => {
+    const t = talk(() => okAnswer());
+    await t.say("hi");
+    expect(t.stateNow().v).toBe(1);
+  });
+});
+
+describe("the Earlier line", () => {
+  const OLD = { path: "/spaces?tag=kitchen", place: "Kitchen" };
+  const old = <T extends object>(e: T) => ({ ...OLD, ...e });
+  const here = <T extends object>(e: T) => ({ path: "/", place: "Home", ...e });
+  const earlier = (p: { document: Document }) =>
+    p.document.querySelector<HTMLButtonElement>("button.ask-earlier");
+  const label = (entries: unknown[]) => earlier(load({ stored: saved({ entries }) }))?.textContent;
+  const savedLine = (id: string) => ({ text: "Saved.", linkId: id });
+
+  it("names a save that the reply shows as a card", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "save the kettle" }),
+        old({ kind: "reply", segments: [{ text: "Done" }, { card: CARD("5", "Kettle") }] }),
+        old({ kind: "changes", lines: [savedLine("5")], cards: {} }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "Kettle"');
+  });
+
+  it("names a save that only the changes show", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "save the mug" }),
+        old({ kind: "reply", segments: [{ text: "Done" }] }),
+        old({ kind: "changes", lines: [savedLine("6")], cards: { "6": CARD("6", "Mug") } }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "Mug"');
+  });
+
+  it("names a save that a failed turn made", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "save the mug" }),
+        old({
+          kind: "alert",
+          message: "Broke",
+          text: "save the mug",
+          changed: true,
+          lines: [savedLine("6")],
+          cards: { "6": CARD("6", "Mug") },
+        }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "Mug"');
+  });
+
+  it("counts saves by link, so two links with one title are two", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "save both" }),
+        old({
+          kind: "changes",
+          lines: [savedLine("5"), savedLine("6")],
+          cards: { "5": CARD("5", "GitHub"), "6": CARD("6", "GitHub") },
+        }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "GitHub" and 1 more');
+  });
+
+  it("leaves out a save that was undone", () => {
+    const undone = (id: string) => ({
+      ...savedLine(id),
+      undo: { kind: "save", url: "/links/delete", body: { id }, done: true },
+    });
+    const cards = { "5": CARD("5", "Kettle"), "6": CARD("6", "Mug") };
+    expect(
+      label([
+        old({ kind: "me", text: "save it" }),
+        old({ kind: "changes", lines: [undone("5")], cards }),
+      ]),
+    ).toBe('Earlier, on Kitchen: "save it"');
+    expect(
+      label([
+        old({ kind: "me", text: "save both" }),
+        old({ kind: "changes", lines: [undone("5"), savedLine("6")], cards }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "Mug"');
+  });
+
+  it("says where an interrupted turn was sent from, not where it is noticed", () => {
+    const p = load({
+      url: "/all",
+      stored: saved({
+        entries: [old({ kind: "me", text: "save the kettle" })],
+        pending: { text: "save the kettle", ...OLD },
+      }),
+    });
+    expect(p.stateNow().entries.at(-1)).toMatchObject({ kind: "notice", ...OLD });
+    expect(earlier(p)?.textContent).toBe('Earlier, on Kitchen: "save the kettle"');
+  });
+
+  it("says how many more were saved", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "save both" }),
+        old({
+          kind: "reply",
+          segments: [{ card: CARD("5", "Kettle") }, { card: CARD("6", "Mug") }],
+        }),
+        old({ kind: "changes", lines: [savedLine("5"), savedLine("6")], cards: {} }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "Kettle" and 1 more');
+  });
+
+  it("quotes the question when nothing was saved, cut to 60 characters", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "what do I have on batteries" }),
+        old({ kind: "reply", segments: [{ text: "Two links." }] }),
+      ]),
+    ).toBe('Earlier, on Kitchen: "what do I have on batteries"');
+    const long = "w".repeat(80);
+    expect(label([old({ kind: "me", text: long }), old({ kind: "reply", segments: [] })])).toBe(
+      `Earlier, on Kitchen: "${"w".repeat(60)}…"`,
+    );
+  });
+
+  it("offers no Try again for a failure on another page, but keeps its Search link", () => {
+    const failed = (extra: object) => ({
+      kind: "alert",
+      message: "Broke",
+      text: "save the kettle",
+      changed: false,
+      ...extra,
+    });
+    const p = load({ stored: saved({ entries: [old(failed({}))] }) });
+    const box = p.document.querySelector(".ask-earlier-entries .ask-alert") as Element;
+    expect([...box.querySelectorAll("button")].map((b) => b.textContent)).toEqual([]);
+    expect(box.querySelector("a")?.textContent).toBe('Search for "save the kettle"');
+    expect(box.textContent).toContain(
+      "Nothing was saved or changed. Search your links the usual way.",
+    );
+    expect(box.textContent).not.toContain("Try again");
+    const same = load({ stored: saved({ entries: [here(failed({}))] }) });
+    expect(
+      [...same.document.querySelectorAll(".ask-alert button")].map((b) => b.textContent),
+    ).toEqual(["Try again"]);
+  });
+
+  it("goes by the last exchange and the place of the last earlier entry", () => {
+    expect(
+      label([
+        { path: "/all", place: "All links", kind: "me", text: "save the kettle" },
+        {
+          path: "/all",
+          place: "All links",
+          kind: "reply",
+          segments: [{ card: CARD("5", "Kettle") }],
+        },
+        { path: "/all", place: "All links", kind: "changes", lines: [savedLine("5")], cards: {} },
+        old({ kind: "me", text: "and the weather?" }),
+        old({ kind: "reply", segments: [{ text: "No idea." }] }),
+        here({ kind: "me", text: "now" }),
+      ]),
+    ).toBe('Earlier, on Kitchen: "and the weather?"');
+  });
+
+  it("hides the earlier entries, shows the ones from this page, and toggles on press", () => {
+    const p = load({
+      stored: saved({
+        entries: [
+          old({ kind: "me", text: "before" }),
+          old({ kind: "reply", segments: [{ text: "Earlier answer" }] }),
+          here({ kind: "me", text: "now" }),
+          here({ kind: "reply", segments: [{ text: "Current answer" }] }),
+        ],
+      }),
+    });
+    const button = earlier(p) as HTMLButtonElement;
+    const box = button.nextElementSibling as HTMLElement;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(box.hasAttribute("hidden")).toBe(true);
+    expect(box.textContent).toContain("Earlier answer");
+    expect(p.panel().messages.textContent).toContain("Current answer");
+    const replies = p.panel().messages.querySelectorAll(".ask-reply");
+    expect(box.contains(replies[0] ?? null)).toBe(true);
+    expect(box.contains(replies[1] ?? null)).toBe(false);
+    button.dispatchEvent(new p.window.Event("click", { bubbles: true }));
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(box.hasAttribute("hidden")).toBe(false);
+    button.dispatchEvent(new p.window.Event("click", { bubbles: true }));
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(box.hasAttribute("hidden")).toBe(true);
+  });
+
+  it("keeps Undo working inside the earlier entries", async () => {
+    const undo = { kind: "save", url: "/links/delete", body: { id: "5" } };
+    const t = talk(() => ({ status: 204 }), {
+      stored: saved({
+        entries: [
+          old({ kind: "me", text: "save it" }),
+          old({
+            kind: "changes",
+            lines: [{ text: "Saved.", linkId: "5", undo }],
+            cards: { "5": CARD("5", "Kettle") },
+          }),
+        ],
+      }),
+    });
+    await t.clickEl(t.document.querySelector("button.ask-earlier"));
+    await t.clickEl(t.document.querySelector(".ask-earlier + * button.ask-undo"));
+    expect(t.net.calls.at(-1)).toEqual({ url: "/links/delete", method: "POST", body: { id: "5" } });
+    expect(t.document.querySelector(".ask-earlier + * .ask-faded")).not.toBeNull();
+    expect(t.document.querySelector(".ask-earlier + * .ask-undone")?.textContent).toBe("Undone.");
+  });
+
+  it("draws new entries after the earlier ones, outside the hidden box", async () => {
+    const t = talk(() => okAnswer({ segments: [{ text: "Fresh" }] }), {
+      stored: saved({
+        entries: [old({ kind: "me", text: "before" }), old({ kind: "reply", segments: [] })],
+      }),
+    });
+    await t.say("now");
+    const box = t.document.querySelector(".ask-earlier + *") as HTMLElement;
+    expect(box.hasAttribute("hidden")).toBe(true);
+    expect(box.textContent).not.toContain("Fresh");
+    expect(t.messages().lastElementChild?.textContent).toBe("Fresh");
+  });
+
+  it("shows no button for entries without an address, or all from this page", () => {
+    const plain = load({ stored: saved() });
+    expect(earlier(plain)).toBeNull();
+    const here2 = load({ stored: saved({ entries: [here({ kind: "me", text: "x" })] }) });
+    expect(earlier(here2)).toBeNull();
+    expect(here2.panel().messages.textContent).toBe("x");
+  });
+
+  it("clears the button and the entries on Start over", () => {
+    const p = load({ stored: saved({ entries: [old({ kind: "me", text: "before" })] }) });
+    expect(earlier(p)).not.toBeNull();
+    p.click("ask-restart");
+    expect(earlier(p)).toBeNull();
+    expect(p.panel().messages.children).toHaveLength(0);
   });
 });

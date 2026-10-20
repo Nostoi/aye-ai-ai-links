@@ -225,7 +225,7 @@ describe("what the answer leaves out", () => {
 });
 
 it("tells the in-app AI how to show a link", () => {
-  expect(IN_APP_INSTRUCTIONS).toContain("write [[link:ID]] on its own line");
+  expect(IN_APP_INSTRUCTIONS).toContain("put [[link:ID]] on its own line");
 });
 
 describe("GET /ai/card/:id", () => {

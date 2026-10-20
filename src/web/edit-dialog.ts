@@ -247,7 +247,7 @@ const showCard = (target, answer) => {
   tile.replaceWith(next);
 };
 const giveFocusBack = () => {
-  if (opener && opener.isConnected) opener.focus();
+  ${panel ? 'const askText = document.getElementById("ask-text");\n  if (opener && opener.isConnected && !opener.closest("[hidden]")) opener.focus();\n  else if (askText && !askText.closest("[hidden]")) askText.focus();\n  else document.body.focus();' : "if (opener && opener.isConnected) opener.focus();"}
 };
 const finish = () => {
   dropPick();
@@ -272,7 +272,7 @@ const open = (from, menu) => {
   editError.textContent = "";
   syncBusy();
   render();
-  dialog.showModal();
+  ${panel ? "if (!dialog.open) " : ""}dialog.showModal();
   titleField.focus();
 };
 ${panel ? "if (editRoot) " : ""}editRoot.addEventListener("click", (event) => {
@@ -413,10 +413,11 @@ form.addEventListener("submit", async (event) => {
 /**
  * The panel's side of the dialog, with the AI on. The contract with the Ask AI panel's script
  * (ask-panel.ts), both events on document:
- * - "aye-edit", { card, opener, note }: open on the panel's card, without Delete link; focus goes
- *   back to opener, and a refusal that comes once the dialog closed, or a failed Undo, goes in note.
- * - "aye-edited", { id }: sent after every Save or Undo answered, so the panel reads its cards for
- *   that link again.
+ * - "aye-edit", { id, read, opener, note }: open at once, busy and without Delete link, and fill
+ *   from the card read resolves to; on "failed" or "gone" close again. Focus goes back to opener.
+ * - "aye-note", { note, text }: the panel writes text into a line's note.
+ * - "aye-edited", { id, note }: sent after every Save or Undo answered, so the panel reads its cards for
+ *   that link again; note is there when the panel opened the dialog.
  * A save updates the page's own cards for the link too. Its Undo is offered while any card for
  * the link is on the page, since the panel replaces its cards when it reads them again.
  */
@@ -432,26 +433,43 @@ const shown = (target, answer) => {
       if (c !== target && c.getAttribute("data-id") === id) showCard(c, answer);
     }
   }
-  document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id } }));
+  document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id, note: notes.get(target) } }));
 };
 const tell = (target, message) => {
   const note = notes.get(target);
-  if (note) document.dispatchEvent(new CustomEvent("aye-note", { detail: { note } }));
-  if (note) note.textContent = message;
+  if (note) document.dispatchEvent(new CustomEvent("aye-note", { detail: { note, text: message } }));
   else if (editAlert) editAlert.textContent = message;
 };
-if (editRoot) {
-  editRoot.addEventListener("click", (event) => {
-    if (event.target.closest(".card-menu button[data-act=edit]")) document.dispatchEvent(new CustomEvent("aye-editing"));
-  });
-}
-document.addEventListener("aye-edit", (event) => {
-  if (dialog.open) return;
-  const { card: from, opener: by, note } = event.detail;
-  notes.set(from, note);
-  open(from, by);
+const UNREAD = { failed: ${JSON.stringify("Couldn't load this link. Try again.")}, gone: ${JSON.stringify("This link was deleted.")} };
+document.addEventListener("aye-edit", async (event) => {
+  const { read, opener: by, note } = event.detail;
+  card = null;
   opener = by;
+  const turn = ++saveTurn;
+  saving = true;
+  dropPick();
+  picture = null;
+  dragDepth = 0;
+  titleField.value = "";
+  pageLine.hidden = true;
+  for (const old of preview.querySelectorAll("img, .edit-initials")) old.remove();
+  chip.hidden = true;
+  removeButton.hidden = true;
+  editError.textContent = "";
   deleteRow.hidden = true;
+  syncBusy();
+  dialog.showModal();
+  titleField.focus();
+  const got = await read;
+  if (turn !== saveTurn) return;
+  if (typeof got === "string") {
+    finish();
+    document.dispatchEvent(new CustomEvent("aye-note", { detail: { note, text: UNREAD[got] ?? UNREAD.failed } }));
+    return;
+  }
+  notes.set(got, note);
+  open(got, by);
+  opener = by;
 });
 dialog.addEventListener("close", () => {
   deleteRow.hidden = false;

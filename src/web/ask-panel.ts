@@ -394,10 +394,11 @@ export const ASK_SCRIPT = `<script>
 
   // Edit (#183) opens the page's one edit dialog on a change line's link. The contract with the
   // dialog's script (edit-dialog.ts):
-  // - "aye-edit" on document, { card, opener, note }: the panel asks the dialog to open on its
-  //   card; focus goes back to opener, and a refusal that comes once the dialog closed goes in note.
-  // - "aye-edited" on document, { id }: the dialog saved or undid an edit to that link; the panel
-  //   reads its cards for it again.
+  // - "aye-edit" on document, { id, read, opener, note }: the dialog opens at once, busy, and fills
+  //   from the card read resolves to, or closes on "failed" or "gone"; focus goes back to opener.
+  // - "aye-note" on document, { note, text }: the panel writes text into the line's note.
+  // - "aye-edited" on document, { id, note }: the dialog saved or undid an edit to that link; the panel
+  //   reads its cards for it again, and note is there when the panel opened the dialog.
   // Edit is offered for a link the AI saved or changed whose card the panel shows, and never for a
   // link whose save was undone or that turned out deleted.
   const gone = new Set();
@@ -458,11 +459,6 @@ export const ASK_SCRIPT = `<script>
     bumpRead(id);
     newest.set(id, Promise.resolve("gone"));
   };
-  const editNotes = new Map();
-  let presses = 0;
-  document.addEventListener("aye-editing", () => {
-    presses += 1;
-  });
   const reveal = (el) => {
     const box = el.closest(".ask-earlier-entries");
     if (box && box.hidden) box.previousElementSibling.click();
@@ -472,26 +468,23 @@ export const ASK_SCRIPT = `<script>
     note.textContent = text;
   };
   document.addEventListener("aye-note", (event) => {
-    if (isObj(event.detail) && event.detail.note) reveal(event.detail.note);
+    const { note, text } = isObj(event.detail) ? event.detail : {};
+    if (note && typeof text === "string") say(note, text);
   });
-  const runEdit = async (id, button, note, block) => {
-    const press = ++presses;
-    note.textContent = "";
+  const readCard = async (id, block) => {
     let read = await refreshCard(id);
     while (read === "stale") read = await newest.get(id);
     if (read === "gone") {
       gone.add(id);
       dropEdits(id);
-      say(note, "This link was deleted.");
-      return;
+      return "gone";
     }
-    if (press !== presses) return;
-    if (read === "failed") say(note, "Couldn't load this link. Try again.");
-    if (read !== "ok" || !button.isConnected) return;
-    const card = panelCard(id, block);
-    if (!card) return;
-    editNotes.set(id, note);
-    document.dispatchEvent(new CustomEvent("aye-edit", { detail: { card, opener: button, note } }));
+    return (read === "ok" && panelCard(id, block)) || "failed";
+  };
+  const runEdit = (id, button, note, block) => {
+    note.textContent = "";
+    const read = readCard(id, block);
+    document.dispatchEvent(new CustomEvent("aye-edit", { detail: { id, read, opener: button, note } }));
   };
   document.addEventListener("aye-edited", async (event) => {
     const id = isObj(event.detail) ? event.detail.id : null;
@@ -501,7 +494,7 @@ export const ASK_SCRIPT = `<script>
       drawn = true;
     });
     if (!drawn) return;
-    const note = editNotes.get(id);
+    const note = event.detail.note;
     if ((await refreshCard(id)) === "failed" && note) {
       say(note, "This card couldn't be refreshed. Reload to see the change.");
     }

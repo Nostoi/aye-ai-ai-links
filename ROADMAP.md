@@ -28,7 +28,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - **O2.** Edit appears only under the change lines for links the AI saved or changed. Cards in a plain answer get no buttons.
     - **E1** (in chat). Opened from the panel, the dialog doesn't show Delete link. This reads O1's "unchanged" as covering what the dialog edits.
   - **Rulings after the solution challenge** (REVISE):
-    - **E2.** Pressing Edit first reads the link's card again (`GET /ai/card/:id`) and replaces every panel card for it; the dialog opens on that fresh card. If the read fails, nothing opens and the line says "Couldn't load this link. Try again."; on a 404 it says "This link was deleted." and E4 applies.
+    - **E7** (replaces E2). Pressing Edit reads the link's card again (`GET /ai/card/:id`) and replaces every panel card for it. The dialog opens at once and waits, busy, then fills from that fresh card. If the link can't be read, it closes and the line says why: "Couldn't load this link. Try again.", or on a 404 "This link was deleted." and E4 applies.
     - **E3.** Reads of one link's card are numbered, and only the latest one started is drawn and stored. That covers the dialog's Save and Undo, the panel's Undo and E2.
     - **E4.** When a save's Undo deletes the link, every line's Edit for it goes, and a redraw shows none.
     - **E5.** With the AI on, the dialog's Undo bar follows the link, not the card element: a late Save still offers Undo while any card for the link is on the page.

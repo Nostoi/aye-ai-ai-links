@@ -324,7 +324,7 @@ describe("Edit in the panel, on Home", () => {
     expect(page.focused().at(-1)).toBe(editButton(page));
   });
 
-  it("says it couldn't load the link, and opens nothing, when the card can't be read", async () => {
+  it("says it couldn't load the link, and leaves the dialog closed, when the card can't be read", async () => {
     const { page, dialog } = onPage(home(), { "/ai/card/1": { status: 500 } });
     await pressEdit(page);
     expect(dialog.open).toBeFalsy();
@@ -332,7 +332,7 @@ describe("Edit in the panel, on Home", () => {
     expect(editButton(page)).not.toBeNull();
   });
 
-  it("says the link was deleted, removes its Edit and opens nothing, when the card is gone", async () => {
+  it("says the link was deleted, removes its Edit and leaves the dialog closed, when the card is gone", async () => {
     const { page, dialog } = onPage(home(), {
       "/ai/card/1": { status: 404, body: { code: "not_found" } },
     });
@@ -689,7 +689,7 @@ describe("the panel's card reads, per link", () => {
     expect(titleField(page).value).toBe("Read 2");
   });
 
-  it("drops a read still on its way when the save is undone: the card stays faded and no dialog opens", async () => {
+  it("drops a read still on its way when the save is undone: the card stays faded and the dialog ends closed", async () => {
     const { wait, release } = held();
     const { page, dialog } = onPage(home(), { "/ai/card/1": { ...fresh(), wait } });
     page.dispatch(editButton(page), "click");
@@ -706,7 +706,7 @@ describe("the panel's card reads, per link", () => {
     expect(storedCard(page)).toBe(panelCard("1", "Link 1", "v1"));
   });
 
-  it("a late panel read never takes over a dialog opened from a page card's ⋯ since", async () => {
+  it("a late panel read never takes over a dialog opened from a page card's ⋯ after the busy one was cancelled", async () => {
     const { wait, release } = held();
     const html = allPage({
       ...list,
@@ -722,6 +722,8 @@ describe("the panel's card reads, per link", () => {
       "/links/edit": { status: 200, body: editAnswer("Two") },
     });
     page.dispatch(editButton(page), "click");
+    expect(dialog.open).toBe(true);
+    cancel(page);
     page.dispatch(page.$('#all-links [data-id="2"] button[data-act=edit]'), "click");
     titleField(page).value = "Two";
     release();
@@ -918,5 +920,123 @@ describe("the panel's card reads, per link", () => {
     await page.settle();
     const undo = page.sent.find((s) => s.url === "/links/edit/undo");
     expect(undo?.body).toEqual({ id: "1", editId: "e1" });
+  });
+});
+
+describe("Edit opens the dialog at once and waits for the card (E7)", () => {
+  const busy = (page: Page) => ({
+    save: (page.$("#edit-link [data-edit=save].primary") as HTMLButtonElement).disabled,
+    readonly: titleField(page).hasAttribute("readonly"),
+    choose: (page.$("[data-edit=choose]") as HTMLButtonElement).disabled,
+  });
+  const pressHeld = (answer: Answer, stored: unknown = savedOne()) => {
+    const { wait, release } = held();
+    const { page, dialog } = onPage(home(), { "/ai/card/1": { ...answer, wait } }, stored);
+    let edits = 0;
+    page.document.addEventListener("aye-edit", () => {
+      edits += 1;
+    });
+    page.dispatch(editButton(page), "click");
+    return { page, dialog, release, edits: () => edits };
+  };
+
+  it("opens busy on the press, then fills from the card and saves that link", async () => {
+    const { page, dialog, release } = pressHeld(fresh());
+    expect(dialog.open).toBe(true);
+    expect(busy(page)).toEqual({ save: true, readonly: true, choose: true });
+    expect(page.$(".edit-delete-row").hidden).toBe(true);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(true);
+    expect(titleField(page).value).toBe("Fresh");
+    expect(busy(page)).toEqual({ save: false, readonly: false, choose: false });
+    await save(page, "New");
+    expect(postedId(page)).toBe("1");
+  });
+
+  it("opens nothing when the busy dialog was cancelled before the card came", async () => {
+    const { page, dialog, release, edits } = pressHeld(fresh());
+    expect(dialog.open).toBe(true);
+    cancel(page);
+    expect(dialog.open).toBe(false);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
+    expect(edits()).toBe(1);
+    expect(page.focused().at(-1)).toBe(editButton(page));
+  });
+
+  it("closes again when the card can't be read, and the line says why", async () => {
+    const { page, dialog, release } = pressHeld({ status: 500 });
+    expect(dialog.open).toBe(true);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
+    expect(note(page).textContent).toBe("Couldn't load this link. Try again.");
+    expect(page.focused().at(-1)).toBe(editButton(page));
+  });
+
+  it("closes again when the link is gone, removes its Edit, and the line says so", async () => {
+    const { page, dialog, release } = pressHeld({ status: 404, body: { code: "not_found" } });
+    expect(dialog.open).toBe(true);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
+    expect(note(page).textContent).toBe("This link was deleted.");
+    expect(page.document.querySelectorAll(".ask-edit")).toHaveLength(0);
+    expect(page.focused().at(-1)).toBe(page.$("#ask-text"));
+  });
+
+  it("Esc while busy closes the dialog, not the panel, and the late card opens nothing", async () => {
+    const { page, dialog, release } = pressHeld(fresh());
+    expect(dialog.open).toBe(true);
+    page.dispatch(titleField(page), "keydown", { key: "Escape" });
+    dialog.close();
+    expect(page.$("#ask-panel").hidden).toBe(false);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
+  });
+
+  it("a page ⋯ edit whose card read fails writes no line note and leaves a folded box folded", async () => {
+    let reads = 0;
+    const html = allPage({
+      ...list,
+      links: ONE,
+      done: false,
+      pictures: new Map([["1", { own: false, pageVersion: null, pageFit: null }]]),
+    });
+    const stored = {
+      ...savedOne(),
+      entries: (savedOne().entries as Record<string, unknown>[]).map((e) => ({
+        ...e,
+        path: "/tags",
+        place: "Tags",
+      })),
+    };
+    const { page } = onPage(
+      html,
+      {
+        "/ai/card/1": () => {
+          reads += 1;
+          return reads === 1 ? fresh() : { status: 500 };
+        },
+        "/links/edit": { status: 200, body: editAnswer("New") },
+      },
+      stored,
+    );
+    const toggle = page.$("#ask-messages .ask-earlier");
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    page.dispatch(toggle, "click");
+    page.dispatch(box.querySelector(".ask-edit") as Element, "click");
+    await page.settle();
+    cancel(page);
+    page.dispatch(toggle, "click");
+    expect(box.hidden).toBe(true);
+    page.dispatch(page.$('#all-links [data-id="1"] button[data-act=edit]'), "click");
+    await save(page, "New");
+    expect(reads).toBe(2);
+    expect(box.hidden).toBe(true);
+    expect(box.querySelector(".ask-note")?.textContent).toBe("");
   });
 });

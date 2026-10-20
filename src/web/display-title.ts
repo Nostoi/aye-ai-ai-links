@@ -1,4 +1,4 @@
-import { titleFits } from "../core/links.js";
+import { TITLE_MAX, titleFits } from "../core/links.js";
 import type { Link } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 
@@ -16,6 +16,9 @@ const decode = (segment: string) => {
   }
 };
 
+/** Control characters become spaces, and runs of whitespace one space. */
+const plain = (text: string) => text.replace(/[\p{Cc}\s]+/gu, " ").trim();
+
 const PAGE_EXTENSION = /\.(html?|php|aspx?|jsp)$/i;
 const POST_SITE = /^(x|twitter)\.com$/i;
 
@@ -31,13 +34,13 @@ function fromAddress(url: string): string | null {
   const site = parsed.hostname.replace(/^www\./i, "");
   const [first, kind, id, ...rest] = parsed.pathname.split("/").filter(Boolean);
   if (POST_SITE.test(site) && first && first !== "i" && kind === "status" && id && !rest.length) {
-    return `Post by @${decode(first)}`;
+    const user = plain(decode(first));
+    if (user !== "") return `Post by @${user}`;
   }
   const last = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
-  const words = decode(last).replace(PAGE_EXTENSION, "").replace(/[-_]+/g, " ").trim();
-  return /\p{L}/u.test(words)
-    ? `${words.charAt(0).toUpperCase()}${words.slice(1)} — ${site}`
-    : site;
+  const words = plain(decode(last).replace(PAGE_EXTENSION, "").replace(/[-_]+/g, " "));
+  const built = `${words.charAt(0).toUpperCase()}${words.slice(1)} — ${site}`;
+  return /\p{L}/u.test(words) && [...built].length <= TITLE_MAX ? built : site;
 }
 
 /**

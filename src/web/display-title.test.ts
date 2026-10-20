@@ -95,4 +95,31 @@ describe("displayTitle", () => {
       expect(displayTitle(link(u)), u).not.toMatch(/https?:\/\//);
     }
   });
+
+  it("keeps a stored title that only ends in an address", () => {
+    expect(displayTitle(link("https://a.com/x", "Read: https://a.com/x"))).toBe(
+      "Read: https://a.com/x",
+    );
+  });
+
+  it("keeps the extension of a file that is not a page", () => {
+    expect(displayTitle(link("https://example.com/report.pdf"))).toBe("Report.pdf — example.com");
+  });
+
+  it("names a post only for exactly /<user>/status/<id>, and joins a doubled separator into one space", () => {
+    expect(displayTitle(link("https://x.com/u/status/1/photo/1"))).toBe("x.com");
+    expect(displayTitle(link("https://example.com/a--b"))).toBe("A b — example.com");
+  });
+
+  it("falls back to the site when the built title would be longer than a stored title may be", () => {
+    expect(displayTitle(link(`https://a.com/${"a".repeat(5000)}`))).toBe("a.com");
+    const fits = "a".repeat(150);
+    expect(displayTitle(link(`https://a.com/${fits}`))).toBe(`A${fits.slice(1)} — a.com`);
+  });
+
+  it("drops control characters from a built title", () => {
+    expect(displayTitle(link("https://a.com/one%0Atwo%00three"))).toBe("One two three — a.com");
+    expect(displayTitle(link("https://x.com/al%0Aice/status/1"))).toBe("Post by @al ice");
+    expect(displayTitle(link("https://a.com/%0A%00"))).toBe("a.com");
+  });
 });

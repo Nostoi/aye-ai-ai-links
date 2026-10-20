@@ -74,6 +74,19 @@ export interface LinkStore {
   fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled): Promise<Link | null>;
 
   /**
+   * `fillWhyIfMissing`, for the in-app AI, with a receipt. When this call's own write set the
+   * why, it replaces the link's edit record with one that puts the why back to null, and returns
+   * its id. Otherwise (a why was already there, so nothing was written) `editId` is null and an
+   * existing record stays. Null when absent or foreign.
+   */
+  fillWhyWithReceipt(
+    owner: OwnerId,
+    id: string,
+    why: Labelled,
+    at: Date,
+  ): Promise<{ link: Link; editId: string | null } | null>;
+
+  /**
    * The owner's whole tag catalog, ordered by key. Another owner's tags never
    * appear; an owner with no tags (or an unknown one) yields [], never an error.
    */

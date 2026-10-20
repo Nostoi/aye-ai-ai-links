@@ -435,17 +435,39 @@ export class FakeStore
     const after = coveredOf(link);
     const changed = changedFields(before, after);
     if (!anyChanged(changed)) return { link, editId: null };
+    return { link, editId: this.recordReceipt(owner, id, changed, before, after) };
+  }
+
+  private recordReceipt(
+    owner: OwnerId,
+    id: string,
+    changed: Changed,
+    prior: Covered,
+    written: Covered,
+  ): string {
     const editId = randomUUID();
     this.editRecords.set(imageKey(owner, id), {
       editId,
       changed,
-      prior: before,
-      written: after,
+      prior,
+      written,
       pictureChanged: false,
       priorPicture: null,
       writtenSha: null,
     });
-    return { link, editId };
+    return editId;
+  }
+
+  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, _at: Date) {
+    const found = this.owned(owner).get(id);
+    if (!found) return null;
+    const before = coveredOf(this.view(owner, found));
+    const filled = found.why === null;
+    const link = (await this.fillWhyIfMissing(owner, id, why)) as Link;
+    if (!filled) return { link, editId: null };
+    const after = coveredOf(link);
+    const changed = changedFields(before, after);
+    return { link, editId: this.recordReceipt(owner, id, changed, before, after) };
   }
 
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {

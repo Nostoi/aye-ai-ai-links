@@ -122,6 +122,23 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();
   }
 
+  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, at: Date) {
+    const n = parseId(id);
+    if (n === null) return null;
+    return this.db
+      .transaction(() => {
+        const before = readCovered(this.db, owner, n);
+        const filled = this.fillRow(owner, n, why);
+        const link = this.read(owner, n);
+        if (!before || !link) return null;
+        const editId = filled
+          ? writeReceipt(this.db, owner, n, changedFields(before, link), before, link, at)
+          : null;
+        return { link, editId };
+      })
+      .immediate();
+  }
+
   async markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean> {
     const n = parseId(id);
     if (n === null) return false;
@@ -548,13 +565,19 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
   }
 
   private fillSync(owner: OwnerId, id: number, why: Labelled): Link | null {
-    this.db
+    this.fillRow(owner, id, why);
+    return this.read(owner, id);
+  }
+
+  /** True when this call's UPDATE set the why. */
+  private fillRow(owner: OwnerId, id: number, why: Labelled): boolean {
+    const { changes } = this.db
       .prepare(
         `UPDATE links SET why_text = ?, why_source = ?
          WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND why_text IS NULL`,
       )
       .run(why.text, why.source, id, owner);
-    return this.read(owner, id);
+    return changes === 1;
   }
 
   private claimSync(

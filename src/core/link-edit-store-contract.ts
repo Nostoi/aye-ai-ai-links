@@ -10,7 +10,7 @@ import type { LinkEditStore } from "./link-edit-store.js";
 import type { SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
 import type { LinkRemover, LinkStore } from "./store.js";
-import type { LinkTag } from "./types.js";
+import type { Labelled, LinkTag } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
@@ -484,6 +484,58 @@ export function describeLinkEditStoreContract(
       it("answers ids never issued with null", async () => {
         for (const id of ["0", "abc", "999", "-1"]) {
           expect(await receipt(A, id, { summary: "x" })).toBeNull();
+        }
+      });
+    });
+
+    describe("receipts for a fill (fillWhyWithReceipt)", () => {
+      const first = { text: "first why", source: "stated" as const };
+      const second = { text: "second why", source: "inferred" as const };
+      const fill = (owner: string, id: string, why: Labelled = first) =>
+        h.links.fillWhyWithReceipt(owner, id, why, at(20));
+
+      it("a fill returns an id, and Undo puts the why back to null", async () => {
+        const id = await linkWith(A);
+        const result = await fill(A, id);
+        expect(result?.link.why).toEqual(first);
+        expect(await h.edits.undoEdit(A, id, await editId(Promise.resolve(result)))).toBe("undone");
+        expect((await h.links.get(A, id))?.why).toBeNull();
+      });
+
+      it("two fills race: the second returns no id, and Undo of the first works", async () => {
+        const id = await linkWith(A);
+        const a = await editId(fill(A, id));
+        const b = await fill(A, id, second);
+        expect(b?.editId).toBeNull();
+        expect(b?.link.why).toEqual(first);
+        expect(await h.edits.undoEdit(A, id, a)).toBe("undone");
+        expect((await h.links.get(A, id))?.why).toBeNull();
+      });
+
+      it("a fill on a link that has a why returns no id and leaves an existing record", async () => {
+        const id = await linkWith(A);
+        const edit = await editId(h.links.updateWithReceipt(A, id, { summary: "s" }, at(10)));
+        await h.links.update(A, id, { why: { text: "had", source: "asked" } });
+        const result = await fill(A, id);
+        expect(result?.editId).toBeNull();
+        expect(result?.link.why).toEqual({ text: "had", source: "asked" });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect((await h.links.get(A, id))?.summary).toBeNull();
+      });
+
+      it("another owner's link and a deleted link give null, writing nothing", async () => {
+        const id = await linkWith(A);
+        expect(await fill(B, id)).toBeNull();
+        expect((await h.links.get(A, id))?.why).toBeNull();
+        expect(await h.links.markDeleted(A, id, at(30))).toBe(true);
+        expect(await fill(A, id)).toBeNull();
+        expect(await h.links.unmarkDeleted(A, id, at(30))).toBe(true);
+        expect((await h.links.get(A, id))?.why).toBeNull();
+      });
+
+      it("answers ids never issued with null", async () => {
+        for (const id of ["0", "abc", "999", "-1"]) {
+          expect(await fill(A, id)).toBeNull();
         }
       });
     });

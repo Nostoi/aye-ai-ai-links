@@ -159,6 +159,58 @@ describe("two owners and a deleted link", () => {
   });
 });
 
+describe("what the answer leaves out", () => {
+  const row = {
+    status: "declined" as const,
+    source: "stated" as const,
+    since: new Date("2026-10-01T00:00:00Z"),
+    answeredAt: null,
+    waitDays: 30 as const,
+  };
+  const unchanged: Change = { kind: "handy", linkId: "5", change: { tool: row, previous: row } };
+
+  it("drops a Keep handy change that left the row as it was, so a failed turn says it didn't answer", async () => {
+    const world = await oauthWorld();
+    const failed = {
+      ok: false as const,
+      reason: "it took too long",
+      changes: [unchanged],
+      seen: [],
+    };
+    const answer = await chatAnswer(linkDeps(world), A, "Fake", failed);
+    expect(answer).toMatchObject({
+      ok: false,
+      message: "Fake didn't answer: it took too long.",
+      remember: "Fake didn't answer: it took too long.",
+      changes: [],
+    });
+  });
+
+  it("keeps the answer and its changes when a card can't be read", async () => {
+    const world = await oauthWorld();
+    const deps = linkDeps(world);
+    const broken = {
+      images: deps.images,
+      store: {
+        get: () => Promise.reject(new Error("disk")),
+        listTags: (owner: string) => deps.store.listTags(owner),
+      },
+    };
+    const saved: Change = {
+      kind: "link",
+      tool: "save_link",
+      linkId: "5",
+      created: true,
+      fields: [],
+      editId: null,
+    };
+    const ok = { ok: true as const, reply: "Saved [[link:5]]", changes: [saved], seen: ["5"] };
+    const answer = await chatAnswer(broken, A, "Fake", ok);
+    expect(answer).toMatchObject({ ok: true, segments: [{ text: "Saved " }], changes: [saved] });
+    expect(answer.cards).toEqual({});
+  });
+});
+
 it("tells the in-app AI how to show a link", () => {
   expect(IN_APP_INSTRUCTIONS).toContain("write [[link:ID]] on its own line");
 });

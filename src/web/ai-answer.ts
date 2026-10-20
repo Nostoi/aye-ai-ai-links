@@ -1,7 +1,7 @@
 import type { TurnResult } from "../ai/chat-turn.js";
 import type { OwnerId } from "../core/types.js";
 import type { Change } from "../mcp/changes.js";
-import { type AskCardDeps, askCard, loadCard } from "./ai-card.js";
+import { type AskCardDeps, loadCard } from "./ai-card.js";
 
 export type Segment = { text: string } | { card: string };
 export type ChatAnswer =
@@ -25,6 +25,23 @@ export type ChatAnswer =
 const MARKER = /\[\[link:(\d+)\]\]/g;
 const edgeBlanks = (text: string) =>
   text.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
+
+/** A card that can't be read is left out; the answer and its changes still reach the owner. */
+async function readCard(deps: AskCardDeps, owner: OwnerId, id: string) {
+  try {
+    return await loadCard(deps, owner, id);
+  } catch (error) {
+    console.error("[ai-chat] a card couldn't be read:", error);
+    return null;
+  }
+}
+
+/** Core answers a Keep handy request it declines with the row as it was; that wrote nothing. */
+const wroteSomething = (change: Change) =>
+  change.kind !== "handy" ||
+  (["status", "source", "since", "answeredAt", "waitDays"] as const).some(
+    (key) => String(change.change.tool[key]) !== String(change.change.previous?.[key]),
+  );
 
 /** The id (or name) a change line names. */
 const changeSubject = (change: Change): string => {
@@ -62,7 +79,7 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     remembered += between;
     const id = match[1] ?? "";
     if (!seen.has(id) || shown.has(id)) continue;
-    const loaded = await loadCard(deps, owner, id);
+    const loaded = await readCard(deps, owner, id);
     if (!loaded) continue;
     shown.add(id);
     flush();
@@ -82,7 +99,7 @@ export async function chatAnswer(
   ai: string,
   result: TurnResult,
 ): Promise<ChatAnswer> {
-  const { changes } = result;
+  const changes = result.changes.filter(wroteSomething);
   const parts = result.ok
     ? await split(deps, owner, result.reply, new Set(result.seen))
     : { segments: [], shown: new Set<string>(), remembered: "" };
@@ -91,8 +108,8 @@ export async function chatAnswer(
     if (change.kind !== "link" && change.kind !== "handy") continue;
     const id = change.linkId;
     if (parts.shown.has(id) || id in cards) continue;
-    const html = await askCard(deps, owner, id);
-    if (html !== null) cards[id] = html;
+    const loaded = await readCard(deps, owner, id);
+    if (loaded) cards[id] = loaded.html;
   }
   if (result.ok) {
     const remember = parts.remembered.trim() || `${ai} gave no answer.`;

@@ -35,8 +35,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
       - Cards are rendered on the server, and `GET /ai/card/:id` re-reads one after an Undo. That route is mounted whether or not an AI is set up.
     - **Every change gets a line,** including `get_digest`'s "Marked N links as shown in today's picks."
       - Keep handy and profile lines follow the change's status and source, so a suggestion or an inferred note reads as a guess.
-      - Tag changes carry no source, so a tag line never says "(a guess)".
-    - **Undo.**
+      - Tag changes carry no source, so a tag line never says "(a guess)".    - **Undo.**
       - A new save: deletes the link, even if it was edited since (the spec's accepted design).
       - A field edit: `/links/edit/undo`.
       - Keep handy: `/tools/undo`, with the change's own rows.

@@ -574,17 +574,6 @@ describe("the change lines", () => {
     expect(t.lines()).toEqual([`${words}Undo`]);
   });
 
-  it("lists no handy change that left the row as it was, so offers no Undo for it", async () => {
-    const row = { ...ROW, status: "declined", source: "stated" };
-    const t = await lineFor({
-      kind: "handy",
-      linkId: "5",
-      change: { tool: row, previous: { ...row } },
-    });
-    expect(t.lines()).toEqual([]);
-    expect(t.messages().querySelector("button")).toBeNull();
-  });
-
   it("names a tag's kind and links to Tags, with no Undo", async () => {
     const t = await lineFor({ kind: "tag", name: "garden", tagKind: "project" });
     expect(t.lines()).toEqual(["Made garden a project.Tags"]);

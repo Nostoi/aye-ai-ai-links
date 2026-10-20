@@ -1,4 +1,4 @@
-import { TITLE_MAX, titleFits } from "../core/links.js";
+import { titleFits } from "../core/links.js";
 import type { Link } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 
@@ -19,8 +19,6 @@ const decode = (segment: string) => {
 /** Control characters become spaces, and runs of whitespace one space. */
 const plain = (text: string) => text.replace(/[\p{Cc}\s]+/gu, " ").trim();
 
-const short = (title: string) => [...title].length <= TITLE_MAX;
-
 const PAGE_EXTENSION = /\.(html?|php|aspx?|jsp)$/i;
 const POST_SITE = /^(x|twitter)\.com$/i;
 
@@ -37,12 +35,12 @@ function fromAddress(url: string): string | null {
   const [first, kind, id, ...rest] = parsed.pathname.split("/").filter(Boolean);
   if (POST_SITE.test(site) && first && first !== "i" && kind === "status" && id && !rest.length) {
     const post = `Post by @${plain(decode(first))}`;
-    if (post !== "Post by @" && short(post)) return post;
+    if (post !== "Post by @" && titleFits(post)) return post;
   }
   const last = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
   const words = plain(decode(last).replace(PAGE_EXTENSION, "").replace(/[-_]+/g, " "));
   const built = `${words.charAt(0).toUpperCase()}${words.slice(1)} — ${site}`;
-  return /\p{L}/u.test(words) && short(built) ? built : site;
+  return /\p{L}/u.test(words) && titleFits(built) ? built : site;
 }
 
 /**

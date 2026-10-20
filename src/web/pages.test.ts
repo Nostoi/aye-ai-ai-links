@@ -496,15 +496,14 @@ describe("openings from search results (#124)", () => {
 describe("Keep handy on search results", () => {
   const kept = { status: "kept", source: "stated", due: false } as const;
   const shownIn = (html: string, id: string) => {
-    const c = parseHTML(html).document.querySelector(`[data-id="${id}"] [data-handy]`);
-    if (!c) return null;
-    const keep = c.querySelector("button[data-act=keep]") as HTMLElement;
-    return (keep.hidden ? c.querySelector(".handy-on")?.textContent : keep.textContent)
-      ?.replace(/\s+/g, " ")
-      .trim();
+    const c = parseHTML(html).document.querySelector(`[data-id="${id}"] .card-menu`);
+    const rows = [
+      ...(c?.querySelectorAll("button[data-act=keep], button[data-act=not-handy]") ?? []),
+    ].filter((b) => !b.hasAttribute("hidden"));
+    return rows.length === 0 ? null : rows.map((b) => b.textContent).join(", ");
   };
 
-  it("gives each active result the control, kept ones reading Handy · Not handy anymore, and an archived result none", () => {
+  it("gives each active result's menu Keep handy, kept ones Not handy anymore, and an archived result neither", () => {
     const [plain, tool, done] = [
       link({ id: "1", url: "https://example.com/1" }),
       link({ id: "2", url: "https://example.com/2" }),
@@ -517,8 +516,9 @@ describe("Keep handy on search results", () => {
       handy: new Map([["2", kept]]),
     });
     expect(shownIn(html, "1")).toBe("Keep handy");
-    expect(shownIn(html, "2")).toBe("Handy · Not handy anymore");
+    expect(shownIn(html, "2")).toBe("Not handy anymore");
     expect(shownIn(html, "3")).toBeNull();
+    expect(parseHTML(html).document.querySelector("[data-handy]")).toBeNull();
   });
 
   it("has the Undo bar, one error line and one CARD_FETCH, so its scripts run together", () => {

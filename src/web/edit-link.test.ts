@@ -4,10 +4,12 @@ import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import { png } from "../core/image-test-kit.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
-import { cardMenu } from "./card-menu.js";
+import { cardMenu, DIVIDER } from "./card-menu.js";
 import { deleteLinkItem } from "./delete-link.js";
+import { DONE_ITEM } from "./done-link.js";
 import { EDIT_ITEM, editDialog, editMenu } from "./edit-link.js";
-import { handyShelf, NOT_HANDY } from "./handy-shelf.js";
+import { handyShelf } from "./handy-shelf.js";
+import { NOT_HANDY } from "./keep-handy.js";
 import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage, tile } from "./pages.js";
@@ -99,25 +101,62 @@ const data = (el: Element | undefined) =>
   );
 
 describe("the card menu and the card data", () => {
-  it("offers Read then Remove saved copy only with a copy, Remove being a button, and Delete link last", () => {
-    const labels = (html: string) =>
-      [...parseHTML(html).document.querySelectorAll(".card-menu-list > *")].map(
-        (e) => `${e.tagName} ${e.getAttribute("data-act")} ${e.textContent}`,
-      );
-    const withCopy = editMenu(link("7"), { madeAt: new Date(0) });
+  const labels = (html: string) =>
+    [...parseHTML(html).document.querySelectorAll(".card-menu-list > *")].map((e) =>
+      e.tagName === "HR"
+        ? "—"
+        : `${e.tagName} ${e.getAttribute("data-act")} ${e.textContent}${e.hasAttribute("hidden") ? " (hidden)" : ""}`,
+    );
+  const KEPT = { status: "kept", source: "stated", due: false } as const;
+
+  it("puts I'm done with it first, then Keep handy, Edit, the saved copy's rows and Delete link last", () => {
     expect(labels(editMenu(link("7")))).toEqual([
+      "BUTTON archive I'm done with it",
+      "BUTTON keep Keep handy",
+      "BUTTON not-handy Not handy anymore (hidden)",
+      "—",
       "BUTTON edit Edit title and picture…",
+      "—",
       "BUTTON delete-link Delete link",
     ]);
+    const withCopy = editMenu(link("7"), { madeAt: new Date(0) });
     expect(labels(withCopy)).toEqual([
+      "BUTTON archive I'm done with it",
+      "BUTTON keep Keep handy",
+      "BUTTON not-handy Not handy anymore (hidden)",
+      "—",
       "BUTTON edit Edit title and picture…",
       "A read-copy Read saved copy",
       "BUTTON remove-copy Remove saved copy",
+      "—",
       "BUTTON delete-link Delete link",
     ]);
+    const rows = parseHTML(withCopy).document.querySelectorAll(".card-menu-list > :not(hr)");
+    for (const row of rows) expect(row.querySelector("svg"), row.textContent ?? "").not.toBeNull();
+    // The menu stays neutral: no row carries a class, Delete link included.
+    expect(parseHTML(withCopy).document.querySelector(".card-menu-list")?.innerHTML).not.toContain(
+      "class=",
+    );
+  });
+
+  it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
+    expect(labels(editMenu(link("7"), undefined, KEPT)).slice(0, 3)).toEqual([
+      "BUTTON archive I'm done with it",
+      "BUTTON keep Keep handy (hidden)",
+      "BUTTON not-handy Not handy anymore",
+    ]);
+  });
+
+  it("drops the first group for a link you're done with: it can't be done again or kept", () => {
     expect(
-      parseHTML(withCopy).document.querySelector("button[data-act=remove-copy] svg"),
-    ).not.toBeNull();
+      labels(editMenu(link("7", { state: "archived" }), { madeAt: new Date(0) }, KEPT)),
+    ).toEqual([
+      "BUTTON edit Edit title and picture…",
+      "A read-copy Read saved copy",
+      "BUTTON remove-copy Remove saved copy",
+      "—",
+      "BUTTON delete-link Delete link",
+    ]);
   });
 
   it.each(["search", "all", "space"] as const)(
@@ -232,10 +271,13 @@ describe("the card menu and the card data", () => {
     });
     const shelfMenu = parseHTML(html).document.querySelector("details.card-menu")?.outerHTML;
     expect(shelfMenu).toBe(
-      parseHTML(cardMenu("More for Link 1", [NOT_HANDY])).document.querySelector("details")
-        ?.outerHTML,
+      parseHTML(cardMenu("More for Link 1", [DONE_ITEM, NOT_HANDY])).document.querySelector(
+        "details",
+      )?.outerHTML,
     );
-    expect(editMenu(link("1"))).toBe(cardMenu("More for Link 1", [EDIT_ITEM, deleteLinkItem]));
+    expect(editMenu(link("1", { state: "archived" }))).toBe(
+      cardMenu("More for Link 1", [EDIT_ITEM, DIVIDER, deleteLinkItem]),
+    );
   });
 });
 

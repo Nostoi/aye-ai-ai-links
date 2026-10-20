@@ -2,8 +2,10 @@ import type { ShownPicture } from "../core/image-store.js";
 import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
-import { cardMenu, type MenuItem } from "./card-menu.js";
+import { cardMenu } from "./card-menu.js";
+import { DONE_ITEM } from "./done-link.js";
 import { hostOf } from "./host.js";
+import { NOT_HANDY } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -51,12 +53,8 @@ const KEEP_HANDY = `<div class="ask">
 </div>
 </div>`;
 
-const MINUS = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>`;
-
-/** The Handy tile's one menu row. */
-export const NOT_HANDY: MenuItem = { act: "not-handy", icon: MINUS, text: "Not handy anymore" };
-
-const menu = (link: Link) => cardMenu(`More for ${link.title ?? link.url}`, [NOT_HANDY]);
+/** A kept tile's ⋯ menu: the link menu's first group (#192), with Keep handy already done. */
+const menu = (link: Link) => cardMenu(`More for ${link.title ?? link.url}`, [DONE_ITEM, NOT_HANDY]);
 
 /** The space's dot and the site's host, without the space's name (All links uses `siteLine`). */
 function hostLine(link: Link, space: Space | null): string {
@@ -210,7 +208,9 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    if (!make && act !== "done" && act !== "still-works") return;
+    // Done on a tile's ask and the menu's I'm done with it (archive) are the same action.
+    const done = act === "done" || act === "archive";
+    if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
     const id = tile.dataset.id;
     const after = tile.nextElementSibling;
@@ -219,7 +219,7 @@ if (handy) {
     button.disabled = true;
     let dropped = false;
     try {
-      if (act === "done") {
+      if (done) {
         const res = await post("/home/archive", { id });
         if (!res || res.status !== 204) {
           handyError.textContent = await failure(res);

@@ -9,9 +9,10 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
+import { doneLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
-import { handyControl, keepHandyScript } from "./keep-handy.js";
+import { keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
 import { siteLine, spaceClass, tile } from "./pages.js";
@@ -102,7 +103,7 @@ const monthName = (d: Date, now: Date) =>
     timeZone: "UTC",
   });
 
-/** One card: the picture or a tint, the title, the space and site, and Keep handy. No why. */
+/** One card: the picture or a tint, the title, the space and site, and the ⋯ menu. No why. */
 function card(
   link: Link,
   {
@@ -119,10 +120,10 @@ function card(
   const picture = images.get(link.id);
   return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
 ${tile(link, picture, "card-image")}
-${editMenu(link, copies.get(link.id))}
+${editMenu(link, copies.get(link.id), handy.get(link.id))}
 <div class="card-body">
 <h3>${linkTitle(link)}</h3>
-${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}${handyControl(link, handy.get(link.id))}</div>
+${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}</div>
 </li>`;
 }
 
@@ -197,7 +198,7 @@ ${input.ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
 ${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
-</script>
+${done ? "" : `${doneLinkScript("all-links", "all-error")}\n`}</script>
 ${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     {
       menu: true,

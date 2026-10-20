@@ -168,6 +168,7 @@ img.handy-image{background:#fff}
 .card-menu-list button,.card-menu-list a{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left;text-decoration:none}
 .card-menu-list button:hover,.card-menu-list button:focus-visible,.card-menu-list a:hover,.card-menu-list a:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
 .card-menu-list svg{flex:none;fill:none;stroke:var(--soft);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.card-menu-list hr{margin:4px 8px;border:0;border-top:1px solid var(--line)}
 @keyframes menu-in{from{opacity:0;transform:translateY(-4px) scale(.97)}}
 @media (prefers-reduced-motion:reduce){.card-menu-list{animation:none}.card-menu-dot{transition:none}}
 .handy-tile p{margin:0 0 4px}
@@ -361,29 +362,23 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <div class="card-image initials-box" aria-hidden="true"><span class="pic-initials">T1</span></div>
 <details class="card-menu">
 <summary><span class="card-menu-dot" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></span><span class="visually-hidden">More for Title 1</span></summary>
-<div class="card-menu-list"><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit title and picture…</button><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
+<div class="card-menu-list"><button type="button" data-act="archive"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>I&#39;m done with it</button><button type="button" data-act="keep"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>Keep handy</button><button type="button" data-act="not-handy" hidden><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>Not handy anymore</button><hr><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit title and picture…</button><hr><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
 </details>
 <div class="card-body">
 <h3><a href="https://example.com/1" target="_blank" rel="noopener noreferrer" data-open>Title 1</a></h3>
 <p class="card-site"><span class="dot" aria-hidden="true"></span>Kitchen, example.com</p>
-<div class="actions small-actions handy-control" data-handy>
-<button type="button" data-act="keep">Keep handy</button>
-<span class="handy-on" hidden>Handy · <button type="button" data-act="not-handy">Not handy anymore</button></span>
-</div></div>
+</div>
 </li>
 <li class="link-card all-card space-clay" data-id="2" data-title="Title 2" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T2">
 <div class="card-image initials-box" aria-hidden="true"><span class="pic-initials">T2</span></div>
 <details class="card-menu">
 <summary><span class="card-menu-dot" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></span><span class="visually-hidden">More for Title 2</span></summary>
-<div class="card-menu-list"><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit title and picture…</button><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
+<div class="card-menu-list"><button type="button" data-act="archive"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>I&#39;m done with it</button><button type="button" data-act="keep"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>Keep handy</button><button type="button" data-act="not-handy" hidden><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>Not handy anymore</button><hr><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit title and picture…</button><hr><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
 </details>
 <div class="card-body">
 <h3><a href="https://example.com/2" target="_blank" rel="noopener noreferrer" data-open>Title 2</a></h3>
 <p class="card-site"><span class="dot" aria-hidden="true"></span>Kitchen, example.com</p>
-<div class="actions small-actions handy-control" data-handy>
-<button type="button" data-act="keep">Keep handy</button>
-<span class="handy-on" hidden>Handy · <button type="button" data-act="not-handy">Not handy anymore</button></span>
-</div></div>
+</div>
 </li>
 </ul>
 </section>
@@ -442,19 +437,25 @@ const failure = async (res) => {
 {
 const keepRoot = document.getElementById("all-links");
 const keepError = document.getElementById("all-error");
-const showKept = (control, kept) => {
-  const keep = control.querySelector("button[data-act=keep]");
-  const on = control.querySelector(".handy-on");
-  keep.hidden = kept;
-  on.hidden = !kept;
-  (kept ? on.querySelector("button") : keep).focus();
+const showKept = (card, kept, menu) => {
+  for (const b of card.querySelectorAll("button[data-act=keep]")) b.hidden = kept;
+  for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
+  const control = card.querySelector("[data-handy]");
+  const on = control && control.querySelector(".handy-on");
+  if (on) on.hidden = !kept;
+  if (menu || !control) card.querySelector(".card-menu summary").focus();
+  else (kept ? on.querySelector("button") : control.querySelector("button[data-act=keep]")).focus();
 };
 if (keepRoot) {
   keepRoot.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-handy] button[data-act]");
+    const button = event.target.closest(
+      "[data-handy] button[data-act], .card-menu button[data-act=keep], .card-menu button[data-act=not-handy]",
+    );
     if (!button || button.disabled) return;
-    const control = button.closest("[data-handy]");
-    const id = control.closest("[data-id]").dataset.id;
+    const card = button.closest("[data-id]");
+    const id = card.dataset.id;
+    const menu = button.closest("details");
+    if (menu) menu.open = false;
     const keep = button.dataset.act === "keep";
     keepError.textContent = "";
     button.disabled = true;
@@ -462,15 +463,14 @@ if (keepRoot) {
     button.disabled = false;
     const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!moved || !moved.tool) {
-      button.focus();
+      (menu ? menu.querySelector("summary") : button).focus();
       keepError.textContent = await failure(res);
       return;
     }
-    showKept(control, keep);
-    if (keep) return;
-    showUndo("Not handy anymore.", async () => {
+    showKept(card, keep, menu);
+    showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", async () => {
       const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-      if (back && back.status === 204) showKept(control, true);
+      if (back && back.status === 204) showKept(card, !keep, menu);
       else keepError.textContent = await failure(back);
     });
   });
@@ -487,24 +487,25 @@ if (goneRoot) {
     const card = line.closest("[data-id]");
     const buttons = [...line.querySelectorAll("button")];
     if (buttons.some((b) => b.disabled)) return;
-    const id = card.dataset.id;
-    const works = button.dataset.act === "still-works";
-    const hide = works ? line : card;
-    goneError.textContent = "";
     buttons.forEach((b) => (b.disabled = true));
-    const res = await post(works ? "/links/still-works" : "/home/archive", { id });
+    if (button.dataset.act !== "still-works") {
+      await doneCard(card);
+      buttons.forEach((b) => (b.disabled = false));
+      return;
+    }
+    const id = card.dataset.id;
+    goneError.textContent = "";
+    const res = await post("/links/still-works", { id });
     buttons.forEach((b) => (b.disabled = false));
-    const moved = works && res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (works ? !moved || !moved.check : !res || res.status !== 204) {
+    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (!moved || !moved.check) {
       goneError.textContent = await failure(res);
       return;
     }
-    hide.hidden = true;
-    showUndo(works ? "Marked as working." : "Moved out of your list.", async () => {
-      const back = works
-        ? await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous })
-        : await post("/home/unarchive", { id });
-      if (back && back.status === 204) hide.hidden = false;
+    line.hidden = true;
+    showUndo("Marked as working.", async () => {
+      const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
+      if (back && back.status === 204) line.hidden = false;
       else goneError.textContent = await failure(back);
     });
   });
@@ -875,10 +876,32 @@ if (copyRoot) {
   });
 }
 }
-const deleteCard = (() => {
-  const busy = new WeakSet();
+const takeOut = (listRoot, card, remove) => {
   // A card moved out of the list ("I'm done with it") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
+  const parent = card.parentNode;
+  const next = card.nextElementSibling;
+  const cards = [...listRoot.querySelectorAll("[data-id]")];
+  const after = cards.slice(cards.indexOf(card) + 1).find(shown);
+  const nextMenu = after && after.querySelector(".card-menu summary");
+  if (nextMenu) nextMenu.focus();
+  else {
+    const heading = document.querySelector("h1");
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+  }
+  if (remove) card.remove();
+  else card.hidden = true;
+  const month = parent.closest("section.month");
+  if (month && ![...parent.children].some(shown)) month.hidden = true;
+  return () => {
+    if (remove) parent.insertBefore(card, next);
+    else card.hidden = false;
+    if (month) month.hidden = false;
+  };
+};
+const deleteCard = (() => {
+  const busy = new WeakSet();
   return async (card) => {
     if (busy.has(card)) return;
     const listRoot = document.getElementById("all-links");
@@ -892,26 +915,11 @@ const deleteCard = (() => {
       deleteAlert.textContent = await failure(res);
       return;
     }
-    const parent = card.parentNode;
-    const next = card.nextElementSibling;
-    const cards = [...listRoot.querySelectorAll("[data-id]")];
-    const after = cards.slice(cards.indexOf(card) + 1).find(shown);
-    const nextMenu = after && after.querySelector(".card-menu summary");
-    if (nextMenu) nextMenu.focus();
-    else {
-      const heading = document.querySelector("h1");
-      heading.setAttribute("tabindex", "-1");
-      heading.focus();
-    }
-    card.remove();
-    const month = parent.closest("section.month");
-    if (month && ![...parent.children].some(shown)) month.hidden = true;
+    const putBack = takeOut(listRoot, card, true);
     showUndo("Link deleted.", async () => {
       const back = await post("/links/restore", { id });
-      if (back && back.status === 204) {
-        parent.insertBefore(card, next);
-        if (month) month.hidden = false;
-      } else deleteAlert.textContent = await failure(back);
+      if (back && back.status === 204) putBack();
+      else deleteAlert.textContent = await failure(back);
     });
   };
 })();
@@ -923,6 +931,40 @@ if (deleteRoot) {
     if (!button) return;
     button.closest("details").open = false;
     deleteCard(button.closest("[data-id]"));
+  });
+}
+}
+const doneCard = (() => {
+  const busy = new WeakSet();
+  return async (card) => {
+    if (busy.has(card)) return;
+    const listRoot = document.getElementById("all-links");
+    const doneAlert = document.getElementById("all-error");
+    const id = card.dataset.id;
+    doneAlert.textContent = "";
+    busy.add(card);
+    const res = await post("/home/archive", { id });
+    busy.delete(card);
+    if (!res || res.status !== 204) {
+      doneAlert.textContent = await failure(res);
+      return;
+    }
+    const putBack = takeOut(listRoot, card, false);
+    showUndo("Moved out of your list.", async () => {
+      const back = await post("/home/unarchive", { id });
+      if (back && back.status === 204) putBack();
+      else doneAlert.textContent = await failure(back);
+    });
+  };
+})();
+{
+const doneRoot = document.getElementById("all-links");
+if (doneRoot) {
+  doneRoot.addEventListener("click", (event) => {
+    const button = event.target.closest(".card-menu button[data-act=archive]");
+    if (!button) return;
+    button.closest("details").open = false;
+    doneCard(button.closest("[data-id]"));
   });
 }
 }

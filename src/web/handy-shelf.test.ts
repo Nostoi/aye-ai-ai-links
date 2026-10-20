@@ -232,16 +232,18 @@ describe("the Handy shelf", () => {
     expect(ids(tiles(render([gone, calm])))).toEqual([gone.link.id, calm.link.id]);
   });
 
-  it("gives every kept tile a menu with Not handy anymore, and a suggestion none", () => {
+  it("gives every kept tile a menu with I'm done with it then Not handy anymore, and a suggestion none", () => {
     const html = render([kept({ title: "Attendance" })], [suggested()]);
     const [tool, guess] = tiles(html);
     const menu = tool?.querySelector("details.card-menu");
     expect(menu?.querySelector("summary .visually-hidden")?.textContent).toBe(
       "More for Attendance",
     );
-    expect(menu?.querySelector("button[data-act=not-handy]")?.textContent).toBe(
-      "Not handy anymore",
-    );
+    expect(
+      [...(menu?.querySelectorAll(".card-menu-list > *") ?? [])].map(
+        (b) => `${b.getAttribute("data-act")} ${b.textContent}`,
+      ),
+    ).toEqual(["archive I'm done with it", "not-handy Not handy anymore"]);
     expect(guess?.querySelector("details")).toBeNull();
   });
 
@@ -470,6 +472,20 @@ describe("the shelf's script", () => {
     await p.settle();
     expect(urls(p)).toEqual(["/home/archive", "/", "/home/unarchive", "/"]);
     expect(shelfIds(p)).toEqual([due.link.id]);
+  });
+
+  it("the menu's I'm done with it archives, refreshes the shelf and offers Undo, which brings the tile back", async () => {
+    const tool = kept();
+    const p = shelfPage(home([tool]), () => ({ status: 204 }), [home([]), home([tool])]);
+    p.dispatch(p.$(".card-menu button[data-act=archive]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: tool.link.id } });
+    expect(shelfIds(p)).toEqual([]);
+    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/archive", "/", "/home/unarchive", "/"]);
+    expect(shelfIds(p)).toEqual([tool.link.id]);
   });
 
   it("Yes to a suggestion posts keep: true with no Undo; No posts keep: false with Undo", async () => {

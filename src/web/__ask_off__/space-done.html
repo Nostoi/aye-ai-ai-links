@@ -168,6 +168,7 @@ img.handy-image{background:#fff}
 .card-menu-list button,.card-menu-list a{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left;text-decoration:none}
 .card-menu-list button:hover,.card-menu-list button:focus-visible,.card-menu-list a:hover,.card-menu-list a:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
 .card-menu-list svg{flex:none;fill:none;stroke:var(--soft);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.card-menu-list hr{margin:4px 8px;border:0;border-top:1px solid var(--line)}
 @keyframes menu-in{from{opacity:0;transform:translateY(-4px) scale(.97)}}
 @media (prefers-reduced-motion:reduce){.card-menu-list{animation:none}.card-menu-dot{transition:none}}
 .handy-tile p{margin:0 0 4px}
@@ -777,10 +778,32 @@ form.addEventListener("submit", async (event) => {
 });
 }
 }
-const deleteCard = (() => {
-  const busy = new WeakSet();
+const takeOut = (listRoot, card, remove) => {
   // A card moved out of the list ("I'm done with it") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
+  const parent = card.parentNode;
+  const next = card.nextElementSibling;
+  const cards = [...listRoot.querySelectorAll("[data-id]")];
+  const after = cards.slice(cards.indexOf(card) + 1).find(shown);
+  const nextMenu = after && after.querySelector(".card-menu summary");
+  if (nextMenu) nextMenu.focus();
+  else {
+    const heading = document.querySelector("h1");
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+  }
+  if (remove) card.remove();
+  else card.hidden = true;
+  const month = parent.closest("section.month");
+  if (month && ![...parent.children].some(shown)) month.hidden = true;
+  return () => {
+    if (remove) parent.insertBefore(card, next);
+    else card.hidden = false;
+    if (month) month.hidden = false;
+  };
+};
+const deleteCard = (() => {
+  const busy = new WeakSet();
   return async (card) => {
     if (busy.has(card)) return;
     const listRoot = document.getElementById("space-links");
@@ -794,26 +817,11 @@ const deleteCard = (() => {
       deleteAlert.textContent = await failure(res);
       return;
     }
-    const parent = card.parentNode;
-    const next = card.nextElementSibling;
-    const cards = [...listRoot.querySelectorAll("[data-id]")];
-    const after = cards.slice(cards.indexOf(card) + 1).find(shown);
-    const nextMenu = after && after.querySelector(".card-menu summary");
-    if (nextMenu) nextMenu.focus();
-    else {
-      const heading = document.querySelector("h1");
-      heading.setAttribute("tabindex", "-1");
-      heading.focus();
-    }
-    card.remove();
-    const month = parent.closest("section.month");
-    if (month && ![...parent.children].some(shown)) month.hidden = true;
+    const putBack = takeOut(listRoot, card, true);
     showUndo("Link deleted.", async () => {
       const back = await post("/links/restore", { id });
-      if (back && back.status === 204) {
-        parent.insertBefore(card, next);
-        if (month) month.hidden = false;
-      } else deleteAlert.textContent = await failure(back);
+      if (back && back.status === 204) putBack();
+      else deleteAlert.textContent = await failure(back);
     });
   };
 })();

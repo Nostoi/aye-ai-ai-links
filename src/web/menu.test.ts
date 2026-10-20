@@ -126,12 +126,12 @@ describe("the account menu's dismissal", () => {
     expect(isOpen(p)).toBe(true);
   });
 
-  it("closes on a click outside it, and stays open for a click inside it", () => {
+  it("closes on a press outside it, and stays open for a press inside it", () => {
     const p = runAskPage(withAsk(), undefined, { menu: true });
     open(p);
-    p.dispatch(p.$("details.account-menu .account-list"), "click");
+    p.dispatch(p.$("details.account-menu .account-list"), "pointerdown");
     expect(isOpen(p)).toBe(true);
-    p.dispatch(p.$("main"), "click");
+    p.dispatch(p.$("main"), "pointerdown");
     expect(isOpen(p)).toBe(false);
   });
 

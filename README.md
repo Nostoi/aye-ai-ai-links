@@ -27,8 +27,9 @@ You talk to your AI; it uses the library for you.
   - **Its answers.** Each answer is a sentence or two in plain text, with up to five of the links it means as picture cards; any more are named in the text. Its guesses are marked "(a guess)". Under the answer is a list of every change it made.
     - A new save, an edit to a link's title, summary, why or tags, and a Keep handy change each have **Undo**.
     - Undo of an edit works only while the link still holds what the AI wrote.
+  - **It knows the page you are on.** Say "these" or "here" and it means the links the page shows. When an answer names links on that page, the page's other cards dim until your next message, **Start over** or closing the panel.
   - **When the AI doesn't answer.** The panel says why, lists anything already changed, and offers a search for your words.
-  - **Where the conversation lives.** It follows you from page to page in the same browser tab. It ends when you close the tab, sign out, or press **Start over**, and the server keeps none of it.
+  - **Where the conversation lives.** It follows you from page to page in the same browser tab; messages from other pages sit behind an "Earlier, on …" line that you press to show them and press again to hide them. It ends when you close the tab, sign out, or press **Start over**, and the server keeps none of it.
   - **No AI set up.** The menu has no Ask AI, and every page is as before.
 - **It learns about you.** Your AI keeps short notes about you and what you're working on, and reads them before guessing why you saved something. It changes or removes a note only when you ask, and you can see and fix the notes yourself on the Profile page.
 - **Page snapshots.** The server fetches each new link's page and keeps its text, so a search also matches what the page says. A save waits a few seconds for the page, so your AI usually sees the page's title and opening text straight away, and it can read more of the text later. The first start after upgrading to this version fetches every link already in the library, two pages at a time.

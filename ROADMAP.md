@@ -22,6 +22,16 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-20:** Ask AI page awareness (#159, PR 3). Design: `docs/specs/2026-10-19-in-app-ai-design.md`; the mockup's screen 2 governs over its text.
+  - **Owner ruling, 2026-10-20:** the "Earlier, on X" line can be pressed to show the earlier messages, Undo included, and pressed again to hide them.
+  - **Controller rulings:**
+    - Each turn sends `page`: the address, the place, the first 60 link ids on the page and how many it shows. The server puts them in a `<page>` system block as JSON strings, and page ids never vouch for a card.
+    - Ids come from `[data-id]` elements outside the panel and outside anything `[hidden]`, read when the message is sent.
+    - When a reply names a card on the page, the page's other cards dim until the next send, Start over or close; a watcher dims cards added meanwhile. The fade is not stored.
+    - Each stored entry keeps the `path` and `place` it was made on; the stored version stays 1, and an entry without them counts as made on the current page. Messages from other pages sit behind the Earlier line, which says what the last earlier exchange saved, else what was asked.
+    - The request-size cap now counts the whole body, page included.
+  - **Two departures from the spec's line 120:** the page sends up to 60 ids plus a count of all shown, not 24, because Show older and Show all add more links; and it sends ids only, no titles, because the model reads titles with its tools, which keeps page-supplied text out of the prompt.
+
 - **2026-10-20:** Ask AI replies are short, with cards (#185).
   - **Owner's decision.** A new in-app prompt, a cap of 5 cards per reply, and a plain-text safety net for leaked Markdown. No `answer` tool: in a measured comparison it did no better than the prompt (#185 body). Structured outputs were left out of scope and not measured.
   - **Controller rulings,** after the solution challenge (REVISE; #185 comment 6289817200):

@@ -55,6 +55,12 @@ type Verdict =
 const terminal = (status: SnapshotStatus, error: string): Verdict => ({ terminal: status, error });
 const retry = (error: string): Verdict => ({ retry: true, error });
 
+/** Whether a failed fetch may pass if tried again: a 5xx, 408 or 429, a network error or a timeout. */
+export function transientFetch(f: Exclude<FetchOutcome, { kind: "ok" }>): boolean {
+  if (f.kind === "http_error") return f.status >= 500 || f.status === 408 || f.status === 429;
+  return f.kind === "network_error" || f.kind === "timeout";
+}
+
 function judge(outcome: AttemptOutcome): Verdict {
   if (outcome.stage === "extract") {
     const e = outcome.extract;
@@ -93,8 +99,7 @@ function judge(outcome: AttemptOutcome): Verdict {
       return terminal("failed", "fetch:too_large");
     case "http_error": {
       const error = `fetch:http:${f.status}`;
-      const transient = f.status >= 500 || f.status === 408 || f.status === 429;
-      return transient ? retry(error) : terminal("failed", error);
+      return transientFetch(f) ? retry(error) : terminal("failed", error);
     }
     case "network_error":
       return retry(`fetch:network:${f.code}`);

@@ -586,15 +586,42 @@ describe("icon backfill", () => {
       expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
     });
 
-    it("reads a word-picture link once: a second sweep goes on to the icon candidates", async () => {
+    it("★ reads a word-picture link once, one page per sweep: the next sweep goes on to the icon candidates", async () => {
       const t = setup({ extract: githubPage });
       await withPreview(t, 1, GITHUB);
       await t.legacy(2);
       await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB]);
       await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB, "https://ex.com/2"]);
       await t.pass.sweep();
       expect(t.pageCalls).toEqual([GITHUB, "https://ex.com/2"]);
     });
+
+    it.each<[string, FetchOutcome]>([
+      ["a 503", { kind: "http_error", status: 503 }],
+      ["a 429", { kind: "http_error", status: 429 }],
+      ["a 408", { kind: "http_error", status: 408 }],
+      ["a timeout with the network up", { kind: "timeout" }],
+      ["a network error with the network up", { kind: "network_error", code: "ECONNRESET" }],
+    ])(
+      "★ keeps the preview when the read fails with %s, and reads the page again later",
+      async (_n, outcome) => {
+        let fail = true;
+        const t = setup({ page: (url) => (fail ? outcome : okPage(url)), extract: githubPage });
+        const id = await withPreview(t, 1, GITHUB);
+        const before = await t.store.get(OWNER, id);
+        await t.pass.sweep();
+        expect(await t.store.get(OWNER, id)).toEqual(before);
+        expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+        expect(t.status(id)).toBe("ok");
+        fail = false;
+        t.wait();
+        await t.pass.sweep();
+        expect(t.pageCalls).toEqual([GITHUB, GITHUB]);
+        expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+      },
+    );
 
     it.each<[string, FetchOutcome]>([
       ["a 404", { kind: "http_error", status: 404 }],

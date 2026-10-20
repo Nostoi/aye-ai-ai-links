@@ -2,6 +2,7 @@ import type { PageExtractor, PageMetadata } from "./extract.js";
 import type { PageFetcher } from "./fetch.js";
 import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
 import { MAX_IMAGE_ATTEMPTS, RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
+import { transientFetch } from "./snapshot-outcome.js";
 import { boundedIconUrls } from "./snapshot-store.js";
 import { isWordPictureHost, keptPreview } from "./word-picture-host.js";
 
@@ -49,7 +50,12 @@ type Attempt =
 type Failure = { attempts: number; retryAt: number };
 
 /** A link to read for its icons, and how what was found is recorded. */
-type Job = { c: IconCandidate; write: (icons: string[]) => Promise<boolean> };
+type Job = {
+  c: IconCandidate;
+  write: (icons: string[]) => Promise<boolean>;
+  /** Back off, recording nothing, after a fetch failure that may pass (`transientFetch`). */
+  keepOnTransient: boolean;
+};
 
 const backoff = (attempts: number) => Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), RETRY_MAX_MS);
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -61,7 +67,6 @@ const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
  * - First, a link on a word-picture host whose snapshot still names a preview (#193): saved before
  *   that rule, or restored by a delete's Undo. Its page is read afresh, so its icons are the
  *   page's current ones; the preview and its fetched picture are dropped, and the icons recorded.
- *   A page that cannot be read records none, so the card shows initials.
  * - Then, a link snapshotted before icons were looked for (#149). It records the page's icons
  *   when it names no preview, else none.
  *
@@ -115,6 +120,9 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
         if (signal.aborted) return { kind: "stopped" };
         if (!up) return { kind: "offline" };
       }
+      if (job.keepOnTransient && transientFetch(page)) {
+        return { kind: "failed", why: `fetch:${page.kind}` };
+      }
       return record(job, []);
     }
     const out = await extractor.extract(page.html, page.finalUrl, signal);
@@ -157,6 +165,7 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     read: (afterId: string | null, limit: number) => Promise<C[]>,
     wanted: (c: C) => boolean,
     write: (c: C) => Job["write"],
+    keepOnTransient: boolean,
   ): Promise<boolean> {
     let after: string | null = null;
     for (;;) {
@@ -167,7 +176,7 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
         const key = keyOf(c);
         const failed = failures.get(key);
         if (failed && now().getTime() < failed.retryAt) continue;
-        await take({ c, write: write(c) }, key);
+        await take({ c, write: write(c), keepOnTransient }, key);
         return true;
       }
       if (rows.length < pageSize) return false;
@@ -183,12 +192,14 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
       (afterId, limit) => store.wordPictureCandidates(afterId, limit),
       (c) => isWordPictureHost(c.url),
       (c) => (icons) => store.recordWordPictureCheck(c.owner, c.linkId, c.imageUrl, icons),
+      true,
     );
     if (tookOne) return;
     await scanFor(
       (afterId, limit) => store.iconCandidates(afterId, limit),
       () => true,
       (c) => (icons) => store.recordIconCheck(c.owner, c.linkId, icons),
+      false,
     );
   }
 

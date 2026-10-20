@@ -1,6 +1,7 @@
 import { escapeHtml } from "../core/escape-html.js";
+import { ASK_BUTTON, ASK_SCRIPT, type Ask, askPanel } from "./ask-panel.js";
 import { faviconHref, inlineLogo } from "./logo.js";
-import { themeCss } from "./theme.js";
+import { askCss, themeCss } from "./theme.js";
 
 export { escapeHtml } from "../core/escape-html.js";
 
@@ -19,7 +20,9 @@ export const PAGE_STYLE = `\n${themeCss}\n`;
 const NAME = "Aye-AI-AI Links";
 const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</span>`;
 
-const MENU = `<nav class="menu" aria-label="Main"><a href="/all">All links</a><a href="/tags">Tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><button id="sign-out" type="button">Sign out</button></nav>`;
+/** With the AI set up (#159), Ask AI sits between Apps and keys and Sign out. */
+const menuHtml = (withAsk: boolean) =>
+  `<nav class="menu" aria-label="Main"><a href="/all">All links</a><a href="/tags">Tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a>${withAsk ? ASK_BUTTON : ""}<button id="sign-out" type="button">Sign out</button></nav>`;
 
 /** Ends the session, then goes to the sign-in page. */
 const MENU_SCRIPT = `<script>
@@ -135,12 +138,18 @@ const showUndo = (() => {
 /**
  * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
  * adds the menu (and implies `home`), for the pages the owner browses. `undo` adds the Undo bar
- * and `showUndo`.
+ * and `showUndo`. `ask`, given only on menu pages and only when the AI is set up, adds the Ask AI
+ * button and panel (#159); without it the page is exactly as it was.
  */
 export const page = (
   title: string,
   body: string,
-  { home = false, menu = false, undo = false } = {},
+  {
+    home = false,
+    menu = false,
+    undo = false,
+    ask,
+  }: { home?: boolean; menu?: boolean; undo?: boolean; ask?: Ask | undefined } = {},
 ) => `<!doctype html>
 <html lang="en">
 <head>
@@ -149,13 +158,13 @@ export const page = (
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/svg+xml" href="${faviconHref}">
 <style>${PAGE_STYLE}</style>
-</head>
+${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <body>
-<header class="column site">${home || menu ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}${menu ? MENU : ""}</header>
+<header class="column site">${home || menu ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}${menu ? menuHtml(ask !== undefined) : ""}</header>
 <div class="column">
 ${body}
 </div>
-${undo ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}
+${ask ? `${askPanel(ask)}\n` : ""}${undo ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}${ask ? `\n${ASK_SCRIPT}` : ""}
 </body>
 </html>
 `;

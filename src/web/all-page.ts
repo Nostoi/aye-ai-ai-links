@@ -6,6 +6,7 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
@@ -60,6 +61,7 @@ type Input = {
   copies?: Map<string, CopyInfo>;
   /** What to say about saved copies at the foot; shown on the first page of active links only. */
   notice?: CopyNotice | null;
+  ask?: Ask | undefined;
 };
 
 /** GiB rounded down to `places` decimals; the tolerance keeps a configured tenth from reading one lower. */
@@ -199,6 +201,6 @@ ${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
 </script>
 ${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask: input.ask },
   );
 }

@@ -1,5 +1,6 @@
 import type { ExportView } from "../core/export-types.js";
 import type { KeyInfo } from "../store/key-store.js";
+import type { Ask } from "./ask-panel.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 
 /** Decimal MB or GB with one decimal, as phones show sizes; under 50,000 bytes would print 0.0 MB (#130). */
@@ -91,7 +92,9 @@ export const connectionsPage = ({
   now,
   bookmarklet,
   exportView,
+  ask,
 }: {
+  ask?: Ask | undefined;
   connections: ConnectionRow[];
   keys: KeyInfo[];
   now: Date;
@@ -322,5 +325,5 @@ addEventListener("pageshow", (event) => {
   if (event.persisted) location.reload();
 });
 </script>`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask },
   );

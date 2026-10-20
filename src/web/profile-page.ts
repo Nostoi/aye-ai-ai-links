@@ -1,5 +1,6 @@
 import { WEB_SAVED_BY } from "../auth/session.js";
 import type { FocusEntry, ProfileNote } from "../core/types.js";
+import type { Ask } from "./ask-panel.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 
 /** Who a note came from. A guess says so; a note the owner wrote here is theirs. */
@@ -43,10 +44,12 @@ export const profilePage = ({
   notes,
   focus,
   now,
+  ask,
 }: {
   notes: ProfileNote[];
   focus: FocusEntry[];
   now: Date;
+  ask?: Ask | undefined;
 }) =>
   page(
     "Profile · Aye-AI-AI Links",
@@ -189,5 +192,5 @@ addEventListener("pageshow", (event) => {
   if (event.persisted) location.reload();
 });
 </script>`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask },
   );

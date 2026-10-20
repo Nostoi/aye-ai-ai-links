@@ -84,6 +84,7 @@ import {
 import type { McpDeps, TrackCall } from "../mcp/server.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
 import { ALL_RESTART, allHref, allPage } from "./all-page.js";
+import type { Ask } from "./ask-panel.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
@@ -550,6 +551,10 @@ export function webApp({
   const saveSession = requireSession(auth, withAuthLock, loginRedirect);
   const bookmarklet = bookmarkletCode(baseUrl);
 
+  /** The Ask AI panel's details for a menu page, or nothing while no AI is set up (#159). */
+  const askOn = (c: Context<SessionEnv>, place: string): Ask | undefined =>
+    ai ? { ai: ai.model.name, place, owner: c.get("caller").owner } : undefined;
+
   /** What a card shows after an edit or its Undo, read after the write. */
   const cardState = async (owner: OwnerId, id: string) => {
     const link = await getLink(deps, owner, id);
@@ -602,7 +607,7 @@ export function webApp({
       [...items, ...suggestions].map((t) => t.link.id),
     );
     const shelf = handyShelf({ items, suggestions, catalog, images: shelfImages });
-    const page = homePage({ worth, shelf, spaces: spacesSection(spaces) });
+    const page = homePage({ worth, shelf, spaces: spacesSection(spaces), ask: askOn(c, "Home") });
     return c.html(page, 200, NO_STORE);
   });
 
@@ -641,6 +646,7 @@ export function webApp({
       keep,
       pictures,
       copies,
+      ask: askOn(c, "Search"),
     });
     return c.html(html, 200, NO_STORE);
   });
@@ -689,6 +695,7 @@ export function webApp({
         now: deps.now(),
         done,
         later,
+        ask: askOn(c, tag.name),
       });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
@@ -696,8 +703,9 @@ export function webApp({
       if (error.code === "not_found" && before !== undefined) {
         return c.redirect(spaceHref(name, { done }), 303);
       }
-      if (error.code === "not_found") return c.html(spaceMissingPage(), 404, NO_STORE);
-      return c.html(olderInvalidPage(SPACE_RESTART), 400, NO_STORE);
+      if (error.code === "not_found")
+        return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);
+      return c.html(olderInvalidPage(SPACE_RESTART, askOn(c, "this page")), 400, NO_STORE);
     }
   };
   app.get("/spaces", session, space("active"));
@@ -751,12 +759,13 @@ export function webApp({
         now: deps.now(),
         done,
         later,
+        ask: askOn(c, "All links"),
       });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
       if (error.code === "not_found") return c.redirect(allHref(order, { done }), 303);
-      return c.html(olderInvalidPage(ALL_RESTART), 400, NO_STORE);
+      return c.html(olderInvalidPage(ALL_RESTART, askOn(c, "this page")), 400, NO_STORE);
     }
   };
   app.get("/all", session, all("active"));
@@ -805,6 +814,7 @@ export function webApp({
       now,
       bookmarklet,
       exportView: deps.exports.view(owner),
+      ask: askOn(c, "Apps and keys"),
     });
     return c.html(page, 200, NO_STORE);
   });
@@ -1087,7 +1097,11 @@ export function webApp({
   );
 
   app.get("/tags", session, async (c) =>
-    c.html(tagsPage({ tags: await deps.store.listTags(c.get("caller").owner) }), 200, NO_STORE),
+    c.html(
+      tagsPage({ tags: await deps.store.listTags(c.get("caller").owner), ask: askOn(c, "Tags") }),
+      200,
+      NO_STORE,
+    ),
   );
 
   // Each tag action names the tag by its key; core matches it as a name.
@@ -1133,7 +1147,11 @@ export function webApp({
   app.get("/profile", session, async (c) => {
     const { owner } = c.get("caller");
     const { notes, recentFocus } = await profileContext(deps, owner);
-    return c.html(profilePage({ notes, focus: recentFocus, now: deps.now() }), 200, NO_STORE);
+    return c.html(
+      profilePage({ notes, focus: recentFocus, now: deps.now(), ask: askOn(c, "Profile") }),
+      200,
+      NO_STORE,
+    );
   });
 
   app.post("/profile/notes/add", jsonBody({ text: isString }), session, (c) =>

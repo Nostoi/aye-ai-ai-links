@@ -380,6 +380,7 @@ export const askCss = `#ask-open{gap:8px;font:inherit;color:var(--ink);text-deco
 #ask-open svg{flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
 #ask-panel{position:fixed;top:0;right:0;bottom:0;z-index:30;width:400px;display:flex;flex-direction:column;background:var(--surface);border-left:1.5px solid var(--line)}
 #ask-panel[hidden]{display:none}
+.undo-bar{z-index:31}
 body.ask-open{margin-right:400px}
 .ask-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 8px;padding:14px 16px 6px 22px}
 .ask-title{flex:1;min-width:0}
@@ -400,7 +401,7 @@ body.ask-open{margin-right:400px}
 .ask-change{display:flex;flex-direction:column;gap:8px}
 .ask-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:14px}
 .ask-line a{display:inline-flex;align-items:center;min-height:44px}
-.ask-undo,.ask-button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-decoration:none}
+.ask-edit,.ask-undo,.ask-button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-decoration:none}
 .ask-undone{color:var(--soft)}
 .ask-note{font-size:13px;color:var(--soft)}
 .ask-card.ask-faded{opacity:.4}

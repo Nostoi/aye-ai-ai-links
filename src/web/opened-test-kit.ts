@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { expect, it } from "vitest";
 import type { Link } from "../core/types.js";
+import { ASK_KEY } from "./ask-panel.js";
 
 export type Post = { url: string; body: unknown; redirect: unknown; keepalive: unknown };
 
@@ -14,6 +15,9 @@ export type Answer = {
   redirected?: boolean;
 };
 
+/** How the menu's own script starts, as the page embeds it. */
+const MENU_SCRIPT_START = '\ndocument.getElementById("sign-out")';
+
 /**
  * A page in linkedom with all its scripts but the menu's run in one scope, as a browser shares
  * one global scope across a page's scripts, so two scripts that declare the same name fail.
@@ -22,6 +26,29 @@ export type Answer = {
  * up until the test clicks it.
  */
 export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ status: 204 })) {
+  return start(html, answer, false, false);
+}
+
+/**
+ * `runPage` for a page with the Ask AI panel: the panel's script runs too, against a fake
+ * `sessionStorage` holding `stored` as the panel's state, and a `matchMedia` that answers `phone`.
+ * Only the menu's own sign-out script is left out.
+ */
+export function runAskPage(
+  html: string,
+  answer: (sent: Post) => Answer = () => ({ status: 204 }),
+  { phone = false, stored }: { phone?: boolean; stored?: unknown } = {},
+) {
+  return start(html, answer, true, phone, stored);
+}
+
+function start(
+  html: string,
+  answer: (sent: Post) => Answer,
+  ask: boolean,
+  phone: boolean,
+  stored?: unknown,
+) {
   const { document, DOMParser } = parseHTML(html);
   const focusLog: Element[] = [];
   (
@@ -29,9 +56,17 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
   ).HTMLElement.prototype.focus = function (this: Element) {
     focusLog.push(this);
   };
+  if (ask) {
+    Object.defineProperty(document, "activeElement", {
+      get: () => {
+        const last = focusLog.at(-1);
+        return last?.isConnected ? last : document.body;
+      },
+    });
+  }
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
-    .filter((s) => !s.includes("sign-out"))
+    .filter((s) => (ask ? !s.startsWith(MENU_SCRIPT_START) : !s.includes("sign-out")))
     .join("\n");
   const sent: Post[] = [];
   const fetch = async (
@@ -62,7 +97,16 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
       },
     };
   };
-  const location = { href: "https://links.example/", reload: () => {} };
+  const location = { href: "https://links.example/", pathname: "/", search: "", reload: () => {} };
+  const win = document.defaultView as unknown as typeof globalThis;
+  const items = new Map<string, string>();
+  if (stored !== undefined) items.set(ASK_KEY, JSON.stringify(stored));
+  const sessionStorage = {
+    getItem: (k: string) => items.get(k) ?? null,
+    setItem: (k: string, v: string) => void items.set(k, v),
+    removeItem: (k: string) => void items.delete(k),
+  };
+  const matchMedia = () => ({ matches: phone, addEventListener: () => {} });
   new Function(
     "document",
     "fetch",
@@ -71,6 +115,10 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     "DOMParser",
     "setTimeout",
     "clearTimeout",
+    "window",
+    "sessionStorage",
+    "matchMedia",
+    "CustomEvent",
     code,
   )(
     document,
@@ -80,8 +128,11 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     DOMParser,
     () => 0,
     () => {},
+    win,
+    sessionStorage,
+    matchMedia,
+    win.CustomEvent,
   );
-  const win = document.defaultView as unknown as typeof globalThis;
   const dispatch = (target: Element, type: string, init: Record<string, unknown> = {}) => {
     const event = new win.Event(type, { bubbles: true, cancelable: true });
     Object.assign(event, init);
@@ -92,26 +143,35 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  return { document, sent, dispatch, settle, $, location, focused: () => focusLog };
+  return { document, sent, dispatch, settle, $, location, items, focused: () => focusLog };
 }
 
 /**
  * The page's edit dialog, with `showModal` and `close` standing in for the browser's: linkedom
  * has neither, and `close` fires the dialog's close event as a browser does.
  */
-export function stubDialog(page: ReturnType<typeof runPage>) {
+export function stubDialog(
+  page: ReturnType<typeof runPage>,
+  { deferClose = false }: { deferClose?: boolean } = {},
+) {
   const dialog = page.$("#edit-link") as HTMLElement & {
     open?: boolean;
     showModal(): void;
     close(): void;
+    fireClose(): void;
   };
+  let queued = 0;
   dialog.showModal = () => {
     dialog.open = true;
   };
   dialog.close = () => {
     if (!dialog.open) return;
     dialog.open = false;
-    page.dispatch(dialog, "close");
+    if (deferClose) queued += 1;
+    else page.dispatch(dialog, "close");
+  };
+  dialog.fireClose = () => {
+    for (; queued > 0; queued -= 1) page.dispatch(dialog, "close");
   };
   return dialog;
 }

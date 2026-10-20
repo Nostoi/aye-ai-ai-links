@@ -98,11 +98,14 @@ export const ASK_SCRIPT = `<script>
   };
 
   const phone = () => typeof matchMedia === "function" && matchMedia("(max-width: 900px)").matches;
-  // While the phone sheet covers the page, the page behind it can't be reached.
+  // While the phone sheet covers the page, the page behind it can't be reached. The edit dialog
+  // and the Undo bar stay usable above it.
   const behind = () => {
     const sheet = state.open && phone();
+    const bar = document.getElementById("undo-bar");
     for (const el of document.body.children) {
-      if (el === panel || el.tagName === "SCRIPT") continue;
+      if (el === panel || el.tagName === "SCRIPT" || el.tagName === "DIALOG") continue;
+      if (bar && el.contains(bar)) continue;
       if (sheet) el.setAttribute("inert", "");
       else el.removeAttribute("inert");
     }
@@ -370,7 +373,7 @@ export const ASK_SCRIPT = `<script>
     const res = await post(u.url, u.body);
     if (res.status < 200 || res.status > 299) {
       const said = isObj(res.body) && typeof res.body.message === "string" ? res.body.message : null;
-      note.textContent = OWN_ANSWERS.includes(res.status) && said ? said : UNDO_FAILED;
+      say(note, OWN_ANSWERS.includes(res.status) && said ? said : UNDO_FAILED);
       button.disabled = false;
       return;
     }
@@ -380,15 +383,125 @@ export const ASK_SCRIPT = `<script>
     if (u.kind === "save") {
       u.faded = true;
       fadeCards(u.body.id);
+      // The link is deleted: no read still on its way may put its card back, and it can't be edited.
+      endReads(u.body.id);
+      dropEdits(u.body.id);
     }
     save();
     if (u.kind === "save") return;
-    const fresh = await post("/ai/card/" + encodeURIComponent(u.body.id));
-    if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
-      swapCard(u.body.id, fresh.body.card);
-      save();
+    await refreshCard(u.body.id);
+  };
+
+  // Edit (#183) opens the page's one edit dialog on a change line's link. The contract with the
+  // dialog's script (edit-dialog.ts):
+  // - "aye-edit" on document, { id, read, opener, note }: the dialog opens at once, busy, and fills
+  //   from the card read resolves to, or closes on "failed" or "gone"; focus goes back to opener.
+  // - "aye-note" on document, { note, text }: the panel writes text into the line's note.
+  // - "aye-edited" on document, { id, note }: the dialog saved or undid an edit to that link; the panel
+  //   reads its cards for it again, and note is there when the panel opened the dialog.
+  // Edit is offered for a link the AI saved or changed whose card the panel shows, and never for a
+  // link whose save was undone or that turned out deleted.
+  const gone = new Set();
+  const deleted = (id) =>
+    gone.has(id) ||
+    state.entries.some(
+      (entry) =>
+        isObj(entry) &&
+        Array.isArray(entry.lines) &&
+        entry.lines.some(
+          (l) => isObj(l) && undoable(l.undo) && l.undo.kind === "save" && l.undo.done === true && l.undo.body.id === id,
+        ),
+    );
+  const editable = (line) =>
+    typeof line.linkId === "string" &&
+    (line.undo === undefined || (undoable(line.undo) && ["save", "edit"].includes(line.undo.kind))) &&
+    !deleted(line.linkId);
+  // The link's card in the line's own block, else anywhere in the conversation (a cited link's card
+  // sits in the reply above).
+  const panelCard = (id, block) => {
+    const find = (within) =>
+      [...within.querySelectorAll(".ask-card")].find(
+        (card) => card.getAttribute("data-id") === id && card.hasAttribute("data-title"),
+      ) ?? null;
+    return find(block) ?? find(messages);
+  };
+  const dropEdits = (id) => {
+    for (const edit of [...messages.querySelectorAll(".ask-edit")]) {
+      if (edit.getAttribute("data-id") !== id) continue;
+      if (edit === document.activeElement) text.focus();
+      edit.remove();
     }
   };
+  // Reads of one link's card are numbered; only the latest one started is drawn and stored.
+  const reads = new Map();
+  const bumpRead = (id) => {
+    const n = (reads.get(id) ?? 0) + 1;
+    reads.set(id, n);
+    return n;
+  };
+  // "ok" once the fresh card is drawn and stored, "stale" when a later read started, "gone" for a
+  // deleted link, else "failed".
+  const refreshCard = (id) => {
+    const n = bumpRead(id);
+    const read = (async () => {
+      const fresh = await post("/ai/card/" + encodeURIComponent(id));
+      if (reads.get(id) !== n) return "stale";
+      if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
+        swapCard(id, fresh.body.card);
+        save();
+        return "ok";
+      }
+      return fresh.status === 404 ? "gone" : "failed";
+    })();
+    newest.set(id, read);
+    return read;
+  };
+  const newest = new Map();
+  const endReads = (id) => {
+    bumpRead(id);
+    newest.set(id, Promise.resolve("gone"));
+  };
+  const reveal = (el) => {
+    const box = el.closest(".ask-earlier-entries");
+    if (box && box.hidden) box.previousElementSibling.click();
+  };
+  const say = (note, text) => {
+    reveal(note);
+    note.textContent = text;
+  };
+  document.addEventListener("aye-note", (event) => {
+    const { note, text } = isObj(event.detail) ? event.detail : {};
+    if (note && typeof text === "string") say(note, text);
+  });
+  const readCard = async (id, block, note) => {
+    let read = await refreshCard(id);
+    while (read === "stale") read = await newest.get(id);
+    if (read === "gone") {
+      gone.add(id);
+      dropEdits(id);
+      say(note, "This link was deleted.");
+      return "gone";
+    }
+    return (read === "ok" && panelCard(id, block)) || "failed";
+  };
+  const runEdit = (id, button, note, block) => {
+    note.textContent = "";
+    const read = readCard(id, block, note);
+    document.dispatchEvent(new CustomEvent("aye-edit", { detail: { id, read, opener: button, note } }));
+  };
+  document.addEventListener("aye-edited", async (event) => {
+    const id = isObj(event.detail) ? event.detail.id : null;
+    if (typeof id !== "string") return;
+    let drawn = false;
+    forCards(id, () => {
+      drawn = true;
+    });
+    if (!drawn) return;
+    const note = event.detail.note;
+    if ((await refreshCard(id)) === "failed" && note) {
+      say(note, "This card couldn't be refreshed. Reload to see the change.");
+    }
+  });
 
   const slot = (parent, html) => {
     const holder = parseCard(html);
@@ -414,6 +527,19 @@ export const ASK_SCRIPT = `<script>
         row.appendChild(a);
       }
       const u = line.undo;
+      const live = undoable(u) && u.done !== true;
+      const edit = editable(line) && panelCard(id, block) !== null;
+      // Edit and Undo share the row's one note.
+      const note = live || edit ? make("span", "ask-note") : null;
+      if (note) note.setAttribute("aria-live", "polite");
+      if (edit) {
+        const button = make("button", "ask-edit", "Edit");
+        button.setAttribute("type", "button");
+        button.setAttribute("data-id", id);
+        button.setAttribute("title", "Edit title and picture");
+        button.addEventListener("click", () => runEdit(id, button, note, block));
+        row.appendChild(button);
+      }
       if (undoable(u)) {
         if (u.done === true) {
           row.appendChild(make("span", "ask-undone", "Undone."));
@@ -421,13 +547,11 @@ export const ASK_SCRIPT = `<script>
           const button = make("button", "ask-undo", "Undo");
           button.setAttribute("type", "button");
           if (typeof u.title === "string") button.setAttribute("title", u.title);
-          const note = make("span", "ask-note");
-          note.setAttribute("aria-live", "polite");
           button.addEventListener("click", () => runUndo(u, button, note));
           row.appendChild(button);
-          row.appendChild(note);
         }
       }
+      if (note) row.appendChild(note);
       block.appendChild(row);
       list.appendChild(block);
     }
@@ -575,12 +699,12 @@ export const ASK_SCRIPT = `<script>
         box.hidden = !box.hidden;
         toggle.setAttribute("aria-expanded", box.hidden ? "false" : "true");
       });
+      messages.appendChild(toggle);
+      messages.appendChild(box);
       for (const entry of group) {
         const node = drawEntry(entry);
         if (node) box.appendChild(node);
       }
-      messages.appendChild(toggle);
-      messages.appendChild(box);
     }
     for (const entry of state.entries.slice(from)) {
       const node = drawEntry(entry);

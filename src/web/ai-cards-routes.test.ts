@@ -3,6 +3,7 @@ import { IN_APP_INSTRUCTIONS } from "../ai/chat-turn.js";
 import { AiUnavailable, type ModelReply, type ToolCall } from "../ai/model.js";
 import { scriptedModel } from "../ai/model-test-kit.js";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
+import { png } from "../core/image-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import type { Change } from "../mcp/changes.js";
@@ -117,6 +118,7 @@ describe("the chat answer's cards and failure message", () => {
     expect(ids[1]).toBe(cited);
     expect(Object.keys(body.cards)).toEqual([ids[0]]);
     expect(body.cards[ids[0] ?? ""]).toContain("One");
+    expect(body.cards[ids[0] ?? ""]).toContain('data-title="One"');
     expect(body.segments?.some((s) => "card" in s && s.card.includes("Two"))).toBe(true);
   });
 
@@ -247,6 +249,22 @@ describe("GET /ai/card/:id", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect((res.body as { card: string }).card).toContain(SECRET);
+  });
+
+  it("carries the edit dialog's data: data-own after the owner sets a picture, and a second owner still gets 404", async () => {
+    const { world, browser, id } = await owned();
+    const before = (await browser.send(`/ai/card/${id}`)).body as { card: string };
+    expect(before.card).toContain(`data-title="${SECRET}"`);
+    expect(before.card).toContain('data-own="0"');
+    const form = new FormData();
+    form.append("id", id);
+    form.append("picture", new Blob([new Uint8Array(png(80, 60))], { type: "image/png" }));
+    const set = await browser.send("/links/edit", { method: "POST", multipart: form });
+    expect(set.status).toBe(200);
+    const after = (await browser.send(`/ai/card/${id}`)).body as { card: string };
+    expect(after.card).toContain('data-own="1"');
+    const b = await addSecondUser(world);
+    expect((await b.send(`/ai/card/${id}`)).status).toBe(404);
   });
 
   it("refuses a request from another site, like every signed-in page", async () => {

@@ -448,18 +448,27 @@ export const ASK_SCRIPT = `<script>
     const said = typeof entry.text === "string" ? entry.text : null;
     if (said === null) return box;
     if (entry.changed !== true) {
+      const retry = madeHere(entry);
       box.appendChild(
-        make("p", "ask-alert-more", "Nothing was saved or changed. Try again, or search your links the usual way."),
+        make(
+          "p",
+          "ask-alert-more",
+          retry
+            ? "Nothing was saved or changed. Try again, or search your links the usual way."
+            : "Nothing was saved or changed. Search your links the usual way.",
+        ),
       );
       const actions = make("div", "ask-actions");
-      const again = make("button", "ask-button", "Try again");
-      again.setAttribute("type", "button");
-      again.addEventListener("click", () => {
-        if (running) return;
-        // The failed alert goes only once the resend gets an answer, so a second failure leaves its Search link.
-        send(said, { entry, box });
-      });
-      actions.appendChild(again);
+      if (retry) {
+        const again = make("button", "ask-button", "Try again");
+        again.setAttribute("type", "button");
+        again.addEventListener("click", () => {
+          if (running) return;
+          // The failed alert goes only once the resend gets an answer, so a second failure leaves its Search link.
+          send(said, { entry, box });
+        });
+        actions.appendChild(again);
+      }
       actions.appendChild(searchLink(said));
       box.appendChild(actions);
       return box;

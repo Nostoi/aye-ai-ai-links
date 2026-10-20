@@ -117,7 +117,8 @@ export function takeTurn(body: {
 
 /** The system block about the page; page text goes in as JSON strings, so none of it can close the block. */
 function pageBlock({ path, place, ids, shown }: PageContext): string {
-  const quoted = (value: string) => JSON.stringify(value.replace(/\p{Cc}/gu, " "));
+  const quoted = (value: string) =>
+    JSON.stringify(value.replace(/\p{Cc}/gu, " ")).replace(/</g, "\\u003c");
   const links =
     shown === 0
       ? "It shows no links."

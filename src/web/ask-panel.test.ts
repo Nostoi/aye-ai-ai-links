@@ -1367,6 +1367,28 @@ describe("the Earlier line", () => {
     );
   });
 
+  it("offers no Try again for a failure on another page, but keeps its Search link", () => {
+    const failed = (extra: object) => ({
+      kind: "alert",
+      message: "Broke",
+      text: "save the kettle",
+      changed: false,
+      ...extra,
+    });
+    const p = load({ stored: saved({ entries: [old(failed({}))] }) });
+    const box = p.document.querySelector(".ask-earlier-entries .ask-alert") as Element;
+    expect([...box.querySelectorAll("button")].map((b) => b.textContent)).toEqual([]);
+    expect(box.querySelector("a")?.textContent).toBe('Search for "save the kettle"');
+    expect(box.textContent).toContain(
+      "Nothing was saved or changed. Search your links the usual way.",
+    );
+    expect(box.textContent).not.toContain("Try again");
+    const same = load({ stored: saved({ entries: [here(failed({}))] }) });
+    expect(
+      [...same.document.querySelectorAll(".ask-alert button")].map((b) => b.textContent),
+    ).toEqual(["Try again"]);
+  });
+
   it("goes by the last exchange and the place of the last earlier entry", () => {
     expect(
       label([

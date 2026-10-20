@@ -65,6 +65,7 @@ export interface LinkStore {
     id: string,
     patch: LinkPatch,
     at: Date,
+    extend?: string,
   ): Promise<{ link: Link; editId: string | null } | null>;
 
   /**
@@ -84,6 +85,7 @@ export interface LinkStore {
     id: string,
     why: Labelled,
     at: Date,
+    extend?: string,
   ): Promise<{ link: Link; editId: string | null } | null>;
 
   /**

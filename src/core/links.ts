@@ -117,6 +117,8 @@ async function settledWithin(job: Promise<void>, ms: number): Promise<void> {
   }
 }
 
+type ReceiptOptions = { receipt: true; extend?: (linkId: string) => string | undefined };
+
 /**
  * Saves a link, or returns the one already saved. Only a new link's page is fetched; the save
  * waits up to `saveWaitMs` for it, so the result can show the page. A repeat save never waits.
@@ -129,7 +131,7 @@ export async function saveLink(
   deps: Deps,
   owner: OwnerId,
   input: SaveLinkInput,
-  options: { receipt: true },
+  options: ReceiptOptions,
 ): Promise<SaveLinkResult & { whyEditId: string | null }>;
 export async function saveLink(
   deps: Deps,
@@ -141,7 +143,7 @@ export async function saveLink(
   { store, now, snapshots, pages, saveWaitMs = SAVE_WAIT_MS }: Deps,
   owner: OwnerId,
   input: SaveLinkInput,
-  options: { receipt?: true } = {},
+  options: Partial<ReceiptOptions> = {},
 ): Promise<SaveLinkResult & { whyEditId?: string | null }> {
   const key = urlKey(input.url);
   checkSources(input.why, input.tags);
@@ -173,7 +175,7 @@ export async function saveLink(
     link = (await store.get(owner, link.id)) ?? link;
   } else if (why && !link.why) {
     const filled = options.receipt
-      ? await store.fillWhyWithReceipt(owner, link.id, why, now())
+      ? await store.fillWhyWithReceipt(owner, link.id, why, now(), options.extend?.(link.id))
       : await store
           .fillWhyIfMissing(owner, link.id, why)
           .then((l) => l && { link: l, editId: null });
@@ -263,8 +265,9 @@ export async function updateLinkWithReceipt(
   owner: OwnerId,
   id: string,
   input: UpdateLinkInput,
+  extend?: string,
 ): Promise<{ link: Link; editId: string | null }> {
-  const result = await store.updateWithReceipt(owner, id, buildPatch(now, input), now());
+  const result = await store.updateWithReceipt(owner, id, buildPatch(now, input), now(), extend);
   if (!result) throw notFound(id);
   return result;
 }

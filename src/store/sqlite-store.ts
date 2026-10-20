@@ -100,7 +100,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       : this.db.transaction(() => this.updateSync(owner, n, patch)).immediate();
   }
 
-  async updateWithReceipt(owner: OwnerId, id: string, patch: LinkPatch, at: Date) {
+  async updateWithReceipt(owner: OwnerId, id: string, patch: LinkPatch, at: Date, extend?: string) {
     const n = parseId(id);
     if (n === null) return null;
     return this.db
@@ -110,7 +110,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
         if (!before || !link) return null;
         const changed = changedFields(before, link);
         const editId = anyChanged(changed)
-          ? writeReceipt(this.db, owner, n, changed, before, link, at)
+          ? writeReceipt(this.db, owner, n, changed, before, link, at, extend)
           : null;
         return { link, editId };
       })
@@ -122,7 +122,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();
   }
 
-  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, at: Date) {
+  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, at: Date, extend?: string) {
     const n = parseId(id);
     if (n === null) return null;
     return this.db
@@ -132,7 +132,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
         const link = this.read(owner, n);
         if (!before || !link) return null;
         const editId = filled
-          ? writeReceipt(this.db, owner, n, changedFields(before, link), before, link, at)
+          ? writeReceipt(this.db, owner, n, changedFields(before, link), before, link, at, extend)
           : null;
         return { link, editId };
       })

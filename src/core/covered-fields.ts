@@ -35,3 +35,21 @@ export const holdsWritten = (changed: Changed, written: Covered, current: Covere
   (!changed.summary || current.summary === written.summary) &&
   (!changed.why || sameWhy(current.why, written.why)) &&
   (!changed.tags || sameTags(current.tags, written.tags));
+
+export function extendedPrior(
+  old: { changed: Changed; prior: Covered },
+  changed: Changed,
+  before: Covered,
+): { changed: Changed; prior: Covered } {
+  const pick = <K extends keyof Covered>(k: K): Covered[K] =>
+    old.changed[k] ? old.prior[k] : before[k];
+  return {
+    changed: {
+      title: old.changed.title || changed.title,
+      summary: old.changed.summary || changed.summary,
+      why: old.changed.why || changed.why,
+      tags: old.changed.tags || changed.tags,
+    },
+    prior: { title: pick("title"), summary: pick("summary"), why: pick("why"), tags: pick("tags") },
+  };
+}

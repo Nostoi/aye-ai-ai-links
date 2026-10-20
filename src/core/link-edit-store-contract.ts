@@ -539,5 +539,93 @@ export function describeLinkEditStoreContract(
         }
       });
     });
+
+    describe("extending a receipt within a turn", () => {
+      const tag = (key: string): LinkTag => ({
+        key,
+        name: key,
+        source: "stated",
+        kind: "topic",
+        kindSource: "inferred",
+      });
+      const write = (id: string, patch: Parameters<LinkStore["update"]>[2], extend?: string) =>
+        h.links.updateWithReceipt(A, id, patch, at(20), extend);
+      const seeded = async () => {
+        const id = await linkWith(A, { title: "Old" });
+        await h.links.update(A, id, { summary: "A", tags: [tag("old")] });
+        return id;
+      };
+      const state = async (id: string) => {
+        const l = await h.links.get(A, id);
+        return { summary: l?.summary, why: l?.why, tags: l?.tags.map((t) => t.key) };
+      };
+
+      it("a summary then tags with extend make one Undo that restores both", async () => {
+        const id = await seeded();
+        const first = await editId(write(id, { summary: "B" }));
+        const second = await editId(write(id, { tags: [tag("new")] }, first));
+        expect(second).not.toBe(first);
+        expect(await h.edits.undoEdit(A, id, first)).toBe("conflict");
+        expect(await h.edits.undoEdit(A, id, second)).toBe("undone");
+        expect(await state(id)).toEqual({ summary: "A", why: null, tags: ["old"] });
+      });
+
+      it("a fill then an update with extend: one Undo puts the why back to null and the tags back", async () => {
+        const id = await seeded();
+        const fill = await editId(
+          h.links.fillWhyWithReceipt(A, id, { text: "w", source: "stated" }, at(20)),
+        );
+        const edit = await editId(write(id, { tags: [tag("new")] }, fill));
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await state(id)).toEqual({ summary: "A", why: null, tags: ["old"] });
+      });
+
+      it("an update then a fill with extend merges too", async () => {
+        const id = await seeded();
+        const first = await editId(write(id, { summary: "B" }));
+        const merged = await editId(
+          h.links.fillWhyWithReceipt(A, id, { text: "w", source: "stated" }, at(21), first),
+        );
+        expect(await h.edits.undoEdit(A, id, merged)).toBe("undone");
+        expect(await state(id)).toEqual({ summary: "A", why: null, tags: ["old"] });
+      });
+
+      it("the same field twice keeps the first prior", async () => {
+        const id = await seeded();
+        const first = await editId(write(id, { summary: "B" }));
+        const second = await editId(write(id, { summary: "C" }, first));
+        expect(await h.edits.undoEdit(A, id, second)).toBe("undone");
+        expect((await state(id)).summary).toBe("A");
+      });
+
+      it("a stale extend, after a plain update changed the summary, makes a fresh receipt of the second write only", async () => {
+        const id = await seeded();
+        const first = await editId(write(id, { summary: "B" }));
+        await h.links.update(A, id, { summary: "Z" });
+        const second = await editId(write(id, { tags: [tag("new")] }, first));
+        expect(await h.edits.undoEdit(A, id, first)).toBe("conflict");
+        expect(await h.edits.undoEdit(A, id, second)).toBe("undone");
+        expect(await state(id)).toEqual({ summary: "Z", why: null, tags: ["old"] });
+      });
+
+      it("an extend that is not the row's id replaces the dialog's row, as today", async () => {
+        const id = await seeded();
+        const first = await editId(write(id, { summary: "B" }));
+        const dialog = await editId(h.edits.applyEdit(A, id, { title: "Dialog" }, at(21)));
+        const second = await editId(write(id, { tags: [tag("new")] }, first));
+        expect(await h.edits.undoEdit(A, id, dialog)).toBe("conflict");
+        expect(await h.edits.undoEdit(A, id, second)).toBe("undone");
+        expect(await state(id)).toEqual({ summary: "B", why: null, tags: ["old"] });
+        expect((await h.links.get(A, id))?.title).toBe("Dialog");
+      });
+
+      it("an extend with no covered change returns no id, and the old id still undoes", async () => {
+        const id = await seeded();
+        const first = await editId(write(id, { summary: "B" }));
+        expect((await write(id, { summary: "B" }, first))?.editId).toBeNull();
+        expect(await h.edits.undoEdit(A, id, first)).toBe("undone");
+        expect((await state(id)).summary).toBe("A");
+      });
+    });
   });
 }

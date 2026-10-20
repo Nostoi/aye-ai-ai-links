@@ -248,6 +248,10 @@ export function buildMcpServer(
   const { owner, savedBy } = caller;
   const receipts = recorder !== undefined;
   const record: RecordChange = recorder ?? (() => {});
+  const lastEdit = new Map<string, string>();
+  const remember = (linkId: string, editId: string | null) => {
+    if (editId) lastEdit.set(linkId, editId);
+  };
 
   /** Each tool states its output schema once: `tools/list` shows it open, `guarded` checks it strictly. */
   const register = <I extends StandardSchemaWithJSON>(
@@ -284,9 +288,10 @@ export function buildMcpServer(
       const at = { ...deps, now: () => now };
       const input = { ...args, savedBy };
       const { whyFilled, whyEditId, ...saved } = receipts
-        ? await saveLink(at, owner, input, { receipt: true })
+        ? await saveLink(at, owner, input, { receipt: true, extend: (id) => lastEdit.get(id) })
         : { ...(await saveLink(at, owner, input)), whyEditId: null };
       const linkId = saved.link.id;
+      remember(linkId, whyEditId);
       if (saved.created || whyFilled) {
         const fields = saved.created ? [] : ["why"];
         record({
@@ -345,8 +350,9 @@ export function buildMcpServer(
         }),
       };
       const { link, editId } = receipts
-        ? await updateLinkWithReceipt(at, owner, id, patch)
+        ? await updateLinkWithReceipt(at, owner, id, patch, lastEdit.get(id))
         : { link: await updateLink(at, owner, id, patch), editId: null };
+      remember(link.id, editId);
       const fields = Object.keys(patch).filter((k) => patch[k as keyof typeof patch] !== undefined);
       if (fields.length > 0) {
         record({

@@ -5,6 +5,7 @@ import {
   type Covered,
   changedFields,
   coveredOf,
+  extendedPrior,
   holdsWritten,
 } from "./covered-fields.js";
 import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
@@ -427,7 +428,13 @@ export class FakeStore
     return this.view(owner, found);
   }
 
-  async updateWithReceipt(owner: OwnerId, id: string, patch: LinkPatch, _at: Date) {
+  async updateWithReceipt(
+    owner: OwnerId,
+    id: string,
+    patch: LinkPatch,
+    _at: Date,
+    extend?: string,
+  ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
     const before = coveredOf(this.view(owner, found));
@@ -435,30 +442,38 @@ export class FakeStore
     const after = coveredOf(link);
     const changed = changedFields(before, after);
     if (!anyChanged(changed)) return { link, editId: null };
-    return { link, editId: this.recordReceipt(owner, id, changed, before, after) };
+    return { link, editId: this.recordReceipt(owner, id, changed, before, after, extend) };
   }
 
+  /** Replaces the link's record; with a live `extend` it also keeps that record's changes (see `extendedPrior`). */
   private recordReceipt(
     owner: OwnerId,
     id: string,
     changed: Changed,
-    prior: Covered,
-    written: Covered,
+    before: Covered,
+    after: Covered,
+    extend?: string,
   ): string {
+    const key = imageKey(owner, id);
+    const old = this.editRecords.get(key);
+    const merged =
+      old && old.editId === extend && holdsWritten(old.changed, old.written, before)
+        ? extendedPrior(old, changed, before)
+        : undefined;
     const editId = randomUUID();
-    this.editRecords.set(imageKey(owner, id), {
+    this.editRecords.set(key, {
       editId,
-      changed,
-      prior,
-      written,
-      pictureChanged: false,
-      priorPicture: null,
-      writtenSha: null,
+      changed: merged?.changed ?? changed,
+      prior: merged?.prior ?? before,
+      written: after,
+      pictureChanged: merged && old ? old.pictureChanged : false,
+      priorPicture: merged && old ? old.priorPicture : null,
+      writtenSha: merged && old ? old.writtenSha : null,
     });
     return editId;
   }
 
-  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, _at: Date) {
+  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, _at: Date, extend?: string) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
     const before = coveredOf(this.view(owner, found));
@@ -467,7 +482,7 @@ export class FakeStore
     if (!filled) return { link, editId: null };
     const after = coveredOf(link);
     const changed = changedFields(before, after);
-    return { link, editId: this.recordReceipt(owner, id, changed, before, after) };
+    return { link, editId: this.recordReceipt(owner, id, changed, before, after, extend) };
   }
 
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
-import { type Changed, type Covered, holdsWritten } from "../core/covered-fields.js";
+import { type Changed, type Covered, extendedPrior, holdsWritten } from "../core/covered-fields.js";
 import type { LinkTag, OwnerId, Source } from "../core/types.js";
 
 /** A link's tags joined to the catalog; `WHERE` and `ORDER BY` are the caller's. */
@@ -79,7 +79,35 @@ export function attachTags(db: Database, owner: OwnerId, linkId: number, tags: L
   });
 }
 
-/** Replaces the link's receipt with what `before` held and `after` holds in the changed fields. Returns its edit id. */
+/** The `link_edits` picture columns, which a fresh AI receipt leaves empty. */
+type PictureColumns = {
+  picture_changed: number;
+  prior_content_type: string | null;
+  prior_bytes: Buffer | null;
+  prior_sha256: string | null;
+  prior_set_at: number | null;
+  written_sha256: string | null;
+};
+const NO_PICTURE: PictureColumns = {
+  picture_changed: 0,
+  prior_content_type: null,
+  prior_bytes: null,
+  prior_sha256: null,
+  prior_set_at: null,
+  written_sha256: null,
+};
+
+/** The values the receipt replaced, in the fields it changed. */
+const priorOf = (row: ReceiptRow): Covered => ({
+  title: row.prior_title,
+  summary: row.prior_summary,
+  why: why(row.prior_why_text, row.prior_why_source),
+  tags: JSON.parse(row.prior_tags ?? "[]") as LinkTag[],
+});
+
+/**
+ * Replaces the link's receipt with what `before` held and `after` holds in the changed fields.
+ */
 export function writeReceipt(
   db: Database,
   owner: OwnerId,
@@ -88,32 +116,51 @@ export function writeReceipt(
   before: Covered,
   after: Covered,
   at: Date,
+  extend?: string,
 ): string {
+  const old = extend
+    ? (db
+        .prepare("SELECT * FROM link_edits WHERE owner_id = ? AND link_id = ?")
+        .get(owner, linkId) as (ReceiptRow & PictureColumns) | undefined)
+    : undefined;
+  const merged =
+    old && old.edit_id === extend && receiptHolds(old, before)
+      ? extendedPrior({ changed: flagged(old), prior: priorOf(old) }, changed, before)
+      : undefined;
+  const total = merged ?? { changed, prior: before };
+  const picture = merged && old ? old : NO_PICTURE;
   const editId = randomUUID();
   db.prepare(
     `INSERT OR REPLACE INTO link_edits (owner_id, link_id, edit_id, title_changed, picture_changed,
+       prior_content_type, prior_bytes, prior_sha256, prior_set_at, written_sha256,
        prior_title, written_title, summary_changed, prior_summary, written_summary, why_changed,
        prior_why_text, prior_why_source, written_why_text, written_why_source, tags_changed,
        prior_tags, written_tags, at)
-     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     owner,
     linkId,
     editId,
-    changed.title ? 1 : 0,
-    changed.title ? before.title : null,
-    changed.title ? after.title : null,
-    changed.summary ? 1 : 0,
-    changed.summary ? before.summary : null,
-    changed.summary ? after.summary : null,
-    changed.why ? 1 : 0,
-    changed.why ? (before.why?.text ?? null) : null,
-    changed.why ? (before.why?.source ?? null) : null,
-    changed.why ? (after.why?.text ?? null) : null,
-    changed.why ? (after.why?.source ?? null) : null,
-    changed.tags ? 1 : 0,
-    changed.tags ? JSON.stringify(before.tags) : null,
-    changed.tags ? JSON.stringify(after.tags) : null,
+    total.changed.title ? 1 : 0,
+    picture.picture_changed,
+    picture.prior_content_type,
+    picture.prior_bytes,
+    picture.prior_sha256,
+    picture.prior_set_at,
+    picture.written_sha256,
+    total.changed.title ? total.prior.title : null,
+    total.changed.title ? after.title : null,
+    total.changed.summary ? 1 : 0,
+    total.changed.summary ? total.prior.summary : null,
+    total.changed.summary ? after.summary : null,
+    total.changed.why ? 1 : 0,
+    total.changed.why ? (total.prior.why?.text ?? null) : null,
+    total.changed.why ? (total.prior.why?.source ?? null) : null,
+    total.changed.why ? (after.why?.text ?? null) : null,
+    total.changed.why ? (after.why?.source ?? null) : null,
+    total.changed.tags ? 1 : 0,
+    total.changed.tags ? JSON.stringify(total.prior.tags) : null,
+    total.changed.tags ? JSON.stringify(after.tags) : null,
     at.getTime(),
   );
   return editId;

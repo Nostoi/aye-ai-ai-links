@@ -167,6 +167,33 @@ describe("openToolSession", () => {
     ]);
   });
 
+  it("one turn's edits to one link make one Undo, on the last listed change", async () => {
+    const { deps, entry } = setup();
+    await saveLink(deps, CALLER.owner, {
+      url: "https://example.com/zellige",
+      savedBy: "x",
+      tags: [{ name: "Old", source: "stated" }],
+    });
+    entry.session = await openToolSession(deps, CALLER, createCallTracker().track);
+
+    await entry.session.call("save_link", {
+      url: "https://example.com/zellige",
+      why: { text: "For the kitchen", source: "stated" },
+    });
+    await entry.session.call("update_link", {
+      id: "1",
+      tags: [{ name: "Kitchen", source: "stated" }],
+    });
+    const [fill, update] = entry.session.changes();
+
+    expect(fill).toMatchObject({ tool: "save_link", fields: ["why"], editId: null });
+    expect(update).toMatchObject({ tool: "update_link", editId: expect.any(String) });
+    await undoEdit(deps, CALLER.owner, "1", (update as { editId: string }).editId);
+    const link = await deps.store.get(CALLER.owner, "1");
+    expect(link?.why).toBeNull();
+    expect(link?.tags.map((t) => t.key)).toEqual(["old"]);
+  });
+
   it("rejects a call still waiting when the session closes", async () => {
     const { deps, entry } = setup({
       snapshots: { kick: () => new Promise<void>(() => {}) },

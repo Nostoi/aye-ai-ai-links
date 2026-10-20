@@ -137,6 +137,35 @@ function listenUnhandled() {
 }
 
 describe("snapshot runner", () => {
+  it("★ a word-picture host's page keeps no preview, so its icon is pending instead (#193)", async () => {
+    // [Deciding the preview without the saved address.]
+    const s = setup();
+    const page = {
+      title: "T",
+      description: null,
+      imageUrl: "https://opengraph.githubassets.com/x/repo",
+      iconUrls: ["https://github.com/fluidicon.png"],
+    };
+    s.extract.run = async () => ({ kind: "ok", metadata: page, text: "body" });
+    const { link } = await s.store.insertIfAbsent(A, {
+      ...newLink(1, at(0)),
+      url: "https://github.com/Nostoi/repo",
+      urlKey: "github.com/nostoi/repo",
+    });
+    const control = await s.save(A, 2);
+    await s.runner.kick(A, link.id);
+    await s.runner.kick(A, control.id);
+    expect(await s.store.pendingImages(null, 10)).toEqual([
+      { owner: A, linkId: link.id, imageUrl: "https://github.com/fluidicon.png", role: "icon" },
+      {
+        owner: A,
+        linkId: control.id,
+        imageUrl: "https://opengraph.githubassets.com/x/repo",
+        role: "preview",
+      },
+    ]);
+  });
+
   it("runs at most 2 jobs at once across sweeps and kicks, and finishes them all", async () => {
     const s = setup();
     const links = await Promise.all([1, 2, 3, 4, 5].map((n) => s.save(A, n)));

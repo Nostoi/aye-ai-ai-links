@@ -204,6 +204,26 @@ describe("icon urls", () => {
     ]);
   });
 
+  it("★ takes GitHub's fluid-icon, its one icon of 64 px or more, as a candidate (#193)", () => {
+    // [Leaving fluid-icon out: GitHub's other PNG is 32 px, so its links get no icon.]
+    // GitHub's real head, 2026-10-20, in the order it declares them.
+    const head =
+      link('rel="fluid-icon" href="https://github.com/fluidicon.png" title="GitHub"') +
+      link(
+        'rel="mask-icon" href="https://github.githubassets.com/assets/pinned-octocat-093da3e6fa40.svg" color="#000000"',
+      ) +
+      link(
+        'rel="alternate icon" class="js-site-favicon" type="image/png" href="https://github.githubassets.com/favicons/favicon.png"',
+      ) +
+      link(
+        'rel="icon" class="js-site-favicon" type="image/svg+xml" href="https://github.githubassets.com/favicons/favicon.svg"',
+      );
+    expect(icons(head, "https://github.com/Nostoi/aye-ai-ai-links")).toEqual([
+      "https://github.githubassets.com/favicons/favicon.png",
+      "https://github.com/fluidicon.png",
+    ]);
+  });
+
   it("puts a sized declaration before an unsized one", () => {
     const head =
       link('rel="apple-touch-icon" href="/touch.png"') +

@@ -64,7 +64,8 @@ function imageUrl(doc: Document, base: string): string | null {
   );
 }
 
-const ICON_RELS = ["icon", "apple-touch-icon", "apple-touch-icon-precomposed"];
+// `fluid-icon` is GitHub's: its only icon of 64 px or more (#193).
+const ICON_RELS = ["icon", "apple-touch-icon", "apple-touch-icon-precomposed", "fluid-icon"];
 const ICON_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 const ASCII_SPACE = /[\t\n\f\r ]+/;
 

@@ -20,6 +20,7 @@ import type { JsonFetch } from "./auth/metadata-stash.js";
 import { connectClaude, oauthWorld } from "./auth/oauth-test-kit.js";
 import { setOwnerLogin } from "./auth/owner-login.js";
 import type { ServerConfig } from "./config.js";
+import { exportManifest } from "./core/export-format.js";
 import type { ExtractOutcome, PageExtractor } from "./core/extract.js";
 import type {
   FetchOutcome,
@@ -1591,6 +1592,76 @@ describe("startServer", () => {
       await until(() => asked, "the backfill's page fetch");
       await stop();
       expect(iconRow()).toEqual([{ status: null, title: "Page title", text: null, role: null }]);
+    });
+
+    it("★ swaps a GitHub link's stored card of words for its icon; get_link and the export name no preview (#193)", async () => {
+      // [A swap that never runs on a running server, or leaves the preview's address behind.]
+      const GH = "https://github.com/Nostoi/aye-ai-ai-links";
+      const CARD = "https://opengraph.githubassets.com/abc/Nostoi/aye-ai-ai-links";
+      const FLUID = "https://github.com/fluidicon.png";
+      const db = openDatabase(dbPath);
+      let id: string;
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        await saveLink(deps, "owner", { url: GH, savedBy: "seed" });
+        id = String(db.prepare("SELECT id FROM links").pluck().get());
+        const now = deps.now();
+        const lease = await deps.store.leaseSnapshot("owner", id, now, at(1e9));
+        await deps.store.recordSnapshot(
+          "owner",
+          id,
+          lease?.claim ?? -1,
+          record({ imageUrl: CARD }),
+        );
+        const card = { contentType: "image/png" as const, bytes: new Uint8Array(png(1200, 600)) };
+        expect(await deps.images.writeImage("owner", id, CARD, "preview", card, now)).toBe(true);
+      } finally {
+        db.close();
+      }
+      const iconExtractor: PageExtractor = {
+        extract: async () => ({
+          kind: "ok",
+          metadata: { title: "New", description: null, imageUrl: CARD, iconUrls: [FLUID] },
+          text: "new text",
+        }),
+        close: async () => {},
+      };
+      const asked: string[] = [];
+      const { port } = await start({
+        ...fakePipeline({
+          fetchImage: async (url) => {
+            asked.push(url);
+            return { kind: "ok", contentType: "image/png", bytes: new Uint8Array(png(512, 512)) };
+          },
+        }),
+        iconExtractor,
+        iconPollMs: 20,
+        imagePollMs: 20,
+      });
+      await until(() => iconRow()[0]?.role === "icon", "the icon in place of the card");
+      expect(asked).toEqual([FLUID]);
+      expect(iconRow()).toEqual([
+        { status: "ok", title: "Page title", text: "body text", role: "icon" },
+      ]);
+      const res = await json(
+        await post(port, {
+          jsonrpc: "2.0",
+          id: 4,
+          method: "tools/call",
+          params: { name: "get_link", arguments: { id } },
+        }),
+      );
+      expect(res.result.structuredContent.link.snapshot).toMatchObject({
+        status: "ok",
+        imageUrl: null,
+      });
+      const after = openDatabase(dbPath);
+      try {
+        const manifest = await exportManifest(createDeps(after, new FakeEmbedder(DIMS)), "owner");
+        expect(manifest.links[0]?.page).toMatchObject({ title: "Page title", imageUrl: null });
+      } finally {
+        after.close();
+      }
     });
   });
 

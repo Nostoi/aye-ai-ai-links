@@ -3,14 +3,20 @@ import type { ExtractOutcome, PageExtractor, PageMetadata } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome, PageFetcher } from "./fetch.js";
 import { createIconBackfill, iconsToRecord } from "./icon-backfill.js";
-import { MAX_IMAGE_ATTEMPTS, RETRY_MAX_MS } from "./image-indexer.js";
+import { createImageIndexer, MAX_IMAGE_ATTEMPTS, RETRY_MAX_MS } from "./image-indexer.js";
+import { png } from "./image-test-kit.js";
 import type { LinkCheck } from "./link-check-store.js";
+import type { SnapshotRecord } from "./snapshot-store.js";
 import { at, newLink, record } from "./snapshot-store-contract.js";
 
 const OWNER = "o";
 const ICON = "https://ex.com/icon.png";
 const ICON2 = "https://ex.com/icon2.png";
 const PREVIEW = "https://ex.com/og.png";
+const GITHUB = "https://github.com/Nostoi/aye-ai-ai-links";
+/** GitHub's two usable-type icons, as the extraction ranks them: its 32 px PNG, then fluid-icon. */
+const FAVICON = "https://github.githubassets.com/favicons/favicon.png";
+const FLUID = "https://github.com/fluidicon.png";
 const meta = (over: Partial<PageMetadata> = {}): PageMetadata => ({
   title: "Fresh title",
   description: "Fresh description",
@@ -118,17 +124,22 @@ function setup(
 }
 
 describe("iconsToRecord", () => {
+  const PAGE = "https://ex.com/1";
   it("records the page's icons when it names no preview", () => {
-    expect(iconsToRecord(meta())).toEqual([ICON, ICON2]);
+    expect(iconsToRecord(PAGE, meta())).toEqual([ICON, ICON2]);
   });
   it("records none when the page names a preview, or was not read", () => {
-    expect(iconsToRecord(meta({ imageUrl: PREVIEW }))).toEqual([]);
-    expect(iconsToRecord(null)).toEqual([]);
+    expect(iconsToRecord(PAGE, meta({ imageUrl: PREVIEW }))).toEqual([]);
+    expect(iconsToRecord(PAGE, null)).toEqual([]);
+  });
+  it("★ records a word-picture host's icons even when its page names a preview (#193)", () => {
+    // [Asking only whether the page named a preview, so an older GitHub link records none.]
+    expect(iconsToRecord(GITHUB, meta({ imageUrl: PREVIEW }))).toEqual([ICON, ICON2]);
   });
   it("★ reads the child's list through boundedIconUrls: strings only, at most two (N1)", () => {
     // [Passing the child's unvalidated list to a store that refuses more than two.]
     const bad = { ...meta(), iconUrls: [7, ICON, null, ICON2, "https://ex.com/3.png"] };
-    expect(iconsToRecord(bad as unknown as PageMetadata)).toEqual([ICON, ICON2]);
+    expect(iconsToRecord(PAGE, bad as unknown as PageMetadata)).toEqual([ICON, ICON2]);
   });
 });
 
@@ -454,5 +465,224 @@ describe("icon backfill", () => {
     expect(t.status(next)).not.toBeNull();
     expect(t.status(doomed)).toBeNull();
     expect(t.logged.length).toBeLessThanOrEqual(1);
+  });
+
+  describe("the word-picture check (#193)", () => {
+    /** The fresh page: GitHub's card of words as the preview, and both its icons. */
+    const githubPage = () => okExtract(meta({ imageUrl: PREVIEW, iconUrls: [FAVICON, FLUID] }));
+    const PNG = { contentType: "image/png" as const, bytes: new Uint8Array(png(1200, 600)) };
+
+    /** A link saved at `url` before #193, its preview fetched and its old icons recorded. */
+    async function withPreview(
+      t: ReturnType<typeof setup>,
+      n: number,
+      url: string,
+      over: Partial<SnapshotRecord> = {},
+    ) {
+      const { link } = await t.store.insertIfAbsent(OWNER, {
+        ...newLink(n, at(0)),
+        url,
+        urlKey: url.replace(/^https:\/\//, ""),
+      });
+      const lease = await t.store.leaseSnapshot(OWNER, link.id, at(1), at(100));
+      const r = record({ imageUrl: PREVIEW, iconUrls: [FAVICON], ...over });
+      expect(await t.store.recordSnapshot(OWNER, link.id, lease?.claim ?? -1, r)).toBe(true);
+      expect(await t.store.writeImage(OWNER, link.id, PREVIEW, "preview", PNG)).toBe(true);
+      return link.id;
+    }
+
+    it("★ reads the page afresh, so a stale 32 px candidate gives way to fluid-icon (finding 1)", async () => {
+      // [Reusing the snapshot's old candidates: the favicon fails the floor, and the link has no picture.]
+      const t = setup({ extract: githubPage });
+      const id = await withPreview(t, 1, GITHUB);
+      const before = (await t.store.get(OWNER, id))?.snapshot;
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB]);
+      expect((await t.store.get(OWNER, id))?.snapshot).toEqual({ ...before, imageUrl: null });
+      expect(await t.store.getSnapshotText(OWNER, id)).toBe("body text");
+      expect(await t.store.image(OWNER, id, "page")).toBeNull();
+
+      const sizes: Record<string, Buffer> = { [FAVICON]: png(32, 32), [FLUID]: png(512, 512) };
+      const indexer = createImageIndexer({
+        store: t.store,
+        fetcher: {
+          fetch: async (url) => ({
+            kind: "ok",
+            contentType: "image/png",
+            bytes: new Uint8Array(sizes[url] ?? png(1, 1)),
+          }),
+          close: async () => {},
+        },
+        now: () => at(2000),
+      });
+      await indexer.sweep();
+      await indexer.sweep();
+      await indexer.stop();
+      expect((await t.store.imageVersions(OWNER, [id])).get(id)?.fit).toBe("contain");
+      expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "icon" });
+      expect(await t.store.wordPictureCandidates(null, 100)).toEqual([]);
+    });
+
+    it.each(["extract_timeout", "extract_crashed", "extract_out_of_memory"] as const)(
+      "★ swaps the preview of a %s snapshot, keeping its status and title (finding 2)",
+      async (status) => {
+        // [Swapping only ok snapshots, so these keep the card of words for good.]
+        const t = setup({ extract: githubPage });
+        const id = await withPreview(t, 1, GITHUB, {
+          status,
+          iconUrls: [],
+          text: null,
+          lastError: "extract:x",
+        });
+        await t.pass.sweep();
+        const snap = (await t.store.get(OWNER, id))?.snapshot;
+        expect(snap).toMatchObject({ status, title: "Page title", imageUrl: null });
+        expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+        expect(await t.store.dueSnapshots(at(10_000), 10)).toEqual([]);
+      },
+    );
+
+    it("★ reconciles a link deleted during a sweep once its delete is undone, with no restart (finding 3)", async () => {
+      // [A check that runs once at start: the restored link keeps its card of words.]
+      const t = setup({ extract: githubPage });
+      const id = await withPreview(t, 1, GITHUB);
+      expect(await t.store.markDeleted(OWNER, id, at(50))).toBe(true);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([]);
+      expect(await t.store.unmarkDeleted(OWNER, id, at(50))).toBe(true);
+      expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB]);
+      expect(await t.store.image(OWNER, id, "page")).toBeNull();
+      expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+    });
+
+    it("★ recovers from a store write that throws, in the same process (finding 4)", async () => {
+      // [Giving up on the link after one failure.]
+      const t = setup({ extract: githubPage });
+      const id = await withPreview(t, 1, GITHUB);
+      vi.spyOn(t.store, "recordWordPictureCheck").mockRejectedValueOnce(new Error("disk full"));
+      await t.pass.sweep();
+      expect(t.logged.some((l) => l.includes("a store call failed"))).toBe(true);
+      expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB]);
+      t.wait();
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB, GITHUB]);
+      expect(await t.store.image(OWNER, id, "page")).toBeNull();
+      expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+    });
+
+    it("★ never reads an ordinary page that names a preview, and leaves it as it was", async () => {
+      // [Swapping every preview, not only a word-picture host's.]
+      const t = setup({ extract: githubPage });
+      const id = await withPreview(t, 1, "https://example.com/article");
+      const before = await t.store.get(OWNER, id);
+      await t.pass.sweep();
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([]);
+      expect(await t.store.get(OWNER, id)).toEqual(before);
+      expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+    });
+
+    it("★ reads a word-picture link once, one page per sweep: the next sweep goes on to the icon candidates", async () => {
+      const t = setup({ extract: githubPage });
+      await withPreview(t, 1, GITHUB);
+      await t.legacy(2);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB]);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB, "https://ex.com/2"]);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB, "https://ex.com/2"]);
+    });
+
+    it.each<[string, FetchOutcome]>([
+      ["a 503", { kind: "http_error", status: 503 }],
+      ["a 429", { kind: "http_error", status: 429 }],
+      ["a 408", { kind: "http_error", status: 408 }],
+      ["a timeout with the network up", { kind: "timeout" }],
+      ["a network error with the network up", { kind: "network_error", code: "ECONNRESET" }],
+    ])(
+      "★ keeps the preview when the read fails with %s, and reads the page again later",
+      async (_n, outcome) => {
+        let fail = true;
+        const t = setup({ page: (url) => (fail ? outcome : okPage(url)), extract: githubPage });
+        const id = await withPreview(t, 1, GITHUB);
+        const before = await t.store.get(OWNER, id);
+        await t.pass.sweep();
+        expect(await t.store.get(OWNER, id)).toEqual(before);
+        expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+        expect(t.status(id)).toBe("ok");
+        fail = false;
+        t.wait();
+        await t.pass.sweep();
+        expect(t.pageCalls).toEqual([GITHUB, GITHUB]);
+        expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+      },
+    );
+
+    const beforeMetadata: [string, ExtractOutcome][] = [
+      ["a timeout", { kind: "timeout", metadata: null }],
+      ["a crash", { kind: "crashed", metadata: null, detail: "exit code 1" }],
+      ["out of memory", { kind: "out_of_memory", metadata: null }],
+    ];
+
+    it.each(beforeMetadata)(
+      "★ keeps the preview when the extraction ends in %s before metadata, and reads the page again later",
+      async (_n, outcome) => {
+        let fail = true;
+        const t = setup({ extract: () => (fail ? outcome : githubPage()) });
+        const id = await withPreview(t, 1, GITHUB);
+        const before = await t.store.get(OWNER, id);
+        await t.pass.sweep();
+        expect(await t.store.get(OWNER, id)).toEqual(before);
+        expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+        expect(t.status(id)).toBe("ok");
+        fail = false;
+        t.wait();
+        await t.pass.sweep();
+        expect(t.pageCalls).toEqual([GITHUB, GITHUB]);
+        expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+      },
+    );
+
+    it.each(beforeMetadata)(
+      "an icon-check link whose extraction ends in %s before metadata still records none at once",
+      async (_n, outcome) => {
+        const t = setup({ extract: () => outcome });
+        const id = await t.legacy(1);
+        await t.pass.sweep();
+        expect(t.status(id)).toBe("none");
+        expect(t.pageCalls).toEqual(["https://ex.com/1"]);
+      },
+    );
+
+    it.each<[string, FetchOutcome]>([
+      ["a 404", { kind: "http_error", status: 404 }],
+      ["refused", { kind: "refused", reason: "address" }],
+    ])(
+      "★ ends at initials when the page read fails with %s, never at the old preview",
+      async (_n, outcome) => {
+        // [Leaving the preview when the fresh read fails.]
+        const t = setup({ page: () => outcome });
+        const id = await withPreview(t, 1, GITHUB);
+        await t.pass.sweep();
+        expect(t.status(id)).toBe("none");
+        expect(await t.store.imageVersions(OWNER, [id])).toEqual(new Map());
+        expect((await t.store.get(OWNER, id))?.snapshot?.imageUrl).toBeNull();
+      },
+    );
+
+    it("★ reads a word-picture link even while it is flagged gone", async () => {
+      // [Copying the icon candidates' dead-flag rule, so a dead GitHub link keeps its preview.]
+      const t = setup({ page: () => ({ kind: "http_error", status: 404 }) });
+      const id = await withPreview(t, 1, GITHUB);
+      await t.store.updateCheckIf(OWNER, id, null, gone);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB]);
+      expect(t.status(id)).toBe("none");
+    });
   });
 });

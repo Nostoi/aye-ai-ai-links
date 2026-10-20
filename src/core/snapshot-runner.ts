@@ -154,7 +154,7 @@ export function createSnapshotRunner(o: SnapshotRunnerOptions): SnapshotRunner {
     const recorded = await write(
       job,
       lease,
-      snapshotRecord({ outcome, attempts: lease.attempts, now: now() }),
+      snapshotRecord({ outcome, attempts: lease.attempts, now: now(), url: lease.url }),
     );
     if (recorded && outcome.stage === "extract") await keepCopy(job, outcome.extract);
   }

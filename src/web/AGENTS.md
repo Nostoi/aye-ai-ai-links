@@ -7,7 +7,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 1. **Room to breathe:** big text, generous space, few things per screen.
 2. **Size = importance:** the one thing worth attention is the biggest thing.
 3. **Color means one thing each** (below).
-4. **Pictures jog memory:** real page images, shown large.
+4. **Pictures are small accents:** your words lead, and a picture is a small fixed square beside them, never a wide crop (ROADMAP 2026-10-20; #194 and #195 bring All links and Home to it). A page's preview shows unless its site makes pictures of words (`isWordPictureHost`, `src/core/word-picture-host.ts`), which shows the site's icon. A link with no picture shows its initials on `--pic`, never in its space's color.
 5. **Ask, don't make you dig:** open on a question; search understands vague memories.
 6. **No guilt counters:** no unread totals; small, finishable nudges.
 

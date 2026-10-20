@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { IconBackfillStore } from "./icon-backfill-store.js";
-import type { ImageBytes, ImageStore } from "./image-store.js";
+import type { ImageBytes, ImageStore, LinkImageReader } from "./image-store.js";
 import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import type { LinkEditStore } from "./link-edit-store.js";
 import type { SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
-import type { LinkStore } from "./store.js";
+import type { LinkRemover, LinkStore } from "./store.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. */
 export type IconBackfillHarness = {
-  links: LinkStore & SnapshotStore;
-  images: ImageStore & IconBackfillStore;
+  links: LinkStore & SnapshotStore & LinkRemover;
+  images: ImageStore & LinkImageReader & IconBackfillStore;
   checks: LinkCheckStore;
   edits: LinkEditStore;
   addOwner(owner: string): MaybeAsync<void>;
@@ -318,6 +318,169 @@ export function describeIconBackfillStoreContract(
     it("answers an id never issued with false", async () => {
       expect(await h.images.recordIconCheck(A, "999", [ICON])).toBe(false);
       expect(await h.images.recordIconCheck(A, "nope", [])).toBe(false);
+    });
+
+    describe("links that name a preview, for the word-picture check (#193)", () => {
+      const named = async () =>
+        (await h.images.wordPictureCandidates(null, 100)).map((c) => c.linkId);
+      /** A link whose snapshot named IMG, with that preview fetched. */
+      const withPreview = async (owner = A, over: Partial<SnapshotRecord> = {}) => {
+        const id = await recorded(owner, record({ imageUrl: IMG, iconUrls: [ICON], ...over }));
+        expect(await h.images.writeImage(owner, id, IMG, "preview", PNG, at(5))).toBe(true);
+        return id;
+      };
+
+      it("lists a link naming a preview, with its owner, address and preview", async () => {
+        const id = await withPreview();
+        await legacy();
+        expect(await h.images.wordPictureCandidates(null, 100)).toEqual([
+          { owner: A, linkId: id, url: "https://ex.com/1", imageUrl: IMG },
+        ]);
+      });
+
+      it("★ lists one whose extraction ended badly but kept the metadata (finding 2)", async () => {
+        // [Asking for an ok snapshot, which leaves these with their preview for good.]
+        const ids = [];
+        for (const status of ["extract_timeout", "extract_crashed", "extract_out_of_memory"]) {
+          ids.push(
+            await withPreview(A, {
+              status: status as SnapshotRecord["status"],
+              text: null,
+              lastError: "extract:x",
+            }),
+          );
+        }
+        expect(await named()).toEqual(ids);
+      });
+
+      it("★ lists a link flagged gone, and every owner's, in id order a page at a time", async () => {
+        // [Copying the icon candidates' dead-flag clause, which keeps a dead link's preview for good.]
+        const ids = [await withPreview(A), await withPreview(B), await withPreview(A)];
+        expect((await h.checks.updateCheckIf(A, ids[0] as string, null, gone))?.applied).toBe(true);
+        const first = await h.images.wordPictureCandidates(null, 2);
+        expect(first.map((c) => [c.owner, c.linkId])).toEqual([
+          [A, ids[0]],
+          [B, ids[1]],
+        ]);
+        const rest = await h.images.wordPictureCandidates(first[1]?.linkId ?? null, 2);
+        expect(rest.map((c) => [c.owner, c.linkId])).toEqual([[A, ids[2]]]);
+      });
+
+      it("★ leaves out a deleted link, and lists it again once its delete is undone (finding 3)", async () => {
+        // [Listing a hidden link, or forgetting it for good.]
+        const id = await withPreview();
+        expect(await h.links.markDeleted(A, id, at(50))).toBe(true);
+        expect(await named()).toEqual([]);
+        expect(await h.links.unmarkDeleted(A, id, at(50))).toBe(true);
+        expect(await named()).toEqual([id]);
+      });
+
+      it("★ replaces the preview with the fresh icons: the first is pending, the preview gone", async () => {
+        // [Keeping the snapshot's old icon candidates, or the fetched preview.]
+        const id = await withPreview();
+        expect(await h.images.recordWordPictureCheck(A, id, IMG, [ICON2, ICON3])).toBe(true);
+        expect(await h.imageStatus(A, id)).toBe("pending");
+        expect(await h.images.pendingImages(null, 100)).toEqual([
+          { owner: A, linkId: id, imageUrl: ICON2, role: "icon" },
+        ]);
+        expect(await h.images.image(A, id, "page")).toBeNull();
+        expect((await h.links.get(A, id))?.snapshot?.imageUrl).toBeNull();
+        expect(await named()).toEqual([]);
+        expect(await h.images.endImage(A, id, ICON2, "icon", "none")).toBe(true);
+        expect(await h.images.pendingImages(null, 100)).toEqual([
+          { owner: A, linkId: id, imageUrl: ICON3, role: "icon" },
+        ]);
+      });
+
+      it("records none when the fresh page had no icon: nothing pending, no picture", async () => {
+        const id = await withPreview();
+        expect(await h.images.recordWordPictureCheck(A, id, IMG, [])).toBe(true);
+        expect(await h.imageStatus(A, id)).toBe("none");
+        expect(await h.images.pendingImages(null, 100)).toEqual([]);
+        expect(await h.images.image(A, id)).toBeNull();
+        expect(await candidates()).toEqual([]);
+      });
+
+      it("★ changes only the picture: title, description, text, status and owner picture stay", async () => {
+        // [Re-running the snapshot, or clearing the owner's picture with the fetched one.]
+        const id = await withPreview(A, {
+          status: "extract_timeout",
+          text: null,
+          lastError: "extract:timeout",
+        });
+        expect(await h.edits.applyEdit(A, id, { picture: { set: PNG } }, at(6))).not.toBeNull();
+        const before = await stateOf(A, id);
+        expect(await h.images.recordWordPictureCheck(A, id, IMG, [ICON2])).toBe(true);
+        const after = await stateOf(A, id);
+        expect(after.snapshot).toEqual({ ...before.snapshot, imageUrl: null });
+        expect(after.snapshot?.status).toBe("extract_timeout");
+        expect(after.text).toBe(before.text);
+        expect(await h.images.image(A, id, "own")).toMatchObject({ bytes: PNG.bytes });
+      });
+
+      it.each<
+        [
+          string,
+          () => Promise<{
+            owner: string;
+            id: string;
+            writer: string;
+            icons: string[];
+            url: string;
+          }>,
+        ]
+      >([
+        [
+          "with a different preview",
+          async () => ({ owner: A, id: await withPreview(), writer: A, icons: [ICON], url: ICON3 }),
+        ],
+        [
+          "naming no preview",
+          async () => ({ owner: A, id: await legacy(), writer: A, icons: [ICON], url: IMG }),
+        ],
+        [
+          "another owner's",
+          async () => ({ owner: A, id: await withPreview(), writer: B, icons: [ICON], url: IMG }),
+        ],
+        [
+          "deleted",
+          async () => {
+            const id = await withPreview();
+            expect(await h.links.markDeleted(A, id, at(50))).toBe(true);
+            return { owner: A, id, writer: A, icons: [ICON], url: IMG };
+          },
+        ],
+        [
+          "with more than MAX_ICON_URLS icons",
+          async () => ({
+            owner: A,
+            id: await withPreview(),
+            writer: A,
+            icons: [ICON, ICON2, ICON3],
+            url: IMG,
+          }),
+        ],
+      ])("★ refuses a link %s, changing nothing", async (_name, seed) => {
+        // [An unconditional update, or one missing that WHERE clause.]
+        const { owner, id, writer, icons, url } = await seed();
+        const before = await stateOf(owner, id);
+        const status = await h.imageStatus(owner, id);
+        expect(await h.images.recordWordPictureCheck(writer, id, url, icons)).toBe(false);
+        expect(await stateOf(owner, id)).toEqual(before);
+        expect(await h.imageStatus(owner, id)).toBe(status);
+      });
+
+      it("★ keeps the stored preview when it refuses", async () => {
+        // [Deleting the preview row before checking the snapshot still names it.]
+        const id = await withPreview();
+        expect(await h.images.recordWordPictureCheck(A, id, ICON3, [ICON])).toBe(false);
+        expect(await h.images.image(A, id, "page")).toMatchObject({ role: "preview" });
+      });
+
+      it("answers an id never issued with false", async () => {
+        expect(await h.images.recordWordPictureCheck(A, "999", IMG, [ICON])).toBe(false);
+        expect(await h.images.recordWordPictureCheck(A, "nope", IMG, [])).toBe(false);
+      });
     });
   });
 }

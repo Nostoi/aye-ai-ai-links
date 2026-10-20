@@ -23,7 +23,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
 - **2026-10-20:** Ask AI replies are short, with cards (#185).
-  - **Owner's decision.** A new in-app prompt, a cap of 5 cards per reply, and a plain-text safety net for leaked Markdown. No `answer` tool and no structured outputs: in a measured comparison they did no better than the prompt (#185 body).
+  - **Owner's decision.** A new in-app prompt, a cap of 5 cards per reply, and a plain-text safety net for leaked Markdown. No `answer` tool: in a measured comparison it did no better than the prompt (#185 body). Structured outputs were left out of scope and not measured.
   - **Controller rulings,** after the solution challenge (REVISE; #185 comment 6289817200):
     - Markers are read before any tidying, so tidying never makes a card.
     - A marker past the fifth card is shown as the link's title in plain text, and the history keeps the marker. This replaces the issue body's "removed", which was the controller's wording.

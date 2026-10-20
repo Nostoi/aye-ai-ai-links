@@ -30,9 +30,10 @@ export function goneLine(link: Link, view: GoneView | null | undefined, copy?: C
 /**
  * The gone line's buttons on the cards inside `#root`, including those Show older links appends.
  * It still works posts `/links/still-works`, hides that card's line and offers Undo, which sends
- * back the rows the answer held. I'm done with it posts `/home/archive`, hides the card and offers
- * Undo, which posts `/home/unarchive`. A refusal is shown in `#error`, and a refused Undo leaves
- * things hidden. A block; needs `CARD_FETCH` and `showUndo`.
+ * back the rows the answer held. I'm done with it is the menu's own (`doneCard`), so the page's
+ * script includes `doneLinkScript` too. Each button is off until the other's answer comes. A
+ * refusal is shown in `#error`, and a refused Undo leaves things hidden. A block; needs
+ * `CARD_FETCH` and `showUndo`.
  */
 export const goneScript = (root: string, error: string) => `{
 const goneRoot = document.getElementById(${JSON.stringify(root)});
@@ -45,24 +46,25 @@ if (goneRoot) {
     const card = line.closest("[data-id]");
     const buttons = [...line.querySelectorAll("button")];
     if (buttons.some((b) => b.disabled)) return;
-    const id = card.dataset.id;
-    const works = button.dataset.act === "still-works";
-    const hide = works ? line : card;
-    goneError.textContent = "";
     buttons.forEach((b) => (b.disabled = true));
-    const res = await post(works ? "/links/still-works" : "/home/archive", { id });
+    if (button.dataset.act !== "still-works") {
+      await doneCard(card);
+      buttons.forEach((b) => (b.disabled = false));
+      return;
+    }
+    const id = card.dataset.id;
+    goneError.textContent = "";
+    const res = await post("/links/still-works", { id });
     buttons.forEach((b) => (b.disabled = false));
-    const moved = works && res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (works ? !moved || !moved.check : !res || res.status !== 204) {
+    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (!moved || !moved.check) {
       goneError.textContent = await failure(res);
       return;
     }
-    hide.hidden = true;
-    showUndo(works ? "Marked as working." : "Moved out of your list.", async () => {
-      const back = works
-        ? await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous })
-        : await post("/home/unarchive", { id });
-      if (back && back.status === 204) hide.hidden = false;
+    line.hidden = true;
+    showUndo("Marked as working.", async () => {
+      const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
+      if (back && back.status === 204) line.hidden = false;
       else goneError.textContent = await failure(back);
     });
   });

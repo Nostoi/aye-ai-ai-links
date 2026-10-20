@@ -168,6 +168,7 @@ img.handy-image{background:#fff}
 .card-menu-list button,.card-menu-list a{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left;text-decoration:none}
 .card-menu-list button:hover,.card-menu-list button:focus-visible,.card-menu-list a:hover,.card-menu-list a:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
 .card-menu-list svg{flex:none;fill:none;stroke:var(--soft);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.card-menu-list hr{margin:4px 8px;border:0;border-top:1px solid var(--line)}
 @keyframes menu-in{from{opacity:0;transform:translateY(-4px) scale(.97)}}
 @media (prefers-reduced-motion:reduce){.card-menu-list{animation:none}.card-menu-dot{transition:none}}
 .handy-tile p{margin:0 0 4px}
@@ -393,8 +394,10 @@ const focusAfter = (shelf, from) => {
   const tile = (id) => (id ? shelf.querySelector('[data-id="' + id + '"]') : null);
   const same = tile(from.id);
   const next = tile(from.next);
+  const button = same && same.querySelector('button[data-act="' + from.act + '"]');
   const target =
-    (same && (same.querySelector('button[data-act="' + from.act + '"]') || same.querySelector("a, button, summary"))) ||
+    (button && (button.closest("details") ? button.closest("details").querySelector("summary") : button)) ||
+    (same && same.querySelector("a, button, summary")) ||
     (next && next.querySelector("a, button, summary")) ||
     document.getElementById("handy-title");
   if (target.closest("[hidden]")) showAll(shelf);
@@ -447,7 +450,9 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    if (!make && act !== "done" && act !== "still-works") return;
+    // Done on a tile's ask and the menu's I'm done with it (archive) are the same action.
+    const done = act === "done" || act === "archive";
+    if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
     const id = tile.dataset.id;
     const after = tile.nextElementSibling;
@@ -456,7 +461,7 @@ if (handy) {
     button.disabled = true;
     let dropped = false;
     try {
-      if (act === "done") {
+      if (done) {
         const res = await post("/home/archive", { id });
         if (!res || res.status !== 204) {
           handyError.textContent = await failure(res);

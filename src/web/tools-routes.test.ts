@@ -376,7 +376,7 @@ describe("POST /tools/undo", () => {
 
 describe("Keep handy on the pages that list links", () => {
   const visible = (html: string, id: string) => {
-    const c = parseHTML(html).document.querySelector(`[data-id="${id}"] [data-handy]`);
+    const c = parseHTML(html).document.querySelector(`[data-id="${id}"] .card-menu`);
     const keep = c?.querySelector("button[data-act=keep]") as HTMLElement | undefined;
     return keep ? (keep.hidden ? "kept" : "keep") : null;
   };

@@ -7,10 +7,11 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
+import { doneLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { hostOf } from "./host.js";
-import { handyControl, keepHandyScript } from "./keep-handy.js";
+import { keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { spaceClass, tile, whyLine } from "./pages.js";
@@ -98,19 +99,18 @@ function card(
   const picture = images.get(link.id);
   return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
 ${tile(link, picture, "card-image")}
-${editMenu(link, copies.get(link.id))}
+${editMenu(link, copies.get(link.id), handy.get(link.id))}
 <div class="card-body">
 <h3>${linkTitle(link)}</h3>
 <p class="small">${saved}</p>
 ${why}
-${goneLine(link, gone.get(link.id), copies.get(link.id))}
-${done ? "" : handyControl(link, handy.get(link.id))}</div>
+${goneLine(link, gone.get(link.id), copies.get(link.id))}</div>
 </li>`;
 }
 
 /**
- * Tell me why, Keep handy, the edit dialog and Delete link on the active cards, including those Show older
- * links appends.
+ * Tell me why, the ⋯ menu (I'm done with it, Keep handy, the edit dialog, the saved copy's Remove
+ * and Delete link) and the gone line on the active cards, including those Show older links appends.
  */
 const cardsScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
@@ -119,6 +119,7 @@ ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
 ${removeCopyScript("space-links", "space-error")}
 ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
+${doneLinkScript("space-links", "space-error")}
 </script>
 `;
 

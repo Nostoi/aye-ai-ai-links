@@ -546,17 +546,19 @@ describe("Remove saved copy on a space page", () => {
 
 describe("Keep handy on a space page", () => {
   const kept = { status: "kept", source: "stated", due: false } as const;
-  it("gives each active card the control, and the done view none but the Undo bar", () => {
+  it("gives each active card's menu Keep handy or Not handy anymore, and the done view neither but the Undo bar", () => {
     const html = space({ links: [link("1"), link("2")], handy: new Map([["2", kept]]) });
     const d = dom(html);
-    expect((d.querySelector('[data-id="1"] button[data-act=keep]') as HTMLElement).hidden).toBe(
-      false,
-    );
-    expect((d.querySelector('[data-id="2"] .handy-on') as HTMLElement).hidden).toBe(false);
+    const row = (id: string, act: string) =>
+      d.querySelector(`[data-id="${id}"] .card-menu button[data-act=${act}]`) as HTMLElement;
+    expect([row("1", "keep").hidden, row("1", "not-handy").hidden]).toEqual([false, true]);
+    expect([row("2", "keep").hidden, row("2", "not-handy").hidden]).toEqual([true, false]);
     expect(html).toContain('id="undo-bar"');
     expect(html.match(/const post = /g)).toHaveLength(1);
     const done = space({ links: [link("1", { state: "archived" })], done: true });
-    expect(dom(done).querySelector("[data-handy]")).toBeNull();
+    expect(
+      dom(done).querySelector("[data-act=keep], [data-act=not-handy], [data-handy]"),
+    ).toBeNull();
     expect(done).toContain('id="undo-bar"');
   });
 });

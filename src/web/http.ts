@@ -83,6 +83,8 @@ import {
 } from "../core/worth-a-look.js";
 import type { McpDeps, TrackCall } from "../mcp/server.js";
 import { type KeyInfo, KeyStoreError } from "../store/key-store.js";
+import { chatAnswer } from "./ai-answer.js";
+import { askCard } from "./ai-card.js";
 import { ALL_RESTART, allHref, allPage } from "./all-page.js";
 import type { Ask } from "./ask-panel.js";
 import { bookmarkletCode } from "./bookmarklet.js";
@@ -1194,22 +1196,9 @@ export function webApp({
     app.post("/ai/chat", session, chatBody, async (c) => {
       const { history, text } = c.get("turn");
       const name = ai.model.name;
-      const answer = (result: TurnResult) => {
-        const { changes, seen } = result;
-        return c.json(
-          result.ok
-            ? { ok: true, ai: name, reply: result.reply, changes, seen }
-            : {
-                ok: false,
-                ai: name,
-                message: `${name} didn't answer: ${result.reason}.`,
-                changes,
-                seen,
-              },
-          200,
-          NO_STORE,
-        );
-      };
+      const { owner } = c.get("caller");
+      const answer = async (result: TurnResult) =>
+        c.json(await chatAnswer(deps, owner, name, result), 200, NO_STORE);
       let tools: ToolSession;
       try {
         tools = await openToolSession(ai.deps, inAppCaller(c.get("caller"), name), ai.track);
@@ -1236,6 +1225,14 @@ export function webApp({
   } else {
     app.post("/ai/chat", session, (c) => c.json({ code: "NO_AI" }, 404, NO_STORE));
   }
+
+  // One card for the panel, to replace a stale one. It needs no AI, so it is mounted either way.
+  app.get("/ai/card/:id{[0-9]+}", session, async (c) => {
+    const card = await askCard(deps, c.get("caller").owner, c.req.param("id"));
+    return card === null
+      ? c.json({ code: "not_found" }, 404, NO_STORE)
+      : c.json({ card }, 200, NO_STORE);
+  });
 
   if (consent) {
     app.get("/consent", session, async (c) => {

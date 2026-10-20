@@ -704,8 +704,9 @@ describe("startServer", () => {
           ok: false,
           ai: "Fake",
           message: "Fake didn't answer: the server is stopping.",
+          remember: "Fake didn't answer: the server is stopping.",
+          cards: {},
           changes: [],
-          seen: [],
         });
         expect(rows()).toEqual([]);
       } finally {

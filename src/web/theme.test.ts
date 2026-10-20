@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { SPACE_COLORS } from "../core/tag-space.js";
 import { editDialog } from "./edit-link.js";
-import { themeCss, tokens } from "./theme.js";
+import { askCss, themeCss, tokens } from "./theme.js";
 
 const channel = (n: number) => {
   const c = n / 255;
@@ -404,9 +404,14 @@ const specificity = (sel: string) => {
 };
 const AT_REST = /::|:(hover|focus|focus-visible|active)\b/;
 /** The winning value of `prop` on `el` at `width`, by specificity and then source order. */
-function computed(el: Element, prop: string, width: "desktop" | "phone"): string | undefined {
+function computed(
+  el: Element,
+  prop: string,
+  width: "desktop" | "phone",
+  css = themeCss,
+): string | undefined {
   let best: { spec: number; value: string } | undefined;
-  for (const rule of parseCss(themeCss)) {
+  for (const rule of parseCss(css)) {
     if (rule.media !== null && !(width === "phone" && rule.media === "(max-width:600px)")) continue;
     const value = rule.decls.get(prop);
     if (value === undefined) continue;
@@ -420,6 +425,61 @@ function computed(el: Element, prop: string, width: "desktop" | "phone"): string
 }
 const el = (html: string, pick: string) =>
   parseHTML(`<html><body>${html}</body></html>`).document.querySelector(pick) as Element;
+
+describe("a picture-less card in a coloured space (#193)", () => {
+  const initials = '<span class="pic-initials">AB</span>';
+  // Each card as its builder renders it with no picture, in a space: the box the initials sit in.
+  it.each([
+    [
+      "a search result",
+      `<li class="result space-clay"><div class="tile initials-box">${initials}</div></li>`,
+    ],
+    [
+      "an All links or space card",
+      `<li class="link-card space-clay"><div class="card-image initials-box">${initials}</div></li>`,
+    ],
+    [
+      "Worth a look's lead",
+      `<article class="worth-card space-clay"><div class="worth-image initials-box">${initials}</div></article>`,
+    ],
+    [
+      "Worth a look's small card",
+      `<article class="worth-card worth-small space-clay"><div class="worth-tile initials-box">${initials}</div></article>`,
+    ],
+    [
+      "a Handy postcard",
+      `<article class="handy-tile space-clay"><div class="handy-image initials-box">${initials}</div></article>`,
+    ],
+    [
+      "a space's mosaic",
+      '<a class="home-space space-clay"><div class="mosaic"><div class="mosaic-icon initials-box"><span class="pic-initials">AB</span></div></div></a>',
+    ],
+    [
+      "an Ask AI card",
+      `<article class="ask-card space-clay"><div class="ask-tile initials-box">${initials}</div></article>`,
+    ],
+    [
+      "the edit dialog's preview",
+      '<div class="edit-preview space-clay"><span class="edit-initials">AB</span></div>',
+    ],
+  ])("★ %s shows its initials on the page background, untinted", (_name, html) => {
+    // [A box or initials still mixed with the space colour.]
+    const box = el(html, ".initials-box, .edit-preview");
+    const text = el(html, ".pic-initials, .edit-initials");
+    // A page with the AI on carries both sheets.
+    const css = `${themeCss}\n${askCss}`;
+    for (const width of ["desktop", "phone"] as const) {
+      expect(computed(box, "background", width, css), width).toBe("var(--bg)");
+      expect(computed(text, "color", width, css), width).not.toContain("--space");
+    }
+  });
+
+  it("★ leaves the Handy postcard behind its initials untinted too", () => {
+    // [Neutralising only the picture box, so the postcard around it keeps the space colour.]
+    const card = el('<article class="handy-tile space-clay"></article>', "article");
+    expect(computed(card, "background", "desktop")).toBe("var(--bg)");
+  });
+});
 
 describe("icons and initials", () => {
   const mosaic = el(

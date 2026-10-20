@@ -16,7 +16,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), saved summaries (#160), stats and what they say about you (#161), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), stats and what they say about you (#161), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
 
 ## Decision log
 
@@ -27,6 +27,25 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **This supersedes** the 2026-10-19 Ask AI rulings that Ask AI "looks like the other menu links" and that "the menu is today's menu plus Ask AI before Sign out" (owner ruling, 2026-10-20, #196 comment 6298376762: the approval of the redesign, #191, replaces them). The dated design `docs/specs/2026-10-19-in-app-ai-design.md` is left as written.
   - **No-AI snapshots narrowed.** The 2026-10-19 line "with no AI set up, every page is byte for byte as before" held the pages against the Ask AI panel. It does not freeze them against a deliberate redesign: `src/web/__ask_off__` is regenerated with `vitest -u` when a PR changes a page on purpose, and the panel must still add nothing when it is off (#191).
   - **Dismissal.** The account menu closes on Escape pressed inside the bar, on a click outside it and when focus moves out of the bar; it leaves an Escape that Ask AI's panel already took.
+- **2026-10-20:** Calmer Home and All links (#191), and which picture a card shows (#193, its first part).
+  - **Owner rulings, 2026-10-20:**
+    - **Order.** The redesign (#192–#197) goes ahead of the rest of the Later order: #160, #161, #133, #131 and #132 (#191 comment 6297978367).
+    - **Design rule 4 is reversed.** "Pictures jog memory: real page images, shown large" becomes "pictures are small accents" (`src/web/AGENTS.md`). #194 and #195 make the pictures small on All links and Home.
+    - **Detection, the simple version** (#193 comment 6297999133). Known hosts show the site's icon instead of their preview: github.com social cards and x.com link cards. The owner can switch any card to its icon through **Edit title and picture…**, which is a later PR. There is no AI image check.
+    - **Picture-less cards** show initials on a neutral background, never tinted with the space's colour.
+  - **Controller rulings:**
+    - **The hosts** are github.com, x.com and twitter.com, with or without `www.`. No other subdomain counts. They are judged on the saved address, so a short link that redirects to GitHub keeps its preview. The rule is `isWordPictureHost` in `src/core/word-picture-host.ts`. A known host's snapshot records no preview, only its icons.
+    - **GitHub's icon.** `rel=fluid-icon` becomes a kept icon rel. It is GitHub's only icon of 64 px or more; its other PNG is 32 px. A known host with no usable icon shows initials.
+    - **The neutral background** is `--bg`. Each card type's picture box, the Handy postcard and the edit dialog's preview use it. The space dots stay. The empty-space mosaic's `.tint-*` stays until #195 makes spaces words only.
+    - **Existing links converge in the icon backfill's sweep, every 15 s.** This replaces a once-per-start pass, after the solution challenge (REVISE). A live known-host link whose snapshot still names a preview is read afresh:
+      - It is read whatever its snapshot's status (`extract_timeout`, `extract_crashed` and `extract_out_of_memory` keep metadata), so the current icons are found rather than stale ones.
+      - The preview and its fetched picture are dropped and the fresh icons recorded. The snapshot's status, title and text stay.
+      - A link restored by a delete's Undo is picked up by the next sweep.
+  - **Changes to #149** (ROADMAP 2026-10-19 and #149 comment of 2026-10-19):
+    - **`imageUrl`.** For a known host, get_link's `imageUrl` and the export's `page.imageUrl` are null. This replaces the controller default "get_link's imageUrl stays the page's preview address".
+    - **A known-host link marked as gone** is read once and does not wait until it works again. If the read fails, it shows initials.
+    - **A fresh read that fails** records no icon, so the card shows initials, as #149's backfill does.
+
 - **2026-10-20:** Edit in the Ask AI panel (#183).
   - **Owner rulings, 2026-10-20:**
     - **O1.** Edit opens the existing title-and-picture dialog, unchanged in what it edits.

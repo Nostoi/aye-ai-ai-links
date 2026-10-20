@@ -363,6 +363,7 @@ const answer = (over: Record<string, unknown> = {}) => ({
   picture: { own: false, pageVersion: PAGE, pageFit: "cover" },
   editId: null,
   ...over,
+  shown: over.shown ?? over.title ?? "Link 1",
 });
 /** The search page with the dialog, `<dialog>`'s two methods stood in for (linkedom has neither). */
 function opened(
@@ -652,6 +653,7 @@ describe("the edit dialog's script", () => {
             status: 200,
             body: answer({
               title: HOSTILE,
+              shown: HOSTILE,
               version: OWN,
               picture: { own: true, pageVersion: PAGE, pageFit: "cover" },
               editId: "e1",
@@ -661,6 +663,7 @@ describe("the edit dialog's script", () => {
             status: 200,
             body: answer({
               title: null,
+              shown: "Ex 1 — ex.com",
               version: null,
               initials: "EC",
               picture: { own: false, pageVersion: null },
@@ -685,13 +688,14 @@ describe("the edit dialog's script", () => {
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toMatchObject({ url: "/links/edit/undo", body: { id: "1", editId: "e1" } });
-    expect(card.querySelector("h2 a")?.textContent).toBe("https://ex.com/1");
+    expect(card.querySelector("h2 a")?.textContent).toBe("Ex 1 — ex.com");
+    expect(card.getAttribute("data-title")).toBe("");
     expect(card.querySelector(".tile")?.tagName).toBe("DIV");
     expect(card.querySelector(".tile")?.getAttribute("class")).toBe("tile initials-box");
     expect(card.querySelector(".tile")?.getAttribute("aria-hidden")).toBe("true");
     expect(card.getAttribute("data-initials")).toBe("EC");
     expect(card.querySelector(".card-menu summary .visually-hidden")?.textContent).toBe(
-      "More for https://ex.com/1",
+      "More for Ex 1 — ex.com",
     );
   });
 

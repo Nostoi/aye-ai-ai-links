@@ -1,5 +1,6 @@
 import type { Link } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
+import { displayTitle } from "./display-title.js";
 import { escapeHtml } from "./page.js";
 
 /**
@@ -11,7 +12,7 @@ export const openLink = (link: Link, label: string, className?: string) =>
 
 /** A saved link's title (escaped HTML): linked by `openLink` when it is a web link, else plain. */
 export function linkTitle(link: Link): string {
-  const label = escapeHtml(link.title ?? link.url);
+  const label = escapeHtml(displayTitle(link));
   return isWebUrl(link.url) ? openLink(link, label) : label;
 }
 

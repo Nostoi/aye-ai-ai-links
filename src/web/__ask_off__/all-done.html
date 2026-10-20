@@ -564,7 +564,7 @@ const showCard = (target, answer) => {
   d.pageVersion = answer.picture.pageVersion === null ? "" : answer.picture.pageVersion;
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
-  const label = answer.title === null ? answer.url : answer.title;
+  const label = answer.shown;
   const heading = target.querySelector(".result-body h2, .card-body h3");
   (heading.querySelector("a") || heading).textContent = label;
   const named = target.querySelector(".card-menu summary .visually-hidden");

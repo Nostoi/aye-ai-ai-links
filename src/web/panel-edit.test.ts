@@ -129,6 +129,7 @@ describe("the AI-on All page's edit dialog", () => {
               status: 200,
               body: {
                 title: "Renamed",
+                shown: "Renamed",
                 url: "https://ex.com/1",
                 initials: "R",
                 version: null,
@@ -195,6 +196,7 @@ const panelCard = (id: string, title: string, version: string) =>
   );
 const editAnswer = (title: string, editId: string | null = "e1") => ({
   title,
+  shown: title,
   url: "https://ex.com/1",
   initials: title.slice(0, 1),
   version: null,

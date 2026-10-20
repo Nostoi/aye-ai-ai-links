@@ -24,8 +24,9 @@ const meta: PageMetadata = {
 type FailedFetch = Exclude<FetchOutcome, { kind: "ok" }>;
 const fetchOf = (fetch: FailedFetch): AttemptOutcome => ({ stage: "fetch", fetch });
 const extractOf = (extract: ExtractOutcome): AttemptOutcome => ({ stage: "extract", extract });
-const map = (outcome: AttemptOutcome, attempts = 1): SnapshotRecord =>
-  snapshotRecord({ outcome, attempts, now });
+const PAGE = "https://x.test/page";
+const map = (outcome: AttemptOutcome, attempts = 1, url = PAGE): SnapshotRecord =>
+  snapshotRecord({ outcome, attempts, now, url });
 const after = (ms: number) => new Date(now.getTime() + ms);
 
 /** The store's rule: pending and retrying need a time; every other status needs none. */
@@ -239,6 +240,23 @@ describe("snapshotRecord", () => {
     const metadata = { ...meta, iconUrls: bad } as unknown as PageMetadata;
     expect(map(extractOf({ kind: "ok", metadata, text: "b" })).iconUrls).toEqual(want);
   });
+
+  it.each<[string, ExtractOutcome]>([
+    ["ok", { kind: "ok", metadata: meta, text: "body" }],
+    ["timeout", { kind: "timeout", metadata: meta }],
+    ["crashed", { kind: "crashed", metadata: meta, detail: "SIGSEGV" }],
+    ["out_of_memory", { kind: "out_of_memory", metadata: meta }],
+  ])(
+    "★ %s for a word-picture host keeps no preview, but its icons and the rest (#193)",
+    (_n, extract) => {
+      // [Recording GitHub's card of words as the preview, so its icon is never fetched.]
+      const control = map(extractOf(extract));
+      const r = map(extractOf(extract), 1, "https://github.com/Nostoi/aye-ai-ai-links");
+      expect(control.imageUrl).toBe("https://x.test/i.png");
+      expect(r).toEqual({ ...control, imageUrl: null });
+      expect(r.iconUrls).toEqual(meta.iconUrls);
+    },
+  );
 
   it("ok with no text stores null text", () => {
     expect(map(extractOf({ kind: "ok", metadata: meta, text: null })).text).toBeNull();

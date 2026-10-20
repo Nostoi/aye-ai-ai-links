@@ -2,6 +2,7 @@ import type { ExtractOutcome, PageMetadata } from "./extract.js";
 import type { FetchOutcome } from "./fetch.js";
 import { boundedIconUrls, type SnapshotRecord } from "./snapshot-store.js";
 import type { SnapshotStatus } from "./types.js";
+import { keptPreview } from "./word-picture-host.js";
 
 /** Attempts a snapshot gets, counting the first. */
 export const MAX_ATTEMPTS = 6;
@@ -111,14 +112,16 @@ function judge(outcome: AttemptOutcome): Verdict {
 /**
  * The record to write for a finished attempt. `attempts` is the lease count (this attempt
  * included) and is written back unchanged. A retry that has no attempts left becomes `failed`.
- * Nothing here produces `pending`.
+ * Nothing here produces `pending`. `url` is the link's saved address, which decides whether the
+ * page's preview is kept (`keptPreview`).
  */
 export function snapshotRecord(input: {
   outcome: AttemptOutcome;
   attempts: number;
   now: Date;
+  url: string;
 }): SnapshotRecord {
-  const { outcome, attempts, now } = input;
+  const { outcome, attempts, now, url } = input;
   const v = judge(outcome);
   const base = {
     attempts,
@@ -146,7 +149,7 @@ export function snapshotRecord(input: {
     fetchedAt: outcome.stage === "extract" ? now : null,
     title: v.metadata?.title ?? null,
     description: v.metadata?.description ?? null,
-    imageUrl: v.metadata?.imageUrl ?? null,
+    imageUrl: keptPreview(url, v.metadata?.imageUrl ?? null),
     iconUrls: boundedIconUrls(v.metadata?.iconUrls),
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,

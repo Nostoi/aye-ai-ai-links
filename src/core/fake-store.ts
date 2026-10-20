@@ -8,7 +8,7 @@ import {
   extendedPrior,
   holdsWritten,
 } from "./covered-fields.js";
-import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
+import type { IconBackfillStore, IconCandidate, PreviewLink } from "./icon-backfill-store.js";
 import {
   type ImageBytes,
   type ImageEnd,
@@ -853,6 +853,37 @@ export class FakeStore
     this.imageStates.set(imageKey(owner, linkId), {
       status: iconUrls.length > 0 ? "pending" : "none",
     });
+    return true;
+  }
+
+  async wordPictureCandidates(afterId: string | null, limit: number): Promise<PreviewLink[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const found: PreviewLink[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [linkId, s] of mine) {
+        if (this.isHidden(owner, linkId) || s.imageUrl === null) continue;
+        if (afterId !== null && order(linkId) <= order(afterId)) continue;
+        const url = (this.owned(owner).get(linkId) as Link).url;
+        found.push({ owner, linkId, url, imageUrl: s.imageUrl });
+      }
+    }
+    return found.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
+  }
+
+  async recordWordPictureCheck(
+    owner: OwnerId,
+    linkId: string,
+    imageUrl: string,
+    iconUrls: string[],
+  ): Promise<boolean> {
+    const s = this.snapshots.get(owner)?.get(linkId);
+    if (!s || this.isHidden(owner, linkId) || s.imageUrl !== imageUrl) return false;
+    if (iconUrls.length > MAX_ICON_URLS) return false;
+    const key = imageKey(owner, linkId);
+    s.imageUrl = null;
+    s.iconUrls = [...iconUrls];
+    this.imageStates.set(key, { status: iconUrls.length > 0 ? "pending" : "none" });
+    if (this.storedImages.get(key)?.role === "preview") this.storedImages.delete(key);
     return true;
   }
 

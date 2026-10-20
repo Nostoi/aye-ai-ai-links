@@ -3,6 +3,7 @@ import type { PageFetcher } from "./fetch.js";
 import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
 import { MAX_IMAGE_ATTEMPTS, RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
 import { boundedIconUrls } from "./snapshot-store.js";
+import { isWordPictureHost, keptPreview } from "./word-picture-host.js";
 
 export type IconBackfillOptions = {
   store: IconBackfillStore;
@@ -29,9 +30,12 @@ export type IconBackfill = {
   sweep(): Promise<void>;
 };
 
-/** The icons to record from a page's metadata: none when it names a preview or was not read. */
-export function iconsToRecord(metadata: PageMetadata | null): string[] {
-  if (metadata === null || (metadata.imageUrl ?? null) !== null) return [];
+/**
+ * The icons to record from the metadata of a page saved at `url`: none when it was not read, or
+ * when it names a preview that is kept (`keptPreview`).
+ */
+export function iconsToRecord(url: string, metadata: PageMetadata | null): string[] {
+  if (metadata === null || keptPreview(url, metadata.imageUrl ?? null) !== null) return [];
   return boundedIconUrls(metadata.iconUrls);
 }
 
@@ -44,21 +48,29 @@ type Attempt =
 
 type Failure = { attempts: number; retryAt: number };
 
+/** A link to read for its icons, and how what was found is recorded. */
+type Job = { c: IconCandidate; write: (icons: string[]) => Promise<boolean> };
+
 const backoff = (attempts: number) => Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), RETRY_MAX_MS);
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /**
- * Looks once at each link snapshotted before icons were looked for, in the background: one page
- * per sweep, through the page fetcher and the pass's own extractor. It records the page's icons
- * when it names no preview, else none; the image pass then fetches a recorded icon. It never
- * re-runs a snapshot.
+ * Reads, in the background, the pages of two kinds of link for their icons: one page per sweep,
+ * through the page fetcher and the pass's own extractor. It never re-runs a snapshot.
  *
- * Every attempt either records the link, which ends its candidacy for good, or backs it off, so no
- * sweep fetches the same page as the last. A link that fails `MAX_IMAGE_ATTEMPTS` times (a child
- * that could not run, an abort nobody asked for, a store write that failed) is left alone for the
- * life of the process, with nothing written. While the network is down a link only waits. Backoffs
- * are kept in memory, so a restart tries those links again. `stop` writes nothing for the attempt
- * it cuts off.
+ * - First, a link on a word-picture host whose snapshot still names a preview (#193): saved before
+ *   that rule, or restored by a delete's Undo. Its page is read afresh, so its icons are the
+ *   page's current ones; the preview and its fetched picture are dropped, and the icons recorded.
+ *   A page that cannot be read records none, so the card shows initials.
+ * - Then, a link snapshotted before icons were looked for (#149). It records the page's icons
+ *   when it names no preview, else none.
+ *
+ * The image pass then fetches a recorded icon. Every attempt either records the link, which ends
+ * its candidacy for good, or backs it off, so no sweep fetches the same page as the last. A link
+ * that fails `MAX_IMAGE_ATTEMPTS` times (a child that could not run, an abort nobody asked for, a
+ * store write that failed) is left alone for the life of the process, with nothing written. While
+ * the network is down a link only waits. Backoffs are kept in memory, so a restart tries those
+ * links again. `stop` writes nothing for the attempt it cuts off.
  */
 export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
   const { store, pages, extractor, now } = o;
@@ -80,9 +92,9 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
 
   const keyOf = (c: IconCandidate) => JSON.stringify([c.owner, c.linkId]);
 
-  async function record(c: IconCandidate, icons: string[]): Promise<Attempt> {
+  async function record(job: Job, icons: string[]): Promise<Attempt> {
     try {
-      return (await store.recordIconCheck(c.owner, c.linkId, icons))
+      return (await job.write(icons))
         ? { kind: "recorded" }
         : { kind: "failed", why: "the store refused the check" };
     } catch (error) {
@@ -91,7 +103,8 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
   }
 
   /** Fetches and reads one candidate's page and records what came of it. */
-  async function attempt(c: IconCandidate): Promise<Attempt> {
+  async function attempt(job: Job): Promise<Attempt> {
+    const { c } = job;
     const { signal } = abort;
     const page = await pages.fetch(c.url, signal);
     if (signal.aborted) return { kind: "stopped" };
@@ -102,7 +115,7 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
         if (signal.aborted) return { kind: "stopped" };
         if (!up) return { kind: "offline" };
       }
-      return record(c, []);
+      return record(job, []);
     }
     const out = await extractor.extract(page.html, page.finalUrl, signal);
     if (signal.aborted) return { kind: "stopped" };
@@ -110,12 +123,12 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     if (out.kind === "spawn_failed") {
       return { kind: "failed", why: `extract:spawn_failed:${out.detail}` };
     }
-    return record(c, iconsToRecord(out.metadata));
+    return record(job, iconsToRecord(c.url, out.metadata));
   }
 
   /** Attempts one candidate and books the result: done, a backoff, or the end of its budget. */
-  async function take(c: IconCandidate, key: string): Promise<void> {
-    const result = await attempt(c);
+  async function take(job: Job, key: string): Promise<void> {
+    const result = await attempt(job);
     if (result.kind === "stopped") return;
     if (result.kind === "recorded") {
       failures.delete(key);
@@ -136,24 +149,47 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     failures.set(key, { attempts, retryAt });
   }
 
-  /** One sweep from the first candidate: at most one page fetch. */
-  async function scan(): Promise<void> {
+  /**
+   * Pages through one kind of candidate from the first, and attempts the first that `wanted`
+   * keeps and is not waiting out a backoff. True when it attempted one, or the pass went quiet.
+   */
+  async function scanFor<C extends IconCandidate>(
+    read: (afterId: string | null, limit: number) => Promise<C[]>,
+    wanted: (c: C) => boolean,
+    write: (c: C) => Job["write"],
+  ): Promise<boolean> {
     let after: string | null = null;
     for (;;) {
-      const rows = await store.iconCandidates(after, pageSize);
+      const rows = await read(after, pageSize);
       for (const c of rows) {
-        if (quiet) return;
+        if (quiet) return true;
+        if (!wanted(c)) continue;
         const key = keyOf(c);
         const failed = failures.get(key);
         if (failed && now().getTime() < failed.retryAt) continue;
-        await take(c, key);
-        return;
+        await take({ c, write: write(c) }, key);
+        return true;
       }
-      if (rows.length < pageSize) return;
-      after = (rows.at(-1) as IconCandidate).linkId;
+      if (rows.length < pageSize) return false;
+      after = (rows.at(-1) as C).linkId;
       await nextTurn();
-      if (quiet) return;
+      if (quiet) return true;
     }
+  }
+
+  /** One sweep: at most one page fetch, word-picture links first. */
+  async function scan(): Promise<void> {
+    const tookOne = await scanFor(
+      (afterId, limit) => store.wordPictureCandidates(afterId, limit),
+      (c) => isWordPictureHost(c.url),
+      (c) => (icons) => store.recordWordPictureCheck(c.owner, c.linkId, c.imageUrl, icons),
+    );
+    if (tookOne) return;
+    await scanFor(
+      (afterId, limit) => store.iconCandidates(afterId, limit),
+      () => true,
+      (c) => (icons) => store.recordIconCheck(c.owner, c.linkId, icons),
+    );
   }
 
   async function sweepOnce(): Promise<void> {

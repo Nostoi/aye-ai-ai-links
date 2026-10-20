@@ -404,6 +404,10 @@ body.ask-open{margin-right:400px}
 .ask-undone{color:var(--soft)}
 .ask-note{font-size:13px;color:var(--soft)}
 .ask-card.ask-faded{opacity:.4}
+.ask-dim{opacity:.4}
+.ask-earlier{align-self:center;max-width:100%;min-height:44px;padding:0 10px;font-size:13px;font-weight:400;text-align:center;background:none;border:0;color:var(--soft);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.ask-earlier-entries{display:flex;flex-direction:column;gap:14px}
+.ask-earlier-entries[hidden]{display:none}
 .ask-alert{padding:14px 16px;border:1.5px solid var(--line);border-radius:16px;background:var(--surface)}
 .ask-alert p{margin:0 0 6px;overflow-wrap:anywhere}
 .ask-alert-more{font-size:15px;color:var(--soft)}

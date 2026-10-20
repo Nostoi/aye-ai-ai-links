@@ -1,3 +1,4 @@
+import { MAX_PAGE_IDS } from "../ai/chat-turn.js";
 import { escapeHtml } from "../core/escape-html.js";
 
 /** What `page()` needs to add the Ask AI panel (#159): the AI's name, the page's name, and the owner's id. */
@@ -32,7 +33,8 @@ export const askPanel = ({
 
 /**
  * The panel's script; it relies on no other page script. The conversation lives in
- * `sessionStorage` under `ASK_KEY` as `{v, owner, open, entries, history, pending}`. State that
+ * `sessionStorage` under `ASK_KEY` as `{v, owner, open, entries, history, pending}`; each entry
+ * added carries the `path` and `place` of the page it was made on. State that
  * fails to parse, or whose `v` or `owner` isn't this page's, is discarded; a failed save is
  * ignored and the panel works without memory. `window.askPanel` is what the sending code uses.
  * Sign out removes the key from here, so the menu's own script is the same with the AI off.
@@ -83,6 +85,8 @@ export const ASK_SCRIPT = `<script>
     return blank();
   };
   const state = load();
+  const place = (panel.getAttribute("data-place") ?? "").slice(0, 300);
+  const path = (location.pathname + location.search).slice(0, 300);
   let signedOut = false;
   // Counts Start overs, so an answer that arrives after one is not drawn into the new conversation.
   let epoch = 0;
@@ -116,6 +120,7 @@ export const ASK_SCRIPT = `<script>
     text.focus();
   };
   const close = () => {
+    clearFade();
     show(false);
     openButton.focus();
   };
@@ -131,12 +136,51 @@ export const ASK_SCRIPT = `<script>
   }
   document.getElementById("ask-restart").addEventListener("click", () => {
     epoch += 1;
+    clearFade();
     state.entries = [];
     state.history = [];
     state.pending = null;
     messages.replaceChildren();
     save();
   });
+
+  const MAX_PAGE_IDS = ${MAX_PAGE_IDS};
+  // The link ids on the page, in order, once each: not the panel's own cards, nor anything hidden.
+  const pageIds = () => {
+    const ids = new Set();
+    for (const el of document.querySelectorAll("[data-id]")) {
+      if (panel.contains(el) || el.closest("[hidden]")) continue;
+      const id = el.getAttribute("data-id");
+      if (/^[0-9]+$/.test(id)) ids.add(id);
+    }
+    return [...ids];
+  };
+  const pageContext = () => {
+    const ids = pageIds();
+    return { path, place, ids: ids.slice(0, MAX_PAGE_IDS), shown: ids.length };
+  };
+
+  // After a reply names cards on this page, the page's other cards dim until the next send, Start
+  // over or close. The fade is not stored.
+  let fade = null;
+  const dimPage = (named) => {
+    for (const el of document.querySelectorAll("[data-id]")) {
+      if (!panel.contains(el) && !named.has(el.getAttribute("data-id"))) el.classList.add("ask-dim");
+    }
+  };
+  const clearFade = () => {
+    fade?.disconnect();
+    fade = null;
+    for (const el of document.querySelectorAll(".ask-dim")) el.classList.remove("ask-dim");
+  };
+  const startFade = (named) => {
+    clearFade();
+    dimPage(named);
+    // Cards added later, such as by a shelf refresh or Show older, are dimmed as they arrive.
+    if (typeof MutationObserver !== "function") return;
+    fade = new MutationObserver(() => dimPage(named));
+    fade.observe(document.body, { childList: true, subtree: true });
+  };
 
   const MAX_MESSAGES = 40;
   const MAX_BYTES = 400 * 1024;
@@ -179,8 +223,8 @@ export const ASK_SCRIPT = `<script>
   };
 
   // What the server gets of the conversation: the last 40 messages in whole pairs, each reply cut
-  // to 8,000 characters, and the oldest pairs dropped until the body is under 400 KiB.
-  const trimHistory = (history, said) => {
+  // to 8,000 characters, and the oldest pairs dropped until the body, page included, is under 400 KiB.
+  const trimHistory = (history, said, page) => {
     // Pairs are stored together, so a pair is kept only when both halves are right.
     const isSaid = (m, role) =>
       isObj(m) && m.role === role && typeof m.text === "string" && m.text.trim() !== "";
@@ -196,7 +240,7 @@ export const ASK_SCRIPT = `<script>
       const extra = list.length - MAX_MESSAGES;
       list = list.slice(extra + (extra % 2));
     }
-    const bytes = () => new TextEncoder().encode(JSON.stringify({ history: list, text: said })).length;
+    const bytes = () => new TextEncoder().encode(JSON.stringify({ history: list, text: said, page })).length;
     while (list.length > 0 && bytes() > MAX_BYTES) list = list.slice(2);
     return list;
   };
@@ -450,11 +494,83 @@ export const ASK_SCRIPT = `<script>
     return null;
   };
   const add = (entry) => {
+    entry.path = path;
+    entry.place = place;
     state.entries.push(entry);
     const node = drawEntry(entry);
     if (node) messages.appendChild(node);
     scroll();
     return node;
+  };
+
+  // An entry with no address counts as made on this page.
+  const madeHere = (entry) => !isObj(entry) || typeof entry.path !== "string" || entry.path === path;
+  // The cards an exchange shows, as elements: the reply's, and those kept with its changes.
+  const cardsOf = (entries) => {
+    const found = [];
+    for (const e of entries) {
+      const htmls = [];
+      if (Array.isArray(e.segments)) {
+        for (const s of e.segments) if (isObj(s) && typeof s.card === "string") htmls.push(s.card);
+      }
+      if (isObj(e.cards)) {
+        for (const h of Object.values(e.cards)) if (typeof h === "string") htmls.push(h);
+      }
+      for (const h of htmls) found.push(...parseCard(h).querySelectorAll("[data-id]"));
+    }
+    return found;
+  };
+  const clip = (said) => (said.length > 60 ? said.slice(0, 60) + "…" : said);
+  // What the last earlier exchange came to: the links it saved, else what the owner asked.
+  const summarize = (group) => {
+    const exchange = group.slice(Math.max(0, group.findLastIndex((e) => isObj(e) && e.kind === "me")));
+    const entries = exchange.filter(isObj);
+    const cards = cardsOf(entries);
+    const titles = [];
+    for (const e of entries) {
+      if (!["changes", "alert"].includes(e.kind) || !Array.isArray(e.lines)) continue;
+      for (const line of e.lines) {
+        if (!isObj(line) || line.text !== "Saved." || typeof line.linkId !== "string") continue;
+        const card = cards.find((c) => c.getAttribute("data-id") === line.linkId);
+        const title = card?.querySelector("h3")?.textContent;
+        if (title && !titles.includes(title)) titles.push(title);
+      }
+    }
+    if (titles.length > 0) {
+      return 'saved "' + titles[0] + '"' + (titles.length > 1 ? " and " + (titles.length - 1) + " more" : "");
+    }
+    const asked = entries.find((e) => e.kind === "me" && typeof e.text === "string");
+    return asked ? '"' + clip(asked.text) + '"' : "";
+  };
+  // Entries made on other pages sit behind one line that shows them or hides them again.
+  const drawAll = () => {
+    let from = state.entries.length;
+    while (from > 0 && madeHere(state.entries[from - 1])) from -= 1;
+    const group = state.entries.slice(0, from);
+    if (group.length > 0) {
+      const last = group[group.length - 1];
+      const where = isObj(last) && typeof last.place === "string" ? last.place : "";
+      const said = summarize(group);
+      const toggle = make("button", "ask-earlier", "Earlier, on " + where + (said ? ": " + said : ""));
+      toggle.setAttribute("type", "button");
+      toggle.setAttribute("aria-expanded", "false");
+      const box = make("div", "ask-earlier-entries");
+      box.hidden = true;
+      toggle.addEventListener("click", () => {
+        box.hidden = !box.hidden;
+        toggle.setAttribute("aria-expanded", box.hidden ? "false" : "true");
+      });
+      for (const entry of group) {
+        const node = drawEntry(entry);
+        if (node) box.appendChild(node);
+      }
+      messages.appendChild(toggle);
+      messages.appendChild(box);
+    }
+    for (const entry of state.entries.slice(from)) {
+      const node = drawEntry(entry);
+      if (node) messages.appendChild(node);
+    }
   };
 
   const sendButton = document.querySelector("#ask-form button[type=submit]");
@@ -463,6 +579,7 @@ export const ASK_SCRIPT = `<script>
     if (said === "") return;
     running = true;
     sendButton.disabled = true;
+    clearFade();
     const mine = epoch;
     if (!again) add({ kind: "me", text: said });
     const thinking = make("p", "ask-notice", "Thinking…");
@@ -471,7 +588,8 @@ export const ASK_SCRIPT = `<script>
     scroll();
     state.pending = { text: said };
     save();
-    const res = await post("/ai/chat", { history: trimHistory(state.history, said), text: said });
+    const page = pageContext();
+    const res = await post("/ai/chat", { history: trimHistory(state.history, said, page), text: said, page });
     running = false;
     sendButton.disabled = false;
     thinking.remove();
@@ -494,7 +612,9 @@ export const ASK_SCRIPT = `<script>
     const lines = changeLines(changes);
     const cards = isObj(answer.cards) ? answer.cards : {};
     if (answer.ok) {
-      add({ kind: "reply", segments: Array.isArray(answer.segments) ? answer.segments : [] });
+      const node = add({ kind: "reply", segments: Array.isArray(answer.segments) ? answer.segments : [] });
+      const named = new Set([...node.querySelectorAll(".ask-card[data-id]")].map((c) => c.getAttribute("data-id")));
+      if (state.open && pageIds().some((id) => named.has(id))) startFade(named);
       if (lines.length > 0) add({ kind: "changes", lines, cards });
     } else {
       const message = typeof answer.message === "string" ? answer.message : FALLBACK;
@@ -523,13 +643,10 @@ export const ASK_SCRIPT = `<script>
   if (state.pending !== null) {
     const sent = typeof state.pending.text === "string";
     state.pending = null;
-    if (sent) state.entries.push({ kind: "notice", text: INTERRUPTED });
+    if (sent) state.entries.push({ kind: "notice", text: INTERRUPTED, path, place });
     save();
   }
-  for (const entry of state.entries) {
-    const node = drawEntry(entry);
-    if (node) messages.appendChild(node);
-  }
+  drawAll();
   fadeSaved();
   scroll();
   if (state.open) show(true);

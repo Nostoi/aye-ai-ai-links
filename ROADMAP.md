@@ -29,7 +29,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - **E1** (in chat). Opened from the panel, the dialog doesn't show Delete link. This reads O1's "unchanged" as covering what the dialog edits.
   - **Rulings after the solution challenge** (REVISE):
     - **E7** (replaces E2). Pressing Edit reads the link's card again (`GET /ai/card/:id`) and replaces every panel card for it. The dialog opens at once and waits, busy, then fills from that fresh card. If the link can't be read, it closes and the line says why: "Couldn't load this link. Try again.", or on a 404 "This link was deleted." and E4 applies.
-    - **E3.** Reads of one link's card are numbered, and only the latest one started is drawn and stored. That covers the dialog's Save and Undo, the panel's Undo and E2.
+    - **E3.** Reads of one link's card are numbered, and only the latest one started is drawn and stored. That covers the dialog's Save and Undo, the panel's Undo and E7.
     - **E4.** When a save's Undo deletes the link, every line's Edit for it goes, and a redraw shows none.
     - **E5.** With the AI on, the dialog's Undo bar follows the link, not the card element: a late Save still offers Undo while any card for the link is on the page.
   - **The boundary:** after a dialog edit, the page's own cards on All links, search and space pages update, as they always have. Home and Handy cards don't; they update on reload.

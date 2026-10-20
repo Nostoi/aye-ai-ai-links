@@ -53,6 +53,21 @@ export interface LinkStore {
   update(owner: OwnerId, id: string, patch: LinkPatch): Promise<Link | null>;
 
   /**
+   * `update`, for the in-app AI, with a receipt: in the same atomic step it reads the link's
+   * title, summary, why and ordered tags (key and source) before and after. When none changed it
+   * writes no receipt and returns `editId: null`, leaving any existing receipt as it is.
+   * Otherwise it replaces the link's edit record (see `LinkEditStore`) with what the write
+   * replaced and wrote, and returns that record's new id. Null when absent or foreign; then
+   * nothing is written. `update`, `updateIf` and `fillWhyIfMissing` never write a receipt.
+   */
+  updateWithReceipt(
+    owner: OwnerId,
+    id: string,
+    patch: LinkPatch,
+    at: Date,
+  ): Promise<{ link: Link; editId: string | null } | null>;
+
+  /**
    * Conditional write: set why only if it is currently null. Returns the link
    * as it is after the call, or null when absent or foreign.
    */

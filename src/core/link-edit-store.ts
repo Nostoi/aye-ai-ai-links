@@ -36,8 +36,10 @@ export interface LinkEditStore {
   /**
    * In one transaction: puts back what the edit replaced, and removes its record. It does this
    * only while the record's edit id is `editId` and the link still holds what the edit wrote
-   * (its title, when the title changed; its owner picture, or none, when the picture changed).
-   * Otherwise "conflict", and nothing changes. Null when the link is absent.
+   * (its title, summary, why or ordered tags, and its owner picture or none, for each of those
+   * the edit changed). Restoring tags re-attaches the prior ones in their order and sources; a
+   * tag catalog row is never deleted and an existing one keeps its kind. Otherwise "conflict",
+   * and nothing changes. Null when the link is absent.
    */
   undoEdit(owner: OwnerId, linkId: string, editId: string): Promise<UndoOutcome | null>;
 }

@@ -16,8 +16,12 @@ const decode = (segment: string) => {
   }
 };
 
-/** Control characters become spaces, and runs of whitespace one space. */
-const plain = (text: string) => text.replace(/[\p{Cc}\s]+/gu, " ").trim();
+/** Format characters go, control characters become spaces, and runs of whitespace one space. */
+const plain = (text: string) =>
+  text
+    .replace(/\p{Cf}/gu, "")
+    .replace(/[\p{Cc}\s]+/gu, " ")
+    .trim();
 
 const PAGE_EXTENSION = /\.(html?|php|aspx?|jsp)$/i;
 const POST_SITE = /^(x|twitter)\.com$/i;

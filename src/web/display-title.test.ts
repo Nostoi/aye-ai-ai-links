@@ -129,4 +129,11 @@ describe("displayTitle", () => {
     expect(displayTitle(link(`https://x.com/${longest}/status/1`))).toBe(`Post by @${longest}`);
     expect(displayTitle(link(`https://x.com/${longest}a/status/1`))).toBe("x.com");
   });
+
+  it("drops format characters from a built title, so none can reorder it or empty a name", () => {
+    const flipped = displayTitle(link("https://evil.example/%E2%80%AEmoc.elgoog"));
+    expect(flipped).toBe("Moc.elgoog — evil.example");
+    expect(flipped).not.toMatch(/\p{Cf}/u);
+    expect(displayTitle(link("https://x.com/%E2%80%8B/status/1"))).toBe("x.com");
+  });
 });

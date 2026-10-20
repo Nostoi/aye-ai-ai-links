@@ -17,7 +17,7 @@ export const askPanel = ({
   ai,
   place,
   owner,
-}: Ask) => `<aside id="ask-panel" aria-label="Ask AI" data-owner="${escapeHtml(owner)}" hidden>
+}: Ask) => `<aside id="ask-panel" aria-label="Ask AI" data-owner="${escapeHtml(owner)}" data-place="${escapeHtml(place)}" hidden>
 <div class="ask-head">
 <button type="button" id="ask-back" class="ask-back">‹ ${escapeHtml(place)}</button>
 <div class="ask-title"><h2>Ask AI</h2><p>Using ${escapeHtml(ai)}, on ${escapeHtml(place)}</p></div>

@@ -289,6 +289,29 @@ describe("POST /ai/chat", () => {
     expect(model.requests[0]?.messages[1]).toStrictEqual({ role: "assistant", text: "Hello." });
   });
 
+  describe("with a page", () => {
+    const page = { path: "/all", place: "All links", ids: ["3", "4"], shown: 2 };
+
+    it("still answers 200 and gives the model the page block", async () => {
+      const { browser, model } = await chatting([says("Those are your links.")]);
+      const res = await browser.send("/ai/chat", turn({ history: [], text: "Hi", page }));
+      expect(res.status).toBe(200);
+      expect(model.requests[0]?.system).toContain(
+        '<page>\nThe owner is looking at the page "All links" ("/all"). It shows 2 links; their ids, in order: 3, 4.',
+      );
+    });
+
+    it("refuses a bad page with a 400 and asks the model nothing", async () => {
+      const { browser, model } = await chatting([says("never")]);
+      for (const bad of [{ ...page, ids: ["x"] }, { ...page, path: "all" }, "all", null]) {
+        const res = await browser.send("/ai/chat", turn({ history: [], text: "Hi", page: bad }));
+        expect(res.status, JSON.stringify(bad)).toBe(400);
+        expect(res.body).toMatchObject({ code: "BAD_REQUEST" });
+      }
+      expect(model.requests).toHaveLength(0);
+    });
+  });
+
   it("refuses a body over the cap", async () => {
     const { browser, model } = await chatting([says("never")]);
     const res = await browser.send("/ai/chat", ask("x".repeat(CHAT_BODY_LIMIT)));

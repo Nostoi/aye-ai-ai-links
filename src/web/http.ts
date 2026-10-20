@@ -1,6 +1,7 @@
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import {
+  type PageContext,
   runChatTurn,
   SERVER_FAULT,
   type TextTurn,
@@ -210,23 +211,23 @@ export const CHAT_BODY_LIMIT = 512 * 1024;
  * Takes a chat turn, a JSON body under `CHAT_BODY_LIMIT`, and sets `turn` to the history and
  * text `takeTurn` accepts. Other members, such as an owner or a writer's name, are ignored.
  */
-const chatBody = createMiddleware<{ Variables: { turn: { history: TextTurn[]; text: string } } }>(
-  async (c, next) => {
-    const read = await readJson(c, CHAT_BODY_LIMIT);
-    if (read instanceof Response) return read;
-    const value = read.value as { history?: unknown; text?: unknown } | null;
-    const turn =
-      typeof value === "object" && value !== null && !Array.isArray(value)
-        ? takeTurn({ history: value.history, text: value.text })
-        : null;
-    if (!turn) {
-      const message = "Send a JSON body with history and text, within the chat's limits.";
-      return c.json({ code: "BAD_REQUEST", message }, 400);
-    }
-    c.set("turn", turn);
-    await next();
-  },
-);
+const chatBody = createMiddleware<{
+  Variables: { turn: { history: TextTurn[]; text: string; page?: PageContext } };
+}>(async (c, next) => {
+  const read = await readJson(c, CHAT_BODY_LIMIT);
+  if (read instanceof Response) return read;
+  const value = read.value as { history?: unknown; text?: unknown; page?: unknown } | null;
+  const turn =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? takeTurn({ history: value.history, text: value.text, page: value.page })
+      : null;
+  if (!turn) {
+    const message = "Send a JSON body with history and text, within the chat's limits.";
+    return c.json({ code: "BAD_REQUEST", message }, 400);
+  }
+  c.set("turn", turn);
+  await next();
+});
 
 /** The edit form's cap: the largest picture core keeps, plus the auth cap for the other fields. */
 const EDIT_BODY_LIMIT = MAX_IMAGE_BYTES + AUTH_BODY_LIMIT;
@@ -1194,7 +1195,7 @@ export function webApp({
   // 200 whether or not the AI answered, so a failed turn still lists the changes it made.
   if (ai) {
     app.post("/ai/chat", session, chatBody, async (c) => {
-      const { history, text } = c.get("turn");
+      const { history, text, page } = c.get("turn");
       const name = ai.model.name;
       const { owner } = c.get("caller");
       const answer = async (result: TurnResult) =>
@@ -1211,7 +1212,7 @@ export function webApp({
         // @hono/node-server aborts), so a dropped request starts no more model or tool calls. Its
         // answer then reaches no one, so the reason it gives doesn't matter.
         const signal = AbortSignal.any([c.req.raw.signal, ai.signal]);
-        const turn = { model: ai.model, session: tools, history, text, signal };
+        const turn = { model: ai.model, session: tools, history, text, page, signal };
         return answer(await runChatTurn(turn));
       } finally {
         // A failed close must not lose the answer and its changes.

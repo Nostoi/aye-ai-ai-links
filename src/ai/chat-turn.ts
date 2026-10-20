@@ -30,7 +30,7 @@ export type TurnResult =
   | { ok: false; reason: string; changes: Change[]; seen: string[] };
 
 /** Added to the MCP door's instructions for the AI in the app's own panel. */
-export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app itself. What they write here is in their own words, so record it as "stated", or as "asked" when it answers a question you asked. Keep your replies short, and name each link you saved or changed.`;
+export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app itself. What they write here is in their own words, so record it as "stated", or as "asked" when it answers a question you asked. Keep your replies short, and name each link you saved or changed. To show the owner a link, write [[link:ID]] on its own line, using the link's id, then a short note about it; the app shows its card there.`;
 
 // Each reason finishes "<name> didn't answer: …".
 const TOO_LONG = "it took too long";

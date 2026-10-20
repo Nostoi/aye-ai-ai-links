@@ -71,6 +71,7 @@ const CHECKED_PAGES = [
   "/connections/keys/turn-off",
   "/connections/keys/turn-on",
   "/ai/chat",
+  "/ai/card/:id{[0-9]+}",
   "/home/opened",
   "/home/snooze",
   "/home/unsnooze",

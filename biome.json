@@ -10,7 +10,8 @@
       "!**/.superpowers",
       "!**/.remember",
       "!**/.claude",
-      "!docs/design"
+      "!docs/design",
+      "!src/web/__ask_off__"
     ]
   },
   "linter": {

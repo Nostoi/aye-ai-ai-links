@@ -4,6 +4,7 @@ import { linkSpace, type Space } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
@@ -204,7 +205,9 @@ export const searchPage = ({
   keep = false,
   pictures = new Map(),
   copies = new Map(),
+  ask,
 }: {
+  ask?: Ask | undefined;
   query: string;
   links: Link[];
   now: Date;
@@ -245,5 +248,5 @@ ${editLinkScript("results", "results-error")}
 ${deleteLinkScript("results", "results-error")}
 </script>
 ${openedScript("results", "/links/opened")}`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask },
   );

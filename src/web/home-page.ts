@@ -4,6 +4,7 @@ import { linkSpace } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
+import type { Ask } from "./ask-panel.js";
 import { copyHref } from "./copy-page.js";
 import { GONE_TEXT } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
@@ -218,10 +219,12 @@ export const homePage = ({
   worth,
   shelf,
   spaces,
+  ask,
 }: {
   worth: WorthCards;
   shelf: string;
   spaces: string;
+  ask?: Ask | undefined;
 }) =>
   page(
     "Aye-AI-AI Links",
@@ -243,5 +246,5 @@ ${SLASH_SCRIPT}
 ${CARDS_SCRIPT}
 ${openedScript("worth-cards", "/home/opened")}
 ${openedScript("handy", "/links/opened")}`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask },
   );

@@ -369,3 +369,68 @@ ${spaceClasses}
 .phone-steps li{max-width:68ch}
 @media (max-width:600px){.tile{--icon:56px}.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}.result>.tile{border-radius:18px 18px 0 0}.handy-row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;margin:16px -16px 0;padding:4px 16px 8px;scroll-padding-inline:16px}.handy-row>.handy-tile{flex:0 0 156px;scroll-snap-align:start}.handy-tile .card-menu-list{right:auto;left:-106px;transform-origin:top left}.edit-link{inset:96px 0 0;width:100%;max-width:100%;max-height:none;height:auto;margin:0;padding:0 16px 24px;border-radius:22px 22px 0 0}.edit-grabber{display:block;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}.edit-head{display:grid;grid-template-columns:1fr auto 1fr;margin:0 0 8px}.edit-head h2{font-size:17px;text-align:center}.edit-top{display:inline-flex;align-items:center;justify-self:start;min-height:44px;padding:0;border:0;background:none}.edit-top-save{justify-self:end;font-weight:700}.edit-close,.edit-hint,.edit-foot{display:none}.edit-hint-phone{display:block;margin:0;font-size:13px;color:var(--soft);text-align:center}.edit-title{height:48px}.edit-picture-row{flex-direction:column;align-items:stretch}.edit-preview{width:100%;height:196px}.edit-choose{min-height:48px;width:100%}.handy-tile.needs-you .small-actions:has([data-act=still-works]){gap:0 4px}.handy-tile .small-actions:has([data-act=still-works]) button{padding:0}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;
+
+/**
+ * The Ask AI panel's styles (#159), in a second `<style>` that `page()` adds only when the AI is
+ * set up, so `themeCss` and the copy page's hashed style stay as they were. Colors are tokens only.
+ * Above 900px the open panel is a 400px column on the right; at 900px and below, a full-screen sheet.
+ */
+export const askCss = `#ask-open{gap:8px;font:inherit;color:var(--ink);text-decoration:none;text-underline-offset:3px}
+#ask-open[aria-pressed=true]{text-decoration:underline}
+#ask-open svg{flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+#ask-panel{position:fixed;top:0;right:0;bottom:0;z-index:30;width:400px;display:flex;flex-direction:column;background:var(--surface);border-left:1.5px solid var(--line)}
+#ask-panel[hidden]{display:none}
+body.ask-open{margin-right:400px}
+.ask-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 8px;padding:14px 16px 6px 22px}
+.ask-title{flex:1;min-width:0}
+.ask-title h2{margin:0;font-size:18px}
+.ask-title p{margin:0;font-size:13px;color:var(--soft);overflow-wrap:anywhere}
+.ask-tools{display:flex;align-items:center;gap:2px}
+.ask-restart{min-height:44px;padding:0 10px;font-size:14px;font-weight:400;background:none;border:0;color:var(--soft);text-decoration:underline;text-underline-offset:3px}
+.ask-close{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;background:none;border:0;color:var(--ink)}
+.ask-close svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.ask-back{display:none;align-items:center;min-height:44px;padding:0 8px 0 0;background:none;border:0;color:var(--ink)}
+.ask-messages{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:18px 18px 8px}
+.ask-me{align-self:flex-end;max-width:300px;margin:0;text-align:right;font-size:15px;color:var(--soft);overflow-wrap:anywhere}
+.ask-reply{display:flex;flex-direction:column;gap:8px}
+.ask-reply p{margin:0;font-size:15.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ask-me{white-space:pre-wrap}
+.ask-notice{margin:0;font-size:14px;color:var(--soft)}
+.ask-changes{display:flex;flex-direction:column;gap:8px}
+.ask-change{display:flex;flex-direction:column;gap:8px}
+.ask-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:14px}
+.ask-line a{display:inline-flex;align-items:center;min-height:44px}
+.ask-undo,.ask-button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-decoration:none}
+.ask-undone{color:var(--soft)}
+.ask-note{font-size:13px;color:var(--soft)}
+.ask-card.ask-faded{opacity:.4}
+.ask-alert{padding:14px 16px;border:1.5px solid var(--line);border-radius:16px;background:var(--surface)}
+.ask-alert p{margin:0 0 6px;overflow-wrap:anywhere}
+.ask-alert-more{font-size:15px;color:var(--soft)}
+.ask-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.ask-card{display:flex;gap:12px;padding:10px;border-radius:14px;background:var(--bg)}
+.ask-card-body{min-width:0;overflow-wrap:anywhere}
+.ask-card h3{margin:0 0 4px;font-size:15.5px}
+.ask-card .ask-why{margin:0 0 6px;font-size:13px;color:var(--soft)}
+.ask-tile{flex:0 0 84px;width:84px;height:84px;--icon:56px;--initials:28px;border-radius:10px;object-fit:cover;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
+.ask-tags{display:flex;flex-wrap:wrap;gap:6px}
+.ask-tag{padding:2px 10px;border-radius:999px;font-size:13px;background:var(--line)}
+.ask-tag.ask-space{background:color-mix(in srgb,var(--space) 18%,var(--surface))}
+.ask-tag.guess{padding:1px 9px;border:1.5px dashed var(--field);background:none;color:var(--soft);font-style:italic}
+.ask-form{padding:12px 16px 18px;border-top:1.5px solid var(--line)}
+.ask-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ask-row{display:flex;align-items:flex-end;gap:8px}
+.ask-row textarea{flex:1;min-width:0;margin:0;padding:10px 16px;font-size:15.5px;resize:none}
+.ask-row button{min-height:48px;padding:0 18px;font-size:15px}
+@media (max-width:900px){
+body.ask-open{margin-right:0}
+#ask-panel{left:0;width:auto;border-left:0}
+.ask-head{padding:12px 8px 4px 16px}
+.ask-back{display:inline-flex}
+.ask-close{display:none}
+.ask-title{order:3;flex:1 0 100%;padding-top:8px}
+.ask-title h2{font-size:20px}
+.ask-messages{padding:14px 16px 8px}
+.ask-form{padding:10px 12px 20px}
+.ask-row textarea{font-size:16px}
+}`;

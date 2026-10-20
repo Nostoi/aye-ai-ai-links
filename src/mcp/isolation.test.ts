@@ -568,6 +568,7 @@ describe("owner isolation coverage", () => {
     "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
     "GET /save": { noOwnerData: "the save form, filled only from its own query" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
+    "GET /ai/card/:id{[0-9]+}": { request: "/ai/card/:id", marker: () => "Quokka habitat notes" },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
     "GET /links/:id{[0-9]+}/copy": { request: "/links/:id/copy", marker: () => A_COPY_TEXT },
     "GET /links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}": {

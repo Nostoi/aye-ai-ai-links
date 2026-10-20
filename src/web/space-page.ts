@@ -4,6 +4,7 @@ import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
+import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
@@ -66,6 +67,7 @@ type Input = {
   pictures?: Map<string, PictureInfo>;
   /** The links that have a saved copy. */
   copies?: Map<string, CopyInfo>;
+  ask?: Ask | undefined;
 };
 
 /**
@@ -167,7 +169,7 @@ ${body}
 </main>
 ${editDialog()}
 ${done ? DONE_SCRIPT : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask: input.ask },
   );
 }
 
@@ -175,12 +177,12 @@ ${done ? DONE_SCRIPT : CARDS_SCRIPT}${openedScript("space-links", "/links/opened
 export const SPACE_RESTART = `Open the space again from the <a href="/">home page</a> and page from its newest links.`;
 
 /** For a tag the owner does not have, whoever else has it. It never names the tag asked for. */
-export const spaceMissingPage = () =>
+export const spaceMissingPage = (ask?: Ask | undefined) =>
   page(
     "Not found · Aye-AI-AI Links",
     `<main>
 <h1>This space is not here</h1>
 <p>There is no tag with that name. Your tags are on the <a href="/tags">Tags page</a>.</p>
 </main>`,
-    { menu: true },
+    { menu: true, ask },
   );

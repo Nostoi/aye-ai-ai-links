@@ -1,3 +1,4 @@
+import type { Ask } from "./ask-panel.js";
 import { page } from "./page.js";
 
 /**
@@ -50,12 +51,12 @@ if (older && list) {
 </script>`;
 
 /** For a page address that was changed or made by hand; `restart` says where to start again. */
-export const olderInvalidPage = (restart: string) =>
+export const olderInvalidPage = (restart: string, ask?: Ask | undefined) =>
   page(
     "Not valid · Aye-AI-AI Links",
     `<main>
 <h1>That page of older links is not valid</h1>
 <p>${restart}</p>
 </main>`,
-    { menu: true },
+    { menu: true, ask },
   );

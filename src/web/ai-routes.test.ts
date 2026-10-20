@@ -37,10 +37,11 @@ const says = (text: string): ModelReply => ({ text, toolCalls: [] });
 type Answer = {
   ok: boolean;
   ai: string;
-  reply?: string;
+  segments?: ({ text: string } | { card: string })[];
   message?: string;
+  remember: string;
+  cards: Record<string, string>;
   changes: Change[];
-  seen: string[];
 };
 
 /** A world whose AI follows `steps`, and A's browser, signed in. */
@@ -76,9 +77,10 @@ describe("POST /ai/chat", () => {
     expect(res.body).toEqual({
       ok: true,
       ai: "Fake",
-      reply: "Hello from the library.",
+      segments: [{ text: "Hello from the library." }],
+      remember: "Hello from the library.",
+      cards: {},
       changes: [],
-      seen: [],
     });
     expect(model.requests[0]?.messages).toEqual([{ role: "user", text: "Hi" }]);
   });
@@ -163,8 +165,11 @@ describe("POST /ai/chat", () => {
     expect(body).toMatchObject({
       ok: false,
       ai: "Fake",
-      message: "Fake didn't answer: the connection timed out.",
+      message: "Fake stopped before it finished: the connection timed out.",
     });
+    expect(body.remember).toBe(
+      `Fake stopped before it finished: the connection timed out.\n- link ${(body.changes[0] as { linkId: string }).linkId}`,
+    );
     expect(body.changes).toHaveLength(1);
     expect(body.changes[0]).toMatchObject({ kind: "link", tool: "save_link", created: true });
   });
@@ -226,8 +231,9 @@ describe("POST /ai/chat", () => {
         ok: false,
         ai: "Fake",
         message: "Fake didn't answer: something went wrong on the server.",
+        remember: "Fake didn't answer: something went wrong on the server.",
+        cards: {},
         changes: [],
-        seen: [],
       });
       expect(model.requests).toHaveLength(0);
       expect(errors.mock.calls.flat().map(String).join(" ")).toContain("no session");
@@ -336,7 +342,7 @@ describe("POST /ai/chat", () => {
     expect(body.changes).toEqual([
       { kind: "link", tool: "save_link", linkId: saved, created: true, fields: [], editId: null },
     ]);
-    expect(body.seen).not.toContain(aId);
+    expect(JSON.stringify(body)).not.toContain("a.example");
     expect(linkRow(world, saved)).toEqual({
       owner: B,
       url: "https://b.example/mine",

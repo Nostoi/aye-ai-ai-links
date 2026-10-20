@@ -1,5 +1,6 @@
 import { SPACE_COLORS } from "../core/tag-space.js";
 import type { Tag } from "../core/types.js";
+import type { Ask } from "./ask-panel.js";
 import { escapeHtml, page } from "./page.js";
 import { spaceHref } from "./space-page.js";
 
@@ -51,7 +52,7 @@ function tagItem(t: Tag, i: number): string {
  * swatch names the other pinned tags that use it, and a tag whose color another pinned tag uses
  * says so under its swatches.
  */
-export const tagsPage = ({ tags }: { tags: Tag[] }) =>
+export const tagsPage = ({ tags, ask }: { tags: Tag[]; ask?: Ask | undefined }) =>
   page(
     "Tags · Aye-AI-AI Links",
     `<main class="tags">
@@ -203,5 +204,5 @@ if (list) {
   });
 }
 </script>`,
-    { menu: true, undo: true },
+    { menu: true, undo: true, ask },
   );

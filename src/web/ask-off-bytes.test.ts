@@ -12,9 +12,9 @@ import { spaceMissingPage, spacePage } from "./space-page.js";
 import { tagsPage } from "./tags-page.js";
 
 /**
- * With no AI set up every page is byte for byte what it was before the Ask AI panel (#159). Each
- * page, and each variant that changes its markup, is stored as a snapshot made before the panel
- * was added; these files must never change.
+ * The snapshots are made with no AI set up. Each page, and each variant that changes its markup,
+ * is stored as one. They change only when a PR changes a page on purpose (regenerate them with
+ * `vitest -u` and read the diff); the Ask AI panel (#159) must still add nothing when it is off.
  */
 
 const NOW = new Date("2026-10-14T12:00:00Z");
@@ -170,7 +170,25 @@ const pages: Record<string, () => string> = {
   "oauth-error": () => oauthErrorPage("It did not work."),
 };
 
+/** One mark of each AI-only piece: the button and panel, the stored state, the cards' ids, the edit script's events and the opening script's list. */
+const ASK_ONLY = ["ask-", "aye-ask", "askPanel", "aye-note", "aye-edited"];
+
+const UNDO_BAR = 'id="undo-bar"';
+
 describe("with no AI set up", () => {
+  it("no page carries any Ask AI markup, style or script", () => {
+    for (const [name, render] of Object.entries(pages)) {
+      const html = render();
+      for (const mark of ASK_ONLY) expect(html, `${name}: ${mark}`).not.toContain(mark);
+    }
+  });
+
+  it("the Ask AI pieces the check looks for are all there when the AI is on, and the Undo bar only then", () => {
+    const on = olderInvalidPage("x", { ai: "Fake", place: "Home", owner: "o" });
+    for (const mark of [...ASK_ONLY, UNDO_BAR]) expect(on, mark).toContain(mark);
+    expect(olderInvalidPage("x")).not.toContain(UNDO_BAR);
+  });
+
   for (const [name, render] of Object.entries(pages)) {
     it(`${name} is byte for byte as it was before the Ask AI panel`, async () => {
       await expect(render()).toMatchFileSnapshot(`__ask_off__/${name}.html`);

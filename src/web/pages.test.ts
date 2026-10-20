@@ -302,7 +302,7 @@ describe("the header", () => {
 
 describe("the menu", () => {
   // #37 added All links, first, as the page design's menu has it.
-  it("is on home, search, tags, connections, profile and space pages, holds only All links, Tags, Profile, Apps and keys and Sign out, and is not on the others", () => {
+  it("is on home, search, tags, connections, profile and space pages, holds the page links All links and Spaces and tags and the account menu, and is not on the others", () => {
     const withMenu = [
       homePage(EMPTY_HOME),
       searchPage({ query: "", links: [], now: new Date(0) }),
@@ -319,7 +319,10 @@ describe("the menu", () => {
     ];
     for (const html of withMenu) {
       expect(html).toContain(
-        '<nav class="menu" aria-label="Main"><a href="/all">All links</a><a href="/tags">Tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><button id="sign-out"',
+        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><details class="account-menu">',
+      );
+      expect(html).toContain(
+        '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out"',
       );
     }
     const without = [loginPage({ next: "/" }), oauthErrorPage("x"), consentExpiredPage()];

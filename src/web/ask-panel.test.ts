@@ -18,9 +18,10 @@ describe("the Ask AI panel's markup", () => {
   const html = withAsk({ ai: HOSTILE, place: HOSTILE, owner: HOSTILE });
   const panel = document.getElementById("ask-panel");
 
-  it("puts Ask AI between Apps and keys and Sign out, as a toggle for the panel", () => {
+  it("puts Ask AI between the page links and the account menu, as a toggle for the panel", () => {
     const items = [...document.querySelectorAll(".menu > *")].map((e) => e.textContent?.trim());
-    expect(items).toEqual(["All links", "Tags", "Profile", "Apps and keys", "Ask AI", "Sign out"]);
+    expect(items.slice(0, 3)).toEqual(["All links", "Spaces and tags", "Ask AI"]);
+    expect(items).toHaveLength(4);
     const button = document.getElementById("ask-open");
     expect(button?.tagName).toBe("BUTTON");
     expect(button?.getAttribute("type")).toBe("button");

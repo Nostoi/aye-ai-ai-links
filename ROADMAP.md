@@ -22,6 +22,32 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-19:** The Ask AI panel (#159, PR 2).
+  - **Owner rulings, 2026-10-19:**
+    - **Failure copy** (#159 comment 6279458324). With no changes: "<AI> didn't answer: {reason}." and "Nothing was saved or changed." With changes: "<AI> stopped before it finished: {reason}." and the change list. The controller left Try again out of this case, because a retry would repeat the writes.
+    - **Undo label** (comment 6281281459). The button reads plain "Undo"; on a field edit, its hover text is "Puts back the title, summary, why and tags."
+    - **Menu** (comment 6281345863). With the AI on, the menu is today's menu plus Ask AI before Sign out. The mockup's "Apps" and its missing Sign out predate the current menu.
+    - **Edit** (the same comment). Edit is not in this PR; it is #183.
+  - **Controller rulings,** after the solution challenge (REVISE, all nine findings accepted; #159 comment 6281505089):
+    - **Cards.**
+      - A link gets a card only where the reply cites it as `[[link:<id>]]`, and only for a link from the turn's own tool results, read through the owner's store. A changed link that the reply doesn't cite gets its card under the reply.
+      - A search alone shows no cards.
+      - Cards are rendered on the server, and `GET /ai/card/:id` re-reads one after an Undo. That route is mounted whether or not an AI is set up.
+    - **Every change gets a line,** including `get_digest`'s "Marked N links as shown in today's picks."
+      - Keep handy and profile lines follow the change's status and source, so a suggestion or an inferred note reads as a guess.
+      - Tag changes carry no source, so a tag line never says "(a guess)".
+    - **Undo.**
+      - A new save: deletes the link, even if it was edited since (the spec's accepted design).
+      - A field edit: `/links/edit/undo`.
+      - Keep handy: `/tools/undo`, with the change's own rows.
+      - Anything else: a line and no Undo.
+    - **The history the panel posts.**
+      - At most 40 messages and under 400 KiB.
+      - The server's `remember` text keeps each cited link as `[link <id>: <title>]` and is never empty.
+      - A failed turn with no changes adds nothing; one with changes adds the pair.
+    - **Conversation state.** It lives in `sessionStorage`, tied to the signed-in owner and cleared by sign out. A turn interrupted by leaving the page shows a notice on the next page.
+    - **The page behind the panel** is not refreshed after a change.
+    - **With no AI set up,** every page is byte for byte as before; `src/web/ask-off-bytes.test.ts` holds the snapshots.
 - **2026-10-19:** Undo for the in-app AI's link edits (#181), ahead of the Ask AI panel. The owner ruled (#159) that why, tag and summary edits get Undo; the controller added title. The design is the controller's, revised after the solution challenge (#181 comment 6280159207).
   - **What can be undone:** an in-app AI edit to a link's title, summary, why or tags, including a repeat save that fills a missing why. It is undone through the existing `POST /links/edit/undo`. Snooze, state, new saves, profile and tag-kind changes are not covered.
   - **Only the in-app AI records.** Connected agents, Tell me why and the Save page never write a receipt. A link keeps one Undo, its latest recorded edit: an in-app AI edit replaces a pending dialog Undo, and a dialog edit replaces a pending AI one.

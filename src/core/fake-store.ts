@@ -1,4 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
+import {
+  anyChanged,
+  type Changed,
+  type Covered,
+  changedFields,
+  coveredOf,
+  extendedPrior,
+  holdsWritten,
+} from "./covered-fields.js";
 import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
 import {
   type ImageBytes,
@@ -52,11 +61,12 @@ const roleFit = (role: ImageRole): PictureFit => (role === "icon" ? "contain" : 
 type OwnRecord = ImageBytes & { sha256: string; setAt: Date };
 type EditRecord = {
   editId: string;
-  titleChanged: boolean;
+  /** Which covered fields the edit changed; `prior` and `written` hold their values before and after. */
+  changed: Changed;
+  prior: Covered;
+  written: Covered;
   pictureChanged: boolean;
-  priorTitle: string | null;
-  writtenTitle: string | null;
-  prior: OwnRecord | null;
+  priorPicture: OwnRecord | null;
   writtenSha: string | null;
 };
 /** What a delete, Undo and purge do to the link's saved copy, as SQLite does in the same step. */
@@ -418,6 +428,63 @@ export class FakeStore
     return this.view(owner, found);
   }
 
+  async updateWithReceipt(
+    owner: OwnerId,
+    id: string,
+    patch: LinkPatch,
+    _at: Date,
+    extend?: string,
+  ) {
+    const found = this.owned(owner).get(id);
+    if (!found) return null;
+    const before = coveredOf(this.view(owner, found));
+    const link = (await this.update(owner, id, patch)) as Link;
+    const after = coveredOf(link);
+    const changed = changedFields(before, after);
+    if (!anyChanged(changed)) return { link, editId: null };
+    return { link, editId: this.recordReceipt(owner, id, changed, before, after, extend) };
+  }
+
+  /** Replaces the link's record; with a live `extend` it also keeps that record's changes (see `extendedPrior`). */
+  private recordReceipt(
+    owner: OwnerId,
+    id: string,
+    changed: Changed,
+    before: Covered,
+    after: Covered,
+    extend?: string,
+  ): string {
+    const key = imageKey(owner, id);
+    const old = this.editRecords.get(key);
+    const merged =
+      old && old.editId === extend && holdsWritten(old.changed, old.written, before)
+        ? extendedPrior(old, changed, before)
+        : undefined;
+    const editId = randomUUID();
+    this.editRecords.set(key, {
+      editId,
+      changed: merged?.changed ?? changed,
+      prior: merged?.prior ?? before,
+      written: after,
+      pictureChanged: merged && old ? old.pictureChanged : false,
+      priorPicture: merged && old ? old.priorPicture : null,
+      writtenSha: merged && old ? old.writtenSha : null,
+    });
+    return editId;
+  }
+
+  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, _at: Date, extend?: string) {
+    const found = this.owned(owner).get(id);
+    if (!found) return null;
+    const before = coveredOf(this.view(owner, found));
+    const filled = found.why === null;
+    const link = (await this.fillWhyIfMissing(owner, id, why)) as Link;
+    if (!filled) return { link, editId: null };
+    const after = coveredOf(link);
+    const changed = changedFields(before, after);
+    return { link, editId: this.recordReceipt(owner, id, changed, before, after, extend) };
+  }
+
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
@@ -681,13 +748,14 @@ export class FakeStore
       edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
     if (!titleChanged && !pictureChanged) return { editId: null };
     const editId = randomUUID();
+    const prior = coveredOf(link);
     this.editRecords.set(key, {
       editId,
-      titleChanged,
+      changed: { title: titleChanged, summary: false, why: false, tags: false },
+      prior,
+      written: { ...prior, title: titleChanged ? (edit.title ?? null) : prior.title },
       pictureChanged,
-      priorTitle: titleChanged ? link.title : null,
-      writtenTitle: titleChanged ? (edit.title ?? null) : null,
-      prior: pictureChanged && own ? structuredClone(own) : null,
+      priorPicture: pictureChanged && own ? structuredClone(own) : null,
       writtenSha: pictureChanged ? setSha : null,
     });
     if (titleChanged) link.title = edit.title ?? null;
@@ -712,14 +780,21 @@ export class FakeStore
     if (!row || row.editId !== editId) return "conflict";
     const ownSha = this.ownerImages.get(key)?.sha256 ?? null;
     if (
-      (row.titleChanged && link.title !== row.writtenTitle) ||
+      !holdsWritten(row.changed, row.written, coveredOf(this.view(owner, link))) ||
       (row.pictureChanged && ownSha !== row.writtenSha)
     ) {
       return "conflict";
     }
-    if (row.titleChanged) link.title = row.priorTitle;
+    const { changed, prior } = row;
+    if (changed.title) link.title = prior.title;
+    if (changed.summary) link.summary = prior.summary;
+    if (changed.why) link.why = prior.why && { ...prior.why };
+    if (changed.tags) {
+      link.tags = prior.tags.map((t) => ({ ...t }));
+      this.ensureTags(owner, link.tags);
+    }
     if (row.pictureChanged) {
-      if (row.prior) this.ownerImages.set(key, row.prior);
+      if (row.priorPicture) this.ownerImages.set(key, row.priorPicture);
       else this.ownerImages.delete(key);
     }
     this.editRecords.delete(key);

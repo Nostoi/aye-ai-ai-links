@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import { anyChanged, changedFields } from "../core/covered-fields.js";
 import {
   hasConsistentSchedule,
   hasValidIcons,
@@ -28,6 +29,7 @@ import type {
   TagPatch,
   ToolStatus,
 } from "../core/types.js";
+import { attachTags, readCovered, TAG_SELECT, writeReceipt } from "./link-edit-receipts.js";
 import { COPY_MAY_HOLD_FILES, removeCopyWithLink, restoreCopyWithLink } from "./saved-copies.js";
 import { fromMs, parseId, toMs } from "./sql-values.js";
 
@@ -98,9 +100,43 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       : this.db.transaction(() => this.updateSync(owner, n, patch)).immediate();
   }
 
+  async updateWithReceipt(owner: OwnerId, id: string, patch: LinkPatch, at: Date, extend?: string) {
+    const n = parseId(id);
+    if (n === null) return null;
+    return this.db
+      .transaction(() => {
+        const before = readCovered(this.db, owner, n);
+        const link = this.updateSync(owner, n, patch);
+        if (!before || !link) return null;
+        const changed = changedFields(before, link);
+        const editId = anyChanged(changed)
+          ? writeReceipt(this.db, owner, n, changed, before, link, at, extend)
+          : null;
+        return { link, editId };
+      })
+      .immediate();
+  }
+
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const n = parseId(id);
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();
+  }
+
+  async fillWhyWithReceipt(owner: OwnerId, id: string, why: Labelled, at: Date, extend?: string) {
+    const n = parseId(id);
+    if (n === null) return null;
+    return this.db
+      .transaction(() => {
+        const before = readCovered(this.db, owner, n);
+        const filled = this.fillRow(owner, n, why);
+        const link = this.read(owner, n);
+        if (!before || !link) return null;
+        const editId = filled
+          ? writeReceipt(this.db, owner, n, changedFields(before, link), before, link, at, extend)
+          : null;
+        return { link, editId };
+      })
+      .immediate();
   }
 
   async markDeleted(owner: OwnerId, id: string, at: Date): Promise<boolean> {
@@ -529,13 +565,19 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
   }
 
   private fillSync(owner: OwnerId, id: number, why: Labelled): Link | null {
-    this.db
+    this.fillRow(owner, id, why);
+    return this.read(owner, id);
+  }
+
+  /** True when this call's UPDATE set the why. */
+  private fillRow(owner: OwnerId, id: number, why: Labelled): boolean {
+    const { changes } = this.db
       .prepare(
         `UPDATE links SET why_text = ?, why_source = ?
          WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND why_text IS NULL`,
       )
       .run(why.text, why.source, id, owner);
-    return this.read(owner, id);
+    return changes === 1;
   }
 
   private claimSync(
@@ -589,18 +631,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
   }
 
   private attachTags(owner: OwnerId, linkId: number, tags: LinkTag[]): void {
-    const create = this.db.prepare(
-      `INSERT INTO tags (owner_id, key, name, kind, kind_source, pinned) VALUES (?, ?, ?, ?, ?, 0)
-       ON CONFLICT (owner_id, key) DO NOTHING`,
-    );
-    const attach = this.db.prepare(
-      `INSERT INTO link_tags (owner_id, link_id, tag_id, source, position)
-       SELECT ?, ?, id, ?, ? FROM tags WHERE owner_id = ? AND key = ?`,
-    );
-    tags.forEach((t, position) => {
-      create.run(owner, t.key, t.name, t.kind, t.kindSource);
-      attach.run(owner, linkId, t.source, position, owner, t.key);
-    });
+    attachTags(this.db, owner, linkId, tags);
   }
 
   private mustRead(owner: OwnerId, id: number): Link {
@@ -654,10 +685,6 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     return rows.map((row) => toLink(row, tags.get(row.id) ?? [], snaps.get(row.id)));
   }
 }
-
-const TAG_SELECT = `SELECT lt.link_id AS linkId, t.key AS key, t.name AS name, lt.source AS source,
-    t.kind AS kind, t.kind_source AS kindSource
-  FROM link_tags lt JOIN tags t ON t.id = lt.tag_id AND t.owner_id = lt.owner_id`;
 
 const SNAPSHOT_SELECT = `SELECT link_id, fetch_status, fetched_at, title, description, image_url
   FROM snapshots`;

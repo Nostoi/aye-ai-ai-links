@@ -10,7 +10,13 @@ import { getDigest } from "../core/digest.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
 import type { LinkCheckStore } from "../core/link-check-store.js";
-import { getLinkWithText, normalizeTitle, saveLink, updateLink } from "../core/links.js";
+import {
+  getLinkWithText,
+  normalizeTitle,
+  saveLink,
+  updateLink,
+  updateLinkWithReceipt,
+} from "../core/links.js";
 import { listLinks } from "../core/list-links.js";
 import {
   addProfile,
@@ -226,19 +232,26 @@ type ToolConfig<I extends StandardSchemaWithJSON> = {
 
 /**
  * The caller comes from the authenticated request, never from tool arguments. `record` hears
- * each write as it commits (the in-app AI's change list); it never changes a tool's result.
+ * each write as it commits (the in-app AI's change list); it never changes a tool's result. Only
+ * with a recorder do the writes keep Undo receipts, and their ids go to `record` alone.
  */
 export function buildMcpServer(
   deps: McpDeps,
   caller: Caller,
   track: TrackCall = (call) => call,
-  record: RecordChange = () => {},
+  recorder?: RecordChange,
 ): McpServer {
   const server = new McpServer(
     { name: "aye-ai-ai-links", version: deps.version ?? "dev" },
     { instructions: guidance.INSTRUCTIONS },
   );
   const { owner, savedBy } = caller;
+  const receipts = recorder !== undefined;
+  const record: RecordChange = recorder ?? (() => {});
+  const lastEdit = new Map<string, string>();
+  const remember = (linkId: string, editId: string | null) => {
+    if (editId) lastEdit.set(linkId, editId);
+  };
 
   /** Each tool states its output schema once: `tools/list` shows it open, `guarded` checks it strictly. */
   const register = <I extends StandardSchemaWithJSON>(
@@ -273,11 +286,22 @@ export function buildMcpServer(
       // One instant for the save and its keep, as getDigest and markOpened do.
       const now = deps.now();
       const at = { ...deps, now: () => now };
-      const { whyFilled, ...saved } = await saveLink(at, owner, { ...args, savedBy });
+      const input = { ...args, savedBy };
+      const { whyFilled, whyEditId, ...saved } = receipts
+        ? await saveLink(at, owner, input, { receipt: true, extend: (id) => lastEdit.get(id) })
+        : { ...(await saveLink(at, owner, input)), whyEditId: null };
       const linkId = saved.link.id;
+      remember(linkId, whyEditId);
       if (saved.created || whyFilled) {
         const fields = saved.created ? [] : ["why"];
-        record({ kind: "link", tool: "save_link", linkId, created: saved.created, fields });
+        record({
+          kind: "link",
+          tool: "save_link",
+          linkId,
+          created: saved.created,
+          fields,
+          editId: whyEditId,
+        });
       }
       // A repeat save keeps its contract (only a missing why is filled), so handy is ignored.
       if (handy && saved.created) {
@@ -325,10 +349,20 @@ export function buildMcpServer(
           snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
         }),
       };
-      const link = await updateLink(at, owner, id, patch);
+      const { link, editId } = receipts
+        ? await updateLinkWithReceipt(at, owner, id, patch, lastEdit.get(id))
+        : { link: await updateLink(at, owner, id, patch), editId: null };
+      remember(link.id, editId);
       const fields = Object.keys(patch).filter((k) => patch[k as keyof typeof patch] !== undefined);
       if (fields.length > 0) {
-        record({ kind: "link", tool: "update_link", linkId: link.id, created: false, fields });
+        record({
+          kind: "link",
+          tool: "update_link",
+          linkId: link.id,
+          created: false,
+          fields,
+          editId,
+        });
       }
       return { link: await linkWithHandy(at, owner, link) };
     },

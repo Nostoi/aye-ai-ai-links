@@ -3,6 +3,7 @@ import type { ExtractOutcome, PageExtractor } from "./extract.js";
 import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import type { FetchOutcome, PageFetcher } from "./fetch.js";
+import { editLink, undoEdit } from "./link-edit.js";
 import {
   getLinkWithText,
   normalizeTitle,
@@ -11,6 +12,7 @@ import {
   saveLink,
   titleFits,
   updateLink,
+  updateLinkWithReceipt,
 } from "./links.js";
 import { copyLimits } from "./saved-copy.js";
 import { createSnapshotRunner } from "./snapshot-runner.js";
@@ -534,5 +536,81 @@ describe("titles through saveLink and updateLink", () => {
     expect((await d.store.get("a", link.id))?.title).toBe(long);
     expect((await updateLink(d, "a", link.id, { title: "  New " })).title).toBe("New");
     expect((await updateLink(d, "a", link.id, { title: " " })).title).toBeNull();
+  });
+});
+
+describe("updateLinkWithReceipt", () => {
+  const setup = async () => {
+    const store = new FakeStore();
+    const { link } = await store.insertIfAbsent("a", { ...newLink(1, T0), title: "Old" });
+    return { deps: { store, now: () => T0 }, id: link.id, store };
+  };
+
+  it.each([
+    ["an invalid state", { state: "gone" as never }],
+    ["an invalid snooze date", { snoozedUntil: new Date("nope") }],
+    ["a 201-character title", { title: "t".repeat(201) }],
+  ])("refuses %s as updateLink does, writing nothing", async (_n, input) => {
+    const { deps, id, store } = await setup();
+    const plain = await updateLink(deps, "a", id, input).catch((e) => e);
+    const receipt = await updateLinkWithReceipt(deps, "a", id, input).catch((e) => e);
+    expect(plain).toMatchObject({ code: "invalid_input" });
+    expect(receipt).toMatchObject({ code: "invalid_input", message: plain.message });
+    expect((await store.get("a", id))?.title).toBe("Old");
+  });
+
+  it("returns the link and the store's edit id, which undoEdit undoes", async () => {
+    const { deps, id, store } = await setup();
+    const result = await updateLinkWithReceipt(deps, "a", id, { title: " New " });
+    expect(result.link.title).toBe("New");
+    expect(result.editId).toEqual(expect.any(String));
+    await undoEdit({ edits: store }, "a", id, result.editId as string);
+    expect((await store.get("a", id))?.title).toBe("Old");
+    expect((await updateLinkWithReceipt(deps, "a", id, { title: "Old" })).editId).toBeNull();
+  });
+
+  it("answers an absent link as not_found", async () => {
+    const { deps } = await setup();
+    await expect(updateLinkWithReceipt(deps, "a", "999", { title: "x" })).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+});
+
+describe("saveLink's receipt option", () => {
+  const why = { text: "choosing tiles", source: "stated" as const };
+  const repeat = { ...URL_A, why };
+
+  it("with it, a repeat save that fills returns an id that undoEdit undoes", async () => {
+    const store = new FakeStore();
+    const deps = { store, now: () => T0 };
+    await saveLink(deps, "a", URL_A, { receipt: true });
+    const filled = await saveLink(deps, "a", repeat, { receipt: true });
+    expect(filled.whyFilled).toBe(true);
+    expect(filled.whyEditId).toEqual(expect.any(String));
+    await undoEdit({ edits: store }, "a", filled.link.id, filled.whyEditId as string);
+    expect((await store.get("a", filled.link.id))?.why).toBeNull();
+  });
+
+  it("with it, a save that fills nothing returns a null id", async () => {
+    const deps = { store: new FakeStore(), now: () => T0 };
+    const created = await saveLink(deps, "a", repeat, { receipt: true });
+    const again = await saveLink(deps, "a", repeat, { receipt: true });
+    expect(created.whyEditId).toBeNull();
+    expect(again.whyEditId).toBeNull();
+  });
+
+  it("without it, there is no whyEditId key and no receipt replaces a dialog edit", async () => {
+    const store = new FakeStore();
+    const deps = { store, now: () => T0 };
+    const { link } = await saveLink(deps, "a", URL_A);
+    const dialog = (await editLink({ edits: store, now: deps.now }, "a", link.id, {
+      title: "Mine",
+    })) as string;
+    const filled = await saveLink(deps, "a", repeat);
+    expect(filled.whyFilled).toBe(true);
+    expect("whyEditId" in filled).toBe(false);
+    await undoEdit({ edits: store }, "a", link.id, dialog);
+    expect((await store.get("a", link.id))?.title).not.toBe("Mine");
   });
 });

@@ -3,15 +3,17 @@ import type { Database } from "better-sqlite3";
 import type { ImageType } from "../core/fetch.js";
 import type { LinkEdit, LinkEditStore, UndoOutcome } from "../core/link-edit-store.js";
 import type { OwnerId } from "../core/types.js";
+import {
+  type ReceiptRow,
+  readCovered,
+  receiptHolds,
+  restoreCovered,
+} from "./link-edit-receipts.js";
 import { parseId } from "./sql-values.js";
 
 type OwnPicture = { content_type: ImageType; bytes: Buffer; sha256: string; set_at: number };
-type EditRow = {
-  edit_id: string;
-  title_changed: number;
+type EditRow = ReceiptRow & {
   picture_changed: number;
-  prior_title: string | null;
-  written_title: string | null;
   prior_content_type: ImageType | null;
   prior_bytes: Buffer | null;
   prior_sha256: string | null;
@@ -84,17 +86,17 @@ export class SqliteLinkEditStore implements LinkEditStore {
     if (n === null) return null;
     return this.db
       .transaction((): UndoOutcome | null => {
-        const link = this.link(owner, n);
-        if (!link) return null;
+        const current = readCovered(this.db, owner, n);
+        if (!current) return null;
         const row = this.db
           .prepare("SELECT * FROM link_edits WHERE owner_id = ? AND link_id = ?")
           .get(owner, n) as EditRow | undefined;
         if (!row || row.edit_id !== editId) return "conflict";
-        const titleHolds = row.title_changed === 0 || link.title === row.written_title;
         const pictureHolds =
           row.picture_changed === 0 || (this.own(owner, n)?.sha256 ?? null) === row.written_sha256;
-        if (!titleHolds || !pictureHolds) return "conflict";
+        if (!receiptHolds(row, current) || !pictureHolds) return "conflict";
         if (row.title_changed === 1) this.writeTitle(owner, n, row.prior_title);
+        restoreCovered(this.db, owner, n, row);
         if (row.picture_changed === 1) {
           if (row.prior_bytes === null) this.removeOwn(owner, n);
           else {

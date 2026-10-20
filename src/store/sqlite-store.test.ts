@@ -509,6 +509,35 @@ describe("SqliteStore atomicity", () => {
     expect(await state(s)).toEqual(before);
   });
 
+  it("updateWithReceipt rolls back the values, the catalog and the receipt together when attaching tags fails", async () => {
+    const s = setup();
+    await s.h.addOwner("a");
+    const { link } = await saveLink(s.deps, "a", {
+      url: "https://ex.com/1",
+      savedBy: "x",
+      tags: tag("keep"),
+    });
+    const edits = () => s.db.prepare("SELECT * FROM link_edits").all();
+    const before = [await state(s), edits()];
+    s.db.exec(boom);
+    const p = s.h.store.updateWithReceipt(
+      "a",
+      link.id,
+      {
+        title: "changed",
+        summary: "changed",
+        why: { text: "w", source: "inferred" },
+        tags: [
+          { key: "new", name: "new", source: "inferred", kind: "topic", kindSource: "inferred" },
+        ],
+      },
+      NOW,
+    );
+    await expect(p).rejects.toThrow(/boom/);
+    expect([await state(s), edits()]).toEqual(before);
+    expect(before[1]).toEqual([]);
+  });
+
   it("claimSurfaced marks nothing when a later mark in the same call fails", async () => {
     const s = setup();
     await s.h.addOwner("a");

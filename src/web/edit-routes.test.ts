@@ -11,7 +11,8 @@ import {
 } from "../auth/oauth-test-kit.js";
 import { png, svg } from "../core/image-test-kit.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
-import { saveLink, updateLink } from "../core/links.js";
+import { deleteLink } from "../core/link-removal.js";
+import { saveLink, updateLink, updateLinkWithReceipt } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -66,7 +67,7 @@ const undo = (browser: Agent, json: unknown) =>
 /** A's links, pictures and edit records: what B's request must leave alone. */
 const ownedRows = (world: World, owner: string) =>
   Object.fromEntries(
-    ["links", "owner_images", "link_edits", "link_images"].map((t) => [
+    ["links", "owner_images", "link_edits", "link_images", "link_tags", "tags"].map((t) => [
       t,
       world.links.prepare(`SELECT * FROM ${t} WHERE owner_id = ? ORDER BY rowid`).all(owner),
     ]),
@@ -220,6 +221,41 @@ describe("owner isolation and refusals", () => {
     expect((await undo(bBrowser, { id, editId: done.editId })).status).toBe(404);
     expect(ownedRows(world, A)).toEqual(before);
     expect((await undo(browser, { id, editId: done.editId })).status).toBe(200);
+  });
+
+  it("POST /links/edit/undo with A's AI receipt: B gets 404 and A's summary, why, tags, catalog and receipt are unchanged", async () => {
+    const { world, browser, id } = await edited();
+    const { editId } = await updateLinkWithReceipt(linkDeps(world), A, id, {
+      summary: "AI summary",
+      why: { text: "AI why", source: "inferred" },
+      tags: [{ name: "marsupials", source: "inferred" }],
+    });
+    const bBrowser = await addSecondUser(world);
+    const before = ownedRows(world, A);
+    const everything = allRows(world);
+
+    const res = await undo(bBrowser, { id, editId });
+
+    expect(res.status).toBe(404);
+    expect(ownedRows(world, A)).toEqual(before);
+    expect(allRows(world)).toEqual(everything);
+    expect(before.link_edits).toHaveLength(1);
+    expect(before.link_tags).toHaveLength(1);
+    // A's own Undo of the same receipt is accepted, so B's 404 is down to whose link it is.
+    expect((await undo(browser, { id, editId })).status).toBe(200);
+  });
+
+  it("POST /links/edit/undo of an AI receipt on a deleted link is a 404 and writes nothing", async () => {
+    const { world, browser, id } = await edited();
+    const { editId } = await updateLinkWithReceipt(linkDeps(world), A, id, {
+      summary: "AI summary",
+      tags: [{ name: "marsupials", source: "inferred" }],
+    });
+    await deleteLink(linkDeps(world), A, id);
+    const before = allRows(world);
+
+    expect((await undo(browser, { id, editId })).status).toBe(404);
+    expect(allRows(world)).toEqual(before);
   });
 
   it.each([

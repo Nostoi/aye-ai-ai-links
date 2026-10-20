@@ -42,7 +42,11 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     insertIfAbsent: (owner, link) => inner.insertIfAbsent(owner, link),
     get: (owner, id) => inner.get(owner, id),
     update: (owner, id, patch) => inner.update(owner, id, patch),
+    updateWithReceipt: (owner, id, patch, at, extend) =>
+      inner.updateWithReceipt(owner, id, patch, at, extend),
     fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
+    fillWhyWithReceipt: (owner, id, why, at, extend) =>
+      inner.fillWhyWithReceipt(owner, id, why, at, extend),
     listTags: (owner) => inner.listTags(owner),
     updateTag: (owner, key, patch, expected) => inner.updateTag(owner, key, patch, expected),
     pinTag: (owner, key, pin) => inner.pinTag(owner, key, pin),

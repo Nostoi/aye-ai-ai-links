@@ -23,6 +23,16 @@ export type ToolSession = {
   close(): Promise<void>;
 };
 
+function onlyLastEditId(changes: Change[]): Change[] {
+  const lastWith = new Map<string, number>();
+  changes.forEach((c, i) => {
+    if (c.kind === "link" && c.editId) lastWith.set(c.linkId, i);
+  });
+  return changes.map((c, i) =>
+    c.kind === "link" && c.editId && lastWith.get(c.linkId) !== i ? { ...c, editId: null } : c,
+  );
+}
+
 type Pending = { resolve: (result: unknown) => void; reject: (error: Error) => void };
 
 /** The MCP server answered a request with a protocol error, not a tool result. */
@@ -110,7 +120,7 @@ export async function openToolSession(
           throw error;
         }
       },
-      changes: () => [...changes],
+      changes: () => onlyLastEditId(changes),
       close: () => client.close(),
     };
   } catch (error) {

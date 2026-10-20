@@ -53,10 +53,40 @@ export interface LinkStore {
   update(owner: OwnerId, id: string, patch: LinkPatch): Promise<Link | null>;
 
   /**
+   * `update`, for the in-app AI, with a receipt: in the same atomic step it reads the link's
+   * title, summary, why and ordered tags (key and source) before and after. When none changed it
+   * writes no receipt and returns `editId: null`, leaving any existing receipt as it is.
+   * Otherwise it replaces the link's edit record (see `LinkEditStore`) with what the write
+   * replaced and wrote, and returns that record's new id. Null when absent or foreign; then
+   * nothing is written. `update`, `updateIf` and `fillWhyIfMissing` never write a receipt.
+   */
+  updateWithReceipt(
+    owner: OwnerId,
+    id: string,
+    patch: LinkPatch,
+    at: Date,
+    extend?: string,
+  ): Promise<{ link: Link; editId: string | null } | null>;
+
+  /**
    * Conditional write: set why only if it is currently null. Returns the link
    * as it is after the call, or null when absent or foreign.
    */
   fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled): Promise<Link | null>;
+
+  /**
+   * `fillWhyIfMissing`, for the in-app AI, with a receipt. When this call's own write set the
+   * why, it replaces the link's edit record with one that puts the why back to null, and returns
+   * its id. Otherwise (a why was already there, so nothing was written) `editId` is null and an
+   * existing record stays. Null when absent or foreign.
+   */
+  fillWhyWithReceipt(
+    owner: OwnerId,
+    id: string,
+    why: Labelled,
+    at: Date,
+    extend?: string,
+  ): Promise<{ link: Link; editId: string | null } | null>;
 
   /**
    * The owner's whole tag catalog, ordered by key. Another owner's tags never

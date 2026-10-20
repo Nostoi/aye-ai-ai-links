@@ -184,6 +184,15 @@ describe("GET /ai/card/:id", () => {
     expect((res.body as { card: string }).card).toContain(SECRET);
   });
 
+  it("refuses a request from another site, like every signed-in page", async () => {
+    const { browser, id } = await owned();
+    const res = await browser.send(`/ai/card/${id}`, {
+      headers: { origin: "https://evil.example" },
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.stringify(res.body)).not.toContain(SECRET);
+  });
+
   it("answers 404 for another owner's id, with none of its data", async () => {
     const { world, id } = await owned();
     const b = await addSecondUser(world);

@@ -222,6 +222,8 @@ export const ASK_SCRIPT = `<script>
     }
     if (c.kind === "handy") {
       const { tool, previous } = c.change;
+      const same = (k) => previous && previous[k] === tool[k];
+      if (["status", "source", "since", "answeredAt", "waitDays"].every(same)) return [];
       const text = HANDY[tool.status] ?? "Changed its place on your Handy shelf: " + tool.status + ".";
       const body = { id: c.linkId, tool, previous };
       return [{ text, linkId: c.linkId, undo: { kind: "handy", url: "/tools/undo", body } }];

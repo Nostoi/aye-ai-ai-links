@@ -440,6 +440,7 @@ const tell = (target, message) => {
   else if (editAlert) editAlert.textContent = message;
 };
 document.addEventListener("aye-edit", (event) => {
+  if (dialog.open) return;
   const { card: from, opener: by, note } = event.detail;
   notes.set(from, note);
   open(from, by);

@@ -228,16 +228,41 @@ const savedOne = () => ({
 type Route = Answer | ((sent: Post) => Answer);
 type Page = ReturnType<typeof runAskPage>;
 /** Answers each request by its URL; anything not routed gets a 204. */
-const onPage = (html: string, routes: Record<string, Route>) => {
+const onPage = (html: string, routes: Record<string, Route>, stored: unknown = savedOne()) => {
   const page = runAskPage(
     html,
     (sent) => {
       const r = routes[sent.url];
       return (typeof r === "function" ? r(sent) : r) ?? { status: 204 };
     },
-    { stored: savedOne() },
+    { stored },
   );
   return { page, dialog: stubDialog(page) };
+};
+const savedTwo = () => {
+  const state = savedOne();
+  (state.entries as unknown[]).push({
+    kind: "changes",
+    lines: [
+      {
+        text: "Saved.",
+        linkId: "2",
+        undo: { kind: "save", url: "/links/delete", body: { id: "2" } },
+      },
+    ],
+    cards: { "2": panelCard("2", "Link 2", "v1") },
+  });
+  return state;
+};
+const freshFor = (id: string, title: string, version = "v2"): Answer => ({
+  status: 200,
+  body: { card: panelCard(id, title, version) },
+});
+const editFor = (page: Page, id: string) =>
+  page.$(`#ask-messages .ask-edit[data-id="${id}"]`) as HTMLElement;
+const postedId = (page: Page) => {
+  const sent = page.sent.filter((s) => s.url === "/links/edit").at(-1);
+  return (sent?.body as FormData | undefined)?.get("id");
 };
 const home = () => (variants.home as () => string)();
 const allOne = () =>
@@ -467,6 +492,154 @@ describe("the panel's card reads, per link", () => {
       true,
     );
     expect(storedCard(page)).toBe(panelCard("1", "Link 1", "v1"));
+  });
+
+  it("a late panel read never takes over a dialog opened from a page card's ⋯ since", async () => {
+    const { wait, release } = held();
+    const html = allPage({
+      ...list,
+      links: [link("1"), link("2")],
+      done: false,
+      pictures: new Map([
+        ["1", { own: false, pageVersion: null, pageFit: null }],
+        ["2", { own: false, pageVersion: null, pageFit: null }],
+      ]),
+    });
+    const { page, dialog } = onPage(html, {
+      "/ai/card/1": { ...fresh(), wait },
+      "/links/edit": { status: 200, body: editAnswer("Two") },
+    });
+    page.dispatch(editButton(page), "click");
+    page.dispatch(page.$('#all-links [data-id="2"] button[data-act=edit]'), "click");
+    titleField(page).value = "Two";
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(true);
+    expect(titleField(page).value).toBe("Two");
+    expect(page.$(".edit-delete-row").hidden).toBe(false);
+    page.dispatch(page.$("#edit-link form"), "submit");
+    await page.settle();
+    expect(postedId(page)).toBe("2");
+  });
+
+  it("a late read for one row never takes over the dialog a later Edit opened on another", async () => {
+    const { wait, release } = held();
+    const { page, dialog } = onPage(
+      home(),
+      {
+        "/ai/card/1": { ...fresh("One"), wait },
+        "/ai/card/2": freshFor("2", "Two"),
+        "/links/edit": { status: 200, body: editAnswer("Two edited") },
+      },
+      savedTwo(),
+    );
+    page.dispatch(editFor(page, "1"), "click");
+    page.dispatch(editFor(page, "2"), "click");
+    await page.settle();
+    expect(titleField(page).value).toBe("Two");
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(true);
+    expect(titleField(page).value).toBe("Two");
+    await save(page, "Two edited");
+    expect(postedId(page)).toBe("2");
+  });
+
+  it("a late read for an earlier press opens nothing, even once a later press's dialog closed", async () => {
+    const { wait, release } = held();
+    const { page, dialog } = onPage(
+      home(),
+      { "/ai/card/1": { ...fresh("One"), wait }, "/ai/card/2": freshFor("2", "Two") },
+      savedTwo(),
+    );
+    page.dispatch(editFor(page, "1"), "click");
+    page.dispatch(editFor(page, "2"), "click");
+    await page.settle();
+    cancel(page);
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
+    expect(titleField(page).value).toBe("Two");
+  });
+
+  it("a press whose read was overtaken opens on the newer read", async () => {
+    const save1 = held();
+    const read2 = held();
+    let reads = 0;
+    const { page, dialog } = onPage(home(), {
+      "/ai/card/1": () => {
+        reads += 1;
+        const answer = fresh(`Read ${reads}`, `v${reads}`);
+        return reads === 2 ? { ...answer, wait: read2.wait } : answer;
+      },
+      "/links/edit": { status: 200, body: editAnswer("New"), wait: save1.wait },
+    });
+    await pressEdit(page);
+    await save(page, "New");
+    cancel(page);
+    page.dispatch(editButton(page), "click");
+    await page.settle();
+    save1.release();
+    await page.settle();
+    expect(reads).toBe(3);
+    read2.release();
+    await page.settle();
+    expect(dialog.open).toBe(true);
+    expect(titleField(page).value).toBe("Read 3");
+    expect(panelTitle(page)).toBe("Read 3");
+  });
+
+  it("says the card couldn't be refreshed when a Save worked but the read after it failed", async () => {
+    let reads = 0;
+    const { page } = onPage(home(), {
+      "/ai/card/1": () => {
+        reads += 1;
+        return reads === 1 ? fresh() : { status: 500 };
+      },
+      "/links/edit": { status: 200, body: editAnswer("New") },
+    });
+    await pressEdit(page);
+    await save(page, "New");
+    expect(page.$("#undo-bar span").textContent).toBe("Link updated");
+    expect(note(page).textContent).toBe(
+      "Saved, but this card couldn't be refreshed. Reload to see it.",
+    );
+  });
+
+  it("offers a late Save's Undo for its link after the dialog moved to another link and closed", async () => {
+    const { wait, release } = held();
+    let reads = 0;
+    const { page, dialog } = onPage(
+      home(),
+      {
+        "/ai/card/1": () => {
+          reads += 1;
+          return fresh(`Read ${reads}`, `v${reads}`);
+        },
+        "/ai/card/2": freshFor("2", "Two"),
+        "/links/edit": { status: 200, body: editAnswer("New"), wait },
+      },
+      savedTwo(),
+    );
+    page.dispatch(editFor(page, "1"), "click");
+    await page.settle();
+    const target = page.$('#ask-messages .ask-card[data-id="1"]');
+    await save(page, "New");
+    cancel(page);
+    page.dispatch(editFor(page, "2"), "click");
+    await page.settle();
+    expect(titleField(page).value).toBe("Two");
+    release();
+    await page.settle();
+    expect(target.isConnected).toBe(false);
+    expect(panelTitle(page)).toBe("Read 2");
+    expect(dialog.open).toBe(true);
+    cancel(page);
+    expect(page.$("#undo-bar").hidden).toBe(false);
+    page.dispatch(page.$("#undo-bar button"), "click");
+    await page.settle();
+    const undo = page.sent.find((s) => s.url === "/links/edit/undo");
+    expect(undo?.body).toEqual({ id: "1", editId: "e1" });
   });
 
   it("offers a late Save's Undo after its card was read again and the dialog closed", async () => {

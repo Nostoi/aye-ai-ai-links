@@ -384,7 +384,7 @@ export const ASK_SCRIPT = `<script>
       u.faded = true;
       fadeCards(u.body.id);
       // The link is deleted: no read still on its way may put its card back, and it can't be edited.
-      bumpRead(u.body.id);
+      endReads(u.body.id);
       dropEdits(u.body.id);
     }
     save();
@@ -438,39 +438,59 @@ export const ASK_SCRIPT = `<script>
   };
   // "ok" once the fresh card is drawn and stored, "stale" when a later read started, "gone" for a
   // deleted link, else "failed".
-  const refreshCard = async (id) => {
+  const refreshCard = (id) => {
     const n = bumpRead(id);
-    const fresh = await post("/ai/card/" + encodeURIComponent(id));
-    if (reads.get(id) !== n) return "stale";
-    if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
-      swapCard(id, fresh.body.card);
-      save();
-      return "ok";
-    }
-    return fresh.status === 404 ? "gone" : "failed";
+    const read = (async () => {
+      const fresh = await post("/ai/card/" + encodeURIComponent(id));
+      if (reads.get(id) !== n) return "stale";
+      if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
+        swapCard(id, fresh.body.card);
+        save();
+        return "ok";
+      }
+      return fresh.status === 404 ? "gone" : "failed";
+    })();
+    newest.set(id, read);
+    return read;
   };
+  const newest = new Map();
+  const endReads = (id) => {
+    bumpRead(id);
+    newest.set(id, Promise.resolve("gone"));
+  };
+  const editNotes = new Map();
+  let presses = 0;
   const runEdit = async (id, button, note, block) => {
+    const press = ++presses;
     note.textContent = "";
-    const read = await refreshCard(id);
+    let read = await refreshCard(id);
+    while (read === "stale") read = await newest.get(id);
     if (read === "gone") {
       gone.add(id);
       dropEdits(id);
       note.textContent = "This link was deleted.";
       return;
     }
+    if (press !== presses) return;
     if (read === "failed") note.textContent = "Couldn't load this link. Try again.";
     if (read !== "ok" || !button.isConnected) return;
     const card = panelCard(id, block);
-    if (card) document.dispatchEvent(new CustomEvent("aye-edit", { detail: { card, opener: button, note } }));
+    if (!card) return;
+    editNotes.set(id, note);
+    document.dispatchEvent(new CustomEvent("aye-edit", { detail: { card, opener: button, note } }));
   };
-  document.addEventListener("aye-edited", (event) => {
+  document.addEventListener("aye-edited", async (event) => {
     const id = isObj(event.detail) ? event.detail.id : null;
     if (typeof id !== "string") return;
     let drawn = false;
     forCards(id, () => {
       drawn = true;
     });
-    if (drawn) refreshCard(id);
+    if (!drawn) return;
+    const note = editNotes.get(id);
+    if ((await refreshCard(id)) === "failed" && note) {
+      note.textContent = "Saved, but this card couldn't be refreshed. Reload to see it.";
+    }
   });
 
   const slot = (parent, html) => {

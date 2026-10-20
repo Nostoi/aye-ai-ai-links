@@ -163,15 +163,19 @@ export const ASK_SCRIPT = `<script>
   // After a reply names cards on this page, the page's other cards dim until the next send, Start
   // over or close. The fade is not stored.
   let fade = null;
+  const dimmed = new Set();
   const dimPage = (named) => {
     for (const el of document.querySelectorAll("[data-id]")) {
-      if (!panel.contains(el) && !named.has(el.getAttribute("data-id"))) el.classList.add("ask-dim");
+      if (panel.contains(el) || named.has(el.getAttribute("data-id"))) continue;
+      el.classList.add("ask-dim");
+      dimmed.add(el);
     }
   };
   const clearFade = () => {
     fade?.disconnect();
     fade = null;
-    for (const el of document.querySelectorAll(".ask-dim")) el.classList.remove("ask-dim");
+    for (const el of dimmed) el.classList.remove("ask-dim");
+    dimmed.clear();
   };
   const startFade = (named) => {
     clearFade();
@@ -526,18 +530,20 @@ export const ASK_SCRIPT = `<script>
     const exchange = group.slice(Math.max(0, group.findLastIndex((e) => isObj(e) && e.kind === "me")));
     const entries = exchange.filter(isObj);
     const cards = cardsOf(entries);
-    const titles = [];
+    const titles = new Map();
     for (const e of entries) {
       if (!["changes", "alert"].includes(e.kind) || !Array.isArray(e.lines)) continue;
       for (const line of e.lines) {
         if (!isObj(line) || line.text !== "Saved." || typeof line.linkId !== "string") continue;
+        if (isObj(line.undo) && line.undo.done === true) continue;
         const card = cards.find((c) => c.getAttribute("data-id") === line.linkId);
         const title = card?.querySelector("h3")?.textContent;
-        if (title && !titles.includes(title)) titles.push(title);
+        if (title) titles.set(line.linkId, title);
       }
     }
-    if (titles.length > 0) {
-      return 'saved "' + titles[0] + '"' + (titles.length > 1 ? " and " + (titles.length - 1) + " more" : "");
+    if (titles.size > 0) {
+      const first = titles.values().next().value;
+      return 'saved "' + first + '"' + (titles.size > 1 ? " and " + (titles.size - 1) + " more" : "");
     }
     const asked = entries.find((e) => e.kind === "me" && typeof e.text === "string");
     return asked ? '"' + clip(asked.text) + '"' : "";
@@ -586,7 +592,7 @@ export const ASK_SCRIPT = `<script>
     thinking.setAttribute("role", "status");
     messages.appendChild(thinking);
     scroll();
-    state.pending = { text: said };
+    state.pending = { text: said, path, place };
     save();
     const page = pageContext();
     const res = await post("/ai/chat", { history: trimHistory(state.history, said, page), text: said, page });
@@ -641,9 +647,17 @@ export const ASK_SCRIPT = `<script>
 
   window.askPanel = { load, save, state, messages, trimHistory, changeLines };
   if (state.pending !== null) {
-    const sent = typeof state.pending.text === "string";
+    const { text: sent, path: from, place: where } = state.pending;
     state.pending = null;
-    if (sent) state.entries.push({ kind: "notice", text: INTERRUPTED, path, place });
+    if (typeof sent === "string") {
+      const same = typeof from === "string" && typeof where === "string";
+      state.entries.push({
+        kind: "notice",
+        text: INTERRUPTED,
+        path: same ? from : path,
+        place: same ? where : place,
+      });
+    }
     save();
   }
   drawAll();

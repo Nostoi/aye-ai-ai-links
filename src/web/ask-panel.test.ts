@@ -128,15 +128,18 @@ function load({
     .join("\n");
   const matchMedia = () => ({ matches: phone, addEventListener: () => {} });
   // linkedom's MutationObserver never fires, so tests fire the callbacks themselves.
-  const observers: { callback: () => void; connected: boolean }[] = [];
+  type Watch = { callback: () => void; connected: boolean; target?: unknown; options?: unknown };
+  const observers: Watch[] = [];
   class FakeObserver {
-    entry: { callback: () => void; connected: boolean };
+    entry: Watch;
     constructor(callback: () => void) {
       this.entry = { callback, connected: false };
       observers.push(this.entry);
     }
-    observe() {
+    observe(target: unknown, options: unknown) {
       this.entry.connected = true;
+      this.entry.target = target;
+      this.entry.options = options;
     }
     disconnect() {
       this.entry.connected = false;
@@ -173,6 +176,9 @@ function load({
       for (const o of observers) if (o.connected) o.callback();
     },
     watching: () => observers.filter((o) => o.connected).length,
+    /** What each connected observer was told to watch. */
+    watched: () =>
+      observers.filter((o) => o.connected).map((o) => ({ target: o.target, options: o.options })),
     /** What the script exposes for the sending code. */
     panel: () =>
       (
@@ -500,7 +506,7 @@ describe("sending a message", () => {
     expect(t.messages().querySelector(".ask-me:last-of-type, .ask-me")?.textContent).toBeTruthy();
     expect(t.messages().textContent).toContain("find my batteries");
     expect(t.messages().textContent).toContain("Thinking…");
-    expect(t.stateNow().pending).toEqual({ text: "find my batteries" });
+    expect(t.stateNow().pending).toEqual({ text: "find my batteries", path: "/", place: "Home" });
     release(okAnswer());
     await flush();
     expect(t.messages().textContent).not.toContain("Thinking…");
@@ -1188,6 +1194,26 @@ describe("what a page card can mean to the fade", () => {
     expect(t.document.querySelector(".again")?.classList.contains("ask-dim")).toBe(false);
   });
 
+  it("watches the whole page for added cards", async () => {
+    const t = fading();
+    await t.say("which");
+    expect(t.watched()).toEqual([
+      { target: t.document.body, options: { childList: true, subtree: true } },
+    ]);
+  });
+
+  it("clears a card that was taken off the page during the fade and put back", async () => {
+    const t = fading();
+    await t.say("which");
+    const card = t.document.querySelector("main [data-id='1']") as Element;
+    expect(card.classList.contains("ask-dim")).toBe(true);
+    const parent = card.parentElement as Element;
+    card.remove();
+    t.click("ask-close");
+    parent.appendChild(card);
+    expect(card.classList.contains("ask-dim")).toBe(false);
+  });
+
   it("does not keep the fade in the stored state", async () => {
     const t = fading();
     await t.say("which");
@@ -1268,6 +1294,51 @@ describe("the Earlier line", () => {
         }),
       ]),
     ).toBe('Earlier, on Kitchen: saved "Mug"');
+  });
+
+  it("counts saves by link, so two links with one title are two", () => {
+    expect(
+      label([
+        old({ kind: "me", text: "save both" }),
+        old({
+          kind: "changes",
+          lines: [savedLine("5"), savedLine("6")],
+          cards: { "5": CARD("5", "GitHub"), "6": CARD("6", "GitHub") },
+        }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "GitHub" and 1 more');
+  });
+
+  it("leaves out a save that was undone", () => {
+    const undone = (id: string) => ({
+      ...savedLine(id),
+      undo: { kind: "save", url: "/links/delete", body: { id }, done: true },
+    });
+    const cards = { "5": CARD("5", "Kettle"), "6": CARD("6", "Mug") };
+    expect(
+      label([
+        old({ kind: "me", text: "save it" }),
+        old({ kind: "changes", lines: [undone("5")], cards }),
+      ]),
+    ).toBe('Earlier, on Kitchen: "save it"');
+    expect(
+      label([
+        old({ kind: "me", text: "save both" }),
+        old({ kind: "changes", lines: [undone("5"), savedLine("6")], cards }),
+      ]),
+    ).toBe('Earlier, on Kitchen: saved "Mug"');
+  });
+
+  it("says where an interrupted turn was sent from, not where it is noticed", () => {
+    const p = load({
+      url: "/all",
+      stored: saved({
+        entries: [old({ kind: "me", text: "save the kettle" })],
+        pending: { text: "save the kettle", ...OLD },
+      }),
+    });
+    expect(p.stateNow().entries.at(-1)).toMatchObject({ kind: "notice", ...OLD });
+    expect(earlier(p)?.textContent).toBe('Earlier, on Kitchen: "save the kettle"');
   });
 
   it("says how many more were saved", () => {

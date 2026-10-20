@@ -17,7 +17,10 @@ export type Change =
       linkId: string;
       created: boolean;
       fields: string[];
-      /** The id for Undoing this write, or null when it changed no covered field. */
+      /**
+       * The id for Undoing this write: an `update_link` that changed a title, summary, why or
+       * tags, or a repeat save whose own fill wrote the why. Null otherwise, including a new save.
+       */
       editId: string | null;
     }
   | { kind: "handy"; linkId: string; change: ToolChange }

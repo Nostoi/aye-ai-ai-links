@@ -24,7 +24,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 
 - **2026-10-19:** Undo for the in-app AI's link edits (#181), ahead of the Ask AI panel. The owner ruled (#159) that why, tag and summary edits get Undo; the controller added title. The design is the controller's, revised after the solution challenge (#181 comment 6280159207).
   - **What can be undone:** an in-app AI edit to a link's title, summary, why or tags, including a repeat save that fills a missing why. It is undone through the existing `POST /links/edit/undo`. Snooze, state, new saves, profile and tag-kind changes are not covered.
-  - **Only the in-app AI records.** Connected agents, Tell me why, the Save page and the edit dialog never touch an AI receipt. An in-app AI edit replaces the link's pending Undo, because a link keeps one Undo: its latest recorded edit.
+  - **Only the in-app AI records.** Connected agents, Tell me why and the Save page never write a receipt. A link keeps one Undo, its latest recorded edit: an in-app AI edit replaces a pending dialog Undo, and a dialog edit replaces a pending AI one.
   - **Undo acts only while the link still holds what the AI wrote,** whoever changed it since. Otherwise it answers "This link changed since, so nothing was undone."
   - **Accepted gaps:**
     - A repeat save's filled why is not listed (so it has no Undo) if the page-text read after it fails. The why was empty before, so no text is lost.

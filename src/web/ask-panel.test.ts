@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { MAX_PAGE_IDS, MAX_TEXT_CHARS } from "../ai/chat-turn.js";
+import { renderCard } from "./ai-card.js";
 import { ASK_KEY } from "./ask-panel.js";
 import { isToolJson, isToolJsonOrNull } from "./http.js";
 import { PAGE_STYLE, page } from "./page.js";
@@ -154,8 +155,18 @@ function load({
     "fetch",
     "location",
     "MutationObserver",
+    "CustomEvent",
     code,
-  )(document, window, sessionStorage, matchMedia, fetch, { pathname, search }, FakeObserver);
+  )(
+    document,
+    window,
+    sessionStorage,
+    matchMedia,
+    fetch,
+    { pathname, search },
+    FakeObserver,
+    window.CustomEvent,
+  );
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const click = (id: string) => el(id).dispatchEvent(new window.Event("click", { bubbles: true }));
   const pressEscape = () =>
@@ -667,6 +678,138 @@ describe("the change lines", () => {
     const block = t.messages().querySelector(".ask-change");
     expect(block?.firstElementChild?.getAttribute("data-id")).toBe("5");
     expect(t.messages().querySelectorAll(".ask-card")).toHaveLength(1);
+  });
+});
+
+describe("Edit under a change line (#183)", () => {
+  /** A card as the server renders it, carrying the edit dialog's data. */
+  const editable = (id: string, title = `Link ${id}`) =>
+    renderCard(
+      {
+        id,
+        url: `https://x.example/${id}`,
+        urlKey: `x.example/${id}`,
+        title,
+        summary: null,
+        why: null,
+        tags: [],
+        savedAt: new Date("2026-10-20T00:00:00Z"),
+        savedBy: "t",
+        lastOpenedAt: null,
+        lastSurfacedAt: null,
+        snoozedUntil: null,
+        state: "active",
+        snapshot: null,
+      },
+      { version: "v1", fit: "cover" },
+      { own: false, pageVersion: null, pageFit: null },
+      [],
+    );
+  const rowButtons = (row: Element | null | undefined) =>
+    [...(row?.querySelectorAll("button") ?? [])].map((b) => b.textContent);
+  const rows = (t: ReturnType<typeof talk>) => [...t.messages().querySelectorAll(".ask-line")];
+  const edits = (t: ReturnType<typeof talk>) => [...t.messages().querySelectorAll(".ask-edit")];
+  const answered = async (over: Record<string, unknown>) => {
+    const t = talk((call) => (call.url === "/ai/chat" ? okAnswer(over) : { status: 204 }));
+    await t.say("go");
+    return t;
+  };
+
+  it("gives a save line with its card Edit then Undo, Edit a plain button", async () => {
+    const t = await answered({
+      changes: [link("5", { created: true })],
+      cards: { "5": editable("5") },
+    });
+    expect(rowButtons(rows(t)[0])).toEqual(["Edit", "Undo"]);
+    const [edit] = edits(t);
+    expect(edit?.tagName).toBe("BUTTON");
+    expect(edit?.getAttribute("type")).toBe("button");
+    expect(edit?.getAttribute("data-id")).toBe("5");
+  });
+
+  it("gives Updated. Edit, with an editId and without one", async () => {
+    const t = await answered({
+      changes: [link("5", { editId: "e1" }), link("6")],
+      cards: { "5": editable("5"), "6": editable("6") },
+    });
+    expect(rows(t).map(rowButtons)).toEqual([["Edit", "Undo"], ["Edit"]]);
+  });
+
+  it("gives handy, tag, profile and surfaced lines no Edit", async () => {
+    const t = await answered({
+      changes: [
+        { kind: "handy", linkId: "9", change: { tool: ROW, previous: null } },
+        { kind: "tag", name: "garden", tagKind: "project" },
+        {
+          kind: "profile",
+          added: [{ entry: "note", id: "1", text: "x", source: "stated" }],
+          edited: [],
+          removed: [],
+        },
+        { kind: "surfaced", linkIds: ["9"] },
+      ],
+      cards: { "9": editable("9") },
+    });
+    expect(rows(t).map(rowButtons)).toEqual([["Undo"], [], [], []]);
+  });
+
+  it("gives a reply's cards no buttons", async () => {
+    const t = await answered({ segments: [{ card: editable("7") }] });
+    expect(t.messages().querySelectorAll(".ask-reply button")).toHaveLength(0);
+  });
+
+  it("gives a changed link the reply cites Edit on its line, its card being only in the reply", async () => {
+    const t = await answered({
+      segments: [{ card: editable("5") }],
+      changes: [link("5", { created: true })],
+      cards: {},
+    });
+    expect(t.messages().querySelectorAll(".ask-change .ask-card")).toHaveLength(0);
+    expect(rowButtons(rows(t)[0])).toEqual(["Edit", "Undo"]);
+  });
+
+  it("gives a line whose link has no card no Edit", async () => {
+    const t = await answered({ changes: [link("5", { created: true })], cards: {} });
+    expect(rowButtons(rows(t)[0])).toEqual(["Undo"]);
+  });
+
+  it("removes Edit from every line for a link once its save is undone, and draws none after a reload", async () => {
+    const t = talk((call) => {
+      if (call.url !== "/ai/chat") return { status: 204 };
+      return t.net.calls.length === 1
+        ? okAnswer({ changes: [link("5", { created: true })], cards: { "5": editable("5") } })
+        : okAnswer({ changes: [link("5", { editId: "e1" })], cards: { "5": editable("5") } });
+    });
+    await t.say("save it");
+    await t.say("rename it");
+    expect(rows(t).map(rowButtons)).toEqual([
+      ["Edit", "Undo"],
+      ["Edit", "Undo"],
+    ]);
+    await t.clickEl(t.messages().querySelector("button.ask-undo"));
+    expect(t.net.calls.at(-1)?.url).toBe("/links/delete");
+    expect(edits(t)).toHaveLength(0);
+    const again = load({ stored: t.stateNow() });
+    expect(again.panel().messages.querySelectorAll(".ask-edit")).toHaveLength(0);
+  });
+
+  it("keeps Edit after an edit's Undo, since the link is still there", async () => {
+    const t = await answered({
+      changes: [link("5", { editId: "e1" })],
+      cards: { "5": editable("5") },
+    });
+    await t.clickEl(t.messages().querySelector("button.ask-undo"));
+    expect(rows(t)[0]?.textContent).toBe("Updated.EditUndone.");
+  });
+
+  it("draws Edit again from the stored state", async () => {
+    const t = await answered({
+      changes: [link("5", { created: true })],
+      cards: { "5": editable("5") },
+    });
+    const again = load({ stored: t.stateNow() });
+    const [row] = again.panel().messages.querySelectorAll(".ask-line");
+    expect(rowButtons(row)).toEqual(["Edit", "Undo"]);
   });
 });
 

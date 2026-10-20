@@ -383,15 +383,95 @@ export const ASK_SCRIPT = `<script>
     if (u.kind === "save") {
       u.faded = true;
       fadeCards(u.body.id);
+      // The link is deleted: no read still on its way may put its card back, and it can't be edited.
+      bumpRead(u.body.id);
+      dropEdits(u.body.id);
     }
     save();
     if (u.kind === "save") return;
-    const fresh = await post("/ai/card/" + encodeURIComponent(u.body.id));
-    if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
-      swapCard(u.body.id, fresh.body.card);
-      save();
+    await refreshCard(u.body.id);
+  };
+
+  // Edit (#183) opens the page's one edit dialog on a change line's link. The contract with the
+  // dialog's script (edit-dialog.ts):
+  // - "aye-edit" on document, { card, opener, note }: the panel asks the dialog to open on its
+  //   card; focus goes back to opener, and a refusal that comes once the dialog closed goes in note.
+  // - "aye-edited" on document, { id }: the dialog saved or undid an edit to that link; the panel
+  //   reads its cards for it again.
+  // Edit is offered for a link the AI saved or changed whose card the panel shows, and never for a
+  // link whose save was undone or that turned out deleted.
+  const gone = new Set();
+  const deleted = (id) =>
+    gone.has(id) ||
+    state.entries.some(
+      (entry) =>
+        isObj(entry) &&
+        Array.isArray(entry.lines) &&
+        entry.lines.some(
+          (l) => isObj(l) && undoable(l.undo) && l.undo.kind === "save" && l.undo.done === true && l.undo.body.id === id,
+        ),
+    );
+  const editable = (line) =>
+    typeof line.linkId === "string" &&
+    (line.undo === undefined || (undoable(line.undo) && ["save", "edit"].includes(line.undo.kind))) &&
+    !deleted(line.linkId);
+  // The link's card in the line's own block, else anywhere in the conversation (a cited link's card
+  // sits in the reply above).
+  const panelCard = (id, block) => {
+    const find = (within) =>
+      [...within.querySelectorAll(".ask-card")].find(
+        (card) => card.getAttribute("data-id") === id && card.hasAttribute("data-title"),
+      ) ?? null;
+    return find(block) ?? find(messages);
+  };
+  const dropEdits = (id) => {
+    for (const edit of [...messages.querySelectorAll(".ask-edit")]) {
+      if (edit.getAttribute("data-id") === id) edit.remove();
     }
   };
+  // Reads of one link's card are numbered; only the latest one started is drawn and stored.
+  const reads = new Map();
+  const bumpRead = (id) => {
+    const n = (reads.get(id) ?? 0) + 1;
+    reads.set(id, n);
+    return n;
+  };
+  // "ok" once the fresh card is drawn and stored, "stale" when a later read started, "gone" for a
+  // deleted link, else "failed".
+  const refreshCard = async (id) => {
+    const n = bumpRead(id);
+    const fresh = await post("/ai/card/" + encodeURIComponent(id));
+    if (reads.get(id) !== n) return "stale";
+    if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
+      swapCard(id, fresh.body.card);
+      save();
+      return "ok";
+    }
+    return fresh.status === 404 ? "gone" : "failed";
+  };
+  const runEdit = async (id, button, note, block) => {
+    note.textContent = "";
+    const read = await refreshCard(id);
+    if (read === "gone") {
+      gone.add(id);
+      dropEdits(id);
+      note.textContent = "This link was deleted.";
+      return;
+    }
+    if (read === "failed") note.textContent = "Couldn't load this link. Try again.";
+    if (read !== "ok" || !button.isConnected) return;
+    const card = panelCard(id, block);
+    if (card) document.dispatchEvent(new CustomEvent("aye-edit", { detail: { card, opener: button, note } }));
+  };
+  document.addEventListener("aye-edited", (event) => {
+    const id = isObj(event.detail) ? event.detail.id : null;
+    if (typeof id !== "string") return;
+    let drawn = false;
+    forCards(id, () => {
+      drawn = true;
+    });
+    if (drawn) refreshCard(id);
+  });
 
   const slot = (parent, html) => {
     const holder = parseCard(html);
@@ -417,6 +497,19 @@ export const ASK_SCRIPT = `<script>
         row.appendChild(a);
       }
       const u = line.undo;
+      const live = undoable(u) && u.done !== true;
+      const edit = editable(line) && panelCard(id, block) !== null;
+      // Edit and Undo share the row's one note.
+      const note = live || edit ? make("span", "ask-note") : null;
+      if (note) note.setAttribute("aria-live", "polite");
+      if (edit) {
+        const button = make("button", "ask-edit", "Edit");
+        button.setAttribute("type", "button");
+        button.setAttribute("data-id", id);
+        button.setAttribute("title", "Edit title and picture");
+        button.addEventListener("click", () => runEdit(id, button, note, block));
+        row.appendChild(button);
+      }
       if (undoable(u)) {
         if (u.done === true) {
           row.appendChild(make("span", "ask-undone", "Undone."));
@@ -424,13 +517,11 @@ export const ASK_SCRIPT = `<script>
           const button = make("button", "ask-undo", "Undo");
           button.setAttribute("type", "button");
           if (typeof u.title === "string") button.setAttribute("title", u.title);
-          const note = make("span", "ask-note");
-          note.setAttribute("aria-live", "polite");
           button.addEventListener("click", () => runUndo(u, button, note));
           row.appendChild(button);
-          row.appendChild(note);
         }
       }
+      if (note) row.appendChild(note);
       block.appendChild(row);
       list.appendChild(block);
     }

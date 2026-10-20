@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { expect, it } from "vitest";
 import type { Link } from "../core/types.js";
+import { ASK_KEY } from "./ask-panel.js";
 
 export type Post = { url: string; body: unknown; redirect: unknown; keepalive: unknown };
 
@@ -30,18 +31,24 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
 
 /**
  * `runPage` for a page with the Ask AI panel: the panel's script runs too, against a fake
- * `sessionStorage` and a `matchMedia` that answers `phone`. Only the menu's own sign-out script is
- * left out.
+ * `sessionStorage` holding `stored` as the panel's state, and a `matchMedia` that answers `phone`.
+ * Only the menu's own sign-out script is left out.
  */
 export function runAskPage(
   html: string,
   answer: (sent: Post) => Answer = () => ({ status: 204 }),
-  { phone = false }: { phone?: boolean } = {},
+  { phone = false, stored }: { phone?: boolean; stored?: unknown } = {},
 ) {
-  return start(html, answer, true, phone);
+  return start(html, answer, true, phone, stored);
 }
 
-function start(html: string, answer: (sent: Post) => Answer, ask: boolean, phone: boolean) {
+function start(
+  html: string,
+  answer: (sent: Post) => Answer,
+  ask: boolean,
+  phone: boolean,
+  stored?: unknown,
+) {
   const { document, DOMParser } = parseHTML(html);
   const focusLog: Element[] = [];
   (
@@ -82,9 +89,10 @@ function start(html: string, answer: (sent: Post) => Answer, ask: boolean, phone
       },
     };
   };
-  const location = { href: "https://links.example/", reload: () => {} };
+  const location = { href: "https://links.example/", pathname: "/", search: "", reload: () => {} };
   const win = document.defaultView as unknown as typeof globalThis;
   const items = new Map<string, string>();
+  if (stored !== undefined) items.set(ASK_KEY, JSON.stringify(stored));
   const sessionStorage = {
     getItem: (k: string) => items.get(k) ?? null,
     setItem: (k: string, v: string) => void items.set(k, v),

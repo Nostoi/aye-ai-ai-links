@@ -392,20 +392,60 @@ form.addEventListener("submit", async (event) => {
   }
   if (!answer) {
     if (current) editError.textContent = refused;
-    else editAlert.textContent = refused;
+    else ${panel ? "tell(target, refused)" : "editAlert.textContent = refused"};
     return;
   }
-  showCard(target, answer);
+  ${panel ? "shown" : "showCard"}(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => target.isConnected && showUndo.offers() === offersAtSave && showUndo(${JSON.stringify("Link updated")}, async () => {
+  const offer = () => ${panel ? "(target.isConnected || linked(target.dataset.id))" : "target.isConnected"} && showUndo.offers() === offersAtSave && showUndo(${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
-    if (undone) showCard(target, undone);
-    else editAlert.textContent = await failure(back);
+    if (undone) ${panel ? "shown" : "showCard"}(target, undone);
+    else ${panel ? "tell(target, await failure(back))" : "editAlert.textContent = await failure(back)"};
   });
   heldUndo = dialog.open ? offer : null;
   if (!dialog.open) offer();
-});
+});${panel ? PANEL_BLOCK : ""}
 }
 }`;
+
+/**
+ * The panel's side of the dialog, with the AI on. The contract with the Ask AI panel's script
+ * (ask-panel.ts), both events on document:
+ * - "aye-edit", { card, opener, note }: open on the panel's card, without Delete link; focus goes
+ *   back to opener, and a refusal that comes once the dialog closed, or a failed Undo, goes in note.
+ * - "aye-edited", { id }: sent after every Save or Undo answered, so the panel reads its cards for
+ *   that link again.
+ * A save updates the page's own cards for the link too. Its Undo is offered while any card for
+ * the link is on the page, since the panel replaces its cards when it reads them again.
+ */
+const PANEL_BLOCK = `
+const notes = new WeakMap();
+const deleteRow = dialog.querySelector(".edit-delete-row");
+const linked = (id) => [...document.querySelectorAll("[data-id][data-title]")].some((c) => c.getAttribute("data-id") === id);
+const shown = (target, answer) => {
+  const id = target.dataset.id;
+  if (!notes.has(target)) showCard(target, answer);
+  if (editRoot) {
+    for (const c of editRoot.querySelectorAll("[data-id][data-title]")) {
+      if (c !== target && c.getAttribute("data-id") === id) showCard(c, answer);
+    }
+  }
+  document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id } }));
+};
+const tell = (target, message) => {
+  const note = notes.get(target);
+  if (note) note.textContent = message;
+  else if (editAlert) editAlert.textContent = message;
+};
+document.addEventListener("aye-edit", (event) => {
+  const { card: from, opener: by, note } = event.detail;
+  notes.set(from, note);
+  open(from, by);
+  opener = by;
+  deleteRow.hidden = true;
+});
+dialog.addEventListener("close", () => {
+  deleteRow.hidden = false;
+});`;

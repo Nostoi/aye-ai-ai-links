@@ -401,7 +401,7 @@ body.ask-open{margin-right:400px}
 .ask-change{display:flex;flex-direction:column;gap:8px}
 .ask-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:14px}
 .ask-line a{display:inline-flex;align-items:center;min-height:44px}
-.ask-undo,.ask-button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-decoration:none}
+.ask-edit,.ask-undo,.ask-button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-decoration:none}
 .ask-undone{color:var(--soft)}
 .ask-note{font-size:13px;color:var(--soft)}
 .ask-card.ask-faded{opacity:.4}

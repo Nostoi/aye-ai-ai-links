@@ -19,6 +19,8 @@ const decode = (segment: string) => {
 /** Control characters become spaces, and runs of whitespace one space. */
 const plain = (text: string) => text.replace(/[\p{Cc}\s]+/gu, " ").trim();
 
+const short = (title: string) => [...title].length <= TITLE_MAX;
+
 const PAGE_EXTENSION = /\.(html?|php|aspx?|jsp)$/i;
 const POST_SITE = /^(x|twitter)\.com$/i;
 
@@ -34,13 +36,13 @@ function fromAddress(url: string): string | null {
   const site = parsed.hostname.replace(/^www\./i, "");
   const [first, kind, id, ...rest] = parsed.pathname.split("/").filter(Boolean);
   if (POST_SITE.test(site) && first && first !== "i" && kind === "status" && id && !rest.length) {
-    const user = plain(decode(first));
-    if (user !== "") return `Post by @${user}`;
+    const post = `Post by @${plain(decode(first))}`;
+    if (post !== "Post by @" && short(post)) return post;
   }
   const last = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
   const words = plain(decode(last).replace(PAGE_EXTENSION, "").replace(/[-_]+/g, " "));
   const built = `${words.charAt(0).toUpperCase()}${words.slice(1)} — ${site}`;
-  return /\p{L}/u.test(words) && [...built].length <= TITLE_MAX ? built : site;
+  return /\p{L}/u.test(words) && short(built) ? built : site;
 }
 
 /**

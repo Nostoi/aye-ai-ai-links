@@ -122,4 +122,11 @@ describe("displayTitle", () => {
     expect(displayTitle(link("https://x.com/al%0Aice/status/1"))).toBe("Post by @al ice");
     expect(displayTitle(link("https://a.com/%0A%00"))).toBe("a.com");
   });
+
+  it("falls back to the site for a post whose user name would make the title too long", () => {
+    expect(displayTitle(link(`https://x.com/${"a".repeat(5000)}/status/1`))).toBe("x.com");
+    const longest = "a".repeat(191);
+    expect(displayTitle(link(`https://x.com/${longest}/status/1`))).toBe(`Post by @${longest}`);
+    expect(displayTitle(link(`https://x.com/${longest}a/status/1`))).toBe("x.com");
+  });
 });

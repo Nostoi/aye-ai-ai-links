@@ -39,9 +39,10 @@ async function readCard(deps: AskCardDeps, owner: OwnerId, id: string) {
 /** Core answers a Keep handy request it declines with the row as it was; that wrote nothing. */
 const wroteSomething = (change: Change) =>
   change.kind !== "handy" ||
-  (["status", "source", "since", "answeredAt", "waitDays"] as const).some(
-    (key) => String(change.change.tool[key]) !== String(change.change.previous?.[key]),
-  );
+  (["status", "source", "since", "answeredAt", "waitDays"] as const).some((key) => {
+    const value = (v: unknown) => (v instanceof Date ? v.getTime() : v);
+    return value(change.change.tool[key]) !== value(change.change.previous?.[key]);
+  });
 
 /** The id (or name) a change line names. */
 const changeSubject = (change: Change): string => {

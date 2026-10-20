@@ -186,6 +186,19 @@ describe("what the answer leaves out", () => {
     });
   });
 
+  it.each([
+    ["a new row", null],
+    ["only its wait", { ...row, waitDays: 60 as const }],
+    ["only its source", { ...row, source: "asked" as const }],
+    ["only its answer date", { ...row, answeredAt: new Date("2026-10-02T00:00:00Z") }],
+    ["its start by a few milliseconds", { ...row, since: new Date("2026-10-01T00:00:00.250Z") }],
+  ])("keeps a Keep handy change that moved %s", async (_, previous) => {
+    const world = await oauthWorld();
+    const moved: Change = { kind: "handy", linkId: "5", change: { tool: row, previous } };
+    const ok = { ok: true as const, reply: "Done.", changes: [moved], seen: [] };
+    expect((await chatAnswer(linkDeps(world), A, "Fake", ok)).changes).toEqual([moved]);
+  });
+
   it("keeps the answer and its changes when a card can't be read", async () => {
     const world = await oauthWorld();
     const deps = linkDeps(world);

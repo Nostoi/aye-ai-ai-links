@@ -43,8 +43,8 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
       - A link restored by a delete's Undo is picked up by the next sweep.
   - **Changes to #149** (ROADMAP 2026-10-19 and #149 comment of 2026-10-19):
     - **`imageUrl`.** For a known host, get_link's `imageUrl` and the export's `page.imageUrl` are null. This replaces the controller default "get_link's imageUrl stays the page's preview address".
-    - **A known-host link marked as gone** is read once and does not wait until it works again. If the read fails, it shows initials.
-    - **A fresh read that fails** records no icon, so the card shows initials, as #149's backfill does.
+    - **A known-host link marked as gone** is read and does not wait until it works again. If the read fails for good, it shows initials.
+    - **A fresh read that fails** for good (a 404, say) records no icon, so the card shows initials, as #149's backfill does. One that may pass (a 5xx, 408 or 429, a network error or a timeout) keeps the preview and is tried again later.
 
 - **2026-10-20:** Edit in the Ask AI panel (#183).
   - **Owner rulings, 2026-10-20:**

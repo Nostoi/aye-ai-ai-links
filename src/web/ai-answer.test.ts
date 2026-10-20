@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { IN_APP_INSTRUCTIONS, MAX_CARDS } from "../ai/chat-turn.js";
 import { oauthWorld } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import type { Change } from "../mcp/changes.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
-import { chatAnswer, MAX_CARDS, tidy } from "./ai-answer.js";
+import { chatAnswer, tidy } from "./ai-answer.js";
 
 const A = "owner";
 
@@ -42,6 +43,7 @@ const pair = (id: string) => `[[link:${id}]]\nnote ${id}`;
 describe("the card cap", () => {
   it("shows MAX_CARDS cards, names the next link in the text, and remembers every marker", async () => {
     expect(MAX_CARDS).toBe(5);
+    expect(IN_APP_INSTRUCTIONS).toContain(`Show at most ${MAX_CARDS} links`);
     const { ids, answer } = await replying(6, (all) => all.map(pair).join("\n"));
     expect(cardsOf(answer.segments)).toHaveLength(5);
     expect(JSON.stringify(cardsOf(answer.segments))).not.toContain("Title 6");

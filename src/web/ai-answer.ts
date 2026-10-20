@@ -1,4 +1,4 @@
-import type { TurnResult } from "../ai/chat-turn.js";
+import { MAX_CARDS, type TurnResult } from "../ai/chat-turn.js";
 import type { OwnerId } from "../core/types.js";
 import type { Change } from "../mcp/changes.js";
 import { type AskCardDeps, loadCard } from "./ai-card.js";
@@ -22,8 +22,6 @@ export type ChatAnswer =
       changes: Change[];
     };
 
-/** The most cards one reply shows; a later marker is named in the text instead. */
-export const MAX_CARDS = 5;
 const MARKER = /\[\[link:(\d+)\]\]/g;
 const edgeBlanks = (text: string) =>
   text.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");

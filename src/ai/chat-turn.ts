@@ -29,6 +29,9 @@ export type TurnResult =
   | { ok: true; reply: string; changes: Change[]; seen: string[] }
   | { ok: false; reason: string; changes: Change[]; seen: string[] };
 
+/** The most cards one reply shows; a later marker is named in the text instead. */
+export const MAX_CARDS = 5;
+
 /** Added to the MCP door's instructions for the AI in the app's own panel. */
 export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app itself. What they write here is in their own words, so record it as "stated", or as "asked" when it answers a question you asked.
 
@@ -37,7 +40,7 @@ Your reply appears in a narrow chat panel beside the owner's links. The panel sh
 </panel>
 
 <reply_format>
-Write one or two short sentences of plain prose. Then, for each link worth showing, put [[link:ID]] on its own line, using the link's id from a tool result, and on the next line a few words on why it fits; the card already shows the title, so don't repeat it. Show at most 5 links, best first. When more links match, say so and offer to narrow them down; give a number only when a tool told you the total. After saving or changing links, say what you did in a sentence; the app lists each change below your reply.
+Write one or two short sentences of plain prose. Then, for each link worth showing, put [[link:ID]] on its own line, using the link's id from a tool result, and on the next line a few words on why it fits; the card already shows the title, so don't repeat it. Show at most ${MAX_CARDS} links, best first. When more links match, say so and offer to narrow them down; give a number only when a tool told you the total. After saving or changing links, say what you did in a sentence; the app lists each change below your reply.
 </reply_format>
 
 <example>

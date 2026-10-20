@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-20:** Ask AI replies are short, with cards (#185).
+  - **Owner's decision.** A new in-app prompt, a cap of 5 cards per reply, and a plain-text safety net for leaked Markdown. No `answer` tool and no structured outputs: in a measured comparison they did no better than the prompt (#185 body).
+  - **Controller rulings,** after the solution challenge (REVISE; #185 comment 6289817200):
+    - Markers are read before any tidying, so tidying never makes a card.
+    - A marker past the fifth card is shown as the link's title in plain text, and the history keeps the marker. This replaces the issue body's "removed", which was the controller's wording.
+    - The prompt asks for a number of further matches only when a tool gave the total.
+    - The cap covers the reply's cards only; a changed link still gets its card under the reply.
+
 - **2026-10-19:** The Ask AI panel (#159, PR 2).
   - **Owner rulings, 2026-10-19:**
     - **Failure copy** (#159 comment 6279458324). With no changes: "<AI> didn't answer: {reason}." and "Nothing was saved or changed." With changes: "<AI> stopped before it finished: {reason}." and the change list. The controller left Try again out of this case, because a retry would repeat the writes.

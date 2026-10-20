@@ -32,7 +32,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - An undone, newly inferred project stays in the tag catalog, as a removed tag does today, so filing suggestions can still offer it.
   - **For PR 2:**
     - The Undo route answers the card's title and picture. After an AI Undo, the panel re-reads the link to show the restored summary, why and tags.
-    - The panel offers one Undo per link, on the change that carries the `editId`, and its label names the turn's changes to that link, not only that change's own `fields`.
+    - The panel offers one Undo per link, on the change that carries the `editId`.
 - **2026-10-19:** The server may call one configured AI (#159). Design: `docs/specs/2026-10-19-in-app-ai-design.md`. Owner rulings, 2026-10-19 (#159 comments), except the two marked as the controller's.
   - **The principle changes on purpose.** AGENTS.md's "The calling agent does the AI work" becomes "One AI connection, and only when set up". This overrides the 2026-10-10 spec's "never calls an AI model API" row, which stays as a dated record. It settles the #159 half of the 2026-10-18 open conflict; #160 is not yet designed.
   - **`get_digest` calls by the in-app AI are listed as changes.**

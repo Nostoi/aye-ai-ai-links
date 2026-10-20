@@ -320,7 +320,56 @@ export const MIGRATIONS: Migration[] = [
   ALTER TABLE link_images ADD COLUMN role TEXT NOT NULL DEFAULT 'preview' CHECK (role IN ('preview', 'icon'));
   `,
   rebuildLinks,
+  rebuildLinkEdits,
 ];
+
+/**
+ * Link edits widen (#181): `link_edits` also holds the summary, why and tags an AI edit changed,
+ * and a row may now change any one of the five. Every row is copied with the new flags at 0.
+ */
+function rebuildLinkEdits(db: Database): void {
+  const cols =
+    "owner_id, link_id, edit_id, title_changed, picture_changed, prior_title, written_title, prior_content_type, prior_bytes, prior_sha256, prior_set_at, written_sha256, at";
+  db.exec(`
+    CREATE TABLE link_edits_new (
+      owner_id TEXT NOT NULL,
+      link_id INTEGER NOT NULL,
+      edit_id TEXT NOT NULL,
+      title_changed INTEGER NOT NULL CHECK (title_changed IN (0, 1)),
+      picture_changed INTEGER NOT NULL CHECK (picture_changed IN (0, 1)),
+      prior_title TEXT,
+      written_title TEXT,
+      prior_content_type TEXT
+        CHECK (prior_content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+      prior_bytes BLOB
+        CHECK (prior_bytes IS NULL OR (typeof(prior_bytes) = 'blob' AND length(prior_bytes) <= 2097152)),
+      prior_sha256 TEXT,
+      prior_set_at INTEGER,
+      written_sha256 TEXT,
+      at INTEGER NOT NULL,
+      summary_changed INTEGER NOT NULL DEFAULT 0 CHECK (summary_changed IN (0, 1)),
+      prior_summary TEXT,
+      written_summary TEXT,
+      why_changed INTEGER NOT NULL DEFAULT 0 CHECK (why_changed IN (0, 1)),
+      prior_why_text TEXT,
+      prior_why_source TEXT,
+      written_why_text TEXT,
+      written_why_source TEXT,
+      tags_changed INTEGER NOT NULL DEFAULT 0 CHECK (tags_changed IN (0, 1)),
+      prior_tags TEXT,
+      written_tags TEXT,
+      PRIMARY KEY (owner_id, link_id),
+      FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+      CHECK (title_changed = 1 OR picture_changed = 1 OR summary_changed = 1
+        OR why_changed = 1 OR tags_changed = 1),
+      CHECK ((prior_bytes IS NULL) = (prior_sha256 IS NULL)
+        AND (prior_bytes IS NULL) = (prior_content_type IS NULL)
+        AND (prior_bytes IS NULL) = (prior_set_at IS NULL))
+    );
+    INSERT INTO link_edits_new (${cols}) SELECT ${cols} FROM link_edits;
+    DROP TABLE link_edits;
+    ALTER TABLE link_edits_new RENAME TO link_edits;`);
+}
 
 /** Links rebuild (#126): AUTOINCREMENT ids, so a deleted link's id is never reused, and `deleted_at`. */
 function rebuildLinks(db: Database): void {

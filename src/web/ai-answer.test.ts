@@ -100,7 +100,7 @@ describe("tidy", () => {
     ["#nospace", "#nospace"],
     ["__init__ and *single* and `code`", "__init__ and *single* and `code`"],
     ["1. first\n2. second", "1. first\n2. second"],
-    ["Intro\n-\nnext\n  *\n•", "Intro\nnext"],
+    ["Intro\n-\nnext", "Intro\n-\nnext"],
   ])("%j -> %j", (input, output) => {
     expect(tidy(input)).toBe(output);
   });
@@ -118,6 +118,31 @@ describe("tidying the reply", () => {
       " note",
     ]);
     expect(answer.remember).not.toMatch(/^[-•]\s*\[\[/m);
+  });
+
+  it("keeps each bulleted card line on its own line past the cap", async () => {
+    const lines = (ids: string[]) =>
+      `Here:\n${ids.map((id) => `- [[link:${id}]] note`).join("\n")}`;
+    const { ids, answer } = await replying(6, lines);
+    expect(cardsOf(answer.segments)).toHaveLength(5);
+    expect(answer.segments.at(-1)).toEqual({ text: " note\nTitle 6 note" });
+    expect(answer.remember).toBe(`Here:\n${ids.map((id) => `[[link:${id}]] note`).join("\n")}`);
+  });
+
+  it("leaves no ** beside a card, a title or a marker inside a pair", async () => {
+    const bold = await replying(6, (ids) =>
+      ids.map((id) => `* **[[link:${id}]]** - note`).join("\n"),
+    );
+    const inside = await replying(1, (ids) => `Intro **see [[link:${ids[0]}]] here** end`);
+    for (const { answer } of [bold, inside]) {
+      expect(JSON.stringify(answer.segments)).not.toContain("**");
+      expect(answer.remember).not.toContain("**");
+    }
+  });
+
+  it("doesn't read the text after a marker as the start of a line", async () => {
+    const { answer } = await replying(1, (ids) => `[[link:${ids[0]}]] - note`);
+    expect(answer.segments.at(-1)).toEqual({ text: " - note" });
   });
 
   it("tidies the text segments and the remembered text but not the title put in a segment", async () => {

@@ -28,7 +28,13 @@ const MARKER = /\[\[link:(\d+)\]\]/g;
 const edgeBlanks = (text: string) =>
   text.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
 
-/** Markdown the panel can't render, as plain text. Applied between markers, never to them. */
+/** Private-use characters that stand in for a marker while the reply is tidied. */
+const OPEN = "";
+const CLOSE = "";
+const HOLDER = new RegExp(`${OPEN}(\\d+)${CLOSE}`);
+const MARK_BEFORE_HOLDER = new RegExp(`^(\\s*)[-*•] (?=${OPEN})`);
+
+/** Markdown the panel can't render, as plain text. A list mark right before a marker is dropped, not made a bullet. */
 export function tidy(text: string): string {
   return text
     .split("\n")
@@ -36,9 +42,9 @@ export function tidy(text: string): string {
       line
         .replace(/\*\*(\S(?:[^*]*\S)?)\*\*/g, "$1")
         .replace(/^#{1,6} /, "")
+        .replace(MARK_BEFORE_HOLDER, "$1")
         .replace(/^(\s*)[-*] /, "$1• "),
     )
-    .filter((line) => !/^\s*[-*•]\s*$/.test(line))
     .join("\n");
 }
 
@@ -90,18 +96,23 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     if (trimmed.trim() !== "") segments.push({ text: trimmed });
     text = "";
   };
-  let end = 0;
-  for (const match of reply.matchAll(MARKER)) {
-    const between = reply.slice(end, match.index);
-    end = match.index + match[0].length;
-    text += tidy(between);
-    remembered += tidy(between);
-    const id = match[1] ?? "";
+  const ids: string[] = [];
+  const masked = reply
+    .replaceAll(OPEN, "")
+    .replaceAll(CLOSE, "")
+    .replace(MARKER, (_, id: string) => `${OPEN}${ids.push(id) - 1}${CLOSE}`);
+  for (const [i, part] of tidy(masked).split(HOLDER).entries()) {
+    if (i % 2 === 0) {
+      text += part;
+      remembered += part;
+      continue;
+    }
+    const id = ids[Number(part)] ?? "";
     if (!seen.has(id) || cited.has(id)) continue;
     const loaded = await readCard(deps, owner, id);
     if (!loaded) continue;
     cited.add(id);
-    remembered += match[0];
+    remembered += `[[link:${id}]]`;
     if (shown.size >= MAX_CARDS) {
       text += loaded.link.title ?? loaded.link.url;
       continue;
@@ -110,8 +121,6 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     flush();
     segments.push({ card: loaded.html });
   }
-  text += tidy(reply.slice(end));
-  remembered += tidy(reply.slice(end));
   flush();
   return { segments, shown, remembered };
 }

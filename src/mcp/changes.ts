@@ -17,6 +17,8 @@ export type Change =
       linkId: string;
       created: boolean;
       fields: string[];
+      /** The id for Undoing this write, or null when it changed no covered field. */
+      editId: string | null;
     }
   | { kind: "handy"; linkId: string; change: ToolChange }
   | { kind: "tag"; name: string; tagKind: TagKind }

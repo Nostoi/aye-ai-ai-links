@@ -93,7 +93,7 @@ describe("POST /ai/chat", () => {
     expect(body.ok).toBe(true);
     const linkId = body.changes[0]?.kind === "link" ? body.changes[0].linkId : "";
     expect(body.changes).toEqual([
-      { kind: "link", tool: "save_link", linkId, created: true, fields: [] },
+      { kind: "link", tool: "save_link", linkId, created: true, fields: [], editId: null },
     ]);
     expect(linkRow(world, linkId)).toEqual({
       owner: A,
@@ -334,7 +334,7 @@ describe("POST /ai/chat", () => {
     expect(toolAnswers(model, 1).map((m) => m.role === "tool" && m.isError)).toEqual([true, true]);
     const saved = body.changes[0]?.kind === "link" ? body.changes[0].linkId : "";
     expect(body.changes).toEqual([
-      { kind: "link", tool: "save_link", linkId: saved, created: true, fields: [] },
+      { kind: "link", tool: "save_link", linkId: saved, created: true, fields: [], editId: null },
     ]);
     expect(body.seen).not.toContain(aId);
     expect(linkRow(world, saved)).toEqual({

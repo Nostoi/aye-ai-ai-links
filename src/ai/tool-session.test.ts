@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import type { Caller } from "../auth/caller.js";
+import { editLink, undoEdit } from "../core/link-edit.js";
+import { saveLink } from "../core/links.js";
 import { createDeps } from "../deps.js";
 import { createCallTracker } from "../mcp/call-tracker.js";
 import * as guidance from "../mcp/guidance.js";
@@ -88,6 +90,34 @@ describe("openToolSession", () => {
     ]);
   });
 
+  it("leaves the MCP door without receipts: no edit id in a result, no row written", async () => {
+    const { db, deps } = setup();
+    await saveLink(deps, CALLER.owner, { url: "https://example.com/d", savedBy: "seed" });
+    const titleBefore = (await deps.store.get(CALLER.owner, "1"))?.title;
+    const dialogEditId = await editLink(deps, CALLER.owner, "1", { title: "Dialog title" });
+
+    const updated = await door(deps, "tools/call", {
+      name: "update_link",
+      arguments: { id: "1", summary: "agent summary" },
+    });
+    const filled = await door(deps, "tools/call", {
+      name: "save_link",
+      arguments: {
+        url: "https://example.com/d",
+        why: { text: "agent why", source: "stated" },
+      },
+    });
+
+    for (const result of [updated, filled]) {
+      expect(result.isError).not.toBe(true);
+      expect(JSON.stringify(result)).not.toMatch(/editId|whyEditId/i);
+    }
+    const row = db.prepare("SELECT edit_id, summary_changed, why_changed FROM link_edits").all();
+    expect(row).toEqual([{ edit_id: dialogEditId, summary_changed: 0, why_changed: 0 }]);
+    await undoEdit(deps, CALLER.owner, "1", dialogEditId as string);
+    expect((await deps.store.get(CALLER.owner, "1"))?.title).toBe(titleBefore);
+  });
+
   it("passes a tool's refusal back as an error result", async () => {
     const { deps, entry } = setup();
     entry.session = await openToolSession(deps, CALLER, createCallTracker().track);
@@ -132,7 +162,7 @@ describe("openToolSession", () => {
     listed.pop();
 
     expect(entry.session.changes()).toEqual([
-      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] },
+      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [], editId: null },
       { kind: "tag", name: "kitchen", tagKind: "project" },
     ]);
   });

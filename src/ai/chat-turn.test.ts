@@ -46,7 +46,14 @@ function fakeSession(behave: Behave = () => undefined) {
       let result: ToolResult = { text: "{}", isError: false, structured: null };
       if (name === "save_link") {
         const linkId = String(changes.length + 1);
-        changes.push({ kind: "link", tool: "save_link", linkId, created: true, fields: [] });
+        changes.push({
+          kind: "link",
+          tool: "save_link",
+          linkId,
+          created: true,
+          fields: [],
+          editId: null,
+        });
         result = { text: `saved ${linkId}`, isError: false, structured: { link: { id: linkId } } };
       } else if (name === "search_links") {
         result = {
@@ -112,7 +119,9 @@ describe("runChatTurn", () => {
     expect(result).toEqual({
       ok: true,
       reply: "Saved it.",
-      changes: [{ kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] }],
+      changes: [
+        { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [], editId: null },
+      ],
       seen: ["1", "7", "8"],
     });
     expect(made.map((m) => m.name)).toEqual(["save_link", "search_links"]);
@@ -132,7 +141,7 @@ describe("runChatTurn", () => {
 
     expect(result.ok).toBe(true);
     expect(result.changes).toEqual([
-      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] },
+      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [], editId: null },
     ]);
     expect(result.seen).toEqual([]);
     expect(model.requests[1]?.messages.at(-1)).toEqual({
@@ -497,7 +506,9 @@ describe("runChatTurn", () => {
       expect(result).toEqual({
         ok: true,
         reply: "Saved.",
-        changes: [{ kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] }],
+        changes: [
+          { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [], editId: null },
+        ],
         seen: ["1"],
       });
       expect(db.prepare("SELECT owner_id, saved_by FROM links").all()).toEqual([

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openToolSession, type ToolSession } from "../ai/tool-session.js";
 import type { Caller } from "../auth/caller.js";
 import { getDigest } from "../core/digest.js";
+import { undoEdit } from "../core/link-edit.js";
 import { saveLink } from "../core/links.js";
 import type { LinkStore } from "../core/store.js";
 import { createDeps } from "../deps.js";
@@ -53,7 +54,7 @@ describe("the change record", () => {
     expect(result.text).toContain('saved with id "1"');
     expect(db.prepare("SELECT id FROM links").all()).toEqual([{ id: 1 }]);
     expect(s.changes()).toEqual([
-      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] },
+      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [], editId: null },
     ]);
   });
 
@@ -203,6 +204,31 @@ describe("the change record", () => {
     );
   });
 
+  it("records the edit id of an update, and Undo restores the summary", async () => {
+    const { deps, entry } = setup();
+    await saveLink(deps, CALLER.owner, { url: URL, summary: "old summary", savedBy: "seed" });
+    const s = await session(entry, deps);
+
+    await s.call("update_link", { id: "1", summary: "new summary" });
+
+    const [change] = s.changes();
+    expect(change).toMatchObject({ kind: "link", tool: "update_link", editId: expect.any(String) });
+    const editId = change?.kind === "link" ? change.editId : null;
+    expect((await deps.store.get(CALLER.owner, "1"))?.summary).toBe("new summary");
+    await undoEdit(deps, CALLER.owner, "1", editId as string);
+    expect((await deps.store.get(CALLER.owner, "1"))?.summary).toBe("old summary");
+  });
+
+  it("records no edit id for an update that changes no covered field", async () => {
+    const { deps, entry } = setup();
+    await saveLink(deps, CALLER.owner, { url: URL, savedBy: "seed" });
+    const s = await session(entry, deps);
+
+    await s.call("update_link", { id: "1", state: "archived" });
+
+    expect(s.changes()).toMatchObject([{ kind: "link", tool: "update_link", editId: null }]);
+  });
+
   it("lists a repeat save that filled the why, and not one that didn't", async () => {
     const { deps, entry } = setup();
     const s = await session(entry, deps);
@@ -213,8 +239,15 @@ describe("the change record", () => {
     await s.call("save_link", repeat);
 
     expect(s.changes()).toEqual([
-      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [] },
-      { kind: "link", tool: "save_link", linkId: "1", created: false, fields: ["why"] },
+      { kind: "link", tool: "save_link", linkId: "1", created: true, fields: [], editId: null },
+      {
+        kind: "link",
+        tool: "save_link",
+        linkId: "1",
+        created: false,
+        fields: ["why"],
+        editId: expect.any(String),
+      },
     ]);
   });
 

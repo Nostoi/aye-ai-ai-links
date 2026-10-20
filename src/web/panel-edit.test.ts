@@ -228,7 +228,12 @@ const savedOne = () => ({
 type Route = Answer | ((sent: Post) => Answer);
 type Page = ReturnType<typeof runAskPage>;
 /** Answers each request by its URL; anything not routed gets a 204. */
-const onPage = (html: string, routes: Record<string, Route>, stored: unknown = savedOne()) => {
+const onPage = (
+  html: string,
+  routes: Record<string, Route>,
+  stored: unknown = savedOne(),
+  { deferClose = false }: { deferClose?: boolean } = {},
+) => {
   const page = runAskPage(
     html,
     (sent) => {
@@ -237,7 +242,7 @@ const onPage = (html: string, routes: Record<string, Route>, stored: unknown = s
     },
     { stored },
   );
-  return { page, dialog: stubDialog(page) };
+  return { page, dialog: stubDialog(page, { deferClose }) };
 };
 const savedTwo = () => {
   const state = savedOne();
@@ -929,9 +934,11 @@ describe("Edit opens the dialog at once and waits for the card (E7)", () => {
     readonly: titleField(page).hasAttribute("readonly"),
     choose: (page.$("[data-edit=choose]") as HTMLButtonElement).disabled,
   });
-  const pressHeld = (answer: Answer, stored: unknown = savedOne()) => {
+  const pressHeld = (answer: Answer, stored: unknown = savedOne(), deferClose = false) => {
     const { wait, release } = held();
-    const { page, dialog } = onPage(home(), { "/ai/card/1": { ...answer, wait } }, stored);
+    const { page, dialog } = onPage(home(), { "/ai/card/1": { ...answer, wait } }, stored, {
+      deferClose,
+    });
     let edits = 0;
     page.document.addEventListener("aye-edit", () => {
       edits += 1;
@@ -952,6 +959,41 @@ describe("Edit opens the dialog at once and waits for the card (E7)", () => {
     expect(busy(page)).toEqual({ save: false, readonly: false, choose: false });
     await save(page, "New");
     expect(postedId(page)).toBe("1");
+  });
+
+  it("stays closed when the card lands after Cancel but before the close event", async () => {
+    const { page, dialog, release } = pressHeld(fresh(), savedOne(), true);
+    cancel(page);
+    release();
+    await page.settle();
+    dialog.fireClose();
+    expect(dialog.open).toBe(false);
+    expect(titleField(page).value).toBe("");
+  });
+
+  it("stays closed when the card lands after Esc but before the close event", async () => {
+    const { page, dialog, release } = pressHeld(fresh(), savedOne(), true);
+    page.dispatch(dialog, "cancel");
+    dialog.close();
+    release();
+    await page.settle();
+    dialog.fireClose();
+    expect(dialog.open).toBe(false);
+    expect(titleField(page).value).toBe("");
+  });
+
+  it("ignores a file dragged in and out, or dropped, while busy", async () => {
+    const { page, dialog, release } = pressHeld(fresh());
+    const files = { dataTransfer: { types: ["Files"], files: [] } };
+    expect(() => {
+      page.dispatch(dialog, "dragenter", files);
+      page.dispatch(dialog, "dragleave", files);
+      page.dispatch(dialog, "dragenter", files);
+      page.dispatch(dialog, "drop", files);
+    }).not.toThrow();
+    release();
+    await page.settle();
+    expect(titleField(page).value).toBe("Fresh");
   });
 
   it("opens nothing when the busy dialog was cancelled before the card came", async () => {

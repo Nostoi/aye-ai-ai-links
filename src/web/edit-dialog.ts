@@ -120,7 +120,7 @@ const dropPick = () => {
   pickUrl = null;
 };
 const render = (note) => {
-  const d = card.dataset;
+  ${panel ? "if (!card) return;\n  " : ""}const d = card.dataset;
   const own = d.own === "1";
   let src = null;
   if (picture && picture.kind === "file") src = pickUrl;
@@ -461,7 +461,7 @@ document.addEventListener("aye-edit", async (event) => {
   dialog.showModal();
   titleField.focus();
   const got = await read;
-  if (turn !== saveTurn) return;
+  if (turn !== saveTurn || !dialog.open) return;
   if (typeof got === "string") {
     finish();
     document.dispatchEvent(new CustomEvent("aye-note", { detail: { note, text: UNREAD[got] ?? UNREAD.failed } }));

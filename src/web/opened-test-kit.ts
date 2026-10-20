@@ -142,19 +142,28 @@ function start(
  * The page's edit dialog, with `showModal` and `close` standing in for the browser's: linkedom
  * has neither, and `close` fires the dialog's close event as a browser does.
  */
-export function stubDialog(page: ReturnType<typeof runPage>) {
+export function stubDialog(
+  page: ReturnType<typeof runPage>,
+  { deferClose = false }: { deferClose?: boolean } = {},
+) {
   const dialog = page.$("#edit-link") as HTMLElement & {
     open?: boolean;
     showModal(): void;
     close(): void;
+    fireClose(): void;
   };
+  let queued = 0;
   dialog.showModal = () => {
     dialog.open = true;
   };
   dialog.close = () => {
     if (!dialog.open) return;
     dialog.open = false;
-    page.dispatch(dialog, "close");
+    if (deferClose) queued += 1;
+    else page.dispatch(dialog, "close");
+  };
+  dialog.fireClose = () => {
+    for (; queued > 0; queued -= 1) page.dispatch(dialog, "close");
   };
   return dialog;
 }

@@ -40,7 +40,8 @@ describe("the navigation bar", () => {
     const rows = own(html, "details .account-list > *").filter(
       (e) => !e.classList.contains("menu-phone-only"),
     );
-    expect(rows.map(text)).toEqual(["Profile", "Apps and keys", "Sign out"]);
+    expect(rows.map(text)).toEqual(["Profile", "Apps and keys", "Your data", "Sign out"]);
+    expect(own(html, 'details a[href="/connections#your-data"]').map(text)).toEqual(["Your data"]);
     expect(html.match(/id="sign-out"/g)).toHaveLength(1);
     expect(nav(html).querySelector("details #sign-out")).not.toBeNull();
   });
@@ -68,6 +69,11 @@ describe("the navigation bar", () => {
     expect(themeCss).toMatch(/\.label-phone\{display:none\}/);
     expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.label-wide[^{]*\{display:none\}/);
     expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.label-phone\{display:inline\}/);
+  });
+
+  it("keeps the bar at the right edge when it wraps under the logo, so the open menu stays on screen", () => {
+    expect(themeCss).toMatch(/\.menu\{[^}]*margin-left:auto/);
+    expect(themeCss).toMatch(/\.account-list\{[^}]*right:0/);
   });
 
   it("makes the summary and every row at least 44px", () => {

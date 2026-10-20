@@ -32,7 +32,7 @@ const BARS = `<span class="icon-phone"><svg viewBox="0 0 24 24" width="20" heigh
  * links (`menu-phone-only`; the inline ones hide there). Sign out is the one `#sign-out`.
  */
 const menuHtml = (withAsk: boolean) =>
-  `<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a>${withAsk ? ASK_BUTTON : ""}<details class="account-menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
+  `<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a>${withAsk ? ASK_BUTTON : ""}<details class="account-menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
 
 /**
  * Ends the session, then goes to the sign-in page. It also closes the account menu on a click

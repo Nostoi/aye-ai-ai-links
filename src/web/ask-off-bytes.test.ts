@@ -170,14 +170,23 @@ const pages: Record<string, () => string> = {
   "oauth-error": () => oauthErrorPage("It did not work."),
 };
 
+/** One mark of each AI-only piece: the button and panel, the stored state, the cards' ids, the edit script's events and the opening script's list. */
+const ASK_ONLY = ["ask-", "aye-ask", "askPanel", "aye-note", "aye-edited"];
+
+const UNDO_BAR = 'id="undo-bar"';
+
 describe("with no AI set up", () => {
   it("no page carries any Ask AI markup, style or script", () => {
     for (const [name, render] of Object.entries(pages)) {
       const html = render();
-      for (const mark of ["ask-open", "ask-panel", "aye-ask", "askPanel"]) {
-        expect(html, `${name}: ${mark}`).not.toContain(mark);
-      }
+      for (const mark of ASK_ONLY) expect(html, `${name}: ${mark}`).not.toContain(mark);
     }
+  });
+
+  it("the Ask AI pieces the check looks for are all there when the AI is on, and the Undo bar only then", () => {
+    const on = olderInvalidPage("x", { ai: "Fake", place: "Home", owner: "o" });
+    for (const mark of [...ASK_ONLY, UNDO_BAR]) expect(on, mark).toContain(mark);
+    expect(olderInvalidPage("x")).not.toContain(UNDO_BAR);
   });
 
   for (const [name, render] of Object.entries(pages)) {

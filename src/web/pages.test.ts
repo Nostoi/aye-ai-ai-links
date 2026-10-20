@@ -322,7 +322,7 @@ describe("the menu", () => {
         '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><details class="account-menu">',
       );
       expect(html).toContain(
-        '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><button id="sign-out"',
+        '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out"',
       );
     }
     const without = [loginPage({ next: "/" }), oauthErrorPage("x"), consentExpiredPage()];

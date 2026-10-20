@@ -36,7 +36,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Controller rulings:**
     - **The hosts** are github.com, x.com and twitter.com, with or without `www.`. No other subdomain counts. They are judged on the saved address, so a short link that redirects to GitHub keeps its preview. The rule is `isWordPictureHost` in `src/core/word-picture-host.ts`. A known host's snapshot records no preview, only its icons.
     - **GitHub's icon.** `rel=fluid-icon` becomes a kept icon rel. It is GitHub's only icon of 64 px or more; its other PNG is 32 px. A known host with no usable icon shows initials.
-    - **The neutral background** is `--bg`. Each card type's picture box, the Handy postcard and the edit dialog's preview use it. The space dots stay. The mosaic's empty cells (`.tint-*`) stay until #195 makes spaces words only.
+    - **The neutral background** is `--pic`, a grey apart from both `--bg` and `--surface`, so a box shows on a dark page. Each card type's picture box, the Handy postcard and the edit dialog's preview use it. The space dots stay. The mosaic's empty cells (`.tint-*`) stay until #195 makes spaces words only.
     - **Existing links converge in the icon backfill's sweep, every 15 s.** This replaces a once-per-start pass, after the solution challenge (REVISE). A live known-host link whose snapshot still names a preview is read afresh:
       - It is read whatever its snapshot's status (`extract_timeout`, `extract_crashed` and `extract_out_of_memory` keep metadata), so the current icons are found rather than stale ones.
       - The preview and its fetched picture are dropped and the fresh icons recorded. The snapshot's status, title and text stay.

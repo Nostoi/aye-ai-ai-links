@@ -11,7 +11,7 @@ export const initialsOf = (text: string) =>
     .join("")
     .toUpperCase();
 
-/** What a picture-less card shows, on the page background: the title's initials, else the host's. */
+/** What a picture-less card shows, on `--pic`: the title's initials, else the host's. */
 export function initialsText(link: Link): string {
   const host = hostOf(link.url).replace(/^www\./, "");
   return initialsOf(link.title ?? "") || initialsOf(host.replaceAll(".", " "));

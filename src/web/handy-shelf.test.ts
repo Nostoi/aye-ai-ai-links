@@ -603,6 +603,22 @@ describe("the shelf's script", () => {
     expect(done.focused().slice(-2)).toEqual([done.$("#handy-title"), done.$("#undo-bar button")]);
   });
 
+  it.each(["archive", "not-handy"])(
+    "after the menu's %s and its Undo, focus is on the restored tile's ⋯",
+    async (act) => {
+      const [a, b] = [kept(), kept()];
+      const answer = (s: Post): Answer =>
+        s.url === "/tools/not-handy" ? { status: 200, body: MOVED } : { status: 204 };
+      const p = shelfPage(home([a, b]), answer, [home([b]), home([a, b])]);
+      p.dispatch(p.$(`[data-id="${a.link.id}"] .card-menu button[data-act=${act}]`), "click");
+      await p.settle();
+      p.dispatch(p.$("#undo-bar button"), "click");
+      await p.settle();
+      expect(shelfIds(p)).toEqual([a.link.id, b.link.id]);
+      expect(p.focused().at(-1)).toBe(p.$(`[data-id="${a.link.id}"] .card-menu summary`));
+    },
+  );
+
   it("when the acted-on tile comes back past the 8 cut, reveals the hidden tiles and focuses it", async () => {
     const items = Array.from({ length: 9 }, (_, i) => kept({}, i === 0));
     const first = items[0] as ShelfItem;

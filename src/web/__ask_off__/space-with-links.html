@@ -494,21 +494,23 @@ const showKept = (card, kept, menu) => {
   if (menu || !control) card.querySelector(".card-menu summary").focus();
   else (kept ? on.querySelector("button") : control.querySelector("button[data-act=keep]")).focus();
 };
+const keepBusy = new WeakSet();
 if (keepRoot) {
   keepRoot.addEventListener("click", async (event) => {
     const button = event.target.closest(
       "[data-handy] button[data-act], .card-menu button[data-act=keep], .card-menu button[data-act=not-handy]",
     );
-    if (!button || button.disabled) return;
+    if (!button) return;
     const card = button.closest("[data-id]");
+    if (keepBusy.has(card)) return;
     const id = card.dataset.id;
     const menu = button.closest("details");
     if (menu) menu.open = false;
     const keep = button.dataset.act === "keep";
     keepError.textContent = "";
-    button.disabled = true;
+    keepBusy.add(card);
     const res = await post(keep ? "/tools/keep" : "/tools/not-handy", { id });
-    button.disabled = false;
+    keepBusy.delete(card);
     const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!moved || !moved.tool) {
       (menu ? menu.querySelector("summary") : button).focus();

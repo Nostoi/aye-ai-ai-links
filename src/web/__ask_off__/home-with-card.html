@@ -415,8 +415,10 @@ const focusAfter = (shelf, from) => {
   const tile = (id) => (id ? shelf.querySelector('[data-id="' + id + '"]') : null);
   const same = tile(from.id);
   const next = tile(from.next);
+  const button = same && same.querySelector('button[data-act="' + from.act + '"]');
   const target =
-    (same && (same.querySelector('button[data-act="' + from.act + '"]') || same.querySelector("a, button, summary"))) ||
+    (button && (button.closest("details") ? button.closest("details").querySelector("summary") : button)) ||
+    (same && same.querySelector("a, button, summary")) ||
     (next && next.querySelector("a, button, summary")) ||
     document.getElementById("handy-title");
   if (target.closest("[hidden]")) showAll(shelf);

@@ -312,6 +312,17 @@ describe("Keep handy in the ⋯ menu", () => {
     expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
   });
 
+  it("Keep handy from the menu puts focus on the card's ⋯, and so does its Undo", async () => {
+    const p = runPage(allLinks(false), keepAnswer);
+    const summary = p.$("[data-id='7'] .card-menu summary");
+    p.dispatch(p.$(".card-menu button[data-act=keep]"), "click");
+    await p.settle();
+    expect(p.focused().slice(-2)).toEqual([summary, p.$("#undo-bar button")]);
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.focused().at(-1)).toBe(summary);
+  });
+
   it("a refusal from the menu leaves the rows as they were and says why", async () => {
     const p = runPage(allLinks(false), () => ({
       status: 409,
@@ -338,6 +349,19 @@ describe("Keep handy on the search that Add opens (keep=1)", () => {
     "control Keep handy",
     "control Not handy anymore (hidden)",
   ];
+
+  it("sends one request while one is waiting, whichever control is pressed second", async () => {
+    let release: () => void = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const p = runPage(keepSearch(false), (s) => ({ ...keepAnswer(s), wait }));
+    p.dispatch(p.$("[data-handy] button[data-act=keep]"), "click");
+    p.dispatch(p.$(".card-menu button[data-act=keep]"), "click");
+    release();
+    await p.settle();
+    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep"]);
+  });
 
   it("keeps the visible control as well as the menu row", () => {
     const d = parseHTML(keepSearch(false)).document;

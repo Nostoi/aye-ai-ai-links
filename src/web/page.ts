@@ -23,16 +23,43 @@ export const PAGE_STYLE = `\n${themeCss}\n`;
 const NAME = "Aye-AI-AI Links";
 const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</span>`;
 
-/** With the AI set up (#159), Ask AI sits between Apps and keys and Sign out. */
-const menuHtml = (withAsk: boolean) =>
-  `<nav class="menu" aria-label="Main"><a href="/all">All links</a><a href="/tags">Tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a>${withAsk ? ASK_BUTTON : ""}<button id="sign-out" type="button">Sign out</button></nav>`;
+const PERSON = `<span class="icon-wide"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/></svg></span>`;
+const BARS = `<span class="icon-phone"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>`;
 
-/** Ends the session, then goes to the sign-in page. */
+/**
+ * Two page links, then Ask AI when the AI is set up (#159), then one `<details>` (#196): the
+ * Account circle at desktop width, the Menu button on the phone, where it also holds the two page
+ * links (`menu-phone-only`; the inline ones hide there). Sign out is the one `#sign-out`.
+ */
+const menuHtml = (withAsk: boolean) =>
+  `<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a>${withAsk ? ASK_BUTTON : ""}<details class="account-menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
+
+/**
+ * Ends the session, then goes to the sign-in page. It also closes the account menu on a click
+ * outside it, on focus moving out of the nav, and on Escape pressed inside the nav (focus goes
+ * back to its button) unless another handler took that Escape: Ask AI owns Escape in its panel.
+ */
 const MENU_SCRIPT = `<script>
 document.getElementById("sign-out").addEventListener("click", async () => {
   await fetch("/api/auth/sign-out", { method: "POST" });
   location.href = "/login";
 });
+{
+  const bar = document.querySelector("nav.menu");
+  const menu = bar.querySelector("details");
+  const close = () => menu.removeAttribute("open");
+  bar.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented || !menu.hasAttribute("open")) return;
+    close();
+    menu.querySelector("summary").focus();
+  });
+  bar.addEventListener("focusout", (event) => {
+    if (event.relatedTarget && !bar.contains(event.relatedTarget)) close();
+  });
+  document.addEventListener("click", (event) => {
+    if (!menu.contains(event.target)) close();
+  });
+}
 </script>`;
 
 /** Idle and maximum times the Undo bar stays up; the maximum is below `UNDO_WINDOW_MS` and `NOTE_UNDO_WINDOW_MS`. */

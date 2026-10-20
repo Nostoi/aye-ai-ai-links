@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-20:** Navigation (#196, part of #191). The top bar is **All links**, **Spaces and tags**, **Ask AI** (an outlined button, only with the AI set up) and an account menu holding **Profile**, **Apps and keys** and **Sign out**; on a phone the logo, **Ask AI** and a menu button that also holds the two page links. "Your data" is a section of Apps and keys, so it is not a menu item.
+  - **Owner ruling, 2026-10-20 (#196 comment 6297978107):** the nav says **Spaces and tags**, not **Tags**.
+  - **This supersedes** the 2026-10-19 Ask AI rulings that Ask AI "looks like the other menu links" and that "the menu is today's menu plus Ask AI before Sign out" (owner ruling, 2026-10-20, #196 comment 6298376762: the approval of the redesign, #191, replaces them). The dated design `docs/specs/2026-10-19-in-app-ai-design.md` is left as written.
+  - **No-AI snapshots narrowed.** The 2026-10-19 line "with no AI set up, every page is byte for byte as before" held the pages against the Ask AI panel. It does not freeze them against a deliberate redesign: `src/web/__ask_off__` is regenerated with `vitest -u` when a PR changes a page on purpose, and the panel must still add nothing when it is off (#191).
+  - **Dismissal.** The account menu closes on Escape pressed inside the bar, on a click outside it and when focus moves out of the bar; it leaves an Escape that Ask AI's panel already took.
 - **2026-10-20:** Edit in the Ask AI panel (#183).
   - **Owner rulings, 2026-10-20:**
     - **O1.** Edit opens the existing title-and-picture dialog, unchanged in what it edits.

@@ -74,7 +74,7 @@ describe("the Tags page", () => {
   it("is linked from the menu", async () => {
     const world = await oauthWorld();
     const html = String((await (await signedIn(world)).send("/")).body);
-    expect(html).toContain('<a href="/tags">Tags</a>');
+    expect(html).toContain('<a class="menu-page" href="/tags">Spaces and tags</a>');
   });
 
   it("refuses GET /tags with a foreign Origin, and serves it without one", async () => {

@@ -32,14 +32,18 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
 /**
  * `runPage` for a page with the Ask AI panel: the panel's script runs too, against a fake
  * `sessionStorage` holding `stored` as the panel's state, and a `matchMedia` that answers `phone`.
- * Only the menu's own sign-out script is left out.
+ * The menu's own script is left out unless `menu` is set; with it, both run in the one scope.
  */
 export function runAskPage(
   html: string,
   answer: (sent: Post) => Answer = () => ({ status: 204 }),
-  { phone = false, stored }: { phone?: boolean; stored?: unknown } = {},
+  {
+    phone = false,
+    stored,
+    menu = false,
+  }: { phone?: boolean; stored?: unknown; menu?: boolean } = {},
 ) {
-  return start(html, answer, true, phone, stored);
+  return start(html, answer, true, phone, stored, menu);
 }
 
 function start(
@@ -48,6 +52,7 @@ function start(
   ask: boolean,
   phone: boolean,
   stored?: unknown,
+  menu = false,
 ) {
   const { document, DOMParser } = parseHTML(html);
   const focusLog: Element[] = [];
@@ -66,7 +71,7 @@ function start(
   }
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
-    .filter((s) => (ask ? !s.startsWith(MENU_SCRIPT_START) : !s.includes("sign-out")))
+    .filter((s) => (ask ? menu || !s.startsWith(MENU_SCRIPT_START) : !s.includes("sign-out")))
     .join("\n");
   const sent: Post[] = [];
   const fetch = async (

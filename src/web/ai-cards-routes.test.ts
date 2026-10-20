@@ -82,9 +82,9 @@ describe("the chat answer's segments and remember", () => {
     expect(body.segments?.at(-1)).toEqual({ text: "again" });
   });
 
-  it("remembers a marker-only reply as the link's id and title", async () => {
-    const t = await citing((id) => `[[link:${id}]]`);
-    expect((await asked(t)).remember).toBe(`[link ${t.id}: ${SECRET}]`);
+  it("remembers a shown link as the model's own marker, and drops a dropped one", async () => {
+    const t = await citing((id) => `See [[link:${id}]] and [[link:999]]`);
+    expect((await asked(t)).remember).toBe(`See [[link:${t.id}]] and`);
   });
 
   it("remembers a reply of only dropped markers as no answer, never empty", async () => {

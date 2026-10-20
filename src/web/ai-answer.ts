@@ -67,7 +67,7 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     shown.add(id);
     flush();
     segments.push({ card: loaded.html });
-    remembered += `[link ${id}: ${(loaded.link.title ?? loaded.link.url).replace(/\s+/g, " ")}]`;
+    remembered += match[0];
   }
   text += reply.slice(end);
   remembered += reply.slice(end);

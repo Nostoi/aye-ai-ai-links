@@ -43,7 +43,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
       - Anything else: a line and no Undo.
     - **The history the panel posts.**
       - At most 40 messages and under 400 KiB.
-      - The server's `remember` text keeps each cited link as `[link <id>: <title>]` and is never empty.
+      - The server's `remember` text keeps each shown link's marker exactly as the model wrote it, and is never empty. A rewritten form (`[link <id>: <title>]`) led Claude, in a live check, to "correct" an id that was right.
       - A failed turn with no changes adds nothing; one with changes adds the pair.
     - **Conversation state.** It lives in `sessionStorage`, tied to the signed-in owner and cleared by sign out. A turn interrupted by leaving the page shows a notice on the next page.
     - **The page behind the panel** is not refreshed after a change.

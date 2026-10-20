@@ -1,7 +1,9 @@
 import { escapeHtml } from "../core/escape-html.js";
 import { ASK_BUTTON, ASK_SCRIPT, type Ask, askPanel } from "./ask-panel.js";
+import { editDialog, editLinkScript } from "./edit-dialog.js";
 import { faviconHref, inlineLogo } from "./logo.js";
 import { openedScript } from "./open-link.js";
+import { CARD_FETCH } from "./tell-why.js";
 import { askCss, themeCss } from "./theme.js";
 
 export { escapeHtml } from "../core/escape-html.js";
@@ -140,7 +142,10 @@ const showUndo = (() => {
  * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
  * adds the menu (and implies `home`), for the pages the owner browses. `undo` adds the Undo bar
  * and `showUndo`. `ask`, given only on menu pages and only when the AI is set up, adds the Ask AI
- * button and panel (#159); without it the page is exactly as it was.
+ * button and panel (#159); without it the page is exactly as it was. With `ask` the page also
+ * owns the one edit dialog, as a body child the phone sheet leaves usable, and the one edit script,
+ * for the page's own card list and alert named by `edits`; the Undo bar is always there. The
+ * script is a block, so its `CARD_FETCH` names stay clear of the page's own.
  */
 export const page = (
   title: string,
@@ -150,7 +155,14 @@ export const page = (
     menu = false,
     undo = false,
     ask,
-  }: { home?: boolean; menu?: boolean; undo?: boolean; ask?: Ask | undefined } = {},
+    edits,
+  }: {
+    home?: boolean;
+    menu?: boolean;
+    undo?: boolean;
+    ask?: Ask | undefined;
+    edits?: { root: string; error: string };
+  } = {},
 ) => `<!doctype html>
 <html lang="en">
 <head>
@@ -165,7 +177,7 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n` : ""}${undo ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}${ask ? `\n${ASK_SCRIPT}\n${openedScript("ask-messages", "/links/opened")}` : ""}
+${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${undo || ask ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}${ask ? `\n${ASK_SCRIPT}\n${openedScript("ask-messages", "/links/opened")}\n<script>{\n${CARD_FETCH}\n${editLinkScript(edits?.root ?? null, edits?.error ?? null, { panel: true })}\n}</script>` : ""}
 </body>
 </html>
 `;

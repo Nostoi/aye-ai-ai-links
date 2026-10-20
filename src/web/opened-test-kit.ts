@@ -14,6 +14,9 @@ export type Answer = {
   redirected?: boolean;
 };
 
+/** How the menu's own script starts, as the page embeds it. */
+const MENU_SCRIPT_START = '\ndocument.getElementById("sign-out")';
+
 /**
  * A page in linkedom with all its scripts but the menu's run in one scope, as a browser shares
  * one global scope across a page's scripts, so two scripts that declare the same name fail.
@@ -22,6 +25,23 @@ export type Answer = {
  * up until the test clicks it.
  */
 export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ status: 204 })) {
+  return start(html, answer, false, false);
+}
+
+/**
+ * `runPage` for a page with the Ask AI panel: the panel's script runs too, against a fake
+ * `sessionStorage` and a `matchMedia` that answers `phone`. Only the menu's own sign-out script is
+ * left out.
+ */
+export function runAskPage(
+  html: string,
+  answer: (sent: Post) => Answer = () => ({ status: 204 }),
+  { phone = false }: { phone?: boolean } = {},
+) {
+  return start(html, answer, true, phone);
+}
+
+function start(html: string, answer: (sent: Post) => Answer, ask: boolean, phone: boolean) {
   const { document, DOMParser } = parseHTML(html);
   const focusLog: Element[] = [];
   (
@@ -31,7 +51,7 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
   };
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
-    .filter((s) => !s.includes("sign-out"))
+    .filter((s) => (ask ? !s.startsWith(MENU_SCRIPT_START) : !s.includes("sign-out")))
     .join("\n");
   const sent: Post[] = [];
   const fetch = async (
@@ -63,6 +83,14 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     };
   };
   const location = { href: "https://links.example/", reload: () => {} };
+  const win = document.defaultView as unknown as typeof globalThis;
+  const items = new Map<string, string>();
+  const sessionStorage = {
+    getItem: (k: string) => items.get(k) ?? null,
+    setItem: (k: string, v: string) => void items.set(k, v),
+    removeItem: (k: string) => void items.delete(k),
+  };
+  const matchMedia = () => ({ matches: phone, addEventListener: () => {} });
   new Function(
     "document",
     "fetch",
@@ -71,6 +99,10 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     "DOMParser",
     "setTimeout",
     "clearTimeout",
+    "window",
+    "sessionStorage",
+    "matchMedia",
+    "CustomEvent",
     code,
   )(
     document,
@@ -80,8 +112,11 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     DOMParser,
     () => 0,
     () => {},
+    win,
+    sessionStorage,
+    matchMedia,
+    win.CustomEvent,
   );
-  const win = document.defaultView as unknown as typeof globalThis;
   const dispatch = (target: Element, type: string, init: Record<string, unknown> = {}) => {
     const event = new win.Event(type, { bubbles: true, cancelable: true });
     Object.assign(event, init);
@@ -92,7 +127,7 @@ export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ 
     for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  return { document, sent, dispatch, settle, $, location, focused: () => focusLog };
+  return { document, sent, dispatch, settle, $, location, items, focused: () => focusLog };
 }
 
 /**

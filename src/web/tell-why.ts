@@ -1,5 +1,5 @@
+import { escapeHtml } from "../core/escape-html.js";
 import type { Link } from "../core/types.js";
-import { escapeHtml } from "./page.js";
 
 /** The amber "needs you" ask on a card with no why, with the field that opens on Tell me why. */
 export const askWhy = (link: Link) =>

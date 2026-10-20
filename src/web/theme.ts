@@ -380,6 +380,7 @@ export const askCss = `#ask-open{gap:8px;font:inherit;color:var(--ink);text-deco
 #ask-open svg{flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
 #ask-panel{position:fixed;top:0;right:0;bottom:0;z-index:30;width:400px;display:flex;flex-direction:column;background:var(--surface);border-left:1.5px solid var(--line)}
 #ask-panel[hidden]{display:none}
+.undo-bar{z-index:31}
 body.ask-open{margin-right:400px}
 .ask-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 8px;padding:14px 16px 6px 22px}
 .ask-title{flex:1;min-width:0}

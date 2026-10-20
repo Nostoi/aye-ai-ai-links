@@ -98,11 +98,14 @@ export const ASK_SCRIPT = `<script>
   };
 
   const phone = () => typeof matchMedia === "function" && matchMedia("(max-width: 900px)").matches;
-  // While the phone sheet covers the page, the page behind it can't be reached.
+  // While the phone sheet covers the page, the page behind it can't be reached. The edit dialog
+  // and the Undo bar stay usable above it.
   const behind = () => {
     const sheet = state.open && phone();
+    const bar = document.getElementById("undo-bar");
     for (const el of document.body.children) {
-      if (el === panel || el.tagName === "SCRIPT") continue;
+      if (el === panel || el.tagName === "SCRIPT" || el.tagName === "DIALOG") continue;
+      if (bar && el.contains(bar)) continue;
       if (sheet) el.setAttribute("inert", "");
       else el.removeAttribute("inert");
     }

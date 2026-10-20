@@ -193,14 +193,17 @@ export function allPage(input: Input): string {
 ${list}
 <div class="all-foot">${noticeLine(input)}${more}${other}</div>
 </main>
-${editDialog()}
-<script>
+${input.ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
-${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${editLinkScript("all-links", "all-error")}
-${removeCopyScript("all-links", "all-error")}
+${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
 </script>
 ${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
-    { menu: true, undo: true, ask: input.ask },
+    {
+      menu: true,
+      undo: true,
+      ask: input.ask,
+      edits: { root: "all-links", error: "all-error" },
+    },
   );
 }

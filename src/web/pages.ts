@@ -238,15 +238,13 @@ ${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=${keep ? "&keep=1" : ""}">your newest links</a>.</p>
 </div>
 </main>
-${editDialog()}
-<script>
+${ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}
 ${goneScript("results", "results-error")}
 ${removeCopyScript("results", "results-error")}
-${editLinkScript("results", "results-error")}
-${deleteLinkScript("results", "results-error")}
+${ask ? "" : `${editLinkScript("results", "results-error")}\n`}${deleteLinkScript("results", "results-error")}
 </script>
 ${openedScript("results", "/links/opened")}`,
-    { menu: true, undo: true, ask },
+    { menu: true, undo: true, ask, edits: { root: "results", error: "results-error" } },
   );

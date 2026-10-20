@@ -112,23 +112,21 @@ ${done ? "" : handyControl(link, handy.get(link.id))}</div>
  * Tell me why, Keep handy, the edit dialog and Delete link on the active cards, including those Show older
  * links appends.
  */
-const CARDS_SCRIPT = `<script>
+const cardsScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
 ${removeCopyScript("space-links", "space-error")}
-${editLinkScript("space-links", "space-error")}
-${deleteLinkScript("space-links", "space-error")}
+${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
 </script>
 `;
 
 /** The edit dialog, Delete link and the saved copy's Remove on the done cards, including those Show older links appends. */
-const DONE_SCRIPT = `<script>
+const doneScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
 ${removeCopyScript("space-links", "space-error")}
-${editLinkScript("space-links", "space-error")}
-${deleteLinkScript("space-links", "space-error")}
+${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
 </script>
 `;
 
@@ -167,9 +165,13 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${editDialog()}
-${done ? DONE_SCRIPT : CARDS_SCRIPT}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
-    { menu: true, undo: true, ask: input.ask },
+${input.ask ? "" : `${editDialog()}\n`}${(done ? doneScript : cardsScript)(input.ask !== undefined)}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+    {
+      menu: true,
+      undo: true,
+      ask: input.ask,
+      edits: { root: "space-links", error: "space-error" },
+    },
   );
 }
 

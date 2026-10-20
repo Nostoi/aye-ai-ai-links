@@ -623,6 +623,42 @@ describe("icon backfill", () => {
       },
     );
 
+    const beforeMetadata: [string, ExtractOutcome][] = [
+      ["a timeout", { kind: "timeout", metadata: null }],
+      ["a crash", { kind: "crashed", metadata: null, detail: "exit code 1" }],
+      ["out of memory", { kind: "out_of_memory", metadata: null }],
+    ];
+
+    it.each(beforeMetadata)(
+      "★ keeps the preview when the extraction ends in %s before metadata, and reads the page again later",
+      async (_n, outcome) => {
+        let fail = true;
+        const t = setup({ extract: () => (fail ? outcome : githubPage()) });
+        const id = await withPreview(t, 1, GITHUB);
+        const before = await t.store.get(OWNER, id);
+        await t.pass.sweep();
+        expect(await t.store.get(OWNER, id)).toEqual(before);
+        expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "preview" });
+        expect(t.status(id)).toBe("ok");
+        fail = false;
+        t.wait();
+        await t.pass.sweep();
+        expect(t.pageCalls).toEqual([GITHUB, GITHUB]);
+        expect(await t.pending()).toEqual([[id, FAVICON, "icon"]]);
+      },
+    );
+
+    it.each(beforeMetadata)(
+      "an icon-check link whose extraction ends in %s before metadata still records none at once",
+      async (_n, outcome) => {
+        const t = setup({ extract: () => outcome });
+        const id = await t.legacy(1);
+        await t.pass.sweep();
+        expect(t.status(id)).toBe("none");
+        expect(t.pageCalls).toEqual(["https://ex.com/1"]);
+      },
+    );
+
     it.each<[string, FetchOutcome]>([
       ["a 404", { kind: "http_error", status: 404 }],
       ["refused", { kind: "refused", reason: "address" }],

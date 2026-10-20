@@ -131,6 +131,9 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     if (out.kind === "spawn_failed") {
       return { kind: "failed", why: `extract:spawn_failed:${out.detail}` };
     }
+    if (job.keepOnTransient && out.kind !== "ok" && out.metadata === null) {
+      return { kind: "failed", why: `extract:${out.kind}` };
+    }
     return record(job, iconsToRecord(c.url, out.metadata));
   }
 

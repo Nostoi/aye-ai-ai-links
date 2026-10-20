@@ -27,7 +27,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **Controller rulings:**
     - Each turn sends `page`: the address, the place, the first 60 link ids on the page and how many it shows. The server puts them in a `<page>` system block as JSON strings, and page ids never vouch for a card.
     - Ids come from `[data-id]` elements outside the panel and outside anything `[hidden]`, read when the message is sent.
-    - When a reply names a card on the page, the page's other cards dim until the next send, Start over or close; a watcher dims cards added meanwhile. The fade is not stored.
+    - When a reply names a card on the page, the page's other cards dim (seen on a wide screen; on a phone the sheet covers the page) until the next send, Start over or close; a watcher dims cards added meanwhile. The fade is not stored.
     - Each stored entry keeps the `path` and `place` it was made on; the stored version stays 1, and an entry without them counts as made on the current page. Messages from other pages sit behind the Earlier line, which says what the last earlier exchange saved, else what was asked.
     - The request-size cap now counts the whole body, page included.
   - **Two departures from the spec's line 120:** the page sends up to 60 ids plus a count of all shown, not 24, because Show older and Show all add more links; and it sends ids only, no titles, because the model reads titles with its tools, which keeps page-supplied text out of the prompt.

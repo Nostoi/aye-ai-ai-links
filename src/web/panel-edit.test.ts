@@ -506,6 +506,56 @@ describe("Edit with the page awareness of #159", () => {
     expect(box.querySelector(".ask-note")?.textContent).toBe(CONFLICT.message);
   });
 
+  it("leaves an open Earlier box open when a refusal comes for a line inside it", async () => {
+    const { page } = onPage(
+      home(),
+      {
+        "/ai/card/1": fresh(),
+        "/links/edit": { status: 200, body: editAnswer("New") },
+        "/links/edit/undo": { status: 409, body: CONFLICT },
+      },
+      elsewhere(savedOne().entries as Record<string, unknown>[]),
+    );
+    const toggle = page.$("#ask-messages .ask-earlier");
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    page.dispatch(toggle, "click");
+    page.dispatch(box.querySelector(".ask-edit") as Element, "click");
+    await page.settle();
+    await save(page, "New");
+    page.dispatch(page.$("#undo-bar button"), "click");
+    await page.settle();
+    expect(box.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(box.querySelector(".ask-note")?.textContent).toBe(CONFLICT.message);
+  });
+
+  it("opens the Earlier box again to show a failed card read for a line inside it", async () => {
+    let reads = 0;
+    const { page } = onPage(
+      home(),
+      {
+        "/ai/card/1": () => {
+          reads += 1;
+          return reads === 1 ? fresh() : { status: 500 };
+        },
+        "/links/edit": { status: 200, body: editAnswer("New") },
+      },
+      elsewhere(savedOne().entries as Record<string, unknown>[]),
+    );
+    const toggle = page.$("#ask-messages .ask-earlier");
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    page.dispatch(toggle, "click");
+    page.dispatch(box.querySelector(".ask-edit") as Element, "click");
+    await page.settle();
+    page.dispatch(toggle, "click");
+    expect(box.hidden).toBe(true);
+    await save(page, "New");
+    expect(reads).toBe(2);
+    expect(box.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(box.querySelector(".ask-note")?.textContent).toBe(REFRESH_FAILED);
+  });
+
   it("gives Edit to a line behind the Earlier line whose card is only in its reply", async () => {
     const { page } = onPage(
       home(),

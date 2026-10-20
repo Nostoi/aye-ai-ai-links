@@ -463,6 +463,13 @@ export const ASK_SCRIPT = `<script>
   document.addEventListener("aye-editing", () => {
     presses += 1;
   });
+  const reveal = (el) => {
+    const box = el.closest(".ask-earlier-entries");
+    if (box && box.hidden) box.previousElementSibling.click();
+  };
+  document.addEventListener("aye-note", (event) => {
+    if (isObj(event.detail) && event.detail.note) reveal(event.detail.note);
+  });
   const runEdit = async (id, button, note, block) => {
     const press = ++presses;
     note.textContent = "";
@@ -492,6 +499,7 @@ export const ASK_SCRIPT = `<script>
     if (!drawn) return;
     const note = editNotes.get(id);
     if ((await refreshCard(id)) === "failed" && note) {
+      reveal(note);
       note.textContent = "This card couldn't be refreshed. Reload to see the change.";
     }
   });

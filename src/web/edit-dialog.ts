@@ -436,8 +436,7 @@ const shown = (target, answer) => {
 };
 const tell = (target, message) => {
   const note = notes.get(target);
-  const box = note ? note.closest(".ask-earlier-entries") : null;
-  if (box && box.hidden) box.previousElementSibling.click();
+  if (note) document.dispatchEvent(new CustomEvent("aye-note", { detail: { note } }));
   if (note) note.textContent = message;
   else if (editAlert) editAlert.textContent = message;
 };

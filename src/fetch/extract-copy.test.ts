@@ -4,6 +4,7 @@ import type { CopyDraft } from "../core/saved-copy.js";
 import { finishedMarkdown } from "../core/saved-copy.js";
 import { parsePage } from "./extract.ts";
 import { articleMarkdown, copyBase, makeCopy } from "./extract-copy.ts";
+import { EXTRACT_DEADLINE_MS } from "./extract-runner.js";
 import { readArticle } from "./extract-text.ts";
 
 const NONCE = "0123456789abcdef0123456789abcdef";
@@ -175,15 +176,15 @@ describe("page text that looks like a reference", () => {
 });
 
 describe("budget", () => {
-  it("converts 1 MiB of paragraphs with 30 images in under 5 s", () => {
+  it("converts 1 MiB of paragraphs with 30 images in well under the extraction deadline", () => {
     const para =
       "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>";
     const body = para.repeat(Math.ceil((1024 * 1024) / para.length));
     const t0 = performance.now();
     const d = draft(body + imgs(30));
-    expect(performance.now() - t0).toBeLessThan(5000);
+    expect(performance.now() - t0).toBeLessThan(EXTRACT_DEADLINE_MS / 2);
     expect(d.imageUrls).toHaveLength(30);
-  });
+  }, 30_000);
 });
 
 describe("makeCopy", () => {

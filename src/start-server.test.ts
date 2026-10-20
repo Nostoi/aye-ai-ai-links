@@ -1202,6 +1202,7 @@ describe("startServer", () => {
       const checks = vi.fn();
       await startWith({
         copyExtractor: copyExtractor(async () => WITH_IMAGE),
+        copyPollMs: 60_000,
         decorateDeps: (d) => {
           recorded = d.savedCopies;
           const real = d.savedCopies.checkFolder.bind(d.savedCopies);

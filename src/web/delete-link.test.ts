@@ -284,6 +284,7 @@ describe("Delete link beside other scripts", () => {
     });
     const edited = {
       title: "Edited",
+      shown: "Edited",
       url: "https://ex.com/7",
       initials: "E",
       version: "v",
@@ -309,6 +310,7 @@ describe("Delete link beside other scripts", () => {
   describe("a late edit answer on card 8", () => {
     const edited = {
       title: "Edited",
+      shown: "Edited",
       url: "https://ex.com/8",
       initials: "E",
       version: "v",

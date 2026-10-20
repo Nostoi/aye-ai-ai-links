@@ -74,6 +74,7 @@ const ownedRows = (world: World, owner: string) =>
   );
 type Answer = {
   title: string | null;
+  shown: string;
   url: string;
   initials: string;
   version: string | null;
@@ -90,6 +91,7 @@ describe("POST /links/edit", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.body).toEqual({
       title: "Quokka habitat",
+      shown: "Quokka habitat",
       url: URL,
       initials: "QH",
       version: v(MINE),
@@ -116,6 +118,25 @@ describe("POST /links/edit", () => {
     });
     const blank = (await edit(browser, { id, title: " " })).body as Answer;
     expect(blank).toMatchObject({ title: null, url: URL });
+  });
+
+  it("answers the title the card shows: the page's own for a link with none, the stored one otherwise", async () => {
+    const { browser, id } = await edited();
+    const named = (await edit(browser, { id, title: "New" })).body as Answer;
+    expect(named).toMatchObject({ title: "New", shown: "New" });
+    const cleared = (await edit(browser, { id, title: " " })).body as Answer;
+    expect(cleared).toMatchObject({ title: null, shown: "Quokkas: a field guide" });
+    const picture = (await edit(browser, { id, picture: file(MINE) })).body as Answer;
+    expect(picture).toMatchObject({ title: null, shown: "Quokkas: a field guide" });
+  });
+
+  it("answers the readable fallback when Undo puts a missing title back", async () => {
+    const { browser, id } = await edited();
+    await edit(browser, { id, title: " " });
+    const named = (await edit(browser, { id, title: "Chosen" })).body as Answer;
+    expect(named.shown).toBe("Chosen");
+    const back = await undo(browser, { id, editId: named.editId });
+    expect(back.body).toMatchObject({ title: null, shown: "Quokkas: a field guide" });
   });
 
   it("'page' removes the owner's picture, so the page's shows again", async () => {
@@ -173,6 +194,7 @@ describe("POST /links/edit/undo", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       title: "Quokka habitat",
+      shown: "Quokka habitat",
       url: URL,
       initials: "QH",
       version: v(PAGE),

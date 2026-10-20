@@ -46,6 +46,9 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
     - **A known-host link marked as gone** is read and does not wait until it works again. If the read fails for good, it shows initials.
     - **A fresh read that fails** for good (a 404, say) records no icon, so the card shows initials, as #149's backfill does. One that may pass (a 5xx, 408 or 429, a network error or a timeout) keeps the preview and is tried again later.
 
+- **2026-10-20:** Readable fallback titles (#197, part of #191). A card's title is `displayTitle` (`src/web/display-title.ts`): the stored title when it is not blank and not wholly a web address, else the saved page's title under the same two checks and `titleFits`, else `Post by @user` for an x.com or twitter.com post, else the last path segment with its site (`Iso cycles — scenario.com`), else the site. It is display only: the stored title, the edit dialog's `data-title`, `initials`, the saved-copy page, the Ask AI answer text, MCP and the export are unchanged. The edit and Undo answers carry the shown title (`shown`) so a card keeps it after Save or Undo.
+  - **Supersedes** `docs/specs/2026-10-17-edit-title-picture-design.md`'s "an empty result means no title (the card shows the URL)": the card now shows the fallback; the spec is left as written. Stored titles are still not rewritten.
+  - **Accepted:** two addresses that differ only by query or fragment can show the same built title (for example two `youtube.com/watch?v=` links with no page title); a page title usually comes first.
 - **2026-10-20:** Edit in the Ask AI panel (#183).
   - **Owner rulings, 2026-10-20:**
     - **O1.** Edit opens the existing title-and-picture dialog, unchanged in what it edits.

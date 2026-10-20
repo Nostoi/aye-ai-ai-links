@@ -3,6 +3,7 @@ import { linkSpace, type Space } from "../core/link-space.js";
 import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu } from "./card-menu.js";
+import { displayTitle } from "./display-title.js";
 import { DONE_ITEM } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { NOT_HANDY } from "./keep-handy.js";
@@ -54,7 +55,7 @@ const KEEP_HANDY = `<div class="ask">
 </div>`;
 
 /** A kept tile's ⋯ menu: the link menu's first group (#192), with Keep handy already done. */
-const menu = (link: Link) => cardMenu(`More for ${link.title ?? link.url}`, [DONE_ITEM, NOT_HANDY]);
+const menu = (link: Link) => cardMenu(`More for ${displayTitle(link)}`, [DONE_ITEM, NOT_HANDY]);
 
 /** The space's dot and the site's host, without the space's name (All links uses `siteLine`). */
 function hostLine(link: Link, space: Space | null): string {

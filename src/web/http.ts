@@ -91,6 +91,7 @@ import type { Ask } from "./ask-panel.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
+import { displayTitle } from "./display-title.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -565,6 +566,7 @@ export function webApp({
     const info = (await deps.images.pictureInfo(owner, [id])).get(id);
     return {
       title: link.title,
+      shown: displayTitle(link),
       url: link.url,
       initials: initialsText(link),
       version: shown?.version ?? null,

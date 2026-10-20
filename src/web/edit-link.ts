@@ -7,6 +7,7 @@ import { cardMenu, DIVIDER, type MenuItem } from "./card-menu.js";
 import { removeCopyItem } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
 import { deleteLinkItem } from "./delete-link.js";
+import { displayTitle } from "./display-title.js";
 import { DONE_ITEM } from "./done-link.js";
 import { initialsText } from "./initials.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
@@ -42,7 +43,7 @@ export const editMenu = (link: Link, copy?: CopyInfo, handy?: HandyView | null) 
     link.state === "active"
       ? [DONE_ITEM, { ...KEEP_ITEM, hidden: kept }, { ...NOT_HANDY, hidden: !kept }, DIVIDER]
       : [];
-  return cardMenu(`More for ${link.title ?? link.url}`, [
+  return cardMenu(`More for ${displayTitle(link)}`, [
     ...first,
     EDIT_ITEM,
     ...(copy ? [readCopyItem(link.id), removeCopyItem] : []),

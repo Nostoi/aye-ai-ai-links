@@ -8,6 +8,9 @@ export const CHILD_ENTRY = new URL(
   import.meta.url,
 );
 
+/** Default time from spawn to SIGKILL. */
+export const EXTRACT_DEADLINE_MS = 20_000;
+
 export type ChildExtractorOptions = {
   /** Time from spawn to SIGKILL. */
   deadlineMs?: number;
@@ -35,7 +38,7 @@ const STDERR_KEPT = 64 * 1024;
  */
 export function createChildExtractor(options: ChildExtractorOptions = {}): PageExtractor {
   const {
-    deadlineMs = 20_000,
+    deadlineMs = EXTRACT_DEADLINE_MS,
     maxOldSpaceMb = 384,
     childEntry = CHILD_ENTRY,
     execPath = process.execPath,

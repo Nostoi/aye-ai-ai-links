@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { MAX_TEXT_CHARS } from "../ai/chat-turn.js";
 import { ASK_KEY } from "./ask-panel.js";
 import { isToolJson, isToolJsonOrNull } from "./http.js";
 import { PAGE_STYLE, page } from "./page.js";
@@ -57,6 +58,12 @@ describe("the Ask AI panel's markup", () => {
     expect(styles[1]?.textContent).toBe(`\n${askCss}\n`);
     expect(PAGE_STYLE).toBe(`\n${themeCss}\n`);
     expect(themeCss).not.toContain("ask-panel");
+  });
+
+  it("limits the message box to the server's longest message", () => {
+    expect(document.getElementById("ask-text")?.getAttribute("maxlength")).toBe(
+      String(MAX_TEXT_CHARS),
+    );
   });
 
   it("uses only theme tokens for colour", () => {
@@ -150,7 +157,10 @@ const saved = (over: Record<string, unknown> = {}) => ({
   owner: ASK.owner,
   open: false,
   entries: [{ kind: "me", text: "hello" }],
-  history: [{ role: "user", text: "hello" }],
+  history: [
+    { role: "user", text: "hello" },
+    { role: "assistant", text: "hi there" },
+  ],
   pending: null,
   ...over,
 });
@@ -226,7 +236,7 @@ describe("the panel's saved state", () => {
   it("keeps this owner's version-1 state", () => {
     const p = load({ stored: saved() });
     expect(p.panel().state.entries).toEqual([{ kind: "me", text: "hello" }]);
-    expect(p.panel().state.history).toHaveLength(1);
+    expect(p.panel().state.history).toHaveLength(2);
   });
 
   it.each([
@@ -397,6 +407,23 @@ describe("trimming the history to send", () => {
     expect(body(cut(history.slice(-(kept.length + 2))))).toBeGreaterThan(400 * 1024);
   });
 
+  it("posts only valid pairs: a malformed message or an empty reply drops its whole pair", () => {
+    const good = [
+      { role: "user", text: "a" },
+      { role: "assistant", text: "b" },
+    ];
+    const kept = trim([
+      ...good,
+      { role: "user", text: "c" },
+      null,
+      { role: "user", text: "d" },
+      { role: "assistant", text: "  " },
+      ...good,
+      { role: "assistant", text: "orphan" },
+    ]);
+    expect(kept).toEqual([...good, ...good]);
+  });
+
   it("cuts a long assistant text to 8,000 characters and leaves the owner's text alone", () => {
     const kept = trim([
       { role: "user", text: "u".repeat(9_000) },
@@ -419,7 +446,13 @@ describe("sending a message", () => {
       {
         url: "/ai/chat",
         method: "POST",
-        body: { history: [{ role: "user", text: "hello" }], text: "find my batteries" },
+        body: {
+          history: [
+            { role: "user", text: "hello" },
+            { role: "assistant", text: "hi there" },
+          ],
+          text: "find my batteries",
+        },
       },
     ]);
     expect(t.messages().querySelector(".ask-me:last-of-type, .ask-me")?.textContent).toBeTruthy();
@@ -764,6 +797,27 @@ describe("a turn that failed", () => {
     ]);
   });
 
+  it("keeps the first alert and its Search link when Try again then gets no answer", async () => {
+    let n = 0;
+    const t = talk(() => {
+      if (++n === 1) return failed();
+      throw new Error("offline");
+    });
+    await t.say("miso butter");
+    await t.clickEl(
+      [...t.messages().querySelectorAll("button")].find((b) => b.textContent === "Try again"),
+    );
+    const alerts = [...t.messages().querySelectorAll('[role="alert"]')];
+    expect(alerts.map((a) => a.querySelector("strong")?.textContent)).toEqual([
+      "Fake didn't answer: the connection timed out.",
+      "Something went wrong. Try again.",
+    ]);
+    expect(alerts[0]?.querySelector("a")?.getAttribute("href")).toBe("/search?q=miso%20butter");
+    expect(t.stateNow().entries.filter((e: { kind: string }) => e.kind === "alert")).toHaveLength(
+      2,
+    );
+  });
+
   it("with changes: lists them with their Undo, offers only Search, and keeps the pair", async () => {
     const t = talk(() =>
       failed({
@@ -817,6 +871,13 @@ describe("a turn that failed", () => {
     expect(send.disabled).toBe(false);
   });
 
+  it("puts the owner's text back in the box after a failure that never reached the turn", async () => {
+    const t = talk(() => ({ status: 500 }));
+    await t.say("keep this text");
+    expect((t.el("ask-text") as HTMLTextAreaElement).value).toBe("keep this text");
+    expect(t.net.calls).toHaveLength(1);
+  });
+
   it("falls back the same way when the request never gets an answer", async () => {
     const t = load({
       fetch: (async () => {
@@ -841,14 +902,17 @@ describe("redrawing the conversation", () => {
     const p = load({ stored: saved({ pending: { text: "hello" } }) });
     expect(p.panel().messages.textContent).toContain(notice);
     expect(p.stateNow().pending).toBeNull();
-    expect(p.stateNow().history).toEqual([{ role: "user", text: "hello" }]);
+    expect(p.stateNow().history).toEqual([
+      { role: "user", text: "hello" },
+      { role: "assistant", text: "hi there" },
+    ]);
     expect(p.stateNow().entries.at(-1)).toEqual({ kind: "notice", text: notice });
     const next = load({ stored: p.stateNow() });
     expect(next.panel().messages.textContent?.split(notice)).toHaveLength(2);
   });
 
   it("draws nothing, and does not throw, for entries that are not known kinds with the right fields", () => {
-    const junk = [
+    const junk: unknown[] = [
       null,
       5,
       "x",
@@ -869,8 +933,11 @@ describe("redrawing the conversation", () => {
       { kind: "notice" },
       { kind: "other", text: "t" },
     ];
-    const p = load({ stored: saved({ entries: junk }) });
-    expect(p.panel().messages.textContent).toBe("");
+    // The last line is a valid line (it draws its text) whose Undo is not: it must draw no button.
+    junk.push({ kind: "changes", lines: [{ text: "x", undo: { kind: "save", faded: true } }] });
+    const p = load({ stored: saved({ entries: junk, open: true }) });
+    expect(p.el("ask-panel").hasAttribute("hidden")).toBe(false);
+    expect(p.panel().messages.textContent).toBe("x");
     expect(p.panel().messages.querySelector("button, a, article")).toBeNull();
   });
 });

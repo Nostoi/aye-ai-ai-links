@@ -26,7 +26,7 @@ export const askPanel = ({
 <div id="ask-messages" class="ask-messages"></div>
 <form id="ask-form" class="ask-form">
 <label class="ask-label" for="ask-text">Message your AI</label>
-<div class="ask-row"><textarea id="ask-text" rows="2" placeholder="Ask, or paste a link to save"></textarea><button class="primary" type="submit">Send</button></div>
+<div class="ask-row"><textarea id="ask-text" rows="2" maxlength="4000" placeholder="Ask, or paste a link to save"></textarea><button class="primary" type="submit">Send</button></div>
 </form>
 </aside>`;
 
@@ -181,15 +181,17 @@ export const ASK_SCRIPT = `<script>
   // What the server gets of the conversation: the last 40 messages in whole pairs, each reply cut
   // to 8,000 characters, and the oldest pairs dropped until the body is under 400 KiB.
   const trimHistory = (history, said) => {
-    let list = history
-      .filter(
-        (m) =>
-          isObj(m) && (m.role === "user" || m.role === "assistant") && typeof m.text === "string",
-      )
-      .map((m) => ({
-        role: m.role,
-        text: m.role === "assistant" ? m.text.slice(0, MAX_REPLY) : m.text,
-      }));
+    // Pairs are stored together, so a pair is kept only when both halves are right.
+    const isSaid = (m, role) =>
+      isObj(m) && m.role === role && typeof m.text === "string" && m.text.trim() !== "";
+    let list = [];
+    for (let i = 0; i + 1 < history.length; i += 2) {
+      if (!isSaid(history[i], "user") || !isSaid(history[i + 1], "assistant")) continue;
+      list.push(
+        { role: "user", text: history[i].text },
+        { role: "assistant", text: history[i + 1].text.slice(0, MAX_REPLY) },
+      );
+    }
     if (list.length > MAX_MESSAGES) {
       const extra = list.length - MAX_MESSAGES;
       list = list.slice(extra + (extra % 2));
@@ -300,7 +302,7 @@ export const ASK_SCRIPT = `<script>
     for (const entry of state.entries) {
       if (!isObj(entry) || !Array.isArray(entry.lines)) continue;
       for (const line of entry.lines) {
-        if (isObj(line) && isObj(line.undo) && line.undo.kind === "save" && line.undo.faded === true) {
+        if (isObj(line) && undoable(line.undo) && line.undo.kind === "save" && line.undo.faded === true) {
           fadeCards(line.undo.body.id);
         }
       }
@@ -406,9 +408,8 @@ export const ASK_SCRIPT = `<script>
       again.setAttribute("type", "button");
       again.addEventListener("click", () => {
         if (running) return;
-        state.entries = state.entries.filter((e) => e !== entry);
-        box.remove();
-        send(said, true);
+        // The failed alert goes only once the resend gets an answer, so a second failure leaves its Search link.
+        send(said, { entry, box });
       });
       actions.appendChild(again);
       actions.appendChild(searchLink(said));
@@ -480,8 +481,14 @@ export const ASK_SCRIPT = `<script>
     if (res.status !== 200 || !isObj(answer) || typeof answer.ok !== "boolean") {
       const told = isObj(answer) && typeof answer.message === "string" ? answer.message : FALLBACK;
       add({ kind: "alert", message: told });
+      // The turn may have run, so nothing is resent; the text is back in the box for the owner to decide.
+      if (text.value === "") text.value = said;
       save();
       return;
+    }
+    if (again) {
+      state.entries = state.entries.filter((e) => e !== again.entry);
+      again.box.remove();
     }
     const changes = Array.isArray(answer.changes) ? answer.changes : [];
     const lines = changeLines(changes);

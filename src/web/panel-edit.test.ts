@@ -506,6 +506,50 @@ describe("Edit with the page awareness of #159", () => {
     expect(box.querySelector(".ask-note")?.textContent).toBe(CONFLICT.message);
   });
 
+  const foldedWhileWaiting = async (url: string, answer: Answer, button: string) => {
+    const { wait, release } = held();
+    const { page } = onPage(
+      home(),
+      { [url]: { ...answer, wait } },
+      elsewhere(savedOne().entries as Record<string, unknown>[]),
+    );
+    const toggle = page.$("#ask-messages .ask-earlier");
+    const box = page.$("#ask-messages .ask-earlier-entries");
+    page.dispatch(toggle, "click");
+    page.dispatch(box.querySelector(button) as Element, "click");
+    await page.settle();
+    page.dispatch(toggle, "click");
+    expect(box.hidden).toBe(true);
+    release();
+    await page.settle();
+    expect(box.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    return box.querySelector(".ask-note")?.textContent;
+  };
+
+  it("opens the folded Earlier box to show a panel Undo's refusal", async () => {
+    const said = await foldedWhileWaiting(
+      "/links/delete",
+      { status: 409, body: CONFLICT },
+      ".ask-undo",
+    );
+    expect(said).toBe(CONFLICT.message);
+  });
+
+  it("opens the folded Earlier box to say an Edit's link was deleted", async () => {
+    const said = await foldedWhileWaiting(
+      "/ai/card/1",
+      { status: 404, body: { code: "not_found" } },
+      ".ask-edit",
+    );
+    expect(said).toBe("This link was deleted.");
+  });
+
+  it("opens the folded Earlier box to say an Edit's link couldn't be loaded", async () => {
+    const said = await foldedWhileWaiting("/ai/card/1", { status: 500 }, ".ask-edit");
+    expect(said).toBe("Couldn't load this link. Try again.");
+  });
+
   it("leaves an open Earlier box open when a refusal comes for a line inside it", async () => {
     const { page } = onPage(
       home(),

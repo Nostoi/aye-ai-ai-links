@@ -373,7 +373,7 @@ export const ASK_SCRIPT = `<script>
     const res = await post(u.url, u.body);
     if (res.status < 200 || res.status > 299) {
       const said = isObj(res.body) && typeof res.body.message === "string" ? res.body.message : null;
-      note.textContent = OWN_ANSWERS.includes(res.status) && said ? said : UNDO_FAILED;
+      say(note, OWN_ANSWERS.includes(res.status) && said ? said : UNDO_FAILED);
       button.disabled = false;
       return;
     }
@@ -467,6 +467,10 @@ export const ASK_SCRIPT = `<script>
     const box = el.closest(".ask-earlier-entries");
     if (box && box.hidden) box.previousElementSibling.click();
   };
+  const say = (note, text) => {
+    reveal(note);
+    note.textContent = text;
+  };
   document.addEventListener("aye-note", (event) => {
     if (isObj(event.detail) && event.detail.note) reveal(event.detail.note);
   });
@@ -478,11 +482,11 @@ export const ASK_SCRIPT = `<script>
     if (read === "gone") {
       gone.add(id);
       dropEdits(id);
-      note.textContent = "This link was deleted.";
+      say(note, "This link was deleted.");
       return;
     }
     if (press !== presses) return;
-    if (read === "failed") note.textContent = "Couldn't load this link. Try again.";
+    if (read === "failed") say(note, "Couldn't load this link. Try again.");
     if (read !== "ok" || !button.isConnected) return;
     const card = panelCard(id, block);
     if (!card) return;
@@ -499,8 +503,7 @@ export const ASK_SCRIPT = `<script>
     if (!drawn) return;
     const note = editNotes.get(id);
     if ((await refreshCard(id)) === "failed" && note) {
-      reveal(note);
-      note.textContent = "This card couldn't be refreshed. Reload to see the change.";
+      say(note, "This card couldn't be refreshed. Reload to see the change.");
     }
   });
 

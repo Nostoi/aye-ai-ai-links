@@ -427,7 +427,9 @@ export const ASK_SCRIPT = `<script>
   };
   const dropEdits = (id) => {
     for (const edit of [...messages.querySelectorAll(".ask-edit")]) {
-      if (edit.getAttribute("data-id") === id) edit.remove();
+      if (edit.getAttribute("data-id") !== id) continue;
+      if (edit === document.activeElement) text.focus();
+      edit.remove();
     }
   };
   // Reads of one link's card are numbered; only the latest one started is drawn and stored.
@@ -471,19 +473,20 @@ export const ASK_SCRIPT = `<script>
     const { note, text } = isObj(event.detail) ? event.detail : {};
     if (note && typeof text === "string") say(note, text);
   });
-  const readCard = async (id, block) => {
+  const readCard = async (id, block, note) => {
     let read = await refreshCard(id);
     while (read === "stale") read = await newest.get(id);
     if (read === "gone") {
       gone.add(id);
       dropEdits(id);
+      say(note, "This link was deleted.");
       return "gone";
     }
     return (read === "ok" && panelCard(id, block)) || "failed";
   };
   const runEdit = (id, button, note, block) => {
     note.textContent = "";
-    const read = readCard(id, block);
+    const read = readCard(id, block, note);
     document.dispatchEvent(new CustomEvent("aye-edit", { detail: { id, read, opener: button, note } }));
   };
   document.addEventListener("aye-edited", async (event) => {

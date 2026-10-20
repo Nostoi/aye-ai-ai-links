@@ -440,7 +440,7 @@ const tell = (target, message) => {
   if (note) document.dispatchEvent(new CustomEvent("aye-note", { detail: { note, text: message } }));
   else if (editAlert) editAlert.textContent = message;
 };
-const UNREAD = { failed: ${JSON.stringify("Couldn't load this link. Try again.")}, gone: ${JSON.stringify("This link was deleted.")} };
+const UNREAD = ${JSON.stringify("Couldn't load this link. Try again.")};
 document.addEventListener("aye-edit", async (event) => {
   const { read, opener: by, note } = event.detail;
   card = null;
@@ -464,7 +464,7 @@ document.addEventListener("aye-edit", async (event) => {
   if (turn !== saveTurn || !dialog.open) return;
   if (typeof got === "string") {
     finish();
-    document.dispatchEvent(new CustomEvent("aye-note", { detail: { note, text: UNREAD[got] ?? UNREAD.failed } }));
+    if (got === "failed") document.dispatchEvent(new CustomEvent("aye-note", { detail: { note, text: UNREAD } }));
     return;
   }
   notes.set(got, note);

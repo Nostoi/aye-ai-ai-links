@@ -1029,6 +1029,18 @@ describe("Edit opens the dialog at once and waits for the card (E7)", () => {
     expect(page.focused().at(-1)).toBe(page.$("#ask-text"));
   });
 
+  it("still says the link was deleted when the busy dialog was cancelled before the 404", async () => {
+    const { page, dialog, release } = pressHeld({ status: 404, body: { code: "not_found" } });
+    cancel(page);
+    expect(page.focused().at(-1)).toBe(editButton(page));
+    release();
+    await page.settle();
+    expect(dialog.open).toBe(false);
+    expect(note(page).textContent).toBe("This link was deleted.");
+    expect(page.document.querySelectorAll(".ask-edit")).toHaveLength(0);
+    expect(page.focused().at(-1)).toBe(page.$("#ask-text"));
+  });
+
   it("Esc while busy closes the dialog, not the panel, and the late card opens nothing", async () => {
     const { page, dialog, release } = pressHeld(fresh());
     expect(dialog.open).toBe(true);

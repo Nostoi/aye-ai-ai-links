@@ -56,6 +56,14 @@ function start(
   ).HTMLElement.prototype.focus = function (this: Element) {
     focusLog.push(this);
   };
+  if (ask) {
+    Object.defineProperty(document, "activeElement", {
+      get: () => {
+        const last = focusLog.at(-1);
+        return last?.isConnected ? last : document.body;
+      },
+    });
+  }
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
     .filter((s) => (ask ? !s.startsWith(MENU_SCRIPT_START) : !s.includes("sign-out")))

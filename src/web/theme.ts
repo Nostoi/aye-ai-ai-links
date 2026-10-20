@@ -414,7 +414,8 @@ body.ask-open{margin-right:400px}
 .ask-card .ask-why{margin:0 0 6px;font-size:13px;color:var(--soft)}
 .ask-tile{flex:0 0 84px;width:84px;height:84px;--icon:56px;--initials:28px;border-radius:10px;object-fit:cover;background:color-mix(in srgb,var(--space,var(--line)) 24%,var(--surface))}
 .ask-tags{display:flex;flex-wrap:wrap;gap:6px}
-.ask-tag{padding:2px 10px;border-radius:999px;font-size:13px;background:color-mix(in srgb,var(--space,var(--line)) 18%,var(--surface))}
+.ask-tag{padding:2px 10px;border-radius:999px;font-size:13px;background:var(--line)}
+.ask-tag.ask-space{background:color-mix(in srgb,var(--space) 18%,var(--surface))}
 .ask-tag.guess{padding:1px 9px;border:1.5px dashed var(--field);background:none;color:var(--soft);font-style:italic}
 .ask-form{padding:12px 16px 18px;border-top:1.5px solid var(--line)}
 .ask-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

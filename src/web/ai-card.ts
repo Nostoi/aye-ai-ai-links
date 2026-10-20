@@ -11,14 +11,15 @@ export function renderCard(link: Link, picture: ShownPicture | undefined, catalo
   const why = link.why
     ? `<p class="ask-why">"${escapeHtml(link.why.text)}"${link.why.source === "inferred" ? " (a guess)" : ""}</p>\n`
     : "";
+  const space = linkSpace(link, catalog);
   const tags = link.tags
     .map((t) =>
       t.source === "inferred"
         ? `<span class="ask-tag guess">${escapeHtml(t.name)} (a guess)</span>`
-        : `<span class="ask-tag">${escapeHtml(t.name)}</span>`,
+        : `<span class="ask-tag${t.key === space?.key ? " ask-space" : ""}">${escapeHtml(t.name)}</span>`,
     )
     .join("");
-  return `<article class="ask-card${spaceClass(linkSpace(link, catalog))}" data-id="${escapeHtml(link.id)}">
+  return `<article class="ask-card${spaceClass(space)}" data-id="${escapeHtml(link.id)}">
 ${tile(link, picture, "ask-tile")}
 <div class="ask-card-body">
 <h3>${linkTitle(link)}</h3>

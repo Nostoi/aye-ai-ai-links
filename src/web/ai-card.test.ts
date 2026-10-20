@@ -63,6 +63,16 @@ describe("renderCard", () => {
     expect(renderCard(link(), undefined, [])).toContain('class="ask-card" data-id="7"');
   });
 
+  it("colours only the space's own tag; an unpinned tag shows no colour", () => {
+    const html = renderCard(
+      link({ tags: [tag("kitchen", "stated"), tag("baking", "stated")] }),
+      undefined,
+      [KITCHEN],
+    );
+    expect(html).toContain('<span class="ask-tag ask-space">kitchen</span>');
+    expect(html).toContain('<span class="ask-tag">baking</span>');
+  });
+
   it("escapes the title", () => {
     const html = renderCard(link({ title: "<script>alert(1)</script>" }), undefined, []);
     expect(html).not.toContain("<script>");

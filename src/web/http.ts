@@ -329,7 +329,7 @@ const toolJson = (t: ToolRecord): ToolJson => ({
 const WAITS: Record<WaitDays, true> = { 30: true, 60: true, 120: true };
 
 /** A row the page sends back: status, source and wait among core's values, and dates that parse. */
-const isToolJson = (value: unknown): value is ToolJson => {
+export const isToolJson = (value: unknown): value is ToolJson => {
   if (typeof value !== "object" || value === null) return false;
   const row = value as Record<string, unknown>;
   return (
@@ -342,7 +342,7 @@ const isToolJson = (value: unknown): value is ToolJson => {
   );
 };
 /** An absent row is null; a missing member is refused, never read as null. */
-const isToolJsonOrNull = (value: unknown): value is ToolJson | null =>
+export const isToolJsonOrNull = (value: unknown): value is ToolJson | null =>
   value === null || isToolJson(value);
 
 const toolRecord = (t: ToolJson): ToolRecord => ({

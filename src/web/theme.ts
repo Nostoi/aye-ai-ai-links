@@ -392,6 +392,22 @@ body.ask-open{margin-right:400px}
 .ask-back{display:none;align-items:center;min-height:44px;padding:0 8px 0 0;background:none;border:0;color:var(--ink)}
 .ask-messages{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:18px 18px 8px}
 .ask-me{align-self:flex-end;max-width:300px;margin:0;text-align:right;font-size:15px;color:var(--soft);overflow-wrap:anywhere}
+.ask-reply{display:flex;flex-direction:column;gap:8px}
+.ask-reply p{margin:0;font-size:15.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ask-me{white-space:pre-wrap}
+.ask-notice{margin:0;font-size:14px;color:var(--soft)}
+.ask-changes{display:flex;flex-direction:column;gap:8px}
+.ask-change{display:flex;flex-direction:column;gap:8px}
+.ask-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:14px}
+.ask-line a{display:inline-flex;align-items:center;min-height:44px}
+.ask-undo,.ask-button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-decoration:none}
+.ask-undone{color:var(--soft)}
+.ask-note{font-size:13px;color:var(--soft)}
+.ask-card.ask-faded{opacity:.4}
+.ask-alert{padding:14px 16px;border:1.5px solid var(--line);border-radius:16px;background:var(--surface)}
+.ask-alert p{margin:0 0 6px;overflow-wrap:anywhere}
+.ask-alert-more{font-size:15px;color:var(--soft)}
+.ask-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
 .ask-card{display:flex;gap:12px;padding:10px;border-radius:14px;background:var(--bg)}
 .ask-card-body{min-width:0;overflow-wrap:anywhere}
 .ask-card h3{margin:0 0 4px;font-size:15.5px}

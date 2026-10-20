@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { ASK_KEY } from "./ask-panel.js";
+import { isToolJson, isToolJsonOrNull } from "./http.js";
 import { PAGE_STYLE, page } from "./page.js";
 import { askCss, themeCss } from "./theme.js";
 
@@ -72,10 +73,14 @@ function load({
   stored,
   storage,
   phone = false,
+  fetch = (async () => {
+    throw new Error("no fetch expected");
+  }) as unknown as typeof globalThis.fetch,
 }: {
   stored?: unknown;
   storage?: Partial<Storage>;
   phone?: boolean;
+  fetch?: typeof globalThis.fetch;
 } = {}) {
   const html = withAsk();
   const { document, window } = parseHTML(html);
@@ -98,14 +103,15 @@ function load({
   }
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
-    .filter((s) => s.includes(ASK_KEY))
+    .filter((s) => s.includes(ASK_KEY) || s.includes("recordOpen"))
     .join("\n");
   const matchMedia = () => ({ matches: phone, addEventListener: () => {} });
-  new Function("document", "window", "sessionStorage", "matchMedia", code)(
+  new Function("document", "window", "sessionStorage", "matchMedia", "fetch", code)(
     document,
     window,
     sessionStorage,
     matchMedia,
+    fetch,
   );
   const el = (id: string) => document.getElementById(id) as HTMLElement;
   const click = (id: string) => el(id).dispatchEvent(new window.Event("click", { bubbles: true }));
@@ -130,6 +136,7 @@ function load({
             state: Record<string, unknown> & { entries: unknown[]; history: unknown[] };
             messages: HTMLElement;
             save: () => void;
+            trimHistory: (history: unknown[], text: string) => { role: string; text: string }[];
           };
         }
       ).askPanel,
@@ -267,7 +274,7 @@ describe("the panel's saved state", () => {
 });
 
 describe("sending", () => {
-  it("is not done here: submitting the form only stops the page from reloading", () => {
+  it("stops the page from reloading when the form is submitted empty", () => {
     const p = load();
     let prevented = false;
     const event = Object.assign(new p.window.Event("submit", { bubbles: true, cancelable: true }), {
@@ -277,5 +284,604 @@ describe("sending", () => {
     });
     p.el("ask-form").dispatchEvent(event);
     expect(prevented).toBe(true);
+  });
+});
+
+type Body = { id?: string; editId?: string; text?: string; tool?: unknown; previous?: unknown };
+type Call = { url: string; method: string; body: Body | undefined };
+type Reply = { status?: number; body?: unknown };
+
+/** A fake `fetch` that records each call and answers from `handler`; a missing body fails `json()`. */
+const fakeFetch = (handler: (call: Call) => Reply | Promise<Reply>) => {
+  const calls: Call[] = [];
+  const fn = async (url: string, init: { method?: string; body?: string } = {}) => {
+    const call = {
+      url,
+      method: init.method ?? "GET",
+      body: init.body ? JSON.parse(init.body) : undefined,
+    };
+    calls.push(call);
+    const reply = await handler(call);
+    return {
+      status: reply.status ?? 200,
+      json: async () => {
+        if (reply.body === undefined) throw new Error("no body");
+        return reply.body;
+      },
+    };
+  };
+  return { fn: fn as unknown as typeof fetch, calls };
+};
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const CARD = (id: string, title = "T") =>
+  `<article class="ask-card" data-id="${id}"><h3><a href="https://x.example/${id}" target="_blank" rel="noopener noreferrer" data-open>${title}</a></h3></article>`;
+const ROW = {
+  status: "kept",
+  source: "asked",
+  since: "2026-10-01T00:00:00.000Z",
+  answeredAt: null,
+  waitDays: 30,
+};
+const link = (linkId: string, over: Record<string, unknown> = {}) => ({
+  kind: "link",
+  tool: "save_link",
+  linkId,
+  created: false,
+  fields: [],
+  editId: null,
+  ...over,
+});
+const okAnswer = (over: Record<string, unknown> = {}) => ({
+  status: 200,
+  body: {
+    ok: true,
+    ai: "Fake",
+    segments: [{ text: "Done." }],
+    remember: "Done.",
+    cards: {},
+    changes: [],
+    ...over,
+  },
+});
+
+/** Loads the panel with `handler` answering every request, and lets the test send and click. */
+function talk(handler: (call: Call) => Reply | Promise<Reply>, options: { stored?: unknown } = {}) {
+  const net = fakeFetch(handler);
+  const p = load({ ...options, fetch: net.fn });
+  const say = async (text: string) => {
+    (p.el("ask-text") as HTMLTextAreaElement).value = text;
+    p.el("ask-form").dispatchEvent(
+      new p.window.Event("submit", { bubbles: true, cancelable: true }),
+    );
+    await flush();
+  };
+  const clickEl = async (node: Element | null | undefined) => {
+    node?.dispatchEvent(new p.window.Event("click", { bubbles: true }));
+    await flush();
+  };
+  const messages = () => p.panel().messages;
+  const lines = () => [...messages().querySelectorAll(".ask-line")].map((n) => n.textContent);
+  return { ...p, net, say, clickEl, messages, lines };
+}
+
+describe("trimming the history to send", () => {
+  const pairs = (n: number, text = "x") =>
+    Array.from({ length: n * 2 }, (_, i) => ({ role: i % 2 === 0 ? "user" : "assistant", text }));
+  const trim = (history: unknown[], text = "next") => load().panel().trimHistory(history, text);
+
+  it("keeps the last 40 messages, dropping whole pairs from the front", () => {
+    const history = Array.from({ length: 50 }, (_, i) => ({
+      role: i % 2 === 0 ? "user" : "assistant",
+      text: `m${i}`,
+    }));
+    const kept = trim(history);
+    expect(kept).toHaveLength(40);
+    expect(kept[0]).toEqual({ role: "user", text: "m10" });
+    expect(kept[39]).toEqual({ role: "assistant", text: "m49" });
+  });
+
+  it("drops the oldest pairs while the body is over 400 KiB", () => {
+    const history = pairs(20).map((m, i) => ({ ...m, text: `${i}:${"y".repeat(20_000)}` }));
+    const cut = (h: typeof history) =>
+      h.map((m) => ({ ...m, text: m.role === "assistant" ? m.text.slice(0, 8_000) : m.text }));
+    const body = (h: unknown[]) =>
+      new TextEncoder().encode(JSON.stringify({ history: h, text: "next" })).length;
+    expect(body(cut(history))).toBeGreaterThan(400 * 1024);
+    const kept = trim(history);
+    expect(body(kept)).toBeLessThanOrEqual(400 * 1024);
+    expect(kept.length).toBeLessThan(40);
+    expect(kept.length % 2).toBe(0);
+    expect(kept[0]?.role).toBe("user");
+    expect(kept.at(-1)?.text.startsWith("39:")).toBe(true);
+    expect(body(cut(history.slice(-(kept.length + 2))))).toBeGreaterThan(400 * 1024);
+  });
+
+  it("cuts a long assistant text to 8,000 characters and leaves the owner's text alone", () => {
+    const kept = trim([
+      { role: "user", text: "u".repeat(9_000) },
+      { role: "assistant", text: "a".repeat(9_000) },
+    ]);
+    expect(kept[0]?.text).toHaveLength(9_000);
+    expect(kept[1]?.text).toHaveLength(8_000);
+  });
+});
+
+describe("sending a message", () => {
+  it("posts the history and the trimmed text, and shows the message and Thinking while it waits", async () => {
+    let release: (r: Reply) => void = () => {};
+    const waiting = new Promise<Reply>((resolve) => {
+      release = resolve;
+    });
+    const t = talk(() => waiting, { stored: saved() });
+    await t.say("  find my batteries  ");
+    expect(t.net.calls).toEqual([
+      {
+        url: "/ai/chat",
+        method: "POST",
+        body: { history: [{ role: "user", text: "hello" }], text: "find my batteries" },
+      },
+    ]);
+    expect(t.messages().querySelector(".ask-me:last-of-type, .ask-me")?.textContent).toBeTruthy();
+    expect(t.messages().textContent).toContain("find my batteries");
+    expect(t.messages().textContent).toContain("Thinking…");
+    expect(t.stateNow().pending).toEqual({ text: "find my batteries" });
+    release(okAnswer());
+    await flush();
+    expect(t.messages().textContent).not.toContain("Thinking…");
+    expect(t.stateNow().pending).toBeNull();
+  });
+
+  it("disables Send while a turn runs, ignores a second submit, and enables Send after", async () => {
+    let release: (r: Reply) => void = () => {};
+    const waiting = new Promise<Reply>((resolve) => {
+      release = resolve;
+    });
+    const t = talk(() => waiting);
+    const send = t.document.querySelector('#ask-form button[type="submit"]') as HTMLButtonElement;
+    await t.say("one");
+    expect(send.disabled).toBe(true);
+    await t.say("two");
+    expect(t.net.calls).toHaveLength(1);
+    release(okAnswer());
+    await flush();
+    expect(send.disabled).toBe(false);
+  });
+
+  it("ignores an empty message", async () => {
+    const t = talk(() => okAnswer());
+    await t.say("   ");
+    expect(t.net.calls).toHaveLength(0);
+    expect(t.stateNow()?.entries ?? []).toHaveLength(0);
+  });
+});
+
+describe("an answer", () => {
+  const reply = () =>
+    okAnswer({
+      segments: [{ text: "See <b>this</b>\nand that" }, { card: CARD("7") }, { text: "Bye" }],
+      remember: "See [link 7: T] Bye",
+    });
+
+  it("draws text segments as text, card segments as cards, and keeps the pair with remember", async () => {
+    const t = talk(() => reply());
+    await t.say("show me");
+    const paragraphs = [...t.messages().querySelectorAll(".ask-reply p")];
+    expect(paragraphs.map((n) => n.textContent)).toEqual(["See <b>this</b>\nand that", "Bye"]);
+    expect(t.messages().querySelector(".ask-reply b")).toBeNull();
+    expect(t.messages().querySelector(".ask-reply .ask-card[data-id='7']")).not.toBeNull();
+    expect(t.panel().state.history).toEqual([
+      { role: "user", text: "show me" },
+      { role: "assistant", text: "See [link 7: T] Bye" },
+    ]);
+    expect(t.stateNow().history).toEqual(t.panel().state.history);
+  });
+
+  it("draws it again after a reload", async () => {
+    const t = talk(() => reply());
+    await t.say("show me");
+    const again = load({ stored: t.stateNow() });
+    expect(again.panel().messages.querySelector(".ask-card[data-id='7']")).not.toBeNull();
+    expect(again.panel().messages.querySelector(".ask-me")?.textContent).toBe("show me");
+  });
+});
+
+describe("the change lines", () => {
+  const lineFor = async (change: unknown, extra: Record<string, unknown> = {}) => {
+    const t = talk(() => okAnswer({ changes: [change], ...extra }));
+    await t.say("go");
+    return t;
+  };
+
+  it("says Saved. for a created link, with an Undo that deletes it", async () => {
+    const t = await lineFor(link("5", { created: true }));
+    expect(t.lines()).toEqual(["Saved.Undo"]);
+    await t.clickEl(t.messages().querySelector("button.ask-undo"));
+    expect(t.net.calls.at(-1)).toEqual({ url: "/links/delete", method: "POST", body: { id: "5" } });
+  });
+
+  it("shows one line for a link saved and edited in the same turn, with the delete Undo", async () => {
+    const t = talk(() =>
+      okAnswer({
+        changes: [link("5", { editId: "e2" }), link("5", { created: true, editId: "e1" })],
+      }),
+    );
+    await t.say("go");
+    expect(t.lines()).toEqual(["Saved.Undo"]);
+    await t.clickEl(t.messages().querySelector("button.ask-undo"));
+    expect(t.net.calls.at(-1)?.url).toBe("/links/delete");
+  });
+
+  it("shows one line for a link edited twice, the one with an editId carrying the Undo", async () => {
+    const t = talk(() =>
+      okAnswer({ changes: [link("5"), link("5", { editId: "e1" }), link("5")] }),
+    );
+    await t.say("go");
+    expect(t.lines()).toEqual(["Updated.Undo"]);
+    const undo = t.messages().querySelector("button.ask-undo");
+    expect(undo?.getAttribute("title")).toBe("Puts back the title, summary, why and tags.");
+  });
+
+  it("says Updated. with no Undo for an edit that has no editId", async () => {
+    const t = await lineFor(link("5"));
+    expect(t.lines()).toEqual(["Updated."]);
+    expect(t.messages().querySelector("button")).toBeNull();
+  });
+
+  it.each([
+    ["kept", "asked", "Kept handy."],
+    ["suggested", "inferred", "Suggested for your Handy shelf (a guess)."],
+    ["declined", "asked", "Taken off your Handy shelf."],
+  ])("says %s for a handy change, with an Undo", async (status, source, words) => {
+    const t = await lineFor({
+      kind: "handy",
+      linkId: "5",
+      change: { tool: { ...ROW, status, source }, previous: null },
+    });
+    expect(t.lines()).toEqual([`${words}Undo`]);
+  });
+
+  it("names a tag's kind and links to Tags, with no Undo", async () => {
+    const t = await lineFor({ kind: "tag", name: "garden", tagKind: "project" });
+    expect(t.lines()).toEqual(["Made garden a project.Tags"]);
+    expect(t.messages().querySelector(".ask-line a")?.getAttribute("href")).toBe("/tags");
+    expect(t.messages().querySelector("button")).toBeNull();
+  });
+
+  const entry = (kind: string, text: string, source: string) => ({
+    entry: kind,
+    id: "1",
+    text,
+    source,
+  });
+
+  it("gives one line per profile entry, marking inferred ones and saying what you're working on for a focus", async () => {
+    const t = await lineFor({
+      kind: "profile",
+      added: [entry("note", "likes tea", "inferred"), entry("focus", "the garden", "inferred")],
+      edited: [entry("note", "likes coffee", "stated")],
+      removed: [entry("focus", "old plan", "asked")],
+    });
+    expect(t.lines()).toEqual([
+      "Added the note 'likes tea' (a guess)Profile",
+      "Added what you're working on: 'the garden' (a guess)Profile",
+      "Changed the note 'likes coffee'Profile",
+      "Removed what you're working on: 'old plan'Profile",
+    ]);
+    expect(t.messages().querySelector(".ask-line a")?.getAttribute("href")).toBe("/profile");
+    expect(t.messages().querySelector("button")).toBeNull();
+  });
+
+  it("counts the links marked as shown in today's picks", async () => {
+    expect((await lineFor({ kind: "surfaced", linkIds: ["1", "2", "3"] })).lines()).toEqual([
+      "Marked 3 links as shown in today's picks.",
+    ]);
+    expect((await lineFor({ kind: "surfaced", linkIds: ["1"] })).lines()).toEqual([
+      "Marked 1 link as shown in today's picks.",
+    ]);
+  });
+
+  it("draws a changed link's card above its line, once", async () => {
+    const t = await lineFor(link("5", { created: true }), { cards: { "5": CARD("5") } });
+    const block = t.messages().querySelector(".ask-change");
+    expect(block?.firstElementChild?.getAttribute("data-id")).toBe("5");
+    expect(t.messages().querySelectorAll(".ask-card")).toHaveLength(1);
+  });
+});
+
+describe("Undo", () => {
+  const save = link("5", { created: true });
+  const edit = link("7", { editId: "e1" });
+  const handy = {
+    kind: "handy",
+    linkId: "9",
+    change: { tool: ROW, previous: { ...ROW, status: "suggested", source: "inferred" } },
+  };
+  const server =
+    (over: Partial<Record<string, Reply>> = {}) =>
+    (call: Call) => {
+      if (call.url === "/ai/chat") {
+        return okAnswer({
+          segments: [{ card: CARD("7", "Old") }],
+          changes: [save, edit, handy],
+          cards: { "5": CARD("5"), "9": CARD("9", "Handy old") },
+        });
+      }
+      return over[call.url] ?? { status: 204 };
+    };
+  const buttons = (t: ReturnType<typeof talk>) => [
+    ...t.messages().querySelectorAll("button.ask-undo"),
+  ];
+
+  it("posts the body each kind needs, and the handy body passes the server's check", async () => {
+    const t = talk(server());
+    await t.say("go");
+    for (const b of buttons(t)) await t.clickEl(b);
+    const posted = t.net.calls.filter((c) => c.url !== "/ai/chat" && c.method === "POST");
+    expect(posted.map((c) => c.url)).toEqual(["/links/delete", "/links/edit/undo", "/tools/undo"]);
+    expect(posted[0]?.body).toEqual({ id: "5" });
+    expect(posted[1]?.body).toEqual({ id: "7", editId: "e1" });
+    expect(posted[2]?.body).toEqual({
+      id: "9",
+      tool: handy.change.tool,
+      previous: handy.change.previous,
+    });
+    expect(isToolJson(posted[2]?.body?.tool)).toBe(true);
+    expect(isToolJsonOrNull(posted[2]?.body?.previous)).toBe(true);
+  });
+
+  it("disables the button while it runs, then shows Undone. in its place", async () => {
+    let release: (r: Reply) => void = () => {};
+    const waiting = new Promise<Reply>((resolve) => {
+      release = resolve;
+    });
+    const t = talk((call) => (call.url === "/links/delete" ? waiting : server()(call)));
+    await t.say("go");
+    const [first] = buttons(t);
+    await t.clickEl(first);
+    expect((first as HTMLButtonElement).disabled).toBe(true);
+    release({ status: 204 });
+    await flush();
+    expect(t.lines()[0]).toBe("Saved.Undone.");
+  });
+
+  it("re-reads the card after an edit Undo, in the panel and in the stored state, and keeps both after a reload", async () => {
+    const t = talk(server({ "/ai/card/7": { body: { card: CARD("7", "Restored") } } }));
+    await t.say("go");
+    await t.clickEl(buttons(t)[1]);
+    expect(t.net.calls.at(-1)).toEqual({ url: "/ai/card/7", method: "GET", body: undefined });
+    expect(t.messages().querySelector(".ask-reply .ask-card")?.textContent).toBe("Restored");
+    const stored = t.stateNow();
+    expect(stored.entries[1].segments).toEqual([{ card: CARD("7", "Restored") }]);
+    const again = load({ stored });
+    expect(again.panel().messages.querySelector(".ask-reply .ask-card")?.textContent).toBe(
+      "Restored",
+    );
+    expect(
+      [...again.panel().messages.querySelectorAll(".ask-line")].map((n) => n.textContent),
+    ).toEqual(["Saved.Undo", "Updated.Undone.", "Kept handy.Undo"]);
+  });
+
+  it("replaces the card kept in the cards map after a handy Undo", async () => {
+    const t = talk(server({ "/ai/card/9": { body: { card: CARD("9", "Handy new") } } }));
+    await t.say("go");
+    await t.clickEl(buttons(t)[2]);
+    expect(t.messages().querySelector(".ask-change .ask-card[data-id='9']")?.textContent).toBe(
+      "Handy new",
+    );
+    expect(t.stateNow().entries[2].cards["9"]).toBe(CARD("9", "Handy new"));
+  });
+
+  it("leaves the card alone when it can't be read again", async () => {
+    const t = talk(server({ "/ai/card/7": { status: 404, body: { code: "not_found" } } }));
+    await t.say("go");
+    await t.clickEl(buttons(t)[1]);
+    expect(t.messages().querySelector(".ask-reply .ask-card")?.textContent).toBe("Old");
+    expect(t.lines()[1]).toBe("Updated.Undone.");
+  });
+
+  it("fades the card after a save Undo, and still fades it after a reload", async () => {
+    const t = talk(server());
+    await t.say("go");
+    await t.clickEl(buttons(t)[0]);
+    const card = () => t.messages().querySelector(".ask-change .ask-card[data-id='5']");
+    expect(card()?.classList.contains("ask-faded")).toBe(true);
+    expect(t.net.calls.some((c) => c.url === "/ai/card/5")).toBe(false);
+    const again = load({ stored: t.stateNow() });
+    expect(
+      again
+        .panel()
+        .messages.querySelector(".ask-card[data-id='5']")
+        ?.classList.contains("ask-faded"),
+    ).toBe(true);
+  });
+
+  it("shows the server's message on a 409 and lets the owner try again", async () => {
+    const t = talk(
+      server({ "/links/delete": { status: 409, body: { message: "Changed since." } } }),
+    );
+    await t.say("go");
+    const [first] = buttons(t);
+    await t.clickEl(first);
+    expect(t.lines()[0]).toBe("Saved.UndoChanged since.");
+    expect((first as HTMLButtonElement).disabled).toBe(false);
+    expect(t.stateNow().entries[2].lines[0].undo.done).toBeUndefined();
+  });
+
+  it("says it didn't work on any other failure", async () => {
+    const t = talk(
+      server({ "/links/delete": { status: 500, body: { message: "secret detail" } } }),
+    );
+    await t.say("go");
+    await t.clickEl(buttons(t)[0]);
+    expect(t.lines()[0]).toBe("Saved.UndoThat didn't work. Try again.");
+  });
+});
+
+describe("a turn that failed", () => {
+  const failed = (over: Record<string, unknown> = {}) => ({
+    status: 200,
+    body: {
+      ok: false,
+      ai: "Fake",
+      message: "Fake didn't answer: the connection timed out.",
+      remember: "r",
+      cards: {},
+      changes: [],
+      ...over,
+    },
+  });
+
+  it("with no changes: says nothing was saved, offers Try again and Search, and keeps no history", async () => {
+    const t = talk(() => failed());
+    await t.say("miso butter");
+    const alert = t.messages().querySelector('[role="alert"]');
+    expect(alert?.querySelector("strong")?.textContent).toBe(
+      "Fake didn't answer: the connection timed out.",
+    );
+    expect(alert?.textContent).toContain(
+      "Nothing was saved or changed. Try again, or search your links the usual way.",
+    );
+    const labels = [...(alert?.querySelectorAll("button, a") ?? [])].map((n) => n.textContent);
+    expect(labels).toEqual(["Try again", 'Search for "miso butter"']);
+    expect(alert?.querySelector("a")?.getAttribute("href")).toBe("/search?q=miso%20butter");
+    expect(t.stateNow().history).toEqual([]);
+  });
+
+  it("Try again sends the same text once more, adds no second copy of the message, and clears the alert", async () => {
+    let n = 0;
+    const t = talk(() => (++n === 1 ? failed() : okAnswer()));
+    await t.say("miso butter");
+    await t.clickEl(
+      [...t.messages().querySelectorAll("button")].find((b) => b.textContent === "Try again"),
+    );
+    expect(t.net.calls.map((c) => c.body?.text)).toEqual(["miso butter", "miso butter"]);
+    expect(t.messages().querySelector('[role="alert"]')).toBeNull();
+    expect(t.messages().querySelectorAll(".ask-me")).toHaveLength(1);
+    expect(t.stateNow().history).toEqual([
+      { role: "user", text: "miso butter" },
+      { role: "assistant", text: "Done." },
+    ]);
+  });
+
+  it("with changes: lists them with their Undo, offers only Search, and keeps the pair", async () => {
+    const t = talk(() =>
+      failed({
+        message: "Fake stopped before it finished: it took too long.",
+        remember: "Fake stopped before it finished: it took too long.\n- link 5",
+        changes: [link("5", { created: true })],
+        cards: { "5": CARD("5") },
+      }),
+    );
+    await t.say("save it");
+    const alert = t.messages().querySelector('[role="alert"]');
+    expect(alert?.querySelector("strong")?.textContent).toBe(
+      "Fake stopped before it finished: it took too long.",
+    );
+    expect(alert?.textContent).toContain("It had already made these changes:");
+    expect(alert?.textContent).toContain(
+      "Check them, then try again or search your links the usual way.",
+    );
+    expect(alert?.textContent).not.toContain("Nothing was saved");
+    expect(alert?.querySelector(".ask-card[data-id='5']")).not.toBeNull();
+    expect(t.lines()).toEqual(["Saved.Undo"]);
+    const labels = [...(alert?.querySelectorAll("a.ask-button, button.ask-button") ?? [])].map(
+      (n) => n.textContent,
+    );
+    expect(labels).toEqual(['Search for "save it"']);
+    expect(t.stateNow().history).toEqual([
+      { role: "user", text: "save it" },
+      { role: "assistant", text: "Fake stopped before it finished: it took too long.\n- link 5" },
+    ]);
+    const undo = alert?.querySelector("button.ask-undo");
+    await t.clickEl(undo);
+    expect(t.net.calls.at(-1)?.url).toBe("/links/delete");
+  });
+
+  it("shows the server's message for another status, and a fallback when there is none", async () => {
+    const withMessage = talk(() => ({ status: 400, body: { message: "Send a JSON body." } }));
+    await withMessage.say("x");
+    expect(withMessage.messages().querySelector('[role="alert"]')?.textContent).toBe(
+      "Send a JSON body.",
+    );
+    const none = talk(() => ({ status: 500 }));
+    await none.say("x");
+    expect(none.messages().querySelector('[role="alert"]')?.textContent).toBe(
+      "Something went wrong. Try again.",
+    );
+    expect(none.stateNow().history).toEqual([]);
+    expect(none.stateNow().pending).toBeNull();
+    const send = none.document.querySelector(
+      '#ask-form button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+  });
+
+  it("falls back the same way when the request never gets an answer", async () => {
+    const t = load({
+      fetch: (async () => {
+        throw new Error("offline");
+      }) as unknown as typeof fetch,
+    });
+    (t.el("ask-text") as HTMLTextAreaElement).value = "hi";
+    t.el("ask-form").dispatchEvent(
+      new t.window.Event("submit", { bubbles: true, cancelable: true }),
+    );
+    await flush();
+    expect(t.panel().messages.querySelector('[role="alert"]')?.textContent).toBe(
+      "Something went wrong. Try again.",
+    );
+  });
+});
+
+describe("redrawing the conversation", () => {
+  it("draws the interrupted-turn notice once, clears pending and adds no history", () => {
+    const notice =
+      "This message was sent, but you left the page before the answer arrived. Anything it saved or changed is in your links.";
+    const p = load({ stored: saved({ pending: { text: "hello" } }) });
+    expect(p.panel().messages.textContent).toContain(notice);
+    expect(p.stateNow().pending).toBeNull();
+    expect(p.stateNow().history).toEqual([{ role: "user", text: "hello" }]);
+    expect(p.stateNow().entries.at(-1)).toEqual({ kind: "notice", text: notice });
+    const next = load({ stored: p.stateNow() });
+    expect(next.panel().messages.textContent?.split(notice)).toHaveLength(2);
+  });
+
+  it("draws nothing, and does not throw, for entries that are not known kinds with the right fields", () => {
+    const junk = [
+      null,
+      5,
+      "x",
+      [],
+      {},
+      { kind: "me" },
+      { kind: "me", text: 4 },
+      { kind: "reply" },
+      { kind: "reply", segments: "no" },
+      { kind: "reply", segments: [null, 3, { text: 1 }, { card: {} }, {}] },
+      {
+        kind: "changes",
+        lines: [null, { text: 1 }, { undo: { kind: "save", url: "/x", body: {} } }],
+      },
+      { kind: "changes", lines: "no" },
+      { kind: "alert" },
+      { kind: "alert", message: 5 },
+      { kind: "notice" },
+      { kind: "other", text: "t" },
+    ];
+    const p = load({ stored: saved({ entries: junk }) });
+    expect(p.panel().messages.textContent).toBe("");
+    expect(p.panel().messages.querySelector("button, a, article")).toBeNull();
+  });
+});
+
+describe("opening a saved link from the panel", () => {
+  it("records the opening of a card's link by its card's id", async () => {
+    const t = talk((call) =>
+      call.url === "/ai/chat" ? okAnswer({ segments: [{ card: CARD("7") }] }) : { status: 204 },
+    );
+    await t.say("show");
+    await t.clickEl(t.messages().querySelector("a[data-open]"));
+    expect(t.net.calls.at(-1)).toEqual({ url: "/links/opened", method: "POST", body: { id: "7" } });
   });
 });

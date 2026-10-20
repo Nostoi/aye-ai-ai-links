@@ -1,6 +1,7 @@
 import { escapeHtml } from "../core/escape-html.js";
 import { ASK_BUTTON, ASK_SCRIPT, type Ask, askPanel } from "./ask-panel.js";
 import { faviconHref, inlineLogo } from "./logo.js";
+import { openedScript } from "./open-link.js";
 import { askCss, themeCss } from "./theme.js";
 
 export { escapeHtml } from "../core/escape-html.js";
@@ -164,7 +165,7 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n` : ""}${undo ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}${ask ? `\n${ASK_SCRIPT}` : ""}
+${ask ? `${askPanel(ask)}\n` : ""}${undo ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}${ask ? `\n${ASK_SCRIPT}\n${openedScript("ask-messages", "/links/opened")}` : ""}
 </body>
 </html>
 `;

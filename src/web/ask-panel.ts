@@ -84,6 +84,8 @@ export const ASK_SCRIPT = `<script>
   };
   const state = load();
   let signedOut = false;
+  // Counts Start overs, so an answer that arrives after one is not drawn into the new conversation.
+  let epoch = 0;
   const save = () => {
     if (signedOut) return;
     try {
@@ -128,21 +130,401 @@ export const ASK_SCRIPT = `<script>
     matchMedia("(max-width: 900px)").addEventListener?.("change", behind);
   }
   document.getElementById("ask-restart").addEventListener("click", () => {
+    epoch += 1;
     state.entries = [];
     state.history = [];
     state.pending = null;
     messages.replaceChildren();
     save();
   });
+
+  const MAX_MESSAGES = 40;
+  const MAX_BYTES = 400 * 1024;
+  const MAX_REPLY = 8000;
+  const INTERRUPTED =
+    "This message was sent, but you left the page before the answer arrived. Anything it saved or changed is in your links.";
+  const FALLBACK = "Something went wrong. Try again.";
+  const UNDO_FAILED = "That didn't work. Try again.";
+  const EDIT_UNDO_TITLE = "Puts back the title, summary, why and tags.";
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const make = (tag, cls, content) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (content !== undefined) node.textContent = content;
+    return node;
+  };
+  const scroll = () => {
+    messages.scrollTop = messages.scrollHeight;
+  };
+  const post = async (url, body) => {
+    try {
+      const init =
+        body === undefined
+          ? { redirect: "manual" }
+          : {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+              redirect: "manual",
+            };
+      const res = await fetch(url, init);
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {}
+      return { status: res.status, body: json };
+    } catch {
+      return { status: 0, body: null };
+    }
+  };
+
+  // What the server gets of the conversation: the last 40 messages in whole pairs, each reply cut
+  // to 8,000 characters, and the oldest pairs dropped until the body is under 400 KiB.
+  const trimHistory = (history, said) => {
+    let list = history
+      .filter(
+        (m) =>
+          isObj(m) && (m.role === "user" || m.role === "assistant") && typeof m.text === "string",
+      )
+      .map((m) => ({
+        role: m.role,
+        text: m.role === "assistant" ? m.text.slice(0, MAX_REPLY) : m.text,
+      }));
+    if (list.length > MAX_MESSAGES) {
+      const extra = list.length - MAX_MESSAGES;
+      list = list.slice(extra + (extra % 2));
+    }
+    const bytes = () => new TextEncoder().encode(JSON.stringify({ history: list, text: said })).length;
+    while (list.length > 0 && bytes() > MAX_BYTES) list = list.slice(2);
+    return list;
+  };
+
+  // One change as the lines the owner reads. Most give one line; a profile change gives one per entry.
+  const HANDY = {
+    kept: "Kept handy.",
+    suggested: "Suggested for your Handy shelf (a guess).",
+    declined: "Taken off your Handy shelf.",
+  };
+  const changeLine = (c) => {
+    if (c.kind === "link") {
+      const id = c.linkId;
+      if (c.created) {
+        return [{ text: "Saved.", linkId: id, undo: { kind: "save", url: "/links/delete", body: { id } } }];
+      }
+      if (typeof c.editId === "string") {
+        const body = { id, editId: c.editId };
+        const undo = { kind: "edit", url: "/links/edit/undo", body, title: EDIT_UNDO_TITLE };
+        return [{ text: "Updated.", linkId: id, undo }];
+      }
+      return [{ text: "Updated.", linkId: id }];
+    }
+    if (c.kind === "handy") {
+      const { tool, previous } = c.change;
+      const text = HANDY[tool.status] ?? "Changed its place on your Handy shelf: " + tool.status + ".";
+      const body = { id: c.linkId, tool, previous };
+      return [{ text, linkId: c.linkId, undo: { kind: "handy", url: "/tools/undo", body } }];
+    }
+    if (c.kind === "tag") {
+      return [{ text: "Made " + c.name + " a " + c.tagKind + ".", link: { href: "/tags", label: "Tags" } }];
+    }
+    if (c.kind === "profile") {
+      const link = { href: "/profile", label: "Profile" };
+      const lines = [];
+      for (const [verb, entries] of [["Added", c.added], ["Changed", c.edited], ["Removed", c.removed]]) {
+        for (const e of entries) {
+          const what = e.entry === "focus" ? "what you're working on: " : "the note ";
+          const guess = e.source === "inferred" ? " (a guess)" : "";
+          lines.push({ text: verb + " " + what + "'" + e.text + "'" + guess, link });
+        }
+      }
+      return lines;
+    }
+    if (c.kind === "surfaced") {
+      const n = c.linkIds.length;
+      return [{ text: "Marked " + n + (n === 1 ? " link" : " links") + " as shown in today's picks." }];
+    }
+    return [];
+  };
+  // One line per link: its save's if it was saved, else the edit that has an Undo, else the first.
+  const changeLines = (changes) => {
+    const rank = (line) => (line.undo?.kind === "save" ? 2 : line.undo?.kind === "edit" ? 1 : 0);
+    const lines = [];
+    const byLink = new Map();
+    for (const change of changes) {
+      for (const line of changeLine(change)) {
+        if (change.kind !== "link") {
+          lines.push(line);
+          continue;
+        }
+        const at = byLink.get(change.linkId);
+        if (at === undefined) {
+          byLink.set(change.linkId, lines.length);
+          lines.push(line);
+        } else if (rank(line) > rank(lines[at])) {
+          lines[at] = line;
+        }
+      }
+    }
+    return lines;
+  };
+
+  const parseCard = (html) => {
+    const holder = make("div");
+    holder.innerHTML = html;
+    return holder;
+  };
+  const cardIdOf = (html) => parseCard(html).firstElementChild?.getAttribute("data-id") ?? null;
+  const forCards = (id, fn) => {
+    for (const card of [...messages.querySelectorAll(".ask-card")]) {
+      if (card.getAttribute("data-id") === id) fn(card);
+    }
+  };
+  const fadeCards = (id) => forCards(id, (card) => card.classList.add("ask-faded"));
+  // A link's card, newly read: the drawn ones and the stored HTML, wherever the turn kept it.
+  const swapCard = (id, html) => {
+    forCards(id, (card) => {
+      const fresh = parseCard(html).firstElementChild;
+      if (fresh) card.replaceWith(fresh);
+    });
+    for (const entry of state.entries) {
+      if (!isObj(entry)) continue;
+      if (Array.isArray(entry.segments)) {
+        entry.segments = entry.segments.map((s) =>
+          isObj(s) && typeof s.card === "string" && cardIdOf(s.card) === id ? { card: html } : s,
+        );
+      }
+      if (isObj(entry.cards) && typeof entry.cards[id] === "string") entry.cards[id] = html;
+    }
+  };
+  const fadeSaved = () => {
+    for (const entry of state.entries) {
+      if (!isObj(entry) || !Array.isArray(entry.lines)) continue;
+      for (const line of entry.lines) {
+        if (isObj(line) && isObj(line.undo) && line.undo.kind === "save" && line.undo.faded === true) {
+          fadeCards(line.undo.body.id);
+        }
+      }
+    }
+  };
+
+  const undoable = (u) =>
+    isObj(u) &&
+    ["save", "edit", "handy"].includes(u.kind) &&
+    typeof u.url === "string" &&
+    isObj(u.body) &&
+    typeof u.body.id === "string";
+  const OWN_ANSWERS = [400, 404, 409];
+  const runUndo = async (u, button, note) => {
+    button.disabled = true;
+    note.textContent = "";
+    const res = await post(u.url, u.body);
+    if (res.status < 200 || res.status > 299) {
+      const said = isObj(res.body) && typeof res.body.message === "string" ? res.body.message : null;
+      note.textContent = OWN_ANSWERS.includes(res.status) && said ? said : UNDO_FAILED;
+      button.disabled = false;
+      return;
+    }
+    u.done = true;
+    const done = make("span", "ask-undone", "Undone.");
+    button.replaceWith(done);
+    if (u.kind === "save") {
+      u.faded = true;
+      fadeCards(u.body.id);
+    }
+    save();
+    if (u.kind === "save") return;
+    const fresh = await post("/ai/card/" + encodeURIComponent(u.body.id));
+    if (fresh.status === 200 && isObj(fresh.body) && typeof fresh.body.card === "string") {
+      swapCard(u.body.id, fresh.body.card);
+      save();
+    }
+  };
+
+  const slot = (parent, html) => {
+    const holder = parseCard(html);
+    while (holder.firstChild) parent.appendChild(holder.firstChild);
+  };
+  const drawLines = (lines, cards) => {
+    const list = make("div", "ask-changes");
+    const carded = new Set();
+    for (const line of lines) {
+      if (!isObj(line) || typeof line.text !== "string") continue;
+      const block = make("div", "ask-change");
+      const id = line.linkId;
+      if (typeof id === "string" && isObj(cards) && typeof cards[id] === "string" && !carded.has(id)) {
+        carded.add(id);
+        slot(block, cards[id]);
+      }
+      const row = make("div", "ask-line");
+      row.appendChild(make("span", "", line.text));
+      const to = isObj(line.link) ? line.link : null;
+      if (to && typeof to.href === "string" && typeof to.label === "string" && to.href[0] === "/" && to.href[1] !== "/") {
+        const a = make("a", "", to.label);
+        a.setAttribute("href", to.href);
+        row.appendChild(a);
+      }
+      const u = line.undo;
+      if (undoable(u)) {
+        if (u.done === true) {
+          row.appendChild(make("span", "ask-undone", "Undone."));
+        } else {
+          const button = make("button", "ask-undo", "Undo");
+          button.setAttribute("type", "button");
+          if (typeof u.title === "string") button.setAttribute("title", u.title);
+          const note = make("span", "ask-note");
+          note.setAttribute("aria-live", "polite");
+          button.addEventListener("click", () => runUndo(u, button, note));
+          row.appendChild(button);
+          row.appendChild(note);
+        }
+      }
+      block.appendChild(row);
+      list.appendChild(block);
+    }
+    return list;
+  };
+
+  const searchLink = (said) => {
+    const a = make("a", "ask-button", 'Search for "' + said + '"');
+    a.setAttribute("href", "/search?q=" + encodeURIComponent(said));
+    return a;
+  };
+  const drawAlert = (entry) => {
+    const box = make("div", "ask-alert");
+    box.setAttribute("role", "alert");
+    const head = make("p", "ask-alert-head");
+    head.appendChild(make("strong", "", entry.message));
+    box.appendChild(head);
+    const said = typeof entry.text === "string" ? entry.text : null;
+    if (said === null) return box;
+    if (entry.changed !== true) {
+      box.appendChild(
+        make("p", "ask-alert-more", "Nothing was saved or changed. Try again, or search your links the usual way."),
+      );
+      const actions = make("div", "ask-actions");
+      const again = make("button", "ask-button", "Try again");
+      again.setAttribute("type", "button");
+      again.addEventListener("click", () => {
+        if (running) return;
+        state.entries = state.entries.filter((e) => e !== entry);
+        box.remove();
+        send(said, true);
+      });
+      actions.appendChild(again);
+      actions.appendChild(searchLink(said));
+      box.appendChild(actions);
+      return box;
+    }
+    box.appendChild(make("p", "ask-alert-more", "It had already made these changes:"));
+    box.appendChild(drawLines(Array.isArray(entry.lines) ? entry.lines : [], entry.cards));
+    box.appendChild(
+      make("p", "ask-alert-more", "Check them, then try again or search your links the usual way."),
+    );
+    const actions = make("div", "ask-actions");
+    actions.appendChild(searchLink(said));
+    box.appendChild(actions);
+    return box;
+  };
+
+  // Draws one stored entry; anything that isn't a known kind with the right field types draws nothing.
+  const drawEntry = (entry) => {
+    if (!isObj(entry)) return null;
+    if (entry.kind === "me" && typeof entry.text === "string") return make("p", "ask-me", entry.text);
+    if (entry.kind === "notice" && typeof entry.text === "string") {
+      return make("p", "ask-notice", entry.text);
+    }
+    if (entry.kind === "reply" && Array.isArray(entry.segments)) {
+      const reply = make("div", "ask-reply");
+      for (const s of entry.segments) {
+        if (!isObj(s)) continue;
+        if (typeof s.text === "string") reply.appendChild(make("p", "", s.text));
+        else if (typeof s.card === "string") slot(reply, s.card);
+      }
+      return reply;
+    }
+    if (entry.kind === "changes" && Array.isArray(entry.lines)) {
+      return drawLines(entry.lines, entry.cards);
+    }
+    if (entry.kind === "alert" && typeof entry.message === "string") return drawAlert(entry);
+    return null;
+  };
+  const add = (entry) => {
+    state.entries.push(entry);
+    const node = drawEntry(entry);
+    if (node) messages.appendChild(node);
+    scroll();
+    return node;
+  };
+
+  const sendButton = document.querySelector("#ask-form button[type=submit]");
+  let running = false;
+  const send = async (said, again) => {
+    if (said === "") return;
+    running = true;
+    sendButton.disabled = true;
+    const mine = epoch;
+    if (!again) add({ kind: "me", text: said });
+    const thinking = make("p", "ask-notice", "Thinking…");
+    thinking.setAttribute("role", "status");
+    messages.appendChild(thinking);
+    scroll();
+    state.pending = { text: said };
+    save();
+    const res = await post("/ai/chat", { history: trimHistory(state.history, said), text: said });
+    running = false;
+    sendButton.disabled = false;
+    thinking.remove();
+    if (mine !== epoch) return;
+    state.pending = null;
+    const answer = res.body;
+    if (res.status !== 200 || !isObj(answer) || typeof answer.ok !== "boolean") {
+      const told = isObj(answer) && typeof answer.message === "string" ? answer.message : FALLBACK;
+      add({ kind: "alert", message: told });
+      save();
+      return;
+    }
+    const changes = Array.isArray(answer.changes) ? answer.changes : [];
+    const lines = changeLines(changes);
+    const cards = isObj(answer.cards) ? answer.cards : {};
+    if (answer.ok) {
+      add({ kind: "reply", segments: Array.isArray(answer.segments) ? answer.segments : [] });
+      if (lines.length > 0) add({ kind: "changes", lines, cards });
+    } else {
+      const message = typeof answer.message === "string" ? answer.message : FALLBACK;
+      add({ kind: "alert", message, text: said, changed: changes.length > 0, lines, cards });
+    }
+    if (answer.ok || changes.length > 0) {
+      state.history.push({ role: "user", text: said });
+      state.history.push({ role: "assistant", text: String(answer.remember ?? "").slice(0, MAX_REPLY) });
+    }
+    save();
+  };
+
   document.getElementById("ask-form").addEventListener("submit", (event) => {
     event.preventDefault();
+    const said = text.value.trim();
+    if (said === "" || running) return;
+    text.value = "";
+    send(said, false);
   });
   document.getElementById("sign-out").addEventListener("click", () => {
     signedOut = true;
     forget();
   });
 
-  window.askPanel = { load, save, state, messages };
+  window.askPanel = { load, save, state, messages, trimHistory, changeLines };
+  if (state.pending !== null) {
+    const sent = typeof state.pending.text === "string";
+    state.pending = null;
+    if (sent) state.entries.push({ kind: "notice", text: INTERRUPTED });
+    save();
+  }
+  for (const entry of state.entries) {
+    const node = drawEntry(entry);
+    if (node) messages.appendChild(node);
+  }
+  fadeSaved();
+  scroll();
   if (state.open) show(true);
 })();
 </script>`;

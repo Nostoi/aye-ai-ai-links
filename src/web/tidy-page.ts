@@ -4,10 +4,12 @@ import { TIDY_SESSION, type TidyLink } from "../core/tidy-up.js";
 import type { FocusEntry, Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 import { cardLine } from "./card-line.js";
+import { PUT_AWAY_UNDO, STALE_UNDO } from "./done-link.js";
 import { monthName, whyText } from "./link-rows.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
+import { CARD_FETCH } from "./tell-why.js";
 
 export type TidyPageInput = {
   queue: TidyLink[];
@@ -43,9 +45,9 @@ function fitFact(fit: FocusEntry | null, hasFocus: boolean): string {
 }
 
 const CHOICES = `<div class="tidy-choices">
-<button type="button" data-act="keep"><b>Keep</b><span>Stays in your lists, as it is now.</span></button>
-<button type="button" class="safe" data-act="put-away"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em></button>
-<button type="button" data-act="stale"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays in your lists, as it is now.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
+<button type="button" data-act="stale" aria-keyshortcuts="3"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>`;
 
 function step({ link, fit }: TidyLink, at: number, input: TidyPageInput): string {
@@ -85,16 +87,96 @@ function finish(count: number): string {
 </section>`;
 }
 
+/** What each choice posts, and the bar its Undo is offered on (Keep has none). */
+const ACTS = {
+  keep: { route: "/tidy/keep", undo: null },
+  "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO },
+  stale: { route: "/home/archive", undo: STALE_UNDO },
+};
+const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
+
+/**
+ * The session's one script, after `CARD_FETCH` and the Undo bar's `showUndo`. The whole session
+ * is one card for `whileBusy`, so a choice, an Undo and a second click each wait for the one
+ * before. A choice posts its route; only an answer that is OK hides the link and shows the first
+ * link not yet decided, or the finish screen, and moves focus to its heading. Put it away and
+ * It's stale answer the `StateChange` that their Undo posts back to `/home/undo-state` exactly as
+ * received, then shows that link again as undecided. A refusal is shown in `#tidy-error`.
+ * Keys 1, 2 and 3 press the shown link's choices, except in a field, with a modifier, or on the
+ * finish screen.
+ */
+const SESSION_SCRIPT = `<script>
+${CARD_FETCH}
+{
+const tidyRoot = document.getElementById("tidy");
+const tidyAlert = document.getElementById("tidy-error");
+const tidyActs = ${JSON.stringify(ACTS)};
+const tidyKeys = ${JSON.stringify(KEYS)};
+const steps = [...tidyRoot.querySelectorAll("section[data-id]")];
+const finished = tidyRoot.querySelector(".tidy-done");
+const decided = new Set();
+const shownStep = () => steps.find((s) => !s.hidden);
+const showStep = (step) => {
+  for (const s of steps) s.hidden = s !== step;
+  finished.hidden = step !== null;
+  const heading = step ? step.querySelector(".tidy-title") : finished.querySelector("h2");
+  heading.setAttribute("tabindex", "-1");
+  heading.focus();
+};
+const showNext = () => showStep(steps.find((s) => !decided.has(s)) || null);
+const choose = (step, act) =>
+  whileBusy(tidyRoot, async () => {
+    const id = step.dataset.id;
+    const { route, undo } = tidyActs[act];
+    tidyAlert.textContent = "";
+    const res = await post(route, { id });
+    const change = undo && res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (undo ? !change || !change.before || !change.after : !res || res.status !== 204) {
+      tidyAlert.textContent = await failure(res);
+      return;
+    }
+    decided.add(step);
+    showNext();
+    if (!undo) return;
+    showUndo(undo.text, () =>
+      whileBusy(tidyRoot, async () => {
+        tidyAlert.textContent = "";
+        const back = await post("/home/undo-state", { id, change });
+        if (!back || back.status !== 204) {
+          tidyAlert.textContent = await failure(back);
+          return;
+        }
+        decided.delete(step);
+        showStep(step);
+      }), undo.title);
+  });
+tidyRoot.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-act]");
+  if (button) choose(button.closest("section[data-id]"), button.dataset.act);
+});
+document.addEventListener("keydown", (event) => {
+  const act = tidyKeys[event.key];
+  const step = shownStep();
+  const active = event.target;
+  if (!act || !step || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+  if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
+  choose(step, act);
+});
+}
+</script>`;
+
 /**
  * The Tidy up page: a session of old links, one shown at a time. Every link is its own section,
  * all but the first hidden, and the finish screen follows the last (alone, for an empty queue).
- * The session's script (#198, Task 3.3) works the choices; opening a link here is recorded.
+ * `SESSION_SCRIPT` works the choices; opening a link here is recorded.
  */
 export function tidyPage(input: TidyPageInput): string {
   const body = `<main id="tidy">
+<p id="tidy-error" role="alert"></p>
 ${input.queue.map((t, i) => step(t, i, input)).join("\n")}
 ${finish(input.queue.length)}
 </main>
-${openedScript("tidy", "/links/opened")}`;
-  return page("Tidy up · Aye-AI-AI Links", body, { home: true });
+${openedScript("tidy", "/links/opened")}
+${SESSION_SCRIPT}`;
+  return page("Tidy up · Aye-AI-AI Links", body, { home: true, undo: true });
 }

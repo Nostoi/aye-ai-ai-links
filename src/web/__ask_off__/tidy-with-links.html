@@ -404,13 +404,16 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .tidy-choices span{font-size:14px;color:var(--soft)}
 .tidy-choices button.safe{border-color:transparent;background:color-mix(in srgb,var(--ink) 6%,var(--surface))}
 .tidy-choices em{position:absolute;top:15px;right:18px;font-size:13px;font-style:normal;color:var(--soft)}
+.tidy-choices button{padding-right:56px}
+.tidy-choices .key{position:absolute;bottom:12px;right:18px;min-width:22px;padding:0 6px;border:1.5px solid var(--line);border-radius:6px;background:none;font-size:12px;line-height:19px;text-align:center}
+#tidy-error{max-width:580px;margin:16px auto 0}
 .tidy-choices button:hover{border-color:var(--field)}
 .tidy-choices button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 .tidy-done{max-width:580px;margin:48px auto}
 .tidy-done h2{font-size:26px;margin:0 0 10px}
 @media (max-width:600px){.tile{--icon:56px}.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}.result>.tile{border-radius:18px 18px 0 0}.handy-row{grid-template-columns:1fr;gap:8px}.handy-tile{grid-template-columns:44px minmax(0,1fr) 44px;column-gap:12px;padding:10px 4px 10px 12px}.handy-image{width:44px;height:44px;border-radius:10px;--icon:32px;--initials:17px}.home-spaces{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.home-space{display:flex;align-items:center;min-height:56px;padding:0 14px}.home-space-recent{display:none}.worth-feature{grid-template-columns:minmax(0,1fr) 64px;grid-template-areas:"reason pic" "title pic" "why why" "line line" "open menu" "quiet quiet";column-gap:12px;padding:16px}.worth-feature h3{font-size:20px}.feature-pic{width:64px;height:64px;border-radius:12px;--icon:44px;--initials:24px}.worth-feature>.card-menu{align-self:center;margin:0 -8px 0 0}.feature-open a.button{width:100%;justify-content:center}.feature-quiet{justify-content:space-around}.worth-row{grid-template-columns:minmax(0,1fr) 44px;padding-left:16px}.worth-row>.also-pic{display:none}.edit-link{inset:96px 0 0;width:100%;max-width:100%;max-height:none;height:auto;margin:0;padding:0 16px 24px;border-radius:22px 22px 0 0}.edit-grabber{display:block;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}.edit-head{display:grid;grid-template-columns:1fr auto 1fr;margin:0 0 8px}.edit-head h2{font-size:17px;text-align:center}.edit-top{display:inline-flex;align-items:center;justify-self:start;min-height:44px;padding:0;border:0;background:none}.edit-top-save{justify-self:end;font-weight:700}.edit-close,.edit-hint,.edit-foot{display:none}.edit-hint-phone{display:block;margin:0;font-size:13px;color:var(--soft);text-align:center}.edit-title{height:48px}.edit-picture-row{flex-direction:column;align-items:stretch}.edit-preview{width:100%;height:196px}.edit-choose{min-height:48px;width:100%}.link-row{gap:12px;padding:12px 52px 12px 12px}.row-pic{flex-basis:40px;width:40px;height:40px}.row-why{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.link-row .card-menu{right:4px}.page-main .orders{display:none}.order-select{display:block}.page-actions{display:grid;grid-template-columns:1fr auto;gap:4px 12px;width:100%}.page-actions .search-instead{grid-column:1/-1;justify-content:center;min-height:48px}}
 @media (max-width:600px){.menu-page{display:none}.account-list .menu-phone-only{display:flex}.label-wide,.icon-wide{display:none}.label-phone{display:inline}.icon-phone{display:inline-flex}}
-@media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}}
+@media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}.tidy-choices .key{display:none}.tidy-choices button{padding-right:20px}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
@@ -418,6 +421,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <header class="column site"><a class="brand" href="/"><svg role="img" aria-label="Aye-AI-AI Links" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 36"><rect x="3.5" y="5.5" width="33" height="25" rx="12.5" fill="#fff" stroke="#2F8F83" stroke-width="5"/><rect x="27.5" y="5.5" width="33" height="25" rx="12.5" fill="#fff" stroke="#2F8F83" stroke-width="5"/><circle cx="19" cy="15.5" r="5" fill="#26262B"/><circle cx="47" cy="15.5" r="5" fill="#26262B"/></svg><span>Aye-AI-AI Links</span></a></header>
 <div class="column">
 <main id="tidy">
+<p id="tidy-error" role="alert"></p>
 <section class="tidy-step" data-id="1">
 <div class="tidy-head"><h1>Tidy up</h1><span class="steps" aria-hidden="true"><b class="now"></b><b></b></span><span class="visually-hidden">Link 1 of 2</span><a class="leave" href="/">Stop here</a></div>
 <article class="tidy space-clay">
@@ -435,9 +439,9 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </ul>
 <p><a class="tidy-open" href="https://example.com/1" target="_blank" rel="noopener noreferrer" data-open>Open it to check</a></p>
 <div class="tidy-choices">
-<button type="button" data-act="keep"><b>Keep</b><span>Stays in your lists, as it is now.</span></button>
-<button type="button" class="safe" data-act="put-away"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em></button>
-<button type="button" data-act="stale"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays in your lists, as it is now.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
+<button type="button" data-act="stale" aria-keyshortcuts="3"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>
 </article>
 </section>
@@ -458,9 +462,9 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </ul>
 <p><a class="tidy-open" href="https://example.com/2" target="_blank" rel="noopener noreferrer" data-open>Open it to check</a></p>
 <div class="tidy-choices">
-<button type="button" data-act="keep"><b>Keep</b><span>Stays in your lists, as it is now.</span></button>
-<button type="button" class="safe" data-act="put-away"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em></button>
-<button type="button" data-act="stale"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays in your lists, as it is now.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
+<button type="button" data-act="stale" aria-keyshortcuts="3"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>
 </article>
 </section>
@@ -491,7 +495,183 @@ if (openRoot) {
 }
 }
 </script>
+<script>
+const post = (url, body, extra) =>
+  fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    redirect: "manual",
+    ...extra,
+  }).catch(() => null);
+const failure = async (res) => {
+  const data = res && [400, 404, 409].includes(res.status) ? await res.json().catch(() => null) : null;
+  return data && typeof data.message === "string"
+    ? data.message
+    : "That did not work. Reload the page and try again.";
+};
+const cardBusy = new WeakSet();
+const whileBusy = async (card, run) => {
+  if (cardBusy.has(card)) return;
+  cardBusy.add(card);
+  try {
+    return await run();
+  } finally {
+    cardBusy.delete(card);
+  }
+};
+{
+const tidyRoot = document.getElementById("tidy");
+const tidyAlert = document.getElementById("tidy-error");
+const tidyActs = {"keep":{"route":"/tidy/keep","undo":null},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"stale":{"route":"/home/archive","undo":{"title":"Let go.","text":"You won't see it again unless you search for it."}}};
+const tidyKeys = {"1":"keep","2":"put-away","3":"stale"};
+const steps = [...tidyRoot.querySelectorAll("section[data-id]")];
+const finished = tidyRoot.querySelector(".tidy-done");
+const decided = new Set();
+const shownStep = () => steps.find((s) => !s.hidden);
+const showStep = (step) => {
+  for (const s of steps) s.hidden = s !== step;
+  finished.hidden = step !== null;
+  const heading = step ? step.querySelector(".tidy-title") : finished.querySelector("h2");
+  heading.setAttribute("tabindex", "-1");
+  heading.focus();
+};
+const showNext = () => showStep(steps.find((s) => !decided.has(s)) || null);
+const choose = (step, act) =>
+  whileBusy(tidyRoot, async () => {
+    const id = step.dataset.id;
+    const { route, undo } = tidyActs[act];
+    tidyAlert.textContent = "";
+    const res = await post(route, { id });
+    const change = undo && res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (undo ? !change || !change.before || !change.after : !res || res.status !== 204) {
+      tidyAlert.textContent = await failure(res);
+      return;
+    }
+    decided.add(step);
+    showNext();
+    if (!undo) return;
+    showUndo(undo.text, () =>
+      whileBusy(tidyRoot, async () => {
+        tidyAlert.textContent = "";
+        const back = await post("/home/undo-state", { id, change });
+        if (!back || back.status !== 204) {
+          tidyAlert.textContent = await failure(back);
+          return;
+        }
+        decided.delete(step);
+        showStep(step);
+      }), undo.title);
+  });
+tidyRoot.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-act]");
+  if (button) choose(button.closest("section[data-id]"), button.dataset.act);
+});
+document.addEventListener("keydown", (event) => {
+  const act = tidyKeys[event.key];
+  const step = shownStep();
+  const active = event.target;
+  if (!act || !step || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+  if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
+  choose(step, act);
+});
+}
+</script>
 </div>
+<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>
+<script>
+const showUndo = (() => {
+  const bar = document.getElementById("undo-bar");
+  const text = bar.querySelector("span");
+  const button = bar.querySelector("button");
+  let current = null;
+  let focused = false;
+  let hovered = false;
+  let returnTo = null;
+  const arm = (action) => {
+    clearTimeout(action.timer);
+    if (!focused && !hovered) action.timer = setTimeout(() => close(action), 10000);
+  };
+  const pause = () => {
+    if (current) clearTimeout(current.timer);
+  };
+  const resume = () => {
+    if (current && !current.running) arm(current);
+  };
+  // `held`: the bar had focus when Undo was clicked; disabling the button may have dropped it
+  // to the body since.
+  const close = (action, held = false) => {
+    if (current !== action) return;
+    clearTimeout(action.timer);
+    clearTimeout(action.ceiling);
+    current = null;
+    const now = document.activeElement;
+    const hadFocus = bar.contains(now) || (held && (!now || now === document.body));
+    bar.hidden = true;
+    focused = false;
+    hovered = false;
+    if (hadFocus && returnTo && returnTo.isConnected) returnTo.focus();
+    returnTo = null;
+  };
+  bar.addEventListener("focusin", () => {
+    focused = true;
+    pause();
+  });
+  bar.addEventListener("focusout", (event) => {
+    if (bar.contains(event.relatedTarget)) return;
+    focused = false;
+    resume();
+  });
+  bar.addEventListener("mouseenter", () => {
+    hovered = true;
+    pause();
+  });
+  bar.addEventListener("mouseleave", () => {
+    hovered = false;
+    resume();
+  });
+  button.addEventListener("click", async () => {
+    const action = current;
+    if (!action || action.running) return;
+    action.running = true;
+    clearTimeout(action.timer);
+    clearTimeout(action.ceiling);
+    const held = bar.contains(document.activeElement);
+    button.disabled = true;
+    try {
+      await action.undo();
+    } finally {
+      if (current === action) button.disabled = false;
+      close(action, held);
+    }
+  });
+  let offers = 0;
+  const show = (message, undo, title) => {
+    offers++;
+    if (current) {
+      clearTimeout(current.timer);
+      clearTimeout(current.ceiling);
+    }
+    if (!current || !bar.contains(document.activeElement)) returnTo = document.activeElement;
+    const action = { undo, running: false };
+    action.ceiling = setTimeout(() => close(action), 45000);
+    current = action;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
+    button.disabled = false;
+    bar.hidden = false;
+    arm(action);
+    button.focus();
+  };
+  show.offers = () => offers;
+  return show;
+})();
+</script>
 
 </body>
 </html>

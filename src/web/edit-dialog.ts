@@ -53,6 +53,8 @@ export const SHRINK_SIDE = 1600;
  * appends. A block for the page's one script after `CARD_FETCH` (it needs `post`, `failure` and
  * `showUndo`).
  * - The card's menu opens the dialog, filled from the card's data attributes (`editData`).
+ * - A Save or Undo shows its answer in the card's `[data-card-title]` and `tile()`'s `[data-pic]`
+ *   box, whatever their classes; a card without one of them skips it.
  * - A picked, pasted or dropped picture is sent as chosen when it is one of the four types, at most
  *   2 MiB and at most SHRINK_SIDE px on its longest side. Otherwise it is re-encoded as WebP (or
  *   whatever kept type the browser gives) at most SHRINK_SIDE px, stepping down until it fits. The
@@ -216,11 +218,12 @@ const showCard = (target, answer) => {
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
   const label = answer.shown;
-  const heading = target.querySelector(".result-body h2, .card-body h3");
-  (heading.querySelector("a") || heading).textContent = label;
+  const heading = target.querySelector("[data-card-title]");
+  if (heading) (heading.querySelector("a") || heading).textContent = label;
   const named = target.querySelector(".card-menu summary .visually-hidden");
   if (named) named.textContent = "More for " + label;
-  const tile = target.querySelector(".tile, .card-image");
+  const tile = target.querySelector("[data-pic]");
+  if (!tile) return;
   const lazyImage = (cls) => {
     const img = document.createElement("img");
     img.className = cls;
@@ -244,6 +247,7 @@ const showCard = (target, answer) => {
       next.append(initials);
     }
   }
+  next.setAttribute("data-pic", "");
   tile.replaceWith(next);
 };
 const giveFocusBack = () => {

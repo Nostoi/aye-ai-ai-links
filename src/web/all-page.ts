@@ -120,9 +120,9 @@ function card(
   const picture = images.get(link.id);
   return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
 ${tile(link, picture, "card-image")}
-${editMenu(link, copies.get(link.id), handy.get(link.id))}
+${editMenu(link, { copy: copies.get(link.id), handy: handy.get(link.id) })}
 <div class="card-body">
-<h3>${linkTitle(link)}</h3>
+<h3 data-card-title>${linkTitle(link)}</h3>
 ${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}</div>
 </li>`;
 }

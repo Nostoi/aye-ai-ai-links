@@ -462,9 +462,13 @@ describe("the search page's cards", () => {
       now: NOW,
       images: new Map([["7", { version: "abc123", fit: "cover" }]]),
     });
-    expect(html).toContain('<img class="tile" src="/images/7?v=abc123" alt="" loading="lazy">');
+    expect(html).toContain(
+      '<img class="tile" data-pic src="/images/7?v=abc123" alt="" loading="lazy">',
+    );
     expect(
-      html.match(/<div class="tile initials-box" aria-hidden="true"><span class="pic-initials">/g),
+      html.match(
+        /<div class="tile initials-box" data-pic aria-hidden="true"><span class="pic-initials">/g,
+      ),
     ).toHaveLength(1);
     expect(html).not.toContain("cdn.example");
     expect(outsideRefs(html)).toEqual([]);
@@ -536,24 +540,24 @@ describe("tile()", () => {
     [
       "cover",
       { version: "v1", fit: "cover" },
-      '<img class="card-image" src="/images/7?v=v1" alt="" loading="lazy">',
+      '<img class="card-image" data-pic src="/images/7?v=v1" alt="" loading="lazy">',
     ],
     [
       "contain",
       { version: "v1", fit: "contain" },
-      '<div class="card-image icon-box" aria-hidden="true"><img class="site-icon" src="/images/7?v=v1" alt="" loading="lazy"></div>',
+      '<div class="card-image icon-box" data-pic aria-hidden="true"><img class="site-icon" src="/images/7?v=v1" alt="" loading="lazy"></div>',
     ],
     [
       "none",
       undefined,
-      '<div class="card-image initials-box" aria-hidden="true"><span class="pic-initials">PP</span></div>',
+      '<div class="card-image initials-box" data-pic aria-hidden="true"><span class="pic-initials">PP</span></div>',
     ],
   ] as const)("renders %s", (_, picture, html) => {
     expect(tile(l, picture, "card-image")).toBe(html);
   });
   it("leaves out the span when there are no initials, and escapes them", () => {
     expect(tile(link({ id: "8", title: "!!", url: "not a url" }), undefined)).toBe(
-      '<div class="tile initials-box" aria-hidden="true"></div>',
+      '<div class="tile initials-box" data-pic aria-hidden="true"></div>',
     );
     expect(tile(link({ id: "9", title: "<b>x</b> y" }), undefined)).not.toContain("<b>");
   });

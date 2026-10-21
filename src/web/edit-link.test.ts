@@ -5,15 +5,18 @@ import { png } from "../core/image-test-kit.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { cardMenu, DIVIDER } from "./card-menu.js";
-import { deleteLinkItem } from "./delete-link.js";
+import { deleteLinkItem, deleteLinkScript } from "./delete-link.js";
 import { DONE_ITEM } from "./done-link.js";
-import { EDIT_ITEM, editDialog, editMenu } from "./edit-link.js";
+import { EDIT_ITEM, editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { NOT_HANDY } from "./keep-handy.js";
+import { linkTitle } from "./open-link.js";
 import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
+import { page } from "./page.js";
 import { searchPage, tile } from "./pages.js";
 import { spacePage } from "./space-page.js";
+import { CARD_FETCH } from "./tell-why.js";
 
 const NOW = new Date("2026-10-17T12:00:00Z");
 const HOSTILE = `<img src=x onerror=alert(1)>`;
@@ -119,7 +122,7 @@ describe("the card menu and the card data", () => {
       "—",
       "BUTTON delete-link Delete link",
     ]);
-    const withCopy = editMenu(link("7"), { madeAt: new Date(0) });
+    const withCopy = editMenu(link("7"), { copy: { madeAt: new Date(0) } });
     expect(labels(withCopy)).toEqual([
       "BUTTON archive I'm done with it",
       "BUTTON keep Keep handy",
@@ -140,7 +143,7 @@ describe("the card menu and the card data", () => {
   });
 
   it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
-    expect(labels(editMenu(link("7"), undefined, KEPT)).slice(0, 3)).toEqual([
+    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 3)).toEqual([
       "BUTTON archive I'm done with it",
       "BUTTON keep Keep handy (hidden)",
       "BUTTON not-handy Not handy anymore",
@@ -149,7 +152,9 @@ describe("the card menu and the card data", () => {
 
   it("drops the first group for a link you're done with: it can't be done again or kept", () => {
     expect(
-      labels(editMenu(link("7", { state: "archived" }), { madeAt: new Date(0) }, KEPT)),
+      labels(
+        editMenu(link("7", { state: "archived" }), { copy: { madeAt: new Date(0) }, handy: KEPT }),
+      ),
     ).toEqual([
       "BUTTON edit Edit title and picture…",
       "A read-copy Read saved copy",
@@ -1118,4 +1123,56 @@ it("over an icon, the owner's picture offers Use the site's icon, and previews t
   expect(p.$(".edit-preview").classList.contains("fit-contain")).toBe(true);
   expect(p.$(".edit-preview img")?.getAttribute("class")).toBe("site-icon");
   expect(p.$(".edit-preview img")?.getAttribute("src")).toBe(`/images/1?page=1&v=${PAGE}`);
+});
+
+describe("a card the dialog knows only by its markers", () => {
+  /** A card with none of the known layout classes: its title is `data-card-title`, its picture `tile()`'s. */
+  const markedPage = (picture: boolean) =>
+    page(
+      "Cards",
+      `<p id="cards-error" role="alert"></p>
+<ul id="cards"><li data-id="1"${editData(link("1"), SHAPES.cover.picture, undefined)}>
+${picture ? `<div class="frame">${tile(link("1"), SHAPES.cover.picture, "odd-pic")}</div>\n` : ""}<p><strong data-card-title>${linkTitle(link("1"))}</strong></p>
+${editMenu(link("1"))}
+</li></ul>
+${editDialog()}
+<script>
+${CARD_FETCH}
+${editLinkScript("cards", "cards-error")}
+${deleteLinkScript("cards", "cards-error")}
+</script>`,
+      { menu: true, undo: true },
+    );
+  const save = async (p: ReturnType<typeof runPage>, title: string) => {
+    p.dispatch(p.$('[data-id="1"] button[data-act=edit]'), "click");
+    (p.$("#edit-title") as HTMLInputElement).value = title;
+    p.dispatch(p.$("#edit-link form"), "submit");
+    await p.settle();
+  };
+
+  it("shows each Save's title and picture, the second Save included", async () => {
+    const replies = [SHAPES.none.answer, SHAPES.contain.answer];
+    const p = runPage(markedPage(true), () => ({
+      status: 200,
+      body: answer({ ...replies.shift(), title: "First", shown: "First" }),
+    }));
+    stubDialog(p);
+    await save(p, "First");
+    expect(p.$("[data-card-title]").textContent).toBe("First");
+    expect(shape(p.$(".frame > *"))).toEqual(shape(serverBox(SHAPES.none.picture, "odd-pic")));
+    await save(p, "Second");
+    expect(shape(p.$(".frame > *"))).toEqual(shape(serverBox(SHAPES.contain.picture, "odd-pic")));
+  });
+
+  it("shows the title on a card with no picture", async () => {
+    const p = runPage(markedPage(false), () => ({
+      status: 200,
+      body: answer({ title: "Renamed", shown: "Renamed" }),
+    }));
+    stubDialog(p);
+    await save(p, "Renamed");
+    expect(p.$("[data-card-title] a").textContent).toBe("Renamed");
+    expect(p.$('[data-id="1"]').getAttribute("data-title")).toBe("Renamed");
+    expect(p.$("#cards-error").textContent).toBe("");
+  });
 });

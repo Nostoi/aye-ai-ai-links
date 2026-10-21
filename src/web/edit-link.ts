@@ -37,7 +37,10 @@ export const readCopyItem = (linkId: string): MenuItem => ({
  * rendered and the script swaps them. A link you're done with gets neither. Then Edit, the saved
  * copy's rows when `copy` is there, and Delete link last.
  */
-export const editMenu = (link: Link, copy?: CopyInfo, handy?: HandyView | null) => {
+export const editMenu = (
+  link: Link,
+  { copy, handy }: { copy?: CopyInfo | undefined; handy?: HandyView | null | undefined } = {},
+) => {
   const kept = handy?.status === "kept";
   const first =
     link.state === "active"

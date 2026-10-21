@@ -115,7 +115,7 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .not-it p{margin:0 0 4px}
 .worth{margin:64px 0 0}
 .also-today{margin:28px 0 12px;font-size:17px;color:var(--soft)}
-div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today{display:none}
+div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-cards:not(:has(>.worth-feature:not([hidden])))>.also-today{display:none}
 .worth-rows{display:flex;flex-direction:column;gap:10px}
 .worth-feature,.worth-row{position:relative;min-width:0;background:var(--surface);overflow-wrap:anywhere}
 .worth-feature:has(.card-menu[open]),.worth-row:has(.card-menu[open]){z-index:5}
@@ -733,6 +733,7 @@ const homeActs = {
     const res = await post("/home/snooze", { id });
     const data = await answered(res, "until");
     if (!data) return failure(res);
+    if (!card.isConnected) return;
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
     showUndo("Hidden for two weeks.", async () =>
@@ -743,8 +744,9 @@ const homeActs = {
     const res = await post("/tools/keep", { id });
     const moved = await answered(res, "tool");
     if (!moved) return failure(res);
-    const putBack = takeOut(worthCards, card, false);
+    const putBack = card.isConnected ? takeOut(worthCards, card, false) : null;
     await refreshShelf();
+    if (!putBack) return;
     showUndo("Kept on your Handy shelf.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         putBack();
@@ -758,6 +760,7 @@ const homeActs = {
     if (!moved) return failure(res);
     showHandy(card, false);
     await refreshShelf();
+    if (!card.isConnected) return;
     showUndo("Not handy anymore.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         showHandy(card, true);
@@ -780,9 +783,12 @@ if (worthCards) {
     if (homeBusy.has(card)) return;
     homeBusy.add(card);
     homeError.textContent = "";
-    const refused = await act(card, card.dataset.id);
-    homeBusy.delete(card);
-    if (refused) homeError.textContent = refused;
+    try {
+      const refused = await act(card, card.dataset.id);
+      if (refused) homeError.textContent = refused;
+    } finally {
+      homeBusy.delete(card);
+    }
   });
 }
 addEventListener("pageshow", (event) => {

@@ -584,6 +584,31 @@ describe("the home page's script", () => {
     expect(p.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
   });
 
+  it("keeps a card deleted while its Not now was out, and frees it again after Undo", async () => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    pick(p, id, "delete-link");
+    await p.settle();
+    expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
+    answer(null);
+    await p.settle();
+    expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
+    expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(hidden(p, id)).toBe(false);
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/snooze", "/links/delete", "/links/restore", "/home/snooze"]);
+    expect(hidden(p, id)).toBe(true);
+  });
+
   it("I'm done with it on the featured card archives once, hides it, and Undo puts it back", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;

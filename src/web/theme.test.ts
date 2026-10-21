@@ -758,21 +758,26 @@ describe("Home's Worth a look cards (#195)", () => {
   });
 
   it.each([
-    ["every row shown", [false, false], true],
-    ["one row taken out", [true, false], true],
-    ["every row taken out", [true, true], false],
-  ])("shows the Also today heading only over a shown row, with %s", (_, hidden, shows) => {
-    const rows = hidden
-      .map((h) => `<article class="worth-row"${h ? " hidden" : ""}></article>`)
-      .join("");
-    for (const w of ["desktop", "phone"] as const) {
-      const heading = el(
-        `<div id="worth-cards"><h3 class="also-today">Also today</h3><div class="worth-rows">${rows}</div></div>`,
-        "h3",
-      );
-      expect(computed(heading, "display", w) !== "none", w).toBe(shows);
-    }
-  });
+    ["every card shown", false, [false, false], true],
+    ["one row taken out", false, [true, false], true],
+    ["every row taken out", false, [true, true], false],
+    ["the featured card taken out", true, [false, false], false],
+  ])(
+    "shows the Also today heading only between a shown featured card and a shown row, with %s",
+    (_, featureHidden, hidden, shows) => {
+      const feature = `<article class="worth-card worth-feature"${featureHidden ? " hidden" : ""}></article>`;
+      const rows = hidden
+        .map((h) => `<article class="worth-row"${h ? " hidden" : ""}></article>`)
+        .join("");
+      for (const w of ["desktop", "phone"] as const) {
+        const heading = el(
+          `<div id="worth-cards">${feature}<h3 class="also-today">Also today</h3><div class="worth-rows">${rows}</div></div>`,
+          "h3",
+        );
+        expect(computed(heading, "display", w) !== "none", w).toBe(shows);
+      }
+    },
+  );
 });
 
 describe("the edit dialog's Delete", () => {

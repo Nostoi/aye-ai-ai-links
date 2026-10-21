@@ -275,6 +275,102 @@ describe("a space page", () => {
   });
 });
 
+describe("a space's sort orders", () => {
+  const tagIn = (href: string) => new URL(href, ORIGIN);
+
+  it("names the order in an address only when it is not newest, with the tag and cursor", () => {
+    const params = (href: string) => [...tagIn(href).searchParams.entries()];
+    expect(params(spaceHref("k"))).toEqual([["tag", "k"]]);
+    expect(params(spaceHref("k", { order: "newest" }))).toEqual([["tag", "k"]]);
+    expect(params(spaceHref("a b", { order: "opened", before: "r5.x" }))).toEqual([
+      ["tag", "a b"],
+      ["order", "opened"],
+      ["before", "r5.x"],
+    ]);
+    expect(tagIn(spaceHref("k", { order: "oldest", done: true })).pathname).toBe("/spaces/done");
+  });
+
+  it("offers all three orders as links to the space in that order", () => {
+    const d = dom(space({ links: [link("1")] }));
+    const choices = [...d.querySelectorAll("nav.orders a")];
+    expect(choices.map((a) => a.textContent)).toEqual([
+      "Newest first",
+      "Oldest first",
+      "Recently opened",
+    ]);
+    expect(
+      choices.map((a) => tagIn(a.getAttribute("href") as string).searchParams.get("order")),
+    ).toEqual([null, "oldest", "opened"]);
+    expect(choices.map((a) => tagOf(a.getAttribute("href") as string))).toEqual(
+      Array(3).fill("home batteries"),
+    );
+  });
+
+  it.each(["newest", "oldest", "opened"] as const)("marks %s as the current order", (order) => {
+    const d = dom(space({ order, links: [link("1")] }));
+    const current = [...d.querySelectorAll("nav.orders a[aria-current=true]")];
+    expect(current.map((a) => a.textContent)).toEqual([
+      { newest: "Newest first", oldest: "Oldest first", opened: "Recently opened" }[order],
+    ]);
+    const selected = d.querySelector("form.order-select option[selected]");
+    expect(selected?.textContent).toBe(current[0]?.textContent);
+  });
+
+  it("gives the phone a select in a form to this space, and the page script that submits it", () => {
+    const html = space({ order: "oldest", links: [link("1")] });
+    const d = dom(html);
+    const form = d.querySelector("form.order-select");
+    expect(form?.getAttribute("action")).toBe("/spaces");
+    expect(form?.querySelector("input[name=tag]")?.getAttribute("value")).toBe("home batteries");
+    expect(html).toContain('querySelector("form.order-select")');
+  });
+
+  it("pages in the same order: Show older links keeps it, and says Show more links off newest", () => {
+    const oldest = space({ order: "oldest", links: [link("1")], older: "o5.x" });
+    const a = dom(oldest).querySelector("#older");
+    expect(a?.textContent).toBe("Show more links");
+    const href = tagIn(a?.getAttribute("href") as string);
+    expect([href.searchParams.get("order"), href.searchParams.get("before")]).toEqual([
+      "oldest",
+      "o5.x",
+    ]);
+    const newest = dom(space({ links: [link("1")], older: "5.x" })).querySelector("#older");
+    expect(newest?.textContent).toBe("Show older links");
+    expect(tagIn(newest?.getAttribute("href") as string).searchParams.has("order")).toBe(false);
+  });
+
+  it("sends the link to Out of your lists with no order, as that view has no sort", () => {
+    const href = hrefs(space({ order: "oldest", links: [link("1")] }), "a.done-link")[0];
+    expect(tagIn(href as string).searchParams.has("order")).toBe(false);
+  });
+
+  it("groups Recently opened by the month of opening, not of saving", () => {
+    const opened = new Date("2026-10-05T00:00:00Z");
+    const html = space({
+      order: "opened",
+      links: [
+        link("2", { savedAt: new Date("2026-09-01T00:00:00Z"), lastOpenedAt: opened }),
+        link("1", { savedAt: new Date("2026-08-01T00:00:00Z"), lastOpenedAt: opened }),
+      ],
+    });
+    const sections = [...dom(html).querySelectorAll("#space-links > section.month")];
+    expect(sections.map((s) => s.querySelector("h2")?.textContent)).toEqual(["Opened in October"]);
+    expect(sections[0]?.querySelectorAll(".link-row")).toHaveLength(2);
+  });
+
+  it.each([
+    ["newest", false, "No links in this space yet."],
+    ["oldest", false, "No links in this space yet."],
+    ["opened", false, "Nothing in this space opened yet. Links you open from this site show here."],
+    ["newest", true, "No older links."],
+    ["oldest", true, "No more links."],
+    ["opened", true, "No more links."],
+  ] as const)("says an empty %s page (later %s) so", (order, later, text) => {
+    const paragraphs = [...dom(space({ order, later })).querySelectorAll("main p")];
+    expect(paragraphs.map((p) => p.textContent)).toContain(text);
+  });
+});
+
 describe("a space's links out of your lists", () => {
   const done = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
     space({ done: true, ...over });

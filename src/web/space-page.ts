@@ -2,6 +2,7 @@ import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace, spaceColor } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
+import type { LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
@@ -11,6 +12,7 @@ import { doneLinkScript, OUT_OF_LISTS, PUT_AWAY_MARKER } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
+import { orderNav, orderSelect, orderSelectScript } from "./link-orders.js";
 import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
 import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -19,16 +21,21 @@ import { olderScript } from "./show-older.js";
 import { CARD_FETCH, tellWhyScript } from "./tell-why.js";
 
 /**
- * The URL of a tag's space page, or with `done` its links out of your lists; `before` is a page's
- * `older` cursor. Every part is encoded, so any key comes back as itself.
+ * The URL of a tag's space page in `order` (newest is the plain address), or with `done` its links
+ * out of your lists; `before` is a page's `older` cursor. Every part is encoded, so any key comes
+ * back as itself.
  */
 export const spaceHref = (
   key: string,
-  { done = false, before }: { done?: boolean; before?: string } = {},
+  {
+    done = false,
+    before,
+    order = "newest",
+  }: { done?: boolean; before?: string; order?: LinkOrder } = {},
 ) =>
   `/spaces${done ? "/done" : ""}?tag=${encodeURIComponent(key)}${
-    before === undefined ? "" : `&before=${encodeURIComponent(before)}`
-  }`;
+    order === "newest" ? "" : `&order=${order}`
+  }${before === undefined ? "" : `&before=${encodeURIComponent(before)}`}`;
 
 /** What kind of space it is. Only a project an AI guessed is a guess, as on the Tags page. */
 function kindLine(t: Tag): string {
@@ -53,6 +60,8 @@ ${t.description ? `<p class="band-description">${escapeHtml(t.description)}</p>\
 
 type Input = {
   tag: Tag;
+  /** How the links are ordered; newest first on Out of your lists, which has no sort. */
+  order?: LinkOrder;
   catalog: Tag[];
   links: Link[];
   older: string | null;
@@ -112,6 +121,7 @@ function row(
 const cardsScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
 ${viewScript}
+${orderSelectScript}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
@@ -131,6 +141,15 @@ ${doneLinkScript("space-links", "space-error")}
 </script>
 `;
 
+/** What an empty list says: the space has none, or no more are left on a later page. */
+function emptyText({ order, done, later }: { order: LinkOrder; done: boolean; later?: boolean }) {
+  if (later) return order === "newest" ? "No older links." : "No more links.";
+  if (done) return "Nothing here is out of your lists yet.";
+  if (order === "opened")
+    return "Nothing in this space opened yet. Links you open from this site show here.";
+  return "No links in this space yet.";
+}
+
 /**
  * A tag's space: a header in its color (`spaceColor`: neutral while it is unpinned), then its
  * active links newest first, or with `done` the links out of your lists. Each page has at most
@@ -138,25 +157,22 @@ ${doneLinkScript("space-links", "space-error")}
  */
 export function spacePage(input: Input): string {
   const { tag, links, older, done, later, now, view = "list" } = input;
-  const empty = later
-    ? "No older links."
-    : done
-      ? "Nothing here is out of your lists yet."
-      : "No links in this space yet.";
+  const order = done ? "newest" : (input.order ?? "newest");
   const list =
     links.length === 0
-      ? `<p>${empty}</p>`
-      : `<div id="space-links">\n${monthSections(links, { order: "newest", now }, (l) => row(l, input))}\n</div>`;
+      ? `<p>${emptyText({ order, done, later })}</p>`
+      : `<div id="space-links">\n${monthSections(links, { order, now }, (l) => row(l, input))}\n</div>`;
   const more = older
-    ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, before: older }))}">Show older links</a></p>\n`
+    ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, order, before: older }))}">${order === "newest" ? "Show older links" : "Show more links"}</a></p>\n`
     : "";
+  const sort = orderNav(order, (o) => spaceHref(tag.key, { order: o }));
   const body = done
     ? `<div class="list-head"><h2>${OUT_OF_LISTS}</h2>${viewSwitch(view)}</div>
 <p class="small"><a class="back-link" href="${escapeHtml(spaceHref(tag.key))}">Back to ${escapeHtml(tag.name)}</a></p>
 <p id="space-error" role="alert"></p>
 ${list}
 ${more}`
-    : `<div class="list-head"><h2>Newest first</h2>${viewSwitch(view)}</div>
+    : `<div class="list-head">${sort}${orderSelect(order, { action: "/spaces", hidden: { tag: tag.key } })}${viewSwitch(view)}</div>
 <p id="space-error" role="alert"></p>
 ${list}
 ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">${OUT_OF_LISTS}</a></p>`;

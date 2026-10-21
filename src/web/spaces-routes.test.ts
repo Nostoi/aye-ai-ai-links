@@ -196,6 +196,90 @@ describe("a space page", () => {
   });
 });
 
+describe("a space page's sort orders", () => {
+  const titlesOf = (page: string) =>
+    [...parseHTML(page).document.querySelectorAll(".link-row h3")].map((h) =>
+      h.textContent?.trim(),
+    );
+
+  async function seeded() {
+    const world = await oauthWorld();
+    const ids: string[] = [];
+    for (let i = 0; i < 25; i++) {
+      ids.push(await save(world, A, `https://a.example/${i}`, ["Kitchen"], `Link ${i}`));
+    }
+    await save(world, A, "https://a.example/other", ["Garden"], "Garden link");
+    return { world, ids, browser: await signedIn(world) };
+  }
+
+  it("lists the space oldest first and pages on in the same order", async () => {
+    const { browser } = await seeded();
+    const first = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
+    expect(titlesOf(first)[0]).toBe("Link 0");
+    expect(titlesOf(first)).toHaveLength(24);
+    const [older] = hrefsOf(first, "#older");
+    expect(older).toContain("order=oldest");
+    const second = await browser.send(older as string);
+    expect(second.status).toBe(200);
+    expect(titlesOf(html(second))).toEqual(["Link 24"]);
+    expect(html(second)).not.toContain("Garden link");
+  });
+
+  it("lists only the opened links of the space by recent opening", async () => {
+    const { world, ids, browser } = await seeded();
+    const deps = depsOf(world);
+    await deps.store.update(A, ids[3] as string, { lastOpenedAt: new Date(5_000_000) });
+    await deps.store.update(A, ids[7] as string, { lastOpenedAt: new Date(9_000_000) });
+    const page = html(await browser.send("/spaces?tag=kitchen&order=opened"));
+    expect(titlesOf(page)).toEqual(["Link 7", "Link 3"]);
+    const none = html(await browser.send("/spaces?tag=garden&order=opened"));
+    expect(none).toContain("Nothing in this space opened yet.");
+  });
+
+  it("answers an unknown order or another order's cursor with the 400 restart page", async () => {
+    const { browser } = await seeded();
+    const oldest = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
+    const [older] = hrefsOf(oldest, "#older");
+    const cursor = new URL(older as string, "https://x.example").searchParams.get("before");
+    for (const path of [
+      "/spaces?tag=kitchen&order=random",
+      `/spaces/done?tag=kitchen&before=${encodeURIComponent(cursor as string)}`,
+      `/spaces?tag=kitchen&before=${encodeURIComponent(cursor as string)}`,
+      `/spaces?tag=kitchen&order=opened&before=${encodeURIComponent(cursor as string)}`,
+    ]) {
+      const res = await browser.send(path);
+      expect(res.status, path).toBe(400);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  it("restarts a cursor naming no live link at the first page of the same order", async () => {
+    const { browser } = await seeded();
+    const res = await browser.send("/spaces?tag=kitchen&order=oldest&before=o1.999999");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/spaces?tag=kitchen&order=oldest");
+  });
+
+  it("gives Out of your lists no sort: it reads no order and lists newest first", async () => {
+    const world = await oauthWorld();
+    const first = await save(world, A, "https://a.example/1", ["Kitchen"], "Old one");
+    const second = await save(world, A, "https://a.example/2", ["Kitchen"], "New one");
+    for (const id of [first, second]) await archive(world, A, id);
+    const browser = await signedIn(world);
+    const plain = await browser.send("/spaces/done?tag=kitchen");
+    const asked = await browser.send("/spaces/done?tag=kitchen&order=oldest");
+    expect(titlesOf(html(plain))).toEqual(["New one", "Old one"]);
+    expect(titlesOf(html(asked))).toEqual(["New one", "Old one"]);
+    expect(parseHTML(html(asked)).document.querySelector("nav.orders")).toBeNull();
+  });
+
+  it("sends the Out of your lists address with no order, whatever the order of the space", async () => {
+    const { browser } = await seeded();
+    const page = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
+    expect(hrefsOf(page, "a.done-link")).toEqual(["/spaces/done?tag=kitchen"]);
+  });
+});
+
 describe("Your spaces on the home page", () => {
   it("shows the owner's pinned tags only, each opening its space, and a quiet line with none", async () => {
     const world = await oauthWorld();

@@ -114,6 +114,31 @@ describe("openSpace", () => {
     expect(archived.page.links.map((l) => l.id)).toEqual([done]);
   });
 
+  it("lists a space oldest first and by recent opening, only opened links, and refuses another order's cursor", async () => {
+    const first = await save("a", ["kitchen"]);
+    const second = await save("a", ["kitchen"]);
+    const third = await save("a", ["kitchen"]);
+    await store.update("a", first, { lastOpenedAt: new Date(9_000) });
+    await store.update("a", third, { lastOpenedAt: new Date(8_000) });
+    const open = (order: "newest" | "oldest" | "opened", limit = 10, before?: string) =>
+      openSpace(deps(), "a", {
+        name: "kitchen",
+        state: "active",
+        limit,
+        order,
+        ...(before === undefined ? {} : { before }),
+      });
+    const ids = async (order: "newest" | "oldest" | "opened") =>
+      (await open(order)).page.links.map((l) => l.id);
+    expect(await ids("newest")).toEqual([third, second, first]);
+    expect(await ids("oldest")).toEqual([first, second, third]);
+    expect(await ids("opened")).toEqual([first, third]);
+    const older = (await open("oldest", 1)).page.older as string;
+    expect(older).not.toBeNull();
+    const refusal = await open("newest", 1, older).catch((e: unknown) => e);
+    expect((refusal as CoreError).code).toBe("invalid_input");
+  });
+
   it("refuses an unknown key and another owner's key the same way", async () => {
     await save("a", ["kitchen"]);
     await save("b", ["Pantry"]);

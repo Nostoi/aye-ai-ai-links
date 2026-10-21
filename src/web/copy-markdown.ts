@@ -42,13 +42,50 @@ function imageNumber(src: string, refs: CopyRefs): number | null {
 const FRAME_OPEN = new Set(["blockquote_open", "list_item_open"]);
 const FRAME_CLOSE = new Set(["blockquote_close", "list_item_close"]);
 
+/** Where each inline code span in `src` starts, mapped to where it ends (CommonMark: a run closes at the next run of its own length). */
+function codeSpans(src: string): Map<number, number> {
+  const spans = new Map<number, number>();
+  if (!src.includes("`")) return spans;
+  const runs = [...src.matchAll(/`+/g)].map((m) => ({ at: m.index, len: m[0].length }));
+  const byLen = new Map<number, number[]>();
+  for (const { at, len } of runs) {
+    const same = byLen.get(len) ?? [];
+    same.push(at);
+    byLen.set(len, same);
+  }
+  let cursor = 0;
+  for (const { at, len } of runs) {
+    if (at < cursor) continue;
+    let slashes = 0;
+    while (src[at - 1 - slashes] === "\\") slashes++;
+    const open = slashes % 2 ? at + 1 : at;
+    const size = len - (open - at);
+    const same = byLen.get(size) ?? [];
+    let lo = 0;
+    let hi = same.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((same[mid] as number) > at) hi = mid;
+      else lo = mid + 1;
+    }
+    const close = same[lo];
+    if (size > 0 && close !== undefined) {
+      spans.set(open, close + size);
+      cursor = close + size;
+    }
+  }
+  return spans;
+}
+
 /** True when `src` has a `[` at `from` that nothing after it closes. */
-function opensUnclosed(src: string, from: number): boolean {
+function opensUnclosed(src: string, from: number, spans: Map<number, number>): boolean {
   if (src[from] !== "[") return false;
   let depth = 0;
   for (let i = from; i < src.length; i++) {
     const c = src[i];
-    if (c === "\\") i++;
+    const span = spans.get(i);
+    if (span !== undefined) i = span - 1;
+    else if (c === "\\") i++;
     else if (c === "[") depth++;
     else if (c === "]" && --depth === 0) return false;
   }
@@ -105,9 +142,12 @@ function repairBlockLinks(state: StateCore): void {
       };
       let cur = begin(0, true);
       let depth = 0;
+      const spans = codeSpans(src);
       for (let k = 0; k < src.length; k++) {
         const c = src[k];
-        if (c === "\\") k++;
+        const span = spans.get(k);
+        if (span !== undefined) k = span - 1;
+        else if (c === "\\") k++;
         else if (c === "[") depth++;
         else if (c === "]" && depth > 0) depth--;
         else if (c === "]" && src[k + 1] === "(" && openers.length) {
@@ -127,8 +167,10 @@ function repairBlockLinks(state: StateCore): void {
           k = closer.end - 1;
         }
       }
-      if (opensUnclosed(src, cur.pos)) openers.push(cur);
-      if (made.length > 1 || cur.head.length || openers.at(-1) === cur) parts.push(...made);
+      if (opensUnclosed(src, cur.pos, spans)) openers.push(cur);
+      if (made.length > 1 || cur.head.length || openers.at(-1) === cur) {
+        for (const part of made) parts.push(part);
+      }
     }
   }
 
@@ -167,7 +209,9 @@ function repairBlockLinks(state: StateCore): void {
     }) as [Token, Token, Token];
     paragraph[1].content = text;
     paragraph[1].children = [...part.head, ...rest];
-    after.set(part.at + 1, [...(after.get(part.at + 1) ?? []), ...paragraph]);
+    const queue = after.get(part.at + 1) ?? [];
+    queue.push(...paragraph);
+    after.set(part.at + 1, queue);
   }
   if (dropped.size || after.size) {
     state.tokens = tokens.flatMap((tk, i) => (dropped.has(i) ? [] : [tk, ...(after.get(i) ?? [])]));

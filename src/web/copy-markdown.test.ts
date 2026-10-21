@@ -349,6 +349,22 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
     expect(text(html).replace(/\s+/g, "")).toMatch(/^\[onetwo/);
   });
 
+  it("pairs many openers with one paragraph of many closers in linear time", () => {
+    const n = 40_000;
+    const start = performance.now();
+    const html = copyHtml(`${"[\n\n".repeat(n)}${`x](${A})`.repeat(n)}`, refs());
+    expect(performance.now() - start).toBeLessThan(3_000);
+    expect(html.match(/<a /g)).toHaveLength(n);
+  });
+
+  it("does not take a closer inside a code span for one", () => {
+    const html = copyHtml("[\n\nT\n\nsee `a](https://e.example/a)` ok", refs());
+    expect(hrefs(html)).toEqual([]);
+    expect(parse(html).querySelector("code")?.textContent).toBe("a](https://e.example/a)");
+    const unmatched = copyHtml(`[\n\nT\n\nsee \`\`a\` ](${A})`, refs());
+    expect(hrefs(unmatched)).toEqual([A]);
+  });
+
   it.each(["](", '](a "', "](a '", "](a ("])(
     "renders 2 MiB of %s in one paragraph after an opener within the budget",
     (unit) => {

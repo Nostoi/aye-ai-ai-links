@@ -584,28 +584,51 @@ describe("the home page's script", () => {
     expect(p.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
   });
 
-  it("keeps a card deleted while its Not now was out, and frees it again after Undo", async () => {
+  it.each([
+    ["Not now, then Delete link", "snooze", "delete-link", "/home/snooze", "Hidden for two weeks."],
+    ["Delete link, then Not now", "delete-link", "snooze", "/links/delete", "Link deleted."],
+    [
+      "Keep handy, then Delete link",
+      "keep",
+      "delete-link",
+      "/tools/keep",
+      "Kept on your Handy shelf.",
+    ],
+  ])("sends one action for a card: %s before the first is answered", async (_, a, b, url, undo) => {
     const cards = two();
-    const id = cards[0]?.link.id as string;
+    const id = cards[1]?.link.id as string;
     let answer = (_: unknown) => {};
     const held = new Promise((r) => (answer = r));
     const p = home(cards, (s) =>
-      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+      s.url === "/home/snooze"
+        ? { status: 200, body: SNOOZE, wait: held }
+        : s.url === "/tools/keep"
+          ? { status: 200, body: { tool: ROW }, wait: held }
+          : { status: 204, wait: held },
     );
-    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    pick(p, id, a);
+    pick(p, id, b);
+    answer(null);
+    await p.settle();
+    expect(urls(p).filter((u) => u !== "/")).toEqual([url]);
+    expect(p.$("#undo-bar span").textContent).toBe(undo);
+  });
+
+  it("frees a card again once its Delete was undone", async () => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE } : { status: 204 },
+    );
     pick(p, id, "delete-link");
     await p.settle();
     expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
-    answer(null);
-    await p.settle();
-    expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
-    expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(hidden(p, id)).toBe(false);
     p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
     await p.settle();
-    expect(urls(p)).toEqual(["/home/snooze", "/links/delete", "/links/restore", "/home/snooze"]);
+    expect(urls(p)).toEqual(["/links/delete", "/links/restore", "/home/snooze"]);
     expect(hidden(p, id)).toBe(true);
   });
 

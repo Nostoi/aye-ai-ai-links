@@ -462,6 +462,16 @@ const failure = async (res) => {
     ? data.message
     : "That did not work. Reload the page and try again.";
 };
+const cardBusy = new WeakSet();
+const whileBusy = async (card, run) => {
+  if (cardBusy.has(card)) return;
+  cardBusy.add(card);
+  try {
+    return await run();
+  } finally {
+    cardBusy.delete(card);
+  }
+};
 const showAll = (shelf) => {
   for (const tile of shelf.querySelectorAll("[data-more]")) tile.hidden = false;
   const button = shelf.querySelector("button[data-act=show-all]");
@@ -517,7 +527,7 @@ const offerUndo = (message, route, body, from) =>
 if (handy) {
   handy.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
-    if (!button || button.disabled) return;
+    if (!button) return;
     const act = button.dataset.act;
     if (act === "show-all") {
       const shelf = document.getElementById("handy-shelf");
@@ -531,11 +541,12 @@ if (handy) {
     const done = act === "done" || act === "archive";
     if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
+    if (cardBusy.has(tile)) return;
     const id = tile.dataset.id;
     const after = tile.nextElementSibling;
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
-    button.disabled = true;
+    cardBusy.add(tile);
     let dropped = false;
     try {
       if (done) {
@@ -569,7 +580,7 @@ if (handy) {
       dropped = await refreshShelf(from);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
-      if (!dropped) button.disabled = false;
+      if (!dropped) cardBusy.delete(tile);
     }
   });
 }
@@ -633,17 +644,13 @@ const takeOut = (listRoot, card, remove) => {
     if (month) month.hidden = false;
   };
 };
-const deleteCard = (() => {
-  const busy = new WeakSet();
-  return async (card) => {
-    if (busy.has(card)) return;
+const deleteCard = (card) =>
+  whileBusy(card, async () => {
     const listRoot = document.getElementById("worth-cards");
     const deleteAlert = document.getElementById("home-error");
     const id = card.dataset.id;
     deleteAlert.textContent = "";
-    busy.add(card);
     const res = await post("/links/delete", { id });
-    busy.delete(card);
     if (!res || res.status !== 204) {
       deleteAlert.textContent = await failure(res);
       return;
@@ -654,8 +661,7 @@ const deleteCard = (() => {
       if (back && back.status === 204) putBack();
       else deleteAlert.textContent = await failure(back);
     });
-  };
-})();
+  });
 {
 const deleteRoot = document.getElementById("worth-cards");
 if (deleteRoot) {
@@ -667,17 +673,13 @@ if (deleteRoot) {
   });
 }
 }
-const doneCard = (() => {
-  const busy = new WeakSet();
-  const done = async (card) => {
-    if (busy.has(card)) return;
+const doneCard = (card) =>
+  whileBusy(card, async () => {
     const listRoot = document.getElementById("worth-cards");
     const doneAlert = document.getElementById("home-error");
     const id = card.dataset.id;
     doneAlert.textContent = "";
-    busy.add(card);
     const res = await post("/home/archive", { id });
-    busy.delete(card);
     if (!res || res.status !== 204) {
       doneAlert.textContent = await failure(res);
       return;
@@ -688,10 +690,7 @@ const doneCard = (() => {
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
     });
-  };
-  done.busy = busy;
-  return done;
-})();
+  });
 {
 const doneRoot = document.getElementById("worth-cards");
 if (doneRoot) {
@@ -715,26 +714,27 @@ if (goneRoot) {
     const buttons = [...line.querySelectorAll("button")];
     if (buttons.some((b) => b.disabled)) return;
     buttons.forEach((b) => (b.disabled = true));
-    if (button.dataset.act !== "still-works") {
-      await doneCard(card);
+    try {
+      if (button.dataset.act !== "still-works") return await doneCard(card);
+      const id = card.dataset.id;
+      await whileBusy(card, async () => {
+        goneError.textContent = "";
+        const res = await post("/links/still-works", { id });
+        const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+        if (!moved || !moved.check) {
+          goneError.textContent = await failure(res);
+          return;
+        }
+        line.hidden = true;
+        showUndo("Marked as working.", async () => {
+          const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
+          if (back && back.status === 204) line.hidden = false;
+          else goneError.textContent = await failure(back);
+        });
+      });
+    } finally {
       buttons.forEach((b) => (b.disabled = false));
-      return;
     }
-    const id = card.dataset.id;
-    goneError.textContent = "";
-    const res = await post("/links/still-works", { id });
-    buttons.forEach((b) => (b.disabled = false));
-    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (!moved || !moved.check) {
-      goneError.textContent = await failure(res);
-      return;
-    }
-    line.hidden = true;
-    showUndo("Marked as working.", async () => {
-      const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
-      if (back && back.status === 204) line.hidden = false;
-      else goneError.textContent = await failure(back);
-    });
   });
 }
 }
@@ -744,26 +744,26 @@ const copyError = document.getElementById("home-error");
 if (copyRoot) {
   copyRoot.addEventListener("click", async (event) => {
     const button = event.target.closest(".card-menu button[data-act=remove-copy]");
-    if (!button || button.disabled) return;
+    if (!button) return;
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
-    const id = card.dataset.id;
-    const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
     menu.open = false;
-    copyError.textContent = "";
-    button.disabled = true;
-    const res = await post("/links/copy/remove", { id });
-    button.disabled = false;
-    if (!res || res.status !== 204) {
-      copyError.textContent = await failure(res);
-      return;
-    }
-    for (const row of rows) row.hidden = true;
-    menu.querySelector("summary").focus();
-    showUndo("Saved copy removed.", async () => {
-      const back = await post("/links/copy/restore", { id });
-      if (back && back.status === 204) for (const row of rows) row.hidden = false;
-      else copyError.textContent = await failure(back);
+    await whileBusy(card, async () => {
+      const id = card.dataset.id;
+      const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
+      copyError.textContent = "";
+      const res = await post("/links/copy/remove", { id });
+      if (!res || res.status !== 204) {
+        copyError.textContent = await failure(res);
+        return;
+      }
+      for (const row of rows) row.hidden = true;
+      menu.querySelector("summary").focus();
+      showUndo("Saved copy removed.", async () => {
+        const back = await post("/links/copy/restore", { id });
+        if (back && back.status === 204) for (const row of rows) row.hidden = false;
+        else copyError.textContent = await failure(back);
+      });
     });
   });
 }
@@ -1125,7 +1125,6 @@ const homeActs = {
     const res = await post("/home/snooze", { id });
     const data = await answered(res, "until");
     if (!data) return failure(res);
-    if (!card.isConnected) return;
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
     showUndo("Hidden for two weeks.", async () =>
@@ -1136,9 +1135,8 @@ const homeActs = {
     const res = await post("/tools/keep", { id });
     const moved = await answered(res, "tool");
     if (!moved) return failure(res);
-    const putBack = card.isConnected ? takeOut(worthCards, card, false) : null;
+    const putBack = takeOut(worthCards, card, false);
     await refreshShelf();
-    if (!putBack) return;
     showUndo("Kept on your Handy shelf.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         putBack();
@@ -1152,7 +1150,6 @@ const homeActs = {
     if (!moved) return failure(res);
     showHandy(card, false);
     await refreshShelf();
-    if (!card.isConnected) return;
     showUndo("Not handy anymore.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         showHandy(card, true);
@@ -1161,7 +1158,6 @@ const homeActs = {
     );
   },
 };
-const homeBusy = doneCard.busy;
 if (worthCards) {
   worthCards.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
@@ -1172,15 +1168,11 @@ if (worthCards) {
     const act = homeActs[button.dataset.act];
     if (!act) return;
     if (menu) menu.open = false;
-    if (homeBusy.has(card)) return;
-    homeBusy.add(card);
-    homeError.textContent = "";
-    try {
+    await whileBusy(card, async () => {
+      homeError.textContent = "";
       const refused = await act(card, card.dataset.id);
       if (refused) homeError.textContent = refused;
-    } finally {
-      homeBusy.delete(card);
-    }
+    });
   });
 }
 addEventListener("pageshow", (event) => {

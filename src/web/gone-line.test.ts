@@ -164,6 +164,33 @@ const click = async (p: ReturnType<typeof runPage>, selector: string) => {
 };
 
 describe("the gone line's buttons", () => {
+  it("turns both buttons back on when It still works throws after the answer", async () => {
+    const boom = new Proxy(
+      {},
+      {
+        get: (_, key) => {
+          if (key === "check") throw new Error("boom");
+          return undefined;
+        },
+      },
+    );
+    const p = load(() => ({ status: 200, body: boom }));
+    const held = process.listeners("unhandledRejection");
+    process.removeAllListeners("unhandledRejection");
+    const thrown: unknown[] = [];
+    process.on("unhandledRejection", (e) => thrown.push(e));
+    try {
+      await click(p, "button[data-act=still-works]");
+    } finally {
+      process.removeAllListeners("unhandledRejection");
+      for (const h of held) process.on("unhandledRejection", h);
+    }
+    expect(thrown).toHaveLength(1);
+    const buttons = [...p.document.querySelectorAll("[data-gone] button")] as HTMLButtonElement[];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((b) => b.disabled)).toEqual([false, false]);
+  });
+
   it("It still works posts the id, hides the line and offers Undo", async () => {
     const p = load(() => WORKS);
     await click(p, "button[data-act=still-works]");

@@ -405,7 +405,9 @@ describe("the shelf's script", () => {
     expect(urls(p)).toEqual(["/links/still-works"]);
     expect(p.$("#handy-error").textContent).toBe(message);
     expect(p.$("#undo-bar").hidden).toBe(true);
-    expect((p.$("button[data-act=still-works]") as HTMLButtonElement).disabled).toBe(false);
+    p.dispatch(p.$("button[data-act=still-works]"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/still-works", "/links/still-works"]);
   });
 
   it("an Undo of It works answered 409 shows the message", async () => {
@@ -632,6 +634,29 @@ describe("the shelf's script", () => {
     expect(target.closest("[hidden]")).toBeNull();
   });
 
+  it("sends nothing for a second action on a tile until the first has finished, then lets it through", async () => {
+    const item = kept({}, true);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = runPage(home([item]), (s) =>
+      s.body === undefined
+        ? { status: 200, text: home([{ ...item, due: false }]), wait: gate }
+        : { status: 200, body: MOVED },
+    );
+    p.dispatch(p.$("button[data-act=still-using]"), "click");
+    await p.settle();
+    p.dispatch(p.$("button[data-act=done]"), "click");
+    await p.settle();
+    expect(urls(p).filter((u) => u !== "/")).toEqual(["/tools/still-using"]);
+    release();
+    await p.settle();
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(urls(p).filter((u) => u !== "/")).toEqual(["/tools/still-using", "/tools/not-handy"]);
+  });
+
   it("ignores a second click on a tile's button until the shelf refresh settles", async () => {
     const item = kept();
     let release = () => {};
@@ -653,7 +678,7 @@ describe("the shelf's script", () => {
     await p.settle();
   });
 
-  it("keeps a tile's button off when its refresh was dropped for a newer one, so a third click posts nothing", async () => {
+  it("keeps a tile busy when its refresh was dropped for a newer one, so a third click posts nothing", async () => {
     const [a, b] = [kept(), kept()];
     const gates: Array<() => void> = [];
     const hold = () => new Promise<void>((resolve) => gates.push(resolve));
@@ -669,7 +694,6 @@ describe("the shelf's script", () => {
     await p.settle();
     gates[0]?.();
     await p.settle();
-    expect((buttonA as HTMLButtonElement).disabled).toBe(true);
     p.dispatch(buttonA, "click");
     await p.settle();
     expect(p.sent.filter((s) => s.url === "/tools/not-handy")).toHaveLength(2);
@@ -681,13 +705,17 @@ describe("the shelf's script", () => {
     const refused = shelfPage(home([kept()]), () => ({ status: 409, body: { message: "no" } }));
     refused.dispatch(refused.$("button[data-act=not-handy]"), "click");
     await refused.settle();
-    expect((refused.$("button[data-act=not-handy]") as HTMLButtonElement).disabled).toBe(false);
+    refused.dispatch(refused.$("button[data-act=not-handy]"), "click");
+    await refused.settle();
+    expect(urls(refused)).toEqual(["/tools/not-handy", "/tools/not-handy"]);
     const stale = runPage(home([kept()]), (s) =>
       s.body === undefined ? { status: 0, type: "opaqueredirect" } : { status: 200, body: MOVED },
     );
     stale.dispatch(stale.$("button[data-act=not-handy]"), "click");
     await stale.settle();
-    expect((stale.$("button[data-act=not-handy]") as HTMLButtonElement).disabled).toBe(false);
+    stale.dispatch(stale.$("button[data-act=not-handy]"), "click");
+    await stale.settle();
+    expect(urls(stale).filter((u) => u !== "/")).toEqual(["/tools/not-handy", "/tools/not-handy"]);
   });
 
   it("drops a refresh that answers after a newer one began, keeping the newer shelf", async () => {

@@ -9,22 +9,18 @@ export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: "I'm don
  * I'm done with it on the cards inside `#root`, including those Show older links appends. Defines
  * the page-global `doneCard(card)`, which the gone line's I'm done with it also calls: it posts
  * `/home/archive`, takes the card out with `takeOut` (hidden, not removed) and offers Undo, which
- * posts `/home/unarchive` and shows the card again. A card is busy until its answer comes, so a
- * second click sends nothing. A refusal, or an Undo that does not succeed, is shown in `#error`.
+ * posts `/home/unarchive` and shows the card again. It sends nothing while another action on the
+ * card is out (`whileBusy`). A refusal, or an Undo that does not succeed, is shown in `#error`.
  * For the page's one script after `CARD_FETCH` and `deleteLinkScript` (it needs `post`, `failure`,
- * `showUndo` and `takeOut`); the menu row's listener is a block.
+ * `showUndo`, `whileBusy` and `takeOut`); the menu row's listener is a block.
  */
-export const doneLinkScript = (root: string, error: string) => `const doneCard = (() => {
-  const busy = new WeakSet();
-  const done = async (card) => {
-    if (busy.has(card)) return;
+export const doneLinkScript = (root: string, error: string) => `const doneCard = (card) =>
+  whileBusy(card, async () => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const doneAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
     doneAlert.textContent = "";
-    busy.add(card);
     const res = await post("/home/archive", { id });
-    busy.delete(card);
     if (!res || res.status !== 204) {
       doneAlert.textContent = await failure(res);
       return;
@@ -35,10 +31,7 @@ export const doneLinkScript = (root: string, error: string) => `const doneCard =
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
     });
-  };
-  done.busy = busy;
-  return done;
-})();
+  });
 {
 const doneRoot = document.getElementById(${JSON.stringify(root)});
 if (doneRoot) {

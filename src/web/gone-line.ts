@@ -24,9 +24,9 @@ export function goneLine(link: Link, view: GoneView | null | undefined): string 
  * The gone line's buttons on the cards inside `#root`, including those Show older links appends.
  * It still works posts `/links/still-works`, hides that card's line and offers Undo, which sends
  * back the rows the answer held. I'm done with it is the menu's own (`doneCard`), so the page's
- * script includes `doneLinkScript` too. Each button is off until the other's answer comes. A
- * refusal is shown in `#error`, and a refused Undo leaves things hidden. A block; needs
- * `CARD_FETCH` and `showUndo`.
+ * script includes `doneLinkScript` too. Each button is off until the other's answer comes, and
+ * a card takes no other action while It still works is out (`whileBusy`). A refusal is shown in
+ * `#error`, and a refused Undo leaves things hidden. A block; needs `CARD_FETCH` and `showUndo`.
  */
 export const goneScript = (root: string, error: string) => `{
 const goneRoot = document.getElementById(${JSON.stringify(root)});
@@ -40,26 +40,27 @@ if (goneRoot) {
     const buttons = [...line.querySelectorAll("button")];
     if (buttons.some((b) => b.disabled)) return;
     buttons.forEach((b) => (b.disabled = true));
-    if (button.dataset.act !== "still-works") {
-      await doneCard(card);
+    try {
+      if (button.dataset.act !== "still-works") return await doneCard(card);
+      const id = card.dataset.id;
+      await whileBusy(card, async () => {
+        goneError.textContent = "";
+        const res = await post("/links/still-works", { id });
+        const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+        if (!moved || !moved.check) {
+          goneError.textContent = await failure(res);
+          return;
+        }
+        line.hidden = true;
+        showUndo("Marked as working.", async () => {
+          const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
+          if (back && back.status === 204) line.hidden = false;
+          else goneError.textContent = await failure(back);
+        });
+      });
+    } finally {
       buttons.forEach((b) => (b.disabled = false));
-      return;
     }
-    const id = card.dataset.id;
-    goneError.textContent = "";
-    const res = await post("/links/still-works", { id });
-    buttons.forEach((b) => (b.disabled = false));
-    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (!moved || !moved.check) {
-      goneError.textContent = await failure(res);
-      return;
-    }
-    line.hidden = true;
-    showUndo("Marked as working.", async () => {
-      const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
-      if (back && back.status === 204) line.hidden = false;
-      else goneError.textContent = await failure(back);
-    });
   });
 }
 }`;

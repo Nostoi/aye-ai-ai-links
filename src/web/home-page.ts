@@ -165,8 +165,8 @@ document.addEventListener("keydown", (event) => {
  * Home's own card actions, after the shared ones (`takeOut`, `doneCard`, `refreshShelf`):
  * - The featured card's I'm done with it is `doneCard`, as the menu's row is (`doneLinkScript`).
  * - Not now, Keep handy and Not handy anymore post first and change the card only once the server
- *   agrees, so a refusal never brings back a card another action took out. A card is busy until
- *   its answer comes, so a second click sends nothing.
+ *   agrees, so a refusal never brings back a card another action took out. Each runs in
+ *   `whileBusy`, so a card takes no other action, Delete link included, until it has finished.
  * - Not now and Keep handy take the card out (`takeOut`); Keep handy also refreshes the Handy
  *   shelf. Not handy anymore swaps the menu's row and refreshes the shelf. Each offers Undo, and
  *   the card stays as it is when Undo is refused.
@@ -192,7 +192,6 @@ const homeActs = {
     const res = await post("/home/snooze", { id });
     const data = await answered(res, "until");
     if (!data) return failure(res);
-    if (!card.isConnected) return;
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
     showUndo("Hidden for two weeks.", async () =>
@@ -203,9 +202,8 @@ const homeActs = {
     const res = await post("/tools/keep", { id });
     const moved = await answered(res, "tool");
     if (!moved) return failure(res);
-    const putBack = card.isConnected ? takeOut(worthCards, card, false) : null;
+    const putBack = takeOut(worthCards, card, false);
     await refreshShelf();
-    if (!putBack) return;
     showUndo("Kept on your Handy shelf.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         putBack();
@@ -219,7 +217,6 @@ const homeActs = {
     if (!moved) return failure(res);
     showHandy(card, false);
     await refreshShelf();
-    if (!card.isConnected) return;
     showUndo("Not handy anymore.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         showHandy(card, true);
@@ -228,7 +225,6 @@ const homeActs = {
     );
   },
 };
-const homeBusy = doneCard.busy;
 if (worthCards) {
   worthCards.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
@@ -239,15 +235,11 @@ if (worthCards) {
     const act = homeActs[button.dataset.act];
     if (!act) return;
     if (menu) menu.open = false;
-    if (homeBusy.has(card)) return;
-    homeBusy.add(card);
-    homeError.textContent = "";
-    try {
+    await whileBusy(card, async () => {
+      homeError.textContent = "";
       const refused = await act(card, card.dataset.id);
       if (refused) homeError.textContent = refused;
-    } finally {
-      homeBusy.delete(card);
-    }
+    });
   });
 }
 addEventListener("pageshow", (event) => {

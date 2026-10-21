@@ -221,8 +221,11 @@ describe("the Handy tiles", () => {
     ["a Pictures card's Tell me why", row("pictures", ask(false)), ".tell-why"],
     ["a list row's open why field", row("list", ask(true)), ".why-form input"],
     ["a Pictures card's open why field", row("pictures", ask(true)), ".why-form input"],
+    ["a list row's why Save", row("list", ask(true)), ".why-form button"],
+    ["a Pictures card's why Save", row("pictures", ask(true)), ".why-form button"],
     ["any card's Tell me why", `<div>${title}${ask(false)}${line}</div>`, ".tell-why"],
     ["any card's open why field", `<div>${title}${ask(true)}${line}</div>`, ".why-form input"],
+    ["any card's why Save", `<div>${title}${ask(true)}${line}</div>`, ".why-form button"],
   ])("lets %s, not Saved copy, take a tap where they overlap", (_, html, pick) => {
     const target = el(html, pick);
     const copy = target.ownerDocument.querySelector(".saved-copy") as Element;
@@ -239,7 +242,9 @@ describe("the Handy tiles", () => {
       return out;
     };
     for (const width of ["desktop", "phone"] as const) {
-      expect(sideOf(target, width), width).toContain("relative");
+      const [own, ...around] = sideOf(target, width);
+      expect(own, width).toBe("relative");
+      expect(around.filter(Boolean), width).toEqual([]);
       expect(sideOf(copy, width).filter(Boolean), width).toEqual([]);
     }
   });

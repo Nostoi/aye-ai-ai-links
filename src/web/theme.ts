@@ -289,10 +289,10 @@ img.row-pic{display:block}
 .faded .row-pic{opacity:.4}
 .row-body{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .row-body h3{font-size:17px;line-height:1.35;margin:0;overflow-wrap:anywhere}
-.row-body h3 a{text-decoration:none}
+.row-body h3 a{position:relative;text-decoration:none}
 .row-body p{margin:0}
 .row-body .ask{margin:8px 0 4px}
-.row-why{margin:2px 0 0;font-size:15px;color:var(--ink);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.row-why{font-size:15px;color:var(--ink);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .link-row .card-menu{top:50%;right:8px;margin-top:-22px}
 main:not([data-view=pictures]) .link-row .card-menu-dot{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
 .list-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin:0 0 16px}

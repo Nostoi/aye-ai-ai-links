@@ -204,12 +204,15 @@ describe("the Handy tiles", () => {
   // Saved copy's tap area reaches up into the title above it. A positioned title link paints, and
   // so takes taps, above a static one; a positioned Saved copy would take them back.
   it.each([
-    ["a search result", "result", "result-body", "h2"],
-    ["a link card", "link-card", "card-body", "h3"],
-  ])("lets %s's title, not Saved copy, take a tap where they overlap", (_, card, body, h) => {
-    const html = `<li class="${card}"><div class="${body}"><${h} data-card-title><a href="/x">T</a></${h}><p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p></div></li>`;
-    expect(computed(el(html, `${h} a`), "position", "desktop")).toBe("relative");
-    expect(computed(el(html, ".saved-copy"), "position", "desktop")).toBeUndefined();
+    ["a search result", "result", "result-body", "h2", null],
+    ["a list row", "link-row", "row-body", "h3", "list"],
+    ["a Pictures card", "link-row", "row-body", "h3", "pictures"],
+  ])("lets %s's title, not Saved copy, take a tap where they overlap", (_, card, body, h, view) => {
+    const html = `<main${view ? ` data-view="${view}"` : ""}><li class="${card}"><div class="${body}"><${h} data-card-title><a href="/x">T</a></${h}><p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p></div></li></main>`;
+    for (const width of ["desktop", "phone"] as const) {
+      expect(computed(el(html, `${h} a`), "position", width), width).toBe("relative");
+      expect(computed(el(html, ".saved-copy"), "position", width), width).toBeUndefined();
+    }
   });
 
   it("spaces every dot on the grey line alike: no part puts a gap before its own dot", () => {

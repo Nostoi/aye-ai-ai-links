@@ -10,6 +10,7 @@ import { displayTitle } from "./display-title.js";
 import { DONE_ITEM } from "./done-link.js";
 import { initialsText } from "./initials.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
+import { NOT_NOW_ITEM } from "./not-now.js";
 import { escapeHtml } from "./page.js";
 
 export const PENCIL = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>`;
@@ -22,16 +23,28 @@ export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit titl
  * done with it and Keep handy, which reads Not handy anymore once `handy` is kept; both rows are
  * rendered and the script swaps them. A link you're done with gets neither. Then Edit, Remove saved
  * copy when `copy` is there, and Delete link last. The copy itself opens from the card's grey line
- * (`cardLine`).
+ * (`cardLine`). Home's rows add Not now after I'm done with it (`notNow`); Home's featured card
+ * shows both as buttons, so its menu leaves them out (`onCard`).
  */
 export const editMenu = (
   link: Link,
-  { copy, handy }: { copy?: CopyInfo | undefined; handy?: HandyView | null | undefined } = {},
+  {
+    copy,
+    handy,
+    notNow = false,
+    onCard = false,
+  }: {
+    copy?: CopyInfo | undefined;
+    handy?: HandyView | null | undefined;
+    notNow?: boolean;
+    onCard?: boolean;
+  } = {},
 ) => {
   const kept = handy?.status === "kept";
+  const put = onCard ? [] : [DONE_ITEM, ...(notNow ? [NOT_NOW_ITEM] : [])];
   const first =
     link.state === "active"
-      ? [DONE_ITEM, { ...KEEP_ITEM, hidden: kept }, { ...NOT_HANDY, hidden: !kept }, DIVIDER]
+      ? [...put, { ...KEEP_ITEM, hidden: kept }, { ...NOT_HANDY, hidden: !kept }, DIVIDER]
       : [];
   return cardMenu(`More for ${displayTitle(link)}`, [
     ...first,

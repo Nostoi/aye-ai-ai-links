@@ -23,8 +23,11 @@ export const VIEW_COOKIE = "aye_view";
 export const viewOf = (value: string | undefined): View =>
   value === "pictures" ? "pictures" : "list";
 
-/** The why as a row reads it: the owner's words in quotes, an AI's labelled as a guess. */
-const whyText = (why: NonNullable<Link["why"]>) =>
+/**
+ * The why as a row reads it: the owner's words in quotes, an AI's labelled as a guess. Home's
+ * Worth a look cards read it the same way.
+ */
+export const whyText = (why: NonNullable<Link["why"]>) =>
   why.source === "inferred"
     ? `Why (a guess): ${escapeHtml(why.text)}`
     : `"${escapeHtml(why.text)}"`;

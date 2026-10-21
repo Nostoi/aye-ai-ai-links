@@ -71,7 +71,6 @@ const variants: Record<string, () => string> = {
         now: NOW,
         catalog: [KITCHEN],
         gone: null,
-        goneCopy: null,
       },
       shelf: "",
       spaces: "",

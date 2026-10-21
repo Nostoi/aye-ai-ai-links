@@ -14,7 +14,6 @@ import { DIMS } from "../search/model.js";
 import { allPage } from "./all-page.js";
 import { editMenu } from "./edit-link.js";
 import { goneLine } from "./gone-line.js";
-import { homePage } from "./home-page.js";
 import { searchPage } from "./pages.js";
 import { spacePage } from "./space-page.js";
 
@@ -154,27 +153,6 @@ describe("the page builders", () => {
     expect(rows(html, "1")).toEqual(ROW("1"));
     expect(lineLink(html, "1")).not.toBeNull();
   });
-
-  describe("home's gone card", () => {
-    const home = (goneCopy: CopyInfo | null) =>
-      homePage({
-        worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: link("9"), goneCopy },
-        shelf: "",
-        spaces: "",
-      });
-    it("links to the copy first when it has one", () => {
-      const row = dom(home(INFO)).querySelector(".worth-gone .small-actions");
-      expect([...(row?.children ?? [])].map((e) => e.textContent)).toEqual([
-        "Read the saved copy",
-        "I'm done with it",
-        "It still works",
-      ]);
-      expect(row?.querySelector("a")?.getAttribute("href")).toBe("/links/9/copy");
-    });
-    it("has no such link without one", () => {
-      expect(dom(home(null)).querySelector(".worth-gone .small-actions a")).toBeNull();
-    });
-  });
 });
 
 const dirs: string[] = [];
@@ -292,14 +270,17 @@ describe("the pages' routes", () => {
     const { save, flag, get } = await world();
     const id = await save("owner", "Old page", { copy: true });
     await flag(id);
-    expect(goneLinks(await get("/"), id)).toEqual([`/links/${id}/copy`]);
+    const reads = dom(await get("/")).querySelectorAll(`#worth-cards [data-id="${id}"] .gone-copy`);
+    expect([...reads].map((a) => a.getAttribute("href"))).toEqual([`/links/${id}/copy`]);
   });
 
-  it("home: reads copyInfo only when there is a gone pick", async () => {
+  it("home: reads copyInfo once, for the cards it shows, and links a pick's copy on its grey line", async () => {
     const { w, save, get } = await world();
-    await save("owner", "Plain", { copy: true });
+    const id = await save("owner", "Plain", { copy: true });
     const spy = vi.spyOn(w.savedCopies, "copyInfo");
-    await get("/");
-    expect(spy).not.toHaveBeenCalled();
+    const html = await get("/");
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]?.[1]).toEqual([id]);
+    expect(lineLink(html, id)?.getAttribute("href")).toBe(`/links/${id}/copy`);
   });
 });

@@ -149,6 +149,35 @@ describe("the card menu and the card data", () => {
     ]);
   });
 
+  it("adds Not now after I'm done with it on Home's rows: the one six-row menu (#195)", () => {
+    expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
+      "BUTTON archive I'm done with it",
+      "BUTTON snooze Not now",
+      "BUTTON keep Keep handy",
+      "BUTTON not-handy Not handy anymore (hidden)",
+      "—",
+      "BUTTON edit Edit title and picture…",
+      "BUTTON remove-copy Remove saved copy",
+      "—",
+      "BUTTON delete-link Delete link",
+    ]);
+    const svg = parseHTML(editMenu(link("7"), { notNow: true })).document.querySelector(
+      "[data-act=snooze] svg",
+    );
+    expect(svg?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("leaves out I'm done with it and Not now when the card shows them as buttons (#195)", () => {
+    expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
+      "BUTTON keep Keep handy",
+      "BUTTON not-handy Not handy anymore (hidden)",
+      "—",
+      "BUTTON edit Edit title and picture…",
+      "—",
+      "BUTTON delete-link Delete link",
+    ]);
+  });
+
   it("drops the first group for a link you're done with: it can't be done again or kept", () => {
     expect(
       labels(

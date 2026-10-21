@@ -57,7 +57,6 @@ const worth = (links: Link[], gone: Link | null = null) => ({
   now: NOW,
   catalog: [KITCHEN],
   gone,
-  goneCopy: null,
 });
 const tool = (l: Link) => ({
   link: l,
@@ -101,8 +100,18 @@ const CASES: Case[] = [
     html: (ls) => homePage({ worth: worth(ls), shelf: "", spaces: "" }),
   },
   {
-    name: "Home's gone card",
-    heading: "h3",
+    name: "Home's Also today row",
+    heading: "h4",
+    html: (ls) =>
+      homePage({
+        worth: worth([{ ...link({ title: "Lead" }), id: "0" }, ...ls]),
+        shelf: "",
+        spaces: "",
+      }),
+  },
+  {
+    name: "Home's gone row",
+    heading: "h4",
     html: (ls) => homePage({ worth: worth([], ls[0] ?? null), shelf: "", spaces: "" }),
   },
   {
@@ -145,7 +154,14 @@ describe("a link with no title", () => {
 
   it("names the card menu by the readable title, and keeps the stored title for the edit dialog", () => {
     for (const c of CASES.filter((x) =>
-      ["All links", "a space page", "search results", "the Handy shelf"].includes(x.name),
+      [
+        "All links",
+        "a space page",
+        "search results",
+        "the Handy shelf",
+        "Home's Worth a look",
+        "Home's gone row",
+      ].includes(x.name),
     )) {
       const { document } = parseHTML(c.html([link()]));
       expect(

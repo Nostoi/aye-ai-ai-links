@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, allRows, oauthWorld, type World } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
@@ -7,6 +7,7 @@ import { SNOOZE_MS } from "../core/worth-a-look.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { SqliteImageStore } from "../store/sqlite-image-store.js";
 
 const A = "owner";
 const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS));
@@ -60,7 +61,7 @@ describe("GET /", () => {
     await browser.signIn();
     const html = String((await browser.send("/")).body);
     expect(html).toMatch(
-      new RegExp(`class="worth-card worth-lead[^"]* space-clay" data-id="${link.id}"`),
+      new RegExp(`class="worth-card worth-feature[^"]* space-clay" data-id="${link.id}"`),
     );
   });
 
@@ -322,7 +323,9 @@ async function signedIn(world: World) {
 }
 
 describe("GET / with a link that seems gone (#128)", () => {
-  it("shows it once, as the gone card, though it is also a reading candidate", async () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const withGone = async () => {
     const world = await oauthWorld();
     const deps = linkDeps(world);
     const { link } = await saveLink(deps, A, {
@@ -341,9 +344,33 @@ describe("GET / with a link that seems gone (#128)", () => {
     });
     const browser = world.agent();
     await browser.signIn();
+    return { world, deps, browser, gone: link };
+  };
+
+  it("shows it once, as the gone row with its warning, though it is also a reading candidate", async () => {
+    const { browser, gone } = await withGone();
     const html = String((await browser.send("/")).body);
-    expect(html.split(`data-id="${link.id}"`)).toHaveLength(2);
-    expect(html).toContain(`worth-gone needs-you`);
-    expect(html).not.toContain("worth-card worth-lead");
+    expect(html.split(`data-id="${gone.id}"`)).toHaveLength(2);
+    expect(html).toMatch(new RegExp(`class="worth-row worth-gone[^"]*" data-id="${gone.id}"`));
+    expect(html).toContain("This page seems gone");
+    expect(html).not.toContain('class="worth-card worth-feature');
+  });
+
+  it("reads the pictures and saved copies of every card it shows, the gone one too", async () => {
+    const { world, deps, browser, gone } = await withGone();
+    const { link: pick } = await saveLink(deps, A, {
+      url: "https://a.example/pick",
+      savedBy: "seed",
+      title: "A pick",
+    });
+    const copies = vi.spyOn(world.savedCopies, "copyInfo");
+    const pictures = vi.spyOn(SqliteImageStore.prototype, "pictureInfo");
+    const html = String((await browser.send("/")).body);
+    expect(html).toContain(`data-id="${pick.id}"`);
+    const asked = (calls: unknown[][]) => calls.flatMap((c) => c[1] as string[]);
+    for (const spy of [copies, pictures]) {
+      expect(asked(spy.mock.calls)).toEqual(expect.arrayContaining([pick.id, gone.id]));
+    }
+    expect(html.match(/<dialog class="edit-link"/g)).toHaveLength(1);
   });
 });

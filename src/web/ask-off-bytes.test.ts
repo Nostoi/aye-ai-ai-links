@@ -84,7 +84,6 @@ const worth = (links: { link: Link; reasons: [] }[]) => ({
   now: NOW,
   catalog: [KITCHEN],
   gone: null,
-  goneCopy: null,
 });
 const IDLE = { state: "idle" } as const;
 const connections = (over: Partial<Parameters<typeof connectionsPage>[0]> = {}) =>

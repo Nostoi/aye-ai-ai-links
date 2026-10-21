@@ -80,8 +80,8 @@ export const UNDO_BAR_MAX_MS = 45_000;
 const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>`;
 
 /**
- * Defines `showUndo(message, undo)` for the page's own script, which calls it after an action has
- * already been done. The bar shows `message` and moves focus to its Undo button. It closes
+ * Defines `showUndo(message, undo, title)` for the page's own script, which calls it after an action has
+ * already been done. The bar shows `message`, after the bold `title` when one is given, and moves focus to its Undo button. It closes
  * `UNDO_BAR_MS` after it last had neither focus nor the pointer.
  * Undo runs `undo` once, with the button disabled until it settles, then closes the
  * bar. A new message replaces the bar, and a pending undo only closes the bar if it is still its
@@ -155,7 +155,7 @@ const showUndo = (() => {
     }
   });
   let offers = 0;
-  const show = (message, undo) => {
+  const show = (message, undo, title) => {
     offers++;
     if (current) {
       clearTimeout(current.timer);
@@ -165,7 +165,13 @@ const showUndo = (() => {
     const action = { undo, running: false };
     action.ceiling = setTimeout(() => close(action), ${UNDO_BAR_MAX_MS});
     current = action;
-    text.textContent = message;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
     button.disabled = false;
     bar.hidden = false;
     arm(action);

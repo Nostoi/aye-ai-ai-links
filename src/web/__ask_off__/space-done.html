@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Done in Kitchen · Aye-AI-AI Links</title>
+<title>Out of your lists in Kitchen · Aye-AI-AI Links</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2036%22%3E%3Crect%20x%3D%223.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Crect%20x%3D%2227.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3C%2Fsvg%3E">
 <style>
 :root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;}
@@ -380,10 +380,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <a href="/tags">Change this space</a>
 </div>
 </section>
-<div class="list-head"><h2>Links you're done with</h2><div class="view-switch" role="group" aria-label="View"><button type="button" data-choice="list" aria-pressed="true">List</button><button type="button" data-choice="pictures" aria-pressed="false">Pictures</button></div></div>
+<div class="list-head"><h2>Out of your lists</h2><div class="view-switch" role="group" aria-label="View"><button type="button" data-choice="list" aria-pressed="true">List</button><button type="button" data-choice="pictures" aria-pressed="false">Pictures</button></div></div>
 <p class="small"><a class="back-link" href="/spaces?tag=kitchen">Back to Kitchen</a></p>
 <p id="space-error" role="alert"></p>
-<p>Nothing here is done yet.</p>
+<p>Nothing here is out of your lists yet.</p>
 
 </main>
 <dialog class="edit-link" id="edit-link" aria-labelledby="edit-link-title">
@@ -825,7 +825,7 @@ form.addEventListener("submit", async (event) => {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("I'm done with it") stays in the page, hidden.
+  // A card moved out of the list ("It's stale") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -967,7 +967,7 @@ const showUndo = (() => {
     }
   });
   let offers = 0;
-  const show = (message, undo) => {
+  const show = (message, undo, title) => {
     offers++;
     if (current) {
       clearTimeout(current.timer);
@@ -977,7 +977,13 @@ const showUndo = (() => {
     const action = { undo, running: false };
     action.ceiling = setTimeout(() => close(action), 45000);
     current = action;
-    text.textContent = message;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
     button.disabled = false;
     bar.hidden = false;
     arm(action);

@@ -162,7 +162,7 @@ describe("the home card actions", () => {
     const res = await browser.send("/home/snooze", post({ id }));
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({
-      message: "This link is already moved out of your list. Reload.",
+      message: "This link is already out of your lists. Reload.",
     });
     expect(row(world, id)).toEqual(before);
   });

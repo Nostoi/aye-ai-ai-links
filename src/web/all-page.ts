@@ -9,7 +9,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript } from "./done-link.js";
+import { doneLinkScript, OUT_OF_LISTS } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -20,7 +20,7 @@ import { olderScript } from "./show-older.js";
 import { CARD_FETCH } from "./tell-why.js";
 
 /**
- * The URL of All links in `order`, or with `done` the links you're done with; `before` is a
+ * The URL of All links in `order`, or with `done` the links out of your lists; `before` is a
  * page's `older` cursor. Newest, the default order, is the plain address.
  */
 export const allHref = (
@@ -52,7 +52,7 @@ type Input = {
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
-  /** The links you're done with, rather than the active ones. */
+  /** The links out of your lists, rather than the active ones. */
   done: boolean;
   /** A page after the first. */
   later?: boolean;
@@ -118,8 +118,8 @@ function row(
 
 function empty({ order, done, later }: Input): string {
   if (later) return order === "newest" ? "No older links." : "No more links.";
-  if (done && order === "opened") return "You haven't opened any of the links you're done with.";
-  if (done) return "Nothing here is done yet.";
+  if (done && order === "opened") return "You haven't opened any of the links out of your lists.";
+  if (done) return "Nothing here is out of your lists yet.";
   if (order === "opened") {
     return "Nothing opened yet. Links you open from this site show here.";
   }
@@ -127,7 +127,7 @@ function empty({ order, done, later }: Input): string {
 }
 
 /**
- * All links, or with `done` the links you're done with, in one of the orders, grouped by month.
+ * All links, or with `done` the links out of your lists, in one of the orders, grouped by month.
  * It shows no count. Each page has at most the links given; `older` is the cursor of the next
  * page, or null.
  */
@@ -146,12 +146,12 @@ export function allPage(input: Input): string {
     : "";
   const other = done
     ? `<a class="back-link" href="${escapeHtml(allHref(order))}">Back to All links</a>`
-    : `<a class="done-link" href="${escapeHtml(allHref(order, { done: true }))}">Links you're done with</a>`;
+    : `<a class="done-link" href="${escapeHtml(allHref(order, { done: true }))}">${OUT_OF_LISTS}</a>`;
   return page(
-    `${done ? "Done · " : ""}All links · Aye-AI-AI Links`,
+    `${done ? `${OUT_OF_LISTS} · ` : ""}All links · Aye-AI-AI Links`,
     `<main class="all" data-view="${view}">
 <div class="all-head">
-<h1>${done ? "Links you're done with" : "All links"}</h1>
+<h1>${done ? OUT_OF_LISTS : "All links"}</h1>
 <div class="all-tools">${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
 </div>
 <nav class="orders" aria-label="Order">${choices}</nav>

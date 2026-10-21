@@ -391,7 +391,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <p class="card-line"><span>example.com</span></p>
 <div class="feature-open"><a class="button primary" href="https://example.com/1" target="_blank" rel="noopener noreferrer" data-open>Open it</a></div>
 <div class="feature-quiet">
-<button type="button" data-act="archive">I'm done with it</button>
+<button type="button" data-act="archive">It's stale</button>
 <button type="button" data-act="snooze">Not now</button>
 </div>
 <details class="card-menu" name="menu">
@@ -518,12 +518,12 @@ const SHELF_ACTS = {
   "suggest-yes": (id) => ["/tools/suggestion", { id, keep: true }, null],
   "suggest-no": (id) => ["/tools/suggestion", { id, keep: false }, "Not kept handy."],
 };
-const offerUndo = (message, route, body, from) =>
+const offerUndo = (message, route, body, from, title) =>
   showUndo(message, async () => {
     const back = await post(route, body);
     if (back && back.status === 204) await refreshShelf(from);
     else handyError.textContent = await failure(back);
-  });
+  }, title);
 if (handy) {
   handy.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
@@ -537,7 +537,7 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    // Done on a tile's ask and the menu's I'm done with it (archive) are the same action.
+    // It's stale on a tile's ask and the menu's It's stale (archive) are the same action.
     const done = act === "done" || act === "archive";
     if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
@@ -556,7 +556,7 @@ if (handy) {
           return;
         }
         dropped = await refreshShelf(from);
-        offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
+        offerUndo("You won't see it again unless you search for it.", "/home/unarchive", { id }, from, "Let go.");
         return;
       }
       if (act === "still-works") {
@@ -621,7 +621,7 @@ if (whyRoot) {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("I'm done with it") stays in the page, hidden.
+  // A card moved out of the list ("It's stale") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -685,11 +685,11 @@ const doneCard = (card) =>
       return;
     }
     const putBack = takeOut(listRoot, card, false);
-    showUndo("Moved out of your list.", async () => {
+    showUndo("You won't see it again unless you search for it.", async () => {
       const back = await post("/home/unarchive", { id });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
-    });
+    }, "Let go.");
   });
 {
 const doneRoot = document.getElementById("worth-cards");
@@ -1289,7 +1289,7 @@ const showUndo = (() => {
     }
   });
   let offers = 0;
-  const show = (message, undo) => {
+  const show = (message, undo, title) => {
     offers++;
     if (current) {
       clearTimeout(current.timer);
@@ -1299,7 +1299,13 @@ const showUndo = (() => {
     const action = { undo, running: false };
     action.ceiling = setTimeout(() => close(action), 45000);
     current = action;
-    text.textContent = message;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
     button.disabled = false;
     bar.hidden = false;
     arm(action);

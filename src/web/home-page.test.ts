@@ -126,13 +126,13 @@ describe("Worth a look today", () => {
     expect(d.querySelector(".worth-rows")).toBeNull();
   });
 
-  it("gives the featured card Open it, I'm done with it and Not now, and a row only its ⋯", () => {
+  it("gives the featured card Open it, It's stale and Not now, and a row only its ⋯", () => {
     const d = dom(render([card([]), card([])]));
     const feature = d.querySelector(".worth-feature") as HTMLElement;
     const open = feature.querySelector("a.button.primary[data-open]") as HTMLAnchorElement;
     expect(open.textContent).toBe("Open it");
     expect(open.getAttribute("href")).toBe(feature.querySelector("h3 a")?.getAttribute("href"));
-    expect(shownButtons(feature)).toEqual(["archive I'm done with it", "snooze Not now"]);
+    expect(shownButtons(feature)).toEqual(["archive It's stale", "snooze Not now"]);
     const row = d.querySelector(".worth-row");
     expect(shownButtons(row)).toEqual([]);
     expect(row?.querySelector("a.button")).toBeNull();
@@ -534,19 +534,13 @@ describe("the home page's script", () => {
   });
 
   it.each([
+    ["Not now, then It's stale", "snooze", "archive", "/home/snooze", "Hidden for two weeks."],
     [
-      "Not now, then I'm done with it",
-      "snooze",
-      "archive",
-      "/home/snooze",
-      "Hidden for two weeks.",
-    ],
-    [
-      "I'm done with it, then Not now",
+      "It's stale, then Not now",
       "archive",
       "snooze",
       "/home/archive",
-      "Moved out of your list.",
+      "Let go. You won't see it again unless you search for it.",
     ],
   ])("sends one action for a card: %s before the first is answered", async (_, a, b, url, undo) => {
     const cards = two();
@@ -632,7 +626,7 @@ describe("the home page's script", () => {
     expect(hidden(p, id)).toBe(true);
   });
 
-  it("I'm done with it on the featured card archives once, hides it, and Undo puts it back", async () => {
+  it("It's stale on the featured card archives once, hides it, and Undo puts it back", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;
     const p = home(cards);
@@ -641,14 +635,16 @@ describe("the home page's script", () => {
     expect(p.sent).toHaveLength(1);
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id } });
     expect(hidden(p, id)).toBe(true);
-    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Let go. You won't see it again unless you search for it.",
+    );
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id } });
     expect(hidden(p, id)).toBe(false);
   });
 
-  it("I'm done with it in a row's menu archives exactly once", async () => {
+  it("It's stale in a row's menu archives exactly once", async () => {
     const cards = two();
     const id = cards[1]?.link.id as string;
     const p = home(cards);
@@ -703,7 +699,7 @@ describe("the home page's script", () => {
     expect(p.$("#home-error").textContent).toBe("Changed since.");
   });
 
-  it("★ a Not now refused after I'm done with it went through leaves the card out", async () => {
+  it("★ a Not now refused after It's stale went through leaves the card out", async () => {
     // [Hiding at Not now's click and showing the card again on its refusal, restoring an archived card.]
     const cards = two();
     const id = cards[0]?.link.id as string;
@@ -719,7 +715,7 @@ describe("the home page's script", () => {
               status: 409,
               body: {
                 code: "conflict",
-                message: "This link is already moved out of your list. Reload.",
+                message: "This link is already out of your lists. Reload.",
               },
               wait: snooze,
             }
@@ -733,7 +729,9 @@ describe("the home page's script", () => {
     refused(null);
     await p.settle();
     expect(hidden(p, id)).toBe(true);
-    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Let go. You won't see it again unless you search for it.",
+    );
   });
 
   it("Tell me why on the featured card saves the answer in place of the question and the amber", async () => {
@@ -982,10 +980,7 @@ describe("the Worth a look gone row (#128)", () => {
     expect(last.dataset.id).toBe(g.id);
     expect(last.classList.contains("worth-gone")).toBe(true);
     expect(last.querySelector("[data-gone] p.small")?.textContent).toBe("This page seems gone");
-    expect(shownButtons(last)).toEqual([
-      "still-works It still works",
-      "gone-done I'm done with it",
-    ]);
+    expect(shownButtons(last)).toEqual(["still-works It still works", "gone-done It's stale"]);
     expect(menuRows(last)[0]).toBe("archive");
     expect(menuRows(last)).toHaveLength(6);
     expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
@@ -1050,7 +1045,7 @@ describe("the Worth a look gone row (#128)", () => {
     expect((row().querySelector("[data-gone]") as HTMLElement).hidden).toBe(false);
   });
 
-  it("I'm done with it on the warning line archives once, and Undo unarchives", async () => {
+  it("It's stale on the warning line archives once, and Undo unarchives", async () => {
     const { p, g, row } = open();
     p.dispatch(p.$(".worth-gone button[data-act=gone-done]"), "click");
     await p.settle();

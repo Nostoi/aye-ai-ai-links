@@ -112,9 +112,9 @@ describe("the card menu and the card data", () => {
     );
   const KEPT = { status: "kept", source: "stated", due: false } as const;
 
-  it("puts I'm done with it first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
+  it("puts It's stale first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
     expect(labels(editMenu(link("7")))).toEqual([
-      "BUTTON archive I'm done with it",
+      "BUTTON archive It's stale",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -124,7 +124,7 @@ describe("the card menu and the card data", () => {
     ]);
     const withCopy = editMenu(link("7"), { copy: { madeAt: new Date(0) } });
     expect(labels(withCopy)).toEqual([
-      "BUTTON archive I'm done with it",
+      "BUTTON archive It's stale",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -143,15 +143,15 @@ describe("the card menu and the card data", () => {
 
   it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
     expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 3)).toEqual([
-      "BUTTON archive I'm done with it",
+      "BUTTON archive It's stale",
       "BUTTON keep Keep handy (hidden)",
       "BUTTON not-handy Not handy anymore",
     ]);
   });
 
-  it("adds Not now after I'm done with it on Home's rows: the one six-row menu (#195)", () => {
+  it("adds Not now after It's stale on Home's rows: the one six-row menu (#195)", () => {
     expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
-      "BUTTON archive I'm done with it",
+      "BUTTON archive It's stale",
       "BUTTON snooze Not now",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -167,7 +167,7 @@ describe("the card menu and the card data", () => {
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("leaves out I'm done with it and Not now when the card shows them as buttons (#195)", () => {
+  it("leaves out It's stale and Not now when the card shows them as buttons (#195)", () => {
     expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -178,7 +178,7 @@ describe("the card menu and the card data", () => {
     ]);
   });
 
-  it("drops the first group for a link you're done with: it can't be done again or kept", () => {
+  it("drops the first group for a link out of your lists: it can't be done again or kept", () => {
     expect(
       labels(
         editMenu(link("7", { state: "archived" }), { copy: { madeAt: new Date(0) }, handy: KEPT }),

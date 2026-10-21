@@ -1,19 +1,20 @@
 import type { GoneView } from "../core/link-check.js";
 import type { Link } from "../core/types.js";
+import { STALE_LABEL } from "./done-link.js";
 
 /** The words on a card whose link seems gone. */
 export const GONE_TEXT = "This page seems gone";
 
 /**
  * The line a card carries once its link seems gone (#128). An active link also gets It still works
- * and I'm done with it; a link already done with gets the line only. It carries no date, and no
+ * and It's stale; a link already out of your lists gets the line only. It carries no date, and no
  * link to a saved copy: the card's grey line (`cardLine`) has that.
  */
 export function goneLine(link: Link, view: GoneView | null | undefined): string {
   if (!view) return "";
   const buttons =
     link.state === "active"
-      ? `\n<div class="actions small-actions"><button type="button" data-act="still-works">It still works</button><button type="button" data-act="gone-done">I'm done with it</button></div>`
+      ? `\n<div class="actions small-actions"><button type="button" data-act="still-works">It still works</button><button type="button" data-act="gone-done">${STALE_LABEL}</button></div>`
       : "";
   return `<div class="gone-line" data-gone>
 <p class="small">${GONE_TEXT}</p>${buttons}
@@ -23,7 +24,7 @@ export function goneLine(link: Link, view: GoneView | null | undefined): string 
 /**
  * The gone line's buttons on the cards inside `#root`, including those Show older links appends.
  * It still works posts `/links/still-works`, hides that card's line and offers Undo, which sends
- * back the rows the answer held. I'm done with it is the menu's own (`doneCard`), so the page's
+ * back the rows the answer held. It's stale is the menu's own (`doneCard`), so the page's
  * script includes `doneLinkScript` too. Each button is off until the other's answer comes, and
  * a card takes no other action while It still works is out (`whileBusy`). A refusal is shown in
  * `#error`, and a refused Undo leaves things hidden. A block; needs `CARD_FETCH` and `showUndo`.

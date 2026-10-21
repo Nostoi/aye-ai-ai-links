@@ -185,7 +185,7 @@ describe("the Handy shelf", () => {
     expect(b?.querySelector(".card-site .dot")).toBeNull();
   });
 
-  it("marks a due tile as needing you with Still using?, Yes and Done; a tile not due has neither", () => {
+  it("marks a due tile as needing you with Still using?, Yes and It's stale; a tile not due has neither", () => {
     const html = render([kept({}, true), kept()]);
     const [due, calm] = tiles(html);
     expect(due?.classList.contains("needs-you")).toBe(true);
@@ -197,7 +197,7 @@ describe("the Handy shelf", () => {
       ]),
     ).toEqual([
       ["still-using", "Yes"],
-      ["done", "Done"],
+      ["done", "It's stale"],
     ]);
     expect(calm?.classList.contains("needs-you")).toBe(false);
     expect(calm?.querySelector(".ask")).toBeNull();
@@ -215,7 +215,7 @@ describe("the Handy shelf", () => {
       ]),
     ).toEqual([
       ["still-works", "It works"],
-      ["done", "Done"],
+      ["done", "It's stale"],
     ]);
     expect(calm?.classList.contains("needs-you")).toBe(false);
     expect(calm?.querySelector(".ask")).toBeNull();
@@ -234,7 +234,7 @@ describe("the Handy shelf", () => {
     expect(ids(tiles(render([gone, calm])))).toEqual([gone.link.id, calm.link.id]);
   });
 
-  it("gives every kept tile a menu with I'm done with it then Not handy anymore, and a suggestion none", () => {
+  it("gives every kept tile a menu with It's stale then Not handy anymore, and a suggestion none", () => {
     const html = render([kept({ title: "Attendance" })], [suggested()]);
     const [tool, guess] = tiles(html);
     const menu = tool?.querySelector("details.card-menu");
@@ -245,7 +245,7 @@ describe("the Handy shelf", () => {
       [...(menu?.querySelectorAll(".card-menu-list > *") ?? [])].map(
         (b) => `${b.getAttribute("data-act")} ${b.textContent}`,
       ),
-    ).toEqual(["archive I'm done with it", "not-handy Not handy anymore"]);
+    ).toEqual(["archive It's stale", "not-handy Not handy anymore"]);
     expect(guess?.querySelector("details")).toBeNull();
   });
 
@@ -463,13 +463,15 @@ describe("the shelf's script", () => {
     expect(p.document.querySelector("#handy-shelf .handy-empty")).toBeNull();
   });
 
-  it("Done archives through /home/archive and offers Undo through /home/unarchive", async () => {
+  it("It's stale archives through /home/archive and offers Undo through /home/unarchive", async () => {
     const due = kept({}, true);
     const p = shelfPage(home([due]), () => ({ status: 204 }), [home([]), home([due])]);
     p.dispatch(p.$("button[data-act=done]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: due.link.id } });
-    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Let go. You won't see it again unless you search for it.",
+    );
     expect(shelfIds(p)).toEqual([]);
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
@@ -477,14 +479,16 @@ describe("the shelf's script", () => {
     expect(shelfIds(p)).toEqual([due.link.id]);
   });
 
-  it("the menu's I'm done with it archives, refreshes the shelf and offers Undo, which brings the tile back", async () => {
+  it("the menu's It's stale archives, refreshes the shelf and offers Undo, which brings the tile back", async () => {
     const tool = kept();
     const p = shelfPage(home([tool]), () => ({ status: 204 }), [home([]), home([tool])]);
     p.dispatch(p.$(".card-menu button[data-act=archive]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: tool.link.id } });
     expect(shelfIds(p)).toEqual([]);
-    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Let go. You won't see it again unless you search for it.",
+    );
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(urls(p)).toEqual(["/home/archive", "/", "/home/unarchive", "/"]);
@@ -599,7 +603,7 @@ describe("the shelf's script", () => {
       gone.$(`[data-id="${b.link.id}"] h3 a`),
       gone.$("#undo-bar button"),
     ]);
-    // Done on the only tile: nothing is left, so focus goes to the heading and then to Undo.
+    // It's stale on the only tile: nothing is left, so focus goes to the heading and then to Undo.
     const done = shelfPage(home([due]), () => ({ status: 204 }), [home([])]);
     done.dispatch(done.$("button[data-act=done]"), "click");
     await done.settle();

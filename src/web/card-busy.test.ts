@@ -72,10 +72,10 @@ const card = (id: string) => `[data-id='${id}']`;
 type Key = "done" | "delete" | "keep" | "copy" | "still";
 const ACTIONS: Record<Key, Action> = {
   done: {
-    name: "I'm done with it",
+    name: "It's stale",
     select: ".card-menu button[data-act=archive]",
     url: "/home/archive",
-    undo: "Moved out of your list.",
+    undo: "Let go. You won't see it again unless you search for it.",
   },
   delete: {
     name: "Delete link",
@@ -217,7 +217,7 @@ describe("All links, on a card Show older appended", () => {
     expect(sentUrls(p)).toEqual(["/home/archive"]);
     release();
     await p.settle();
-    expect(undoText(p)).toBe("Moved out of your list.");
+    expect(undoText(p)).toBe("Let go. You won't see it again unless you search for it.");
   });
 
   function html(links: Link[], older: string | null = null) {
@@ -249,6 +249,6 @@ describe("the edit dialog's Delete link", () => {
     expect(sentUrls(p)).toEqual(["/home/archive"]);
     release();
     await p.settle();
-    expect(undoText(p)).toBe("Moved out of your list.");
+    expect(undoText(p)).toBe("Let go. You won't see it again unless you search for it.");
   });
 });

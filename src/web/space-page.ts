@@ -7,7 +7,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript } from "./done-link.js";
+import { doneLinkScript, OUT_OF_LISTS } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -19,7 +19,7 @@ import { olderScript } from "./show-older.js";
 import { CARD_FETCH, tellWhyScript } from "./tell-why.js";
 
 /**
- * The URL of a tag's space page, or with `done` its links you're done with; `before` is a page's
+ * The URL of a tag's space page, or with `done` its links out of your lists; `before` is a page's
  * `older` cursor. Every part is encoded, so any key comes back as itself.
  */
 export const spaceHref = (
@@ -60,7 +60,7 @@ type Input = {
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
-  /** The links you're done with, rather than the active ones. */
+  /** The links out of your lists, rather than the active ones. */
   done: boolean;
   /** A page after the first. */
   later?: boolean;
@@ -106,7 +106,7 @@ function row(
 }
 
 /**
- * Tell me why, the ⋯ menu (I'm done with it, Keep handy, the edit dialog, the saved copy's Remove
+ * Tell me why, the ⋯ menu (It's stale, Keep handy, the edit dialog, the saved copy's Remove
  * and Delete link) and the gone line on the active cards, including those Show older links appends.
  */
 const cardsScript = (ask: boolean) => `<script>
@@ -132,7 +132,7 @@ ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScr
 
 /**
  * A tag's space: a header in its color (`spaceColor`: neutral while it is unpinned), then its
- * active links newest first, or with `done` the links you're done with. Each page has at most
+ * active links newest first, or with `done` the links out of your lists. Each page has at most
  * the links given; `older` is the cursor of the next page, or null.
  */
 export function spacePage(input: Input): string {
@@ -140,7 +140,7 @@ export function spacePage(input: Input): string {
   const empty = later
     ? "No older links."
     : done
-      ? "Nothing here is done yet."
+      ? "Nothing here is out of your lists yet."
       : "No links in this space yet.";
   const list =
     links.length === 0
@@ -150,7 +150,7 @@ export function spacePage(input: Input): string {
     ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, before: older }))}">Show older links</a></p>\n`
     : "";
   const body = done
-    ? `<div class="list-head"><h2>Links you're done with</h2>${viewSwitch(view)}</div>
+    ? `<div class="list-head"><h2>${OUT_OF_LISTS}</h2>${viewSwitch(view)}</div>
 <p class="small"><a class="back-link" href="${escapeHtml(spaceHref(tag.key))}">Back to ${escapeHtml(tag.name)}</a></p>
 <p id="space-error" role="alert"></p>
 ${list}
@@ -158,9 +158,9 @@ ${more}`
     : `<div class="list-head"><h2>Newest first</h2>${viewSwitch(view)}</div>
 <p id="space-error" role="alert"></p>
 ${list}
-${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">Links you're done with</a></p>`;
+${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">${OUT_OF_LISTS}</a></p>`;
   return page(
-    `${done ? "Done in " : ""}${tag.name} · Aye-AI-AI Links`,
+    `${done ? `${OUT_OF_LISTS} in ` : ""}${tag.name} · Aye-AI-AI Links`,
     `<main class="space" data-view="${view}">
 ${header(tag)}
 ${body}

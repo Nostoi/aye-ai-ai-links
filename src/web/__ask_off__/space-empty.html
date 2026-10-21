@@ -383,7 +383,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <div class="list-head"><h2>Newest first</h2><div class="view-switch" role="group" aria-label="View"><button type="button" data-choice="list" aria-pressed="true">List</button><button type="button" data-choice="pictures" aria-pressed="false">Pictures</button></div></div>
 <p id="space-error" role="alert"></p>
 <p>No links in this space yet.</p>
-<p class="small"><a class="done-link" href="/spaces/done?tag=kitchen">Links you're done with</a></p>
+<p class="small"><a class="done-link" href="/spaces/done?tag=kitchen">Out of your lists</a></p>
 </main>
 <dialog class="edit-link" id="edit-link" aria-labelledby="edit-link-title">
 <form class="edit-form" novalidate>
@@ -937,7 +937,7 @@ form.addEventListener("submit", async (event) => {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("I'm done with it") stays in the page, hidden.
+  // A card moved out of the list ("It's stale") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -1001,11 +1001,11 @@ const doneCard = (card) =>
       return;
     }
     const putBack = takeOut(listRoot, card, false);
-    showUndo("Moved out of your list.", async () => {
+    showUndo("You won't see it again unless you search for it.", async () => {
       const back = await post("/home/unarchive", { id });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
-    });
+    }, "Let go.");
   });
 {
 const doneRoot = document.getElementById("space-links");
@@ -1108,7 +1108,7 @@ const showUndo = (() => {
     }
   });
   let offers = 0;
-  const show = (message, undo) => {
+  const show = (message, undo, title) => {
     offers++;
     if (current) {
       clearTimeout(current.timer);
@@ -1118,7 +1118,13 @@ const showUndo = (() => {
     const action = { undo, running: false };
     action.ceiling = setTimeout(() => close(action), 45000);
     current = action;
-    text.textContent = message;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
     button.disabled = false;
     bar.hidden = false;
     arm(action);

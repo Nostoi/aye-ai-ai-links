@@ -74,8 +74,8 @@ const MENU_DONE = (id: string) => `[data-id='${id}'] .card-menu button[data-act=
 const GONE_DONE = (id: string) => `[data-id='${id}'] [data-gone] button[data-act=gone-done]`;
 
 describe.each([
-  ["the ⋯ menu's I'm done with it", MENU_DONE],
-  ["the gone line's I'm done with it", GONE_DONE],
+  ["the ⋯ menu's It's stale", MENU_DONE],
+  ["the gone line's It's stale", GONE_DONE],
 ])("%s on All links", (_, button) => {
   const load = (answer: (s: Post) => Answer = () => ({ status: 204 })) =>
     runPage(allLinks([link("7"), link("8"), link("9", SEPTEMBER)], { gone: ["7"] }), answer);
@@ -89,7 +89,9 @@ describe.each([
     expect(p.$("[data-id='7']").hidden).toBe(true);
     if (button === MENU_DONE) expect(menu.open).toBe(false);
     expect(p.focused().at(-2)).toBe(p.$("[data-id='8'] .card-menu summary"));
-    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Let go. You won't see it again unless you search for it.",
+    );
   });
 
   it("Undo posts /home/unarchive and shows the card again", async () => {
@@ -138,7 +140,7 @@ describe.each([
 describe.each([
   ["the ⋯ menu", MENU_DONE],
   ["the gone line", GONE_DONE],
-])("I'm done with it from %s on a month's only card", (_, button) => {
+])("It's stale from %s on a month's only card", (_, button) => {
   it("hides the month, focuses the next month's card, and Undo shows both again", async () => {
     const p = runPage(allLinks([link("7"), link("9", SEPTEMBER)], { gone: ["7"] }));
     const month = p.$("[data-id='7']").closest("section.month") as HTMLElement;
@@ -166,7 +168,7 @@ describe.each([
   });
 });
 
-describe("I'm done with it from the ⋯ menu on space pages and search", () => {
+describe("It's stale from the ⋯ menu on space pages and search", () => {
   it.each([
     [
       "a space page",

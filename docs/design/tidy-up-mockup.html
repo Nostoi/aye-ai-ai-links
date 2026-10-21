@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidy up B2</title>
+<style>
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--field:#8F8A82;--teal:#2F8F83;--violet:#7B61C9;--blue:#3A6FD8;--pic:#F2F2F2}
+@media (prefers-color-scheme:dark){:root{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--line:#3A3A40;--field:#77736D;--teal:#4FB3A5;--violet:#A08BE3;--blue:#7099EA;--pic:#323236}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded,"SF Pro Rounded",system-ui,sans-serif;font-size:17px;line-height:1.5}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+.intro{max-width:66ch;margin-bottom:36px}
+.intro h1{font-size:30px;letter-spacing:-.3px;line-height:1.2;margin:0 0 10px}
+.intro p{color:var(--soft);margin:0}
+.intro ol{color:var(--soft);margin:10px 0 0;padding-left:22px;font-size:15.5px}
+.intro li{margin:0 0 4px}
+.stage{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.screen{flex:1 1 600px;min-width:0;border:1.5px solid var(--line);border-radius:22px;padding:22px 26px 34px}
+.phone{flex:0 0 360px;max-width:100%;border-radius:36px;padding:18px 14px 26px}
+.frame-label{font-size:13px;color:var(--soft);margin:0 0 14px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;font-size:15px}
+.brand{font-weight:700;display:flex;align-items:center;gap:8px}
+.brand i{width:22px;height:22px;border-radius:7px;background:var(--teal);display:inline-block}
+.nav{color:var(--soft)}
+.tidy-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 auto 14px;max-width:580px}
+.tidy-head h3{font-size:22px;margin:0;letter-spacing:-.2px}
+.steps{display:flex;gap:7px}
+.steps b{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.steps b.done{background:var(--soft)}
+.steps b.now{background:var(--ink)}
+.leave{display:inline-flex;align-items:center;min-height:44px;padding:0 4px;font-size:14.5px;color:var(--soft);text-decoration:underline;text-underline-offset:3px}
+.tidy{max-width:580px;margin:0 auto;background:var(--surface);border-radius:24px;padding:28px 30px 24px;box-shadow:0 4px 18px #0000000f}
+.link-top{display:flex;gap:18px;align-items:flex-start}
+.pic{flex:0 0 68px;height:68px;border-radius:16px;background:var(--pic);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--soft);font-size:21px}
+.title{font-size:24px;font-weight:700;line-height:1.25;letter-spacing:-.2px;margin:0 0 6px}
+.grey{font-size:14px;color:var(--soft);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.grey .sp{display:inline-flex;align-items:center;gap:6px;color:var(--space)}
+.grey .sp:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--space)}
+.space-teal{--space:var(--teal)}
+.why{margin:20px 0 0;font-size:17.5px;line-height:1.55}
+.why small{display:block;font-size:13.5px;color:var(--soft);margin-bottom:2px}
+.facts{margin:16px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:15.5px}
+.facts li{display:flex;gap:10px;align-items:flex-start}
+.facts svg{flex:0 0 18px;margin-top:3px;stroke:var(--soft);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.facts .soft{color:var(--soft)}
+.facts b{font-weight:650}
+.open{display:inline-flex;align-items:center;min-height:44px;margin-top:6px;font-size:15px;text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
+.stack{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.stack button{position:relative;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:14px 20px;min-height:64px;font:inherit;border-radius:18px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.stack button b{font-size:16.5px}
+.stack button span{font-size:14px;color:var(--soft)}
+.stack button.safe{background:color-mix(in srgb,var(--ink) 6%,var(--surface));border-color:transparent}
+.stack button.safe em{font-style:normal;font-size:13px;color:var(--soft);position:absolute;top:15px;right:18px}
+.stack button:hover{border-color:var(--field)}
+.stack button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+kbd{font-family:inherit;font-size:12.5px;background:var(--bg);color:var(--soft);border-radius:6px;padding:1px 7px;margin-right:8px}
+.phone kbd{display:none}
+.phone .tidy{padding:22px 18px 18px;border-radius:22px}
+.phone .title{font-size:20px}
+.phone .pic{flex-basis:52px;height:52px;font-size:17px}
+.phone .why{font-size:16px}
+.phone .facts{font-size:14.5px}
+.phone .stack button.safe em{position:static;margin-top:2px}
+.phone .top{display:none}
+.states{margin-top:56px}
+.states h2{font-size:22px;margin:0 0 6px}
+.states>p{color:var(--soft);margin:0 0 20px;font-size:15.5px;max-width:66ch}
+.state-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+.mini{background:var(--surface);border-radius:20px;padding:20px 22px;box-shadow:0 2px 10px #0000000b}
+.mini h4{margin:0 0 10px;font-size:15px;color:var(--soft);font-weight:600}
+.bar{display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--surface);border-radius:22px;padding:12px 8px 12px 20px;font-size:15px;line-height:1.4}
+.bar b{display:block}
+.bar span{opacity:.82}
+.bar button{font:inherit;font-weight:700;border:0;border-radius:999px;background:var(--surface);color:var(--ink);padding:0 16px;min-height:44px;flex:0 0 auto}
+@media (max-width:640px){.wrap{padding:24px 16px 64px}.screen{padding:18px 14px 26px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<section class="intro">
+  <h1>Tidy up, version B2</h1>
+  <p>Version B after the critique:</p>
+  <ol>
+    <li>The fit is now one line inside the card, just before the choices. There's no side panel.</li>
+    <li>The safe choice is shown by a soft fill and "If you're not sure", not by an outline that looks already picked.</li>
+    <li>Every case gets a line: it fits a project, it fits nothing, or you haven't told the app what you're working on (no line at all).</li>
+  </ol>
+</section>
+
+<div class="stage">
+  <div class="screen">
+    <p class="frame-label">Computer: it fits something you're working on</p>
+    <div class="top"><span class="brand"><i></i>Aye-AI-AI Links</span><span class="nav">All links · Tags · Profile</span></div>
+    <div class="tidy-head"><h3>Tidy up</h3><span class="steps" aria-hidden="true"><b class="done"></b><b class="now"></b><b></b><b></b><b></b></span><span class="sr">Link 2 of 5</span><a class="leave" href="#">Stop here</a></div>
+    <article class="tidy">
+      <div class="link-top"><div class="pic">HB</div>
+        <div><p class="title">A plain guide to home battery systems</p>
+          <div class="grey"><span class="sp space-teal">House</span><span>energysage.com</span></div></div></div>
+      <p class="why"><small>Why you saved it</small>Comparing batteries before we decide on solar.</p>
+      <ul class="facts">
+        <li><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="soft">Saved in March. You haven't opened it since.</span></li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg><span>Might fit <b>Solar for the house</b>, which you're working on.</span></li>
+      </ul>
+      <a class="open" href="#">Open it to check</a>
+      <div class="stack">
+        <button><b><kbd>1</kbd>Keep</b><span>Stays in your lists, as it is now.</span></button>
+        <button class="safe"><b><kbd>2</kbd>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em></button>
+        <button><b><kbd>3</kbd>It's stale</b><span>Out of sight for good. Search still finds it.</span></button>
+      </div>
+    </article>
+  </div>
+
+  <div class="screen phone">
+    <p class="frame-label">Phone: it fits nothing you're working on</p>
+    <div class="tidy-head"><h3>Tidy up</h3><span class="steps" aria-hidden="true"><b class="done"></b><b class="done"></b><b class="now"></b><b></b><b></b></span><span class="sr">Link 3 of 5</span><a class="leave" href="#">Stop</a></div>
+    <article class="tidy">
+      <div class="link-top"><div class="pic">RW</div>
+        <div><p class="title">Rewrite your CLI in Rust: a field guide</p>
+          <div class="grey"><span>blog.example.dev</span></div></div></div>
+      <p class="why"><small>Why you saved it</small>Maybe for the sync tool someday.</p>
+      <ul class="facts">
+        <li><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="soft">Saved two years ago. Opened once, last May.</span></li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg><span>Doesn't fit anything you're working on now.</span></li>
+      </ul>
+      <a class="open" href="#">Open it to check</a>
+      <div class="stack">
+        <button><b>Keep</b><span>Stays in your lists, as it is now.</span></button>
+        <button class="safe"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em></button>
+        <button><b>It's stale</b><span>Out of sight for good. Search still finds it.</span></button>
+      </div>
+    </article>
+  </div>
+</div>
+
+<section class="states">
+  <h2>The other cases</h2>
+  <p>What changes when there's nothing to say, and the message after each choice.</p>
+  <div class="state-grid">
+    <div class="mini"><h4>You haven't told the app what you're working on</h4>
+      <ul class="facts" style="margin:0"><li><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="soft">Saved in January. Opened twice, last in February.</span></li></ul>
+      <p style="margin:10px 0 0;font-size:14px;color:var(--soft)">No fit line at all, rather than an empty box. Put it away still promises to bring the link back. It does, once you add a project.</p></div>
+    <div class="mini"><h4>After Put it away</h4>
+      <div class="bar"><div><b>Put away.</b><span>Out of your lists but still saved. If you start something it fits, it'll come back.</span></div><button>Undo</button></div></div>
+    <div class="mini"><h4>After It's stale</h4>
+      <div class="bar"><div><b>Let go.</b><span>You won't see it again unless you search for it.</span></div><button>Undo</button></div></div>
+    <div class="mini"><h4>After Keep</h4>
+      <p style="margin:0;font-size:15px">No bar. The next link slides in, since nothing changed. Kept links don't come back to Tidy up for six months.</p></div>
+  </div>
+</section>
+</div>
+</body>
+</html>

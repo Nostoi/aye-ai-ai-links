@@ -50,7 +50,7 @@ name matches the existing tag ignoring case and extra spaces. kind is "topic" or
 
 The result's kindSource becomes "stated". Asking for the kind a tag already has confirms it the same way and leaves everything else as it is, including a done status. Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. A name with no tag is an error: tags are created by tagging a link.`;
 
-export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to archive it (update_link state "archived") if the owner says it's stale.`;
+export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to mark it stale (update_link state "archived") if the owner says it's stale.`;
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
@@ -88,9 +88,9 @@ Reasons:
 - no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or when the owner opens it from the web page; any other opening, such as from a browser bookmark, is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.
-- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is the whole days since its last recorded opening, or null when none is recorded. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to archive it or send handy {action: "not_handy", source: "asked"}.
+- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is the whole days since its last recorded opening, or null when none is recorded. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to mark it stale or send handy {action: "not_handy", source: "asked"}.
 
-Offer to snooze a link (update_link with snoozedUntil) or archive it (state "archived"). Send opened: true if the owner opens one.
+Offer to snooze a link (update_link with snoozedUntil) or mark it stale (state "archived"). Send opened: true if the owner opens one.
 
 Each call marks the links it returns as shown, so the next call returns others. Don't call it again to "refresh": that uses links up before the owner sees them. An empty list means nothing is due.`;
 

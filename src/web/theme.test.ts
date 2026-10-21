@@ -2,6 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { SPACE_COLORS } from "../core/tag-space.js";
 import { editDialog } from "./edit-link.js";
+import { tile } from "./pages.js";
 import { askCss, themeCss, tokens } from "./theme.js";
 
 const channel = (n: number) => {
@@ -638,7 +639,7 @@ describe("icons and initials", () => {
     },
   );
   it.each(["row-pic", "feature-pic", "tile", "also-pic", "handy-image"])(
-    "★ centres a div.%s box with flex",
+    "★ centres a div.%s box with flex on a wide screen",
     (cls) => {
       expect(computed(el(`<div class="${cls} icon-box"></div>`, "div"), "display", "desktop")).toBe(
         "flex",
@@ -713,11 +714,34 @@ describe("Home's Worth a look cards (#195)", () => {
     }
   });
 
-  it("hides a row's picture on a phone, leaving it in the page for the edit dialog", () => {
-    const pic = row('<div class="also-pic"></div>', ".also-pic");
-    expect(computed(pic, "display", "desktop")).not.toBe("none");
-    expect(computed(pic, "display", "phone")).toBe("none");
-  });
+  it.each([
+    ["initials", undefined],
+    ["a site icon", { version: "v1", fit: "contain" as const }],
+    ["a cover picture", { version: "v1", fit: "cover" as const }],
+  ])(
+    "hides a row's picture of %s on a phone, leaving it in the page for the edit dialog",
+    (_, picture) => {
+      const link = {
+        id: "1",
+        url: "https://example.com/a",
+        urlKey: "example.com/a",
+        title: "Batteries",
+        summary: null,
+        why: null,
+        tags: [],
+        savedAt: new Date(0),
+        savedBy: "t",
+        lastOpenedAt: null,
+        lastSurfacedAt: null,
+        snoozedUntil: null,
+        state: "active" as const,
+        snapshot: null,
+      };
+      const pic = row(tile(link, picture, "also-pic"), "[data-pic]");
+      expect(computed(pic, "display", "desktop")).not.toBe("none");
+      expect(computed(pic, "display", "phone")).toBe("none");
+    },
+  );
 
   it("gives each card's ⋯ its own cell instead of the card's corner", () => {
     const fm = feature('<details class="card-menu"></details>', "details");

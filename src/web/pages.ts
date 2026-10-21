@@ -134,7 +134,8 @@ export function whyLine(why: Link["why"]): string {
 
 /**
  * The link's stored image served by this site (a cover photo, or an icon shown whole), else its
- * initials; `className` styles all three. `data-pic` marks the box for the edit dialog.
+ * initials; `className` styles all three. `data-pic` marks the box for the edit dialog, which
+ * rebuilds it after a Save from its first class, so `className` is a single class.
  */
 export function tile(link: Link, picture: ShownPicture | undefined, className = "tile"): string {
   if (!picture) {

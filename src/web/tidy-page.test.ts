@@ -451,6 +451,13 @@ describe("the Tidy up session", () => {
       expect(p.sent.at(-1)).toEqual(post("/tidy/keep", { id: ids[0] }));
     });
 
+    it.each(["1", "2", "3"])("an auto-repeated key %s picks nothing", async (k) => {
+      const { p, ids, shown, key } = load();
+      await key(k, { repeat: true });
+      expect(p.sent).toEqual([]);
+      expect(shown()).toEqual([ids[0]]);
+    });
+
     it("are ignored in a field, with a modifier held, and on the finish screen", async () => {
       const { p, finished, choose, key } = load(fine, 1);
       for (const tag of ["input", "textarea", "select"]) {

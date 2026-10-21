@@ -574,7 +574,7 @@ document.addEventListener("keydown", (event) => {
   const act = tidyKeys[event.key];
   const step = shownStep();
   const active = event.target;
-  if (!act || !step || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+  if (!act || !step || event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
   if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
   choose(step, act);
 });

@@ -50,7 +50,7 @@ name matches the existing tag ignoring case and extra spaces. kind is "topic" or
 
 The result's kindSource becomes "stated". Asking for the kind a tag already has confirms it the same way and leaves everything else as it is, including a done status. Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. A name with no tag is an error: tags are created by tagging a link.`;
 
-export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to archive it (update_link state "archived") if the owner is done with it.`;
+export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to archive it (update_link state "archived") if the owner says it's stale.`;
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 

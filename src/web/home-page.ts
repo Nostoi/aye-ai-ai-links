@@ -14,7 +14,7 @@ import { doneLinkScript, STALE_LABEL } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
-import { whyText } from "./link-rows.js";
+import { monthName, whyText } from "./link-rows.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -40,10 +40,23 @@ export type WorthCards = {
 const quoted = (text: string) => `"${escapeHtml(text)}"`;
 
 /**
- * The reason a card is shown, in plain words. A focus entry comes first; one an agent inferred is
- * a guess, never something the owner said.
+ * The reason a card is shown, in plain words. A link that came back says when it was put away;
+ * then a focus entry comes. One an agent inferred is a guess, never something the owner said.
  */
 function reason({ link, reasons }: DigestLink, now: Date): { text: string; plain: boolean } {
+  const back = reasons.find(
+    (r): r is Extract<DigestReason, { kind: "came_back" }> => r.kind === "came_back",
+  );
+  if (back) {
+    const when = `You put this away in ${monthName(back.putAwayAt, now)}.`;
+    return {
+      text:
+        back.focus.source === "inferred"
+          ? `${when} It may fit ${quoted(back.focus.text)} (a guess).`
+          : `${when} It fits ${quoted(back.focus.text)}.`,
+      plain: false,
+    };
+  }
   const focus = reasons.find(
     (r): r is Extract<DigestReason, { kind: "focus_words" }> => r.kind === "focus_words",
   );

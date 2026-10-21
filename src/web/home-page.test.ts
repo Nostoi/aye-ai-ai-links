@@ -241,6 +241,58 @@ describe("Worth a look today", () => {
       expect(html).not.toContain("You said");
     });
 
+    describe("a link that came back", () => {
+      const PUT_AWAY = new Date("2026-08-20T10:00:00Z");
+      const cameBack = (
+        text: string,
+        source: Source,
+        putAwayAt = PUT_AWAY,
+        over: Partial<Link> = {},
+      ): DigestLink =>
+        card(
+          [
+            {
+              kind: "came_back",
+              focus: { id: "f", text, source, writtenBy: "agent", createdAt: NOW },
+              putAwayAt,
+            },
+          ],
+          { state: "archived", putAwayAt, ...over },
+        );
+
+      it("names the month it was put away and the focus it fits, for a stated or asked focus", () => {
+        for (const source of ["stated", "asked"] as const) {
+          expect(reasonOf(render([cameBack("home batteries", source)]))).toBe(
+            `You put this away in August. It fits "home batteries".`,
+          );
+        }
+      });
+
+      it("calls an inferred focus a guess and never says 'It fits' flatly", () => {
+        const html = render([cameBack("home batteries", "inferred")]);
+        expect(reasonOf(html)).toBe(
+          `You put this away in August. It may fit "home batteries" (a guess).`,
+        );
+        expect(html).not.toContain("It fits");
+      });
+
+      it("adds the year when it was put away in another year", () => {
+        const html = render([cameBack("x", "stated", new Date("2025-12-03T10:00:00Z"))]);
+        expect(reasonOf(html)).toBe(`You put this away in December 2025. It fits "x".`);
+      });
+
+      it("keeps Open it, It's stale and Not now, and takes its space's colour", () => {
+        const html = render([cameBack("x", "stated", PUT_AWAY, on("kitchen"))], {
+          catalog: [tag("kitchen", { pinned: true, color: "clay" })],
+        });
+        const feature = dom(html).querySelector(".worth-feature");
+        expect(feature?.classList.contains("space-clay")).toBe(true);
+        expect(feature?.querySelector("a.button.primary")?.textContent).toBe("Open it");
+        expect(feature?.querySelector("[data-act=archive]")?.textContent).toBe("It's stale");
+        expect(feature?.querySelector("[data-act=snooze]")?.textContent).toBe("Not now");
+      });
+    });
+
     it("says a link not opened lately was saved over a month ago", () => {
       expect(reasonOf(render([card([{ kind: "not_opened_recently" }])]))).toBe(
         "You saved this over a month ago",
@@ -487,6 +539,31 @@ describe("the home page's script", () => {
       { url: "/home/opened", body: { id: cards[0]?.link.id }, redirect: "manual", keepalive: true },
       { url: "/home/opened", body: { id: cards[1]?.link.id }, redirect: "manual", keepalive: true },
     ]);
+  });
+
+  it("a came-back card's three buttons post the existing routes", async () => {
+    const away = new Date("2026-08-20T10:00:00Z");
+    const came: DigestLink = {
+      link: link({ state: "archived", putAwayAt: away }),
+      reasons: [
+        {
+          kind: "came_back",
+          focus: { id: "f", text: "x", source: "stated", writtenBy: "agent", createdAt: NOW },
+          putAwayAt: away,
+        },
+      ],
+    };
+    const id = came.link.id;
+    const p = home([came, card([])], (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE } : { status: 204 },
+    );
+    p.dispatch(p.$(".worth-feature a.button"), "click");
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    await p.settle();
+    p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/opened", "/home/snooze", "/home/archive"]);
+    expect(p.sent.map((s) => (s.body as { id: string }).id)).toEqual([id, id, id]);
   });
 
   it("Not now on the featured card hides it once put off, and Undo sends back the snooze and shows it", async () => {

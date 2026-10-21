@@ -101,6 +101,27 @@ describe("the home card actions", () => {
     expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
+  it("/home/opened on a put-away link brings it back to active: putAwayAt cleared, opening recorded", async () => {
+    const { world, browser, id } = await home();
+    await linkDeps(world).store.update(A, id, {
+      state: "archived",
+      putAwayAt: new Date("2026-09-01T00:00:00Z"),
+    });
+    expect((await browser.send("/home/opened", post({ id }))).status).toBe(204);
+    expect(row(world, id)).toMatchObject({
+      state: "active",
+      put_away_at: null,
+      last_opened_at: expect.any(Number),
+    });
+  });
+
+  it("/home/opened on a stale link records the opening and leaves it stale", async () => {
+    const { world, browser, id } = await home();
+    await linkDeps(world).store.update(A, id, { state: "archived", putAwayAt: null });
+    expect((await browser.send("/home/opened", post({ id }))).status).toBe(204);
+    expect(row(world, id)).toMatchObject({ state: "archived", put_away_at: null });
+  });
+
   it("/links/opened, from any other page, records the opening only: not surfaced, not logged", async () => {
     const { world, browser, id } = await home();
     const res = await browser.send("/links/opened", post({ id }));

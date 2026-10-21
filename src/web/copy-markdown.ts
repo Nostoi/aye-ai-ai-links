@@ -55,7 +55,35 @@ function opensUnclosed(src: string, from: number): boolean {
   return true;
 }
 
-type Part = { at: number; token: Token; head: Token[]; pos: number; paired: boolean };
+const skipSpace = (s: string, from: number): number => {
+  let i = from;
+  while (i < s.length && /\s/.test(s[i] as string)) i++;
+  return i;
+};
+
+/** The address and end of a `](address)` or `](address "title")` at `at`, or null. The title is dropped. */
+function closerAt(state: StateCore, src: string, at: number): { href: string; end: number } | null {
+  const { parseLinkDestination, parseLinkTitle } = state.md.helpers;
+  const dest = parseLinkDestination(src, at + 2, src.length);
+  if (!dest.ok || dest.str === "") return null;
+  let end = skipSpace(src, dest.pos);
+  if (end > dest.pos) {
+    const title = parseLinkTitle(src, end, src.length);
+    if (title.ok) end = skipSpace(src, title.pos);
+  }
+  return src[end] === ")" ? { href: dest.str, end: end + 1 } : null;
+}
+
+/** A stretch of one paragraph: a closer's link, then text. The first reuses the paragraph's tokens. */
+type Part = {
+  at: number;
+  src: string;
+  pos: number;
+  end: number;
+  head: Token[];
+  paired: boolean;
+  first: boolean;
+};
 
 function repairBlockLinks(state: StateCore): void {
   const { tokens } = state;
@@ -69,28 +97,48 @@ function repairBlockLinks(state: StateCore): void {
     } else if (t.type === "inline" && tokens[i - 1]?.type === "paragraph_open") {
       const openers = frames[frames.length - 1] as Part[];
       const src = t.content;
-      const part: Part = { at: i, token: t, head: [], pos: 0, paired: false };
-      while (openers.length && src.startsWith("](", part.pos)) {
-        const dest = state.md.helpers.parseLinkDestination(src, part.pos + 2, src.length);
-        if (!dest.ok || dest.str === "" || src[dest.pos] !== ")") break;
-        (openers.pop() as Part).paired = true;
-        const open = new state.Token("link_open", "a", 1);
-        open.attrs = [["href", state.md.normalizeLink(dest.str)]];
-        const label = new state.Token("text", "", 0);
-        label.content = linkLabel(dest.str);
-        part.head.push(open, label, new state.Token("link_close", "a", -1));
-        part.pos = dest.pos + 1;
+      const made: Part[] = [];
+      const begin = (pos: number, first: boolean): Part => {
+        const part: Part = { at: i, src, pos, end: src.length, head: [], paired: false, first };
+        made.push(part);
+        return part;
+      };
+      let cur = begin(0, true);
+      let depth = 0;
+      for (let k = 0; k < src.length; k++) {
+        const c = src[k];
+        if (c === "\\") k++;
+        else if (c === "[") depth++;
+        else if (c === "]" && depth > 0) depth--;
+        else if (c === "]" && src[k + 1] === "(" && openers.length) {
+          const closer = closerAt(state, src, k);
+          if (!closer) continue;
+          if (k > cur.pos) {
+            cur.end = k;
+            cur = begin(k, false);
+          }
+          (openers.pop() as Part).paired = true;
+          const open = new state.Token("link_open", "a", 1);
+          open.attrs = [["href", state.md.normalizeLink(closer.href)]];
+          const label = new state.Token("text", "", 0);
+          label.content = linkLabel(closer.href);
+          cur.head.push(open, label, new state.Token("link_close", "a", -1));
+          cur.pos = closer.end;
+          k = closer.end - 1;
+        }
       }
-      if (opensUnclosed(src, part.pos)) openers.push(part);
-      if (part.head.length || openers.at(-1) === part) parts.push(part);
+      if (opensUnclosed(src, cur.pos)) openers.push(cur);
+      if (made.length > 1 || cur.head.length || openers.at(-1) === cur) parts.push(...made);
     }
   }
 
   const dropped = new Set<number>();
+  const after = new Map<number, Token[]>();
   for (const part of parts) {
-    if (!part.head.length && !part.paired) continue;
-    const src = part.token.content.slice(part.pos + (part.paired ? 1 : 0));
-    if (!part.head.length && src === "") {
+    const whole = part.first && part.end === part.src.length;
+    if (whole && !part.head.length && !part.paired) continue;
+    const text = part.src.slice(part.pos + (part.paired ? 1 : 0), part.end);
+    if (part.first && !part.head.length && text === "") {
       dropped
         .add(part.at - 1)
         .add(part.at)
@@ -98,10 +146,32 @@ function repairBlockLinks(state: StateCore): void {
       continue;
     }
     const rest: Token[] = [];
-    state.md.inline.parse(src, state.md, state.env, rest);
-    part.token.children = [...part.head, ...rest];
+    state.md.inline.parse(text, state.md, state.env, rest);
+    if (part.first) {
+      (tokens[part.at] as Token).children = [...part.head, ...rest];
+      continue;
+    }
+    const opening = tokens[part.at - 1] as Token;
+    const paragraph = (
+      [
+        ["paragraph_open", "p", 1],
+        ["inline", "", 0],
+        ["paragraph_close", "p", -1],
+      ] as const
+    ).map(([type, tag, nesting]) => {
+      const token = new state.Token(type, tag, nesting);
+      token.block = true;
+      token.level = opening.level;
+      token.hidden = opening.hidden;
+      return token;
+    }) as [Token, Token, Token];
+    paragraph[1].content = text;
+    paragraph[1].children = [...part.head, ...rest];
+    after.set(part.at + 1, [...(after.get(part.at + 1) ?? []), ...paragraph]);
   }
-  if (dropped.size) state.tokens = tokens.filter((_t, i) => !dropped.has(i));
+  if (dropped.size || after.size) {
+    state.tokens = tokens.flatMap((tk, i) => (dropped.has(i) ? [] : [tk, ...(after.get(i) ?? [])]));
+  }
 }
 
 // Every link and image decision is taken here, after parsing, so a refused one shows its label.
@@ -146,7 +216,7 @@ const md = new MarkdownIt("commonmark", { html: false, linkify: false, typograph
 md.disable("reference");
 md.validateLink = () => true;
 md.core.ruler.push("copy_safe", safeTokens);
-md.core.ruler.before("copy_safe", "copy_repair", repairBlockLinks);
+md.core.ruler.before("text_join", "copy_repair", repairBlockLinks);
 
 /** The copy's Markdown as safe HTML (R39): only http(s)/mailto links, only this copy's ledger-ok images. */
 export function copyHtml(markdown: string, refs: CopyRefs): string {

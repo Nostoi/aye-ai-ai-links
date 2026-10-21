@@ -275,6 +275,90 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
     }
   });
 
+  it("drops the title of a titled card address", () => {
+    for (const title of [`"t"`, "'t'", "(t)"]) {
+      const html = copyHtml(`[\n\nT\n\n](${A} ${title})`, refs());
+      expect(hrefs(html)).toEqual([A]);
+      expect(text(html)).not.toContain('"t"');
+      noStray(html);
+    }
+    const open = copyHtml(`[\n\nT\n\n](${A} "t)`, refs());
+    expect(hrefs(open)).toEqual([]);
+    expect(text(open)).toContain("](");
+  });
+
+  it("keeps text before the closer, then the address on its own line", () => {
+    const html = copyHtml(`[\n\nTitle\n\nRead more](${A})`, refs());
+    expect(hrefs(html)).toEqual([A]);
+    expect(
+      all(html)
+        .filter((e) => e.tagName === "P")
+        .map((p) => p.textContent),
+    ).toEqual(["Title", "Read more", "e.example/a"]);
+    noStray(html);
+    const quote = copyHtml(`> [\n>\n> Title\n>\n> Read more](${A})`, refs());
+    expect(parse(quote).querySelector("blockquote a")?.getAttribute("href")).toBe(A);
+    noStray(quote);
+  });
+
+  it("keeps text after a closer's address as the next card's start", () => {
+    const html = copyHtml(`[\n\nOne\n\nmore](${A})[\n\nTwo\n\n](${B})`, refs());
+    expect(hrefs(html)).toEqual([A, B]);
+    noStray(html);
+  });
+
+  it("does not take a balanced link or an escaped bracket for a closer", () => {
+    const real = copyHtml(`[\n\nx\n\n[a](${B}) y`, refs());
+    expect(hrefs(real)).toEqual([B]);
+    expect(parse(real).querySelector("a")?.textContent).toBe("a");
+    expect(text(real)).toContain("[");
+    const escaped = copyHtml(`[\n\nTitle\n\nRead more\\](${A})`, refs());
+    expect(hrefs(escaped)).toEqual([]);
+    expect(text(escaped)).toContain("](");
+  });
+
+  it("leaves a closer that is not a whole address-and-paren as it is", () => {
+    for (const closer of [`](${A} oops)`, `](${A}`, "]()", "](<>)"]) {
+      const html = copyHtml(`[\n\nT\n\n${closer}`, refs());
+      expect(hrefs(html)).toEqual([]);
+      expect(text(html)).toContain(closer);
+    }
+  });
+
+  it("does not let a closed link make the paragraph an opener", () => {
+    const html = copyHtml(`[a](${B}) y\n\n](${A})`, refs());
+    expect(hrefs(html)).toEqual([B]);
+    expect(parse(html).querySelector("p")?.textContent).toBe("a y");
+    expect(text(html)).toContain(`](${A})`);
+  });
+
+  it("reads an escaped closing bracket as part of an opener's text", () => {
+    const html = copyHtml(`[\\]\n\ntext\n\n](${A})`, refs());
+    expect(hrefs(html)).toEqual([A]);
+    expect(parse(html).querySelector("p")?.textContent).toBe("]");
+  });
+
+  it("normalizes a repaired address", () => {
+    const html = copyHtml("[\n\nT\n\n](https://e.example/é)", refs());
+    expect(hrefs(html)).toEqual(["https://e.example/%C3%A9"]);
+  });
+
+  it("closes the most recent opener, leaving the earlier one open", () => {
+    const html = copyHtml(`[\n\none\n\n[\n\ntwo\n\n](${A})`, refs());
+    expect(hrefs(html)).toEqual([A]);
+    expect(text(html).replace(/\s+/g, "")).toMatch(/^\[onetwo/);
+  });
+
+  it.each(["](", '](a "', "](a '", "](a ("])(
+    "renders 2 MiB of %s in one paragraph after an opener within the budget",
+    (unit) => {
+      const start = performance.now();
+      copyHtml(`[\n\n${unit.repeat(Math.ceil((2 * 1024 * 1024) / unit.length))}`, refs());
+      expect(performance.now() - start).toBeLessThan(10_000);
+    },
+    30_000,
+  );
+
   it.each([
     ["orphan closers", "](x)\n\n"],
     ["orphan openers", "[\n\n"],

@@ -211,6 +211,18 @@ describe("a link around blocks", () => {
     noStray(html);
   });
 
+  it("drops the card's title from the link line", () => {
+    const d = draft(`<a href="${CARD}" title="Hidden words"><h3>Title</h3><p>About.</p></a>`);
+    expect(d.markdown).toContain(`About.\n\n${LINE}\n\n`);
+    expect(d.markdown).not.toContain("Hidden words");
+  });
+
+  it("escapes Markdown in the link line's label", () => {
+    const d = draft(card("<h3>Title</h3>", "https://e.example/_a_/*b*"));
+    expect(d.markdown).toContain("[e.example/\\_a\\_/\\*b\\*](https://e.example/_a_/*b*)");
+    expect(show(d.markdown)).not.toContain("<em>");
+  });
+
   it("leaves an inline link, a picture link and a titled link as before", () => {
     const d = draft(
       '<p>see <a href="https://a.b/c">here</a> now</p><p><a href="https://a.b/d"><img src="https://ex.com/p.png" alt="P"></a></p><p><a href="https://a.b/e" title="T">titled</a></p>',

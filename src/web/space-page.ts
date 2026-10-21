@@ -7,7 +7,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript, OUT_OF_LISTS } from "./done-link.js";
+import { doneLinkScript, OUT_OF_LISTS, PUT_AWAY_MARKER } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -166,7 +166,7 @@ ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.ke
 ${header(tag)}
 ${body}
 </main>
-${input.ask ? "" : `${editDialog()}\n`}${(done ? doneScript : cardsScript)(input.ask !== undefined)}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
+${input.ask ? "" : `${editDialog()}\n`}${(done ? doneScript : cardsScript)(input.ask !== undefined)}${openedScript("space-links", "/links/opened", done ? PUT_AWAY_MARKER : undefined)}${older ? olderScript("space-links") : ""}`,
     {
       menu: true,
       undo: true,

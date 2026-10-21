@@ -287,6 +287,27 @@ describe("openings on All links (#124)", () => {
   describe("its links out of your lists", () => {
     itRecordsOpenings(() => all({ links: shown, done: true }), web, "/links/opened");
   });
+  describe("a put-away link opened on Out of your lists", () => {
+    const put = link("1", { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
+    const stale = link("2", { state: "archived" });
+    const html = () => all({ links: [put, stale], done: true });
+    it("leaves the page once the opening is recorded; a stale row stays", async () => {
+      const page = runPage(html());
+      page.dispatch(page.$("[data-id='2'] a[data-open]"), "click");
+      page.dispatch(page.$("[data-id='1'] a[data-open]"), "click");
+      await page.settle();
+      expect(page.sent.map((s) => s.body)).toEqual([{ id: "2" }, { id: "1" }]);
+      expect(page.$("[data-id='1']").hidden).toBe(true);
+      expect(page.$("[data-id='2']").hidden).toBeFalsy();
+    });
+    it("stays when the opening is refused", async () => {
+      const page = runPage(html(), () => ({ status: 500 }));
+      page.dispatch(page.$("[data-id='1'] a[data-open]"), "click");
+      await page.settle();
+      expect(page.sent).toHaveLength(1);
+      expect(page.$("[data-id='1']").hidden).toBeFalsy();
+    });
+  });
   it("records a link Show older links appended", async () => {
     const first = all({ links: [link("3")], older: "c3" });
     const next = all({ links: [link("1")], older: null, later: true });

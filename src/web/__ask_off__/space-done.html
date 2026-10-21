@@ -917,12 +917,16 @@ const openRoot = document.getElementById("space-links");
 const recordOpen = (event) => {
   const link = event.target.closest("a[data-open]");
   if (!link || (event.type === "auxclick" && event.button !== 1)) return;
+  const card = link.closest("[data-id]");
   fetch("/links/opened", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: link.closest("[data-id]").dataset.id }),
+    body: JSON.stringify({ id: card.dataset.id }),
     redirect: "manual",
     keepalive: true,
+  }).then((answer) => {
+    const last = card.querySelector(".card-line > :last-child");
+    if (answer.ok && last && last.textContent === "Put away") takeOut(openRoot, card, false);
   }).catch(() => {});
 };
 if (openRoot) {

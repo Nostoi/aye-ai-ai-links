@@ -799,10 +799,11 @@ const openRoot = document.getElementById("worth-cards");
 const recordOpen = (event) => {
   const link = event.target.closest("a[data-open]");
   if (!link || (event.type === "auxclick" && event.button !== 1)) return;
+  const card = link.closest("[data-id]");
   fetch("/home/opened", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: link.closest("[data-id]").dataset.id }),
+    body: JSON.stringify({ id: card.dataset.id }),
     redirect: "manual",
     keepalive: true,
   }).catch(() => {});
@@ -819,10 +820,11 @@ const openRoot = document.getElementById("handy");
 const recordOpen = (event) => {
   const link = event.target.closest("a[data-open]");
   if (!link || (event.type === "auxclick" && event.button !== 1)) return;
+  const card = link.closest("[data-id]");
   fetch("/links/opened", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: link.closest("[data-id]").dataset.id }),
+    body: JSON.stringify({ id: card.dataset.id }),
     redirect: "manual",
     keepalive: true,
   }).catch(() => {});

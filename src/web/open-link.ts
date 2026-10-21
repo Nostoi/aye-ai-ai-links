@@ -22,19 +22,27 @@ export function linkTitle(link: Link): string {
  * usual; opening from the browser's context menu is not seen. Listening on `#root` covers cards
  * Show older links appends. A block, so these names cannot clash with another script.
  */
-export const openedScript = (root: string, route: string) => `<script>
+export const openedScript = (root: string, route: string, leaveMarker?: string) => `<script>
 {
 const openRoot = document.getElementById(${JSON.stringify(root)});
 const recordOpen = (event) => {
   const link = event.target.closest("a[data-open]");
   if (!link || (event.type === "auxclick" && event.button !== 1)) return;
+  const card = link.closest("[data-id]");
   fetch(${JSON.stringify(route)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: link.closest("[data-id]").dataset.id }),
+    body: JSON.stringify({ id: card.dataset.id }),
     redirect: "manual",
     keepalive: true,
-  }).catch(() => {});
+  })${
+    leaveMarker === undefined
+      ? ""
+      : `.then((answer) => {
+    const last = card.querySelector(".card-line > :last-child");
+    if (answer.ok && last && last.textContent === ${JSON.stringify(leaveMarker)}) takeOut(openRoot, card, false);
+  })`
+  }.catch(() => {});
 };
 if (openRoot) {
   openRoot.addEventListener("click", recordOpen);

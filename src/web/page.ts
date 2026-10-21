@@ -32,12 +32,16 @@ const BARS = `<span class="icon-phone"><svg viewBox="0 0 24 24" width="20" heigh
  * links (`menu-phone-only`; the inline ones hide there). Sign out is the one `#sign-out`.
  */
 const menuHtml = (withAsk: boolean) =>
-  `<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a>${withAsk ? ASK_BUTTON : ""}<details class="account-menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
+  `<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a>${withAsk ? ASK_BUTTON : ""}<details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
 
 /**
- * Ends the session, then goes to the sign-in page. It also closes the account menu on a click
- * outside it, on focus moving out of the nav, and on Escape pressed inside the nav (focus goes
- * back to its button) unless another handler took that Escape: Ask AI owns Escape in its panel.
+ * Ends the session, then goes to the sign-in page. It also closes the page's ⋯ menus, the account
+ * menu and every card menu, through document-level handlers, so a card added later is covered.
+ * A menu closes on a click outside it, on focus moving out of it, and on Escape pressed inside it
+ * (focus goes back to its button) unless another handler took that Escape. The account menu's
+ * area is the whole nav, which holds Ask AI too; a card menu's is its own `<details>`. Ask AI's
+ * panel is outside every menu, so its Escape is not a menu's. Each menu carries `name="menu"`, so
+ * the browser keeps one open at a time.
  */
 const MENU_SCRIPT = `<script>
 document.getElementById("sign-out").addEventListener("click", async () => {
@@ -46,18 +50,25 @@ document.getElementById("sign-out").addEventListener("click", async () => {
 });
 {
   const bar = document.querySelector("nav.menu");
-  const menu = bar.querySelector("details");
-  const close = () => menu.removeAttribute("open");
-  bar.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || event.defaultPrevented || !menu.hasAttribute("open")) return;
-    close();
-    menu.querySelector("summary").focus();
+  const opened = () => document.querySelectorAll("details.account-menu[open], details.card-menu[open]");
+  const area = (menu) => (menu.classList.contains("account-menu") ? bar : menu);
+  const close = (menu) => menu.removeAttribute("open");
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    for (const menu of opened()) {
+      if (!area(menu).contains(event.target)) continue;
+      close(menu);
+      menu.querySelector("summary").focus();
+    }
   });
-  bar.addEventListener("focusout", (event) => {
-    if (event.relatedTarget && !bar.contains(event.relatedTarget)) close();
+  document.addEventListener("focusout", (event) => {
+    if (!event.relatedTarget) return;
+    for (const menu of opened()) {
+      if (area(menu).contains(event.target) && !area(menu).contains(event.relatedTarget)) close(menu);
+    }
   });
   document.addEventListener("pointerdown", (event) => {
-    if (!menu.contains(event.target)) close();
+    for (const menu of opened()) if (!menu.contains(event.target)) close(menu);
   });
 }
 </script>`;

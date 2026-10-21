@@ -25,7 +25,7 @@ export function cardMenu(label: string, items: (MenuItem | typeof DIVIDER)[]): s
         : `<button type="button" data-act="${escapeHtml(i.act)}"${i.hidden ? " hidden" : ""}>${i.icon}${escapeHtml(i.text)}</button>`,
     )
     .join("");
-  return `<details class="card-menu">
+  return `<details class="card-menu" name="menu">
 <summary><span class="card-menu-dot" aria-hidden="true">${DOTS}</span><span class="visually-hidden">${escapeHtml(label)}</span></summary>
 <div class="card-menu-list">${rows}</div>
 </details>`;

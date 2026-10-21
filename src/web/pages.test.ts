@@ -318,7 +318,7 @@ describe("the menu", () => {
     ];
     for (const html of withMenu) {
       expect(html).toContain(
-        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><details class="account-menu">',
+        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><details class="account-menu" name="menu">',
       );
       expect(html).toContain(
         '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out"',

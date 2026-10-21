@@ -1,8 +1,10 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { ASK_KEY } from "./ask-panel.js";
+import { cardMenu, DIVIDER } from "./card-menu.js";
 import { runAskPage, type runPage } from "./opened-test-kit.js";
 import { page } from "./page.js";
+import { olderScript } from "./show-older.js";
 import { themeCss } from "./theme.js";
 
 /** The navigation every signed-in page shares (#196). */
@@ -173,6 +175,150 @@ describe("the account menu's dismissal", () => {
     open(p);
     p.dispatch(p.$("#ask-text"), "keydown", KEY("Escape"));
     expect(p.focused().at(-1)).toBe(p.$("#ask-open"));
+  });
+});
+
+const ITEMS = [
+  { act: "done", icon: "", text: "I'm done with it" },
+  DIVIDER,
+  { act: "edit", icon: "", text: "Edit" },
+];
+const cards = (n: number) =>
+  Array.from(
+    { length: n },
+    (_, i) => `<li class="card" data-i="${i}">${cardMenu(`More for ${i}`, ITEMS)}</li>`,
+  ).join("");
+const cardsPage = () =>
+  page(
+    "t",
+    `<main><ul id="list">${cards(2)}</ul><a id="older" href="/more">older</a></main>${olderScript("list")}`,
+    { menu: true, ask: ASK },
+  );
+
+describe("a card menu's dismissal", () => {
+  type P = ReturnType<typeof runPage>;
+  const start = () => runAskPage(cardsPage(), undefined, { menu: true });
+  const menus = (p: P) => [...p.document.querySelectorAll("details.card-menu")] as HTMLElement[];
+  const summary = (m: Element) => m.querySelector("summary") as HTMLElement;
+  const open = (m: Element) => m.setAttribute("open", "");
+  const row = (m: Element) => m.querySelector("button") as Element;
+
+  it("closes on Escape inside it and puts focus back on its summary", () => {
+    const p = start();
+    const [first, second] = menus(p) as [HTMLElement, HTMLElement];
+    open(first);
+    open(second);
+    p.dispatch(row(first), "keydown", KEY("Escape"));
+    expect(first.hasAttribute("open")).toBe(false);
+    expect(second.hasAttribute("open")).toBe(true);
+    expect(p.focused().at(-1)).toBe(summary(first));
+  });
+
+  it("ignores other keys, and an Escape that happens outside every open menu", () => {
+    const p = start();
+    const [first] = menus(p) as [HTMLElement];
+    open(first);
+    p.dispatch(row(first), "keydown", KEY("Tab"));
+    p.dispatch(p.$("main"), "keydown", KEY("Escape"));
+    expect(first.hasAttribute("open")).toBe(true);
+    expect(p.focused()).toEqual([]);
+  });
+
+  it("closes on a press outside it, and stays open for a press inside it", () => {
+    const p = start();
+    const [first] = menus(p) as [HTMLElement];
+    open(first);
+    p.dispatch(first.querySelector(".card-menu-list") as Element, "pointerdown");
+    p.dispatch(summary(first), "pointerdown");
+    expect(first.hasAttribute("open")).toBe(true);
+    p.dispatch(p.$("main"), "pointerdown");
+    expect(first.hasAttribute("open")).toBe(false);
+  });
+
+  it("closes when focus moves to something outside it, not to something inside it", () => {
+    const p = start();
+    const [first, second] = menus(p) as [HTMLElement, HTMLElement];
+    open(first);
+    p.dispatch(summary(first), "focusout", { relatedTarget: row(first) });
+    expect(first.hasAttribute("open")).toBe(true);
+    p.dispatch(summary(first), "focusout", { relatedTarget: null });
+    expect(first.hasAttribute("open")).toBe(true);
+    p.dispatch(row(first), "focusout", { relatedTarget: summary(second) });
+    expect(first.hasAttribute("open")).toBe(false);
+  });
+
+  it("closes a menu on a card that Show older links appended", async () => {
+    const next = `<ul id="list">${cards(1).replace('data-i="0"', 'data-i="late"')}</ul>`;
+    const p = runAskPage(cardsPage(), () => ({ status: 200, text: next }), { menu: true });
+    p.dispatch(p.$("#older"), "click");
+    await p.settle();
+    const late = p.$('[data-i="late"] details.card-menu');
+    open(late);
+    p.dispatch(row(late), "keydown", KEY("Escape"));
+    expect(late.hasAttribute("open")).toBe(false);
+    expect(p.focused().at(-1)).toBe(summary(late));
+    open(late);
+    p.dispatch(p.$("main"), "pointerdown");
+    expect(late.hasAttribute("open")).toBe(false);
+  });
+
+  it("keeps the account menu and a card menu on their own rules when both are open", () => {
+    const p = start();
+    const [first] = menus(p) as [HTMLElement];
+    const account = p.$("details.account-menu");
+    open(first);
+    open(account);
+    p.dispatch(p.$("#sign-out"), "keydown", KEY("Escape"));
+    expect(account.hasAttribute("open")).toBe(false);
+    expect(first.hasAttribute("open")).toBe(true);
+    expect(p.focused().at(-1)).toBe(summary(account));
+    open(account);
+    p.dispatch(row(first), "keydown", KEY("Escape"));
+    expect(first.hasAttribute("open")).toBe(false);
+    expect(account.hasAttribute("open")).toBe(true);
+  });
+
+  it("still closes the account menu on Escape from Ask AI in the nav, with a card menu on the page", () => {
+    const p = start();
+    const account = p.$("details.account-menu");
+    open(account);
+    p.dispatch(p.$("#ask-open"), "keydown", KEY("Escape"));
+    expect(account.hasAttribute("open")).toBe(false);
+    expect(p.focused().at(-1)).toBe(summary(account));
+  });
+
+  it("leaves card menus alone when the real Ask AI handler takes the Escape", () => {
+    const p = start();
+    const [first] = menus(p) as [HTMLElement];
+    p.dispatch(p.$("#ask-open"), "click");
+    open(first);
+    p.dispatch(p.$("#ask-text"), "keydown", KEY("Escape"));
+    expect(p.$("#ask-panel").hasAttribute("hidden")).toBe(true);
+    expect(p.focused().at(-1)).toBe(p.$("#ask-open"));
+    expect(first.hasAttribute("open")).toBe(true);
+  });
+
+  it("does not interfere with a row's own action: a press on it runs it once", () => {
+    const p = start();
+    const [first] = menus(p) as [HTMLElement];
+    open(first);
+    let runs = 0;
+    row(first).addEventListener("click", () => {
+      runs += 1;
+    });
+    p.dispatch(row(first), "pointerdown");
+    p.dispatch(row(first), "click");
+    expect(runs).toBe(1);
+    expect(first.hasAttribute("open")).toBe(true);
+  });
+
+  it("puts every menu in one exclusive group, so the browser opens one at a time", () => {
+    expect(cardMenu("More", ITEMS)).toContain('<details class="card-menu" name="menu">');
+    expect(plain()).toContain('<details class="account-menu" name="menu">');
+    const names = [...parseHTML(cardsPage()).document.querySelectorAll("details")].map((d) =>
+      d.getAttribute("name"),
+    );
+    expect(names).toEqual(["menu", "menu", "menu"]);
   });
 });
 

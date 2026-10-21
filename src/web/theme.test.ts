@@ -94,16 +94,17 @@ describe("the theme css", () => {
     expect(themeCss).toContain('ui-rounded, "SF Pro Rounded", system-ui, sans-serif');
   });
 
-  it("lays the spaces out in a grid, and on a phone the shelf as one sideways row showing part of the next tile", () => {
+  it("lays the spaces out in a grid, two across with names only on a phone, and the shelf in one column there", () => {
     expect(themeCss).toMatch(
       /\.home-spaces\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(200px,1fr\)\)/,
     );
     const phone = /@media \(max-width:600px\)\{(.*)\}$/m.exec(themeCss)?.[1] ?? "";
     const rule = (sel: string) =>
-      new RegExp(`${sel.replace(/[.>]/g, "\\$&")}\\{([^}]*)\\}`).exec(phone)?.[1] ?? "";
-    expect(rule(".handy-row")).toContain("display:flex");
-    expect(rule(".handy-row")).toContain("overflow-x:auto");
-    expect(rule(".handy-row>.handy-tile")).toContain("flex:0 0 156px");
+      new RegExp(`(?:^|\\})${sel.replace(/[.>]/g, "\\$&")}\\{([^}]*)\\}`).exec(phone)?.[1] ?? "";
+    expect(rule(".home-spaces")).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
+    expect(rule(".home-space-recent")).toBe("display:none");
+    expect(rule(".handy-row")).toContain("grid-template-columns:1fr");
+    expect(phone).not.toContain("overflow-x:auto");
   });
 
   it("puts the tile menu in the top-right corner of every tile, on a translucent circle", () => {
@@ -111,42 +112,57 @@ describe("the theme css", () => {
     expect(themeCss).toMatch(
       /\.card-menu-dot\{[^}]*border-radius:50%;[^}]*background:color-mix\(in srgb,var\(--surface\) \d+%,transparent\)/,
     );
-    expect(themeCss).toMatch(
-      /\.handy-tile\.photo \.card-menu-dot\{[^}]*background:rgb\(\d+ \d+ \d+ \/ \.\d+\)/,
-    );
   });
 
-  it("holds a tile's absolutely placed text inside the tile, so the sideways row doesn't widen the page", () => {
+  it("holds a tile's placed text inside the tile, so the row doesn't widen the page", () => {
     expect(themeCss).toMatch(/\.handy-tile\{[^}]*position:relative/);
+  });
+
+  it("drops the space mosaic, its tints and the photo postcard (#195)", () => {
+    for (const gone of [".mosaic", ".tint-", ".handy-tile.photo"]) {
+      expect(themeCss, gone).not.toContain(gone);
+    }
   });
 });
 
-describe("the Handy postcards", () => {
+describe("the Handy tiles", () => {
   const rule = (selector: string) =>
     new RegExp(`(?:^|\\})${selector.replace(/[.[\]*>]/g, "\\$&")}\\{([^}]*)\\}`, "m").exec(
       themeCss,
     )?.[1] ?? "";
   const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
+  const phoneRule = (selector: string) =>
+    new RegExp(`(?:^|\\})${selector.replace(/[.[\]*>]/g, "\\$&")}\\{([^}]*)\\}`).exec(phone)?.[1] ??
+    "";
 
-  it("puts a photo on white, so a transparent logo sits on white, and leaves a picture-less tile its space color", () => {
+  it("puts a photo on white, so a transparent logo sits on white, and a picture-less box on the picture shade", () => {
     expect(rule("img.handy-image")).toBe("background:#fff");
-    expect(rule(".handy-image")).not.toContain("background");
-    expect(rule(".handy-tile.photo .handy-caption")).toContain("text-shadow:");
+    expect(rule(".handy-image.initials-box")).toBe("background:var(--pic)");
   });
 
-  it("makes square 176px cards in a wrapping grid, and 156px ones in a sideways row on a phone", () => {
-    expect(rule(".handy-row")).toContain("grid-template-columns:repeat(auto-fill,176px)");
-    expect(rule(".handy-tile")).toContain("aspect-ratio:1");
-    expect(phone).toMatch(/\.handy-row\{[^}]*overflow-x:auto/);
-    expect(phone).toMatch(/\.handy-row>\.handy-tile\{[^}]*flex:0 0 156px/);
+  it("makes compact cards: a fixed square picture beside the words, about three across, one column on a phone", () => {
+    expect(rule(".handy-row")).toContain(
+      "grid-template-columns:repeat(auto-fill,minmax(260px,1fr))",
+    );
+    expect(rule(".handy-tile")).not.toContain("aspect-ratio");
+    expect(rule(".handy-tile")).toContain("grid-template-columns:52px minmax(0,1fr) 44px");
+    expect(rule(".handy-image")).toContain("width:52px;height:52px");
+    expect(phoneRule(".handy-row")).toContain("grid-template-columns:1fr");
+    expect(phoneRule(".handy-tile")).toContain("grid-template-columns:44px minmax(0,1fr) 44px");
+    expect(phoneRule(".handy-image")).toContain("width:44px;height:44px");
   });
 
-  it("stretches the title's link over the card, with the menu and panels above it", () => {
+  it("stretches the title's link over the card, with the menu and the ask above it", () => {
     expect(rule(".handy-tile h3 a::after")).toMatch(/position:absolute;[^}]*inset:0/);
-    for (const sel of [".card-menu", ".handy-tile .ask"]) {
-      expect(rule(sel), sel).toMatch(/position:absolute/);
+    expect(rule(".card-menu")).toMatch(/position:absolute/);
+    for (const sel of [".handy-tile .card-menu", ".handy-tile .ask"]) {
+      expect(rule(sel), sel).toMatch(/position:relative/);
       expect(rule(sel), sel).toMatch(/z-index:[2-9]/);
     }
+  });
+
+  it("gives the ask its own line across the card, under the picture and words", () => {
+    expect(rule(".handy-tile .ask")).toContain("grid-column:1/-1");
   });
 
   it("keeps every panel and menu button at least 44px tall, and the card clip-free for the open menu", () => {
@@ -155,9 +171,8 @@ describe("the Handy postcards", () => {
     expect(rule(".handy-tile")).toContain("overflow:visible");
   });
 
-  it("on a phone, opens the menu from the card's left edge, above the next card, inside a row that bleeds to the screen edge", () => {
-    expect(phone).toMatch(/\.handy-tile \.card-menu-list\{right:auto;left:-106px/);
-    expect(phone).toMatch(/\.handy-row\{[^}]*margin:16px -16px 0;padding:4px 16px/);
+  it("opens the menu from the ⋯ at the card's right edge, above the next card", () => {
+    expect(phone).not.toContain(".handy-tile .card-menu-list");
     expect(themeCss).toContain(
       ".handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-card:has(.card-menu[open]){z-index:5}",
     );
@@ -184,46 +199,30 @@ describe("the Handy postcards", () => {
     expect(rule(".small-actions button,.small-actions a")).toContain("min-height:44px");
   });
 
-  it("puts dark text straight on a picture-less card, and a light fade with white text only on a photo", () => {
+  it("puts the words in ink on the card itself, with no fade, and the host in the soft grey", () => {
     expect(rule(".handy-caption")).not.toContain("gradient");
     expect(rule(".handy-caption")).toContain("color:var(--ink)");
-    const photo = rule(".handy-tile.photo .handy-caption");
-    expect(photo).toContain("color:#fff");
-    expect(photo).toContain("text-shadow:");
-    const alphas = [...photo.matchAll(/rgb\(0 0 0 \/ (\.\d+)\)/g)].map((m) => Number(m[1]));
-    expect(alphas.length).toBeGreaterThan(1);
-    expect(Math.max(...alphas)).toBeLessThanOrEqual(0.62);
-    const blurs = [...photo.matchAll(/text-shadow:[^;]*/g)].flatMap((m) =>
-      [...m[0].matchAll(/(\d+)px rgb/g)].map((b) => Number(b[1])),
-    );
-    expect(Math.max(...blurs)).toBeGreaterThanOrEqual(8);
+    expect(rule(".handy-caption .card-site")).toContain("color:var(--soft)");
   });
 
-  it("darkens the host line toward ink, so it reads on a space-tinted card", () => {
-    expect(rule(".handy-caption .card-site")).toContain(
-      "color:color-mix(in srgb,var(--soft) 70%,var(--ink))",
-    );
-  });
-
-  it("keeps the initials small enough never to meet a 3-line title, with a tight line height", () => {
+  it("keeps the initials to under half the picture's side, with a tight line height", () => {
     const initials = computed(
       el('<div class="handy-image initials-box"></div>', "div"),
       "--initials",
       "desktop",
     );
-    expect(initials).toBe("34px");
-    expect(Number.parseInt(initials ?? "", 10)).toBeLessThanOrEqual(36);
+    expect(Number.parseInt(initials ?? "", 10)).toBeLessThanOrEqual(26);
     expect(
       computed(el('<span class="pic-initials"></span>', "span"), "line-height", "desktop"),
     ).toBe("1");
   });
 
-  it("sets the title at 14.5px and the host at 13px on one line with an ellipsis", () => {
-    expect(rule(".handy-tile h3")).toContain("font-size:14.5px");
-    expect(rule(".handy-tile h3")).toContain("line-height:1.25");
-    expect(rule(".handy-tile h3")).toContain("-webkit-line-clamp:3");
+  it("sets the title at 16px bold in at most two lines, and the host at 14px on one line with an ellipsis", () => {
+    expect(rule(".handy-tile h3")).toContain("font-size:16px");
+    expect(rule(".handy-tile h3")).toContain("font-weight:700");
+    expect(rule(".handy-tile h3")).toContain("-webkit-line-clamp:2");
     const site = rule(".handy-caption .card-site");
-    expect(site).toContain("font-size:13px");
+    expect(site).toContain("font-size:14px");
     expect(site).toContain("min-width:0");
     const host = rule(".handy-caption .host");
     for (const part of ["white-space:nowrap", "overflow:hidden", "text-overflow:ellipsis"]) {
@@ -252,11 +251,10 @@ describe("the Handy postcards", () => {
     }
   });
 
-  it("keeps a due panel's text and buttons clear of the menu circle, and a suggestion's unpadded", () => {
-    expect(rule(".handy-tile.needs-you .ask")).toBe("padding-right:40px");
-    const gap = /gap:0 (\d+)px/.exec(rule(".handy-tile.needs-you .small-actions"))?.[1];
-    expect(Number(gap)).toBeLessThanOrEqual(10);
-    expect(rule(".handy-tile .ask")).toContain("padding:3px 10px 0");
+  it("drops the postcard's squeeze rules for asks laid over a small square", () => {
+    // The ask now has its own line, so it no longer dodges the menu or squeezes its buttons.
+    expect(themeCss).not.toContain(".handy-tile.needs-you .ask");
+    expect(phone).not.toContain(":has([data-act=still-works])");
   });
 });
 
@@ -300,9 +298,8 @@ describe("the card menu on every card", () => {
     expect(rule(".card-body")).toContain("overflow-wrap:anywhere");
   });
 
-  it("on a phone, opens only the shelf's menu leftwards; a card's menu opens from its own right edge", () => {
-    expect(phone).toMatch(/\.handy-tile \.card-menu-list\{right:auto;left:-106px/);
-    expect(phone).not.toMatch(/(^|\})\.card-menu-list\{/);
+  it("on a phone, opens every card's menu from its own right edge", () => {
+    expect(phone).not.toMatch(/\.card-menu-list\{/);
   });
 });
 
@@ -465,12 +462,8 @@ describe("a picture-less card in a coloured space (#193)", () => {
       `<article class="worth-card worth-small space-clay"><div class="worth-tile initials-box">${initials}</div></article>`,
     ],
     [
-      "a Handy postcard",
+      "a Handy tile",
       `<article class="handy-tile space-clay"><div class="handy-image initials-box">${initials}</div></article>`,
-    ],
-    [
-      "a space's mosaic",
-      '<a class="home-space space-clay"><div class="mosaic"><div class="mosaic-icon initials-box"><span class="pic-initials">AB</span></div></div></a>',
     ],
     [
       "an Ask AI card",
@@ -503,30 +496,28 @@ describe("a picture-less card in a coloured space (#193)", () => {
     expect(shades.size).toBe(1);
   });
 
-  it("★ leaves the Handy postcard behind its initials untinted too", () => {
-    // [Neutralising only the picture box, so the postcard around it keeps the space colour.]
+  it("★ keeps the Handy tile itself on the plain card surface, untinted by its space", () => {
+    // [A tile tinted with its space colour, or left on the picture shade the postcard used.]
     const card = el('<article class="handy-tile space-clay"></article>', "article");
-    expectNeutralShade(card, "desktop");
+    for (const width of ["desktop", "phone"] as const) {
+      expect(computed(card, "background", width, css), width).toBe("var(--surface)");
+    }
   });
 });
 
 describe("icons and initials", () => {
-  const mosaic = el(
-    '<div class="mosaic"><div class="mosaic-icon"><img class="site-icon"></div></div>',
-    "img",
-  );
   const preview = el('<div class="edit-preview fit-contain"><img class="site-icon"></div>', "img");
-  it.each([
-    ["mosaic", mosaic],
-    ["edit preview", preview],
-  ])("★ shows the %s icon whole at its own size, beating the cover rule", (_, img) => {
-    for (const w of ["desktop", "phone"] as const) {
-      expect(computed(img, "object-fit", w)).toBe("contain");
-      expect(computed(img, "width", w)).toBe("var(--icon,72px)");
-      expect(computed(img, "height", w)).toBe("var(--icon,72px)");
-    }
-  });
-  it.each(["card-image", "worth-image", "tile", "worth-tile"])(
+  it.each([["edit preview", preview]])(
+    "★ shows the %s icon whole at its own size, beating the cover rule",
+    (_, img) => {
+      for (const w of ["desktop", "phone"] as const) {
+        expect(computed(img, "object-fit", w)).toBe("contain");
+        expect(computed(img, "width", w)).toBe("var(--icon,72px)");
+        expect(computed(img, "height", w)).toBe("var(--icon,72px)");
+      }
+    },
+  );
+  it.each(["card-image", "worth-image", "tile", "worth-tile", "handy-image"])(
     "★ centres a div.%s box with flex",
     (cls) => {
       expect(computed(el(`<div class="${cls} icon-box"></div>`, "div"), "display", "desktop")).toBe(
@@ -537,15 +528,11 @@ describe("icons and initials", () => {
       ).toBe("flex");
     },
   );
-  it("★ keeps Handy's icon and initials boxes in the tile's top half", () => {
-    for (const box of ["icon-box", "initials-box"]) {
-      const d = el(
-        `<article class="handy-tile"><div class="handy-image ${box}"></div></article>`,
-        "div",
-      );
-      expect(computed(d, "height", "phone")).toBe("50%");
-      expect(computed(d, "inset", "phone")).toBe("0 0 auto");
-    }
+  it("★ fits Handy's icon inside its small square", () => {
+    // [An icon sized for the old postcard, overflowing a 52px or 44px picture.]
+    const d = el('<div class="handy-image icon-box"></div>', "div");
+    expect(Number.parseInt(computed(d, "--icon", "desktop") ?? "", 10)).toBeLessThanOrEqual(40);
+    expect(Number.parseInt(computed(d, "--icon", "phone") ?? "", 10)).toBeLessThanOrEqual(34);
   });
   it("sizes the icon per box, and 56px in a search tile on a phone", () => {
     const tile = el('<div class="tile icon-box"></div>', "div");
@@ -558,7 +545,7 @@ describe("icons and initials", () => {
   it("puts the icon on the plate token, light in both modes, and drops .handy-initials", () => {
     expect(tokens.light.plate).toBe("#FFFFFF");
     expect(tokens.dark.plate).toBe("#E9E6E0");
-    expect(computed(mosaic, "background", "desktop")).toBe("var(--plate)");
+    expect(computed(preview, "background", "desktop")).toBe("var(--plate)");
     expect(themeCss).not.toContain("handy-initials");
   });
 });

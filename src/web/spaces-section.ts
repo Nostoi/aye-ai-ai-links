@@ -1,29 +1,23 @@
 import type { HomeSpace } from "../core/spaces.js";
+import { displayTitle } from "./display-title.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass } from "./pages.js";
 import { spaceHref } from "./space-page.js";
 
-const CELLS = 3;
+/** The titles of the space's recent links, one per line; the theme hides them on a phone. */
+const recent = (s: HomeSpace) =>
+  s.recent.length === 0
+    ? ""
+    : `\n<span class="home-space-recent">${s.recent.map((l) => `<span>${escapeHtml(displayTitle(l))}</span>`).join("")}</span>`;
 
-/** Three cells: each stored image, newest first and the first one large, then tints. */
-const mosaic = (s: HomeSpace) =>
-  Array.from({ length: CELLS }, (_, i) => {
-    const image = s.mosaic[i];
-    if (!image) return `<div class="tint-${i + 1}"></div>`;
-    const contain = image.fit === "contain";
-    const img = `<img${contain ? ' class="site-icon"' : ""} src="/images/${encodeURIComponent(image.linkId)}?v=${encodeURIComponent(image.version)}" alt="" loading="lazy">`;
-    return contain ? `<div class="mosaic-icon">${img}</div>` : img;
-  }).join("");
-
-const tile = (s: HomeSpace) =>
+const card = (s: HomeSpace) =>
   `<a class="home-space${spaceClass(s.color ? { color: s.color } : null)}" href="${escapeHtml(spaceHref(s.key))}">
-<div class="mosaic" aria-hidden="true">${mosaic(s)}</div>
-<div class="home-space-name"><span class="dot" aria-hidden="true"></span>${escapeHtml(s.name)}</div>
+<span class="home-space-name"><span class="dot" aria-hidden="true"></span>${escapeHtml(s.name)}</span>${recent(s)}
 </a>`;
 
 /**
- * "Your spaces" on the home page: each pinned tag as a tile in its color, with a mosaic of its
- * links' stored images, opening its space page. With nothing pinned, one quiet line says how.
+ * "Your spaces" on the home page: each pinned tag as a card in its color, with its name and the
+ * titles of its newest links, opening its space page. With nothing pinned, one quiet line says how.
  */
 export const spacesSection = (
   spaces: HomeSpace[],
@@ -32,6 +26,6 @@ export const spacesSection = (
 ${
   spaces.length === 0
     ? '<p class="small">Pin a tag on the <a href="/tags">Tags page</a> and it shows here as a space.</p>'
-    : `<div class="home-spaces">\n${spaces.map(tile).join("\n")}\n</div>`
+    : `<div class="home-spaces">\n${spaces.map(card).join("\n")}\n</div>`
 }
 </section>`;

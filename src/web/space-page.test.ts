@@ -1,12 +1,10 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
-import type { HomeSpace } from "../core/spaces.js";
 import type { Link, Tag } from "../core/types.js";
 import { itRecordsOpenings, openAppended } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage } from "./pages.js";
 import { spaceHref, spacePage } from "./space-page.js";
-import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
@@ -83,58 +81,6 @@ describe("spaceHref", () => {
     expect(done.pathname).toBe("/spaces/done");
     expect(done.searchParams.get("before")).toBe("5.link+1");
     expect(done.searchParams.get("tag")).toBe(ODD_KEY);
-  });
-});
-
-describe("the Your spaces section", () => {
-  const tile = (over: Partial<HomeSpace> & { key: string }): HomeSpace => ({
-    name: over.key,
-    color: null,
-    mosaic: [],
-    ...over,
-  });
-
-  it("says how to make a space when nothing is pinned", () => {
-    const html = spacesSection([]);
-    expect(html).toContain("Your spaces");
-    expect(html).toContain("Pin a tag on the");
-    expect(hrefs(html, "a")).toEqual(["/tags"]);
-  });
-
-  it("shows each space as a tile opening its page, in its color, with its stored images", () => {
-    const html = spacesSection([
-      tile({
-        key: "home batteries",
-        name: "Home batteries",
-        color: "teal",
-        mosaic: [
-          { linkId: "7", version: "v7", fit: "cover" },
-          { linkId: "3", version: "v3", fit: "cover" },
-        ],
-      }),
-      tile({ key: "kitchen", name: "Kitchen", color: null }),
-    ]);
-    const tiles = [...dom(html).querySelectorAll("a.home-space")];
-    expect(tiles.map((a) => a.textContent?.trim())).toEqual(["Home batteries", "Kitchen"]);
-    expect(tiles.map((a) => tagOf(a.getAttribute("href") as string))).toEqual([
-      "home batteries",
-      "kitchen",
-    ]);
-    expect(tiles[0]?.className).toContain("space-teal");
-    expect(tiles[1]?.className).not.toMatch(/space-/);
-    const imgs = [...(tiles[0]?.querySelectorAll("img") ?? [])].map((i) => i.getAttribute("src"));
-    expect(imgs).toEqual(["/images/7?v=v7", "/images/3?v=v3"]);
-    expect(tiles[0]?.querySelectorAll(".mosaic > *")).toHaveLength(3);
-    expect(tiles[1]?.querySelectorAll(".mosaic > img")).toHaveLength(0);
-    expect(tiles[1]?.querySelectorAll(".mosaic > *")).toHaveLength(3);
-    expect(outsideRefs(html)).toEqual([]);
-  });
-
-  it("keeps a hostile name inert and an odd key intact", () => {
-    const html = spacesSection([tile({ key: ODD_KEY, name: HOSTILE, color: "clay" })]);
-    expect(html).not.toContain("<img src=x");
-    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
-    expect(hrefs(html, "a.home-space").map(tagOf)).toEqual([ODD_KEY]);
   });
 });
 

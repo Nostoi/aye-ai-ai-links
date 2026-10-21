@@ -3,9 +3,7 @@ import { CoreError } from "./errors.js";
 import { FakeSearch } from "./fake-search.js";
 import { FakeStore } from "./fake-store.js";
 import { saveLink } from "./links.js";
-import type { SnapshotRecord } from "./snapshot-store.js";
-import { record } from "./snapshot-store-contract.js";
-import { homeSpaces, MOSAIC_DEPTH, openSpace } from "./spaces.js";
+import { homeSpaces, openSpace } from "./spaces.js";
 
 let store: FakeStore;
 let withImage: Set<string>;
@@ -45,13 +43,16 @@ beforeEach(() => {
 });
 
 describe("homeSpaces", () => {
-  it("lists only pinned tags, by key, each with its name and color", async () => {
-    await save("a", ["Kitchen", "Baking", "Home batteries"]);
+  const shape = (spaces: Awaited<ReturnType<typeof homeSpaces>>["spaces"]) =>
+    spaces.map(({ recent, ...s }) => ({ ...s, recent: recent.map((l) => l.id) }));
+
+  it("lists only pinned tags, by key, each with its name, color and recent links", async () => {
+    const both = await save("a", ["Kitchen", "Baking", "Home batteries"]);
     await pin("a", "kitchen", "clay");
     await pin("a", "home batteries", "teal");
-    expect((await homeSpaces(deps(), "a")).spaces).toEqual([
-      { key: "home batteries", name: "Home batteries", color: "teal", mosaic: [] },
-      { key: "kitchen", name: "Kitchen", color: "clay", mosaic: [] },
+    expect(shape((await homeSpaces(deps(), "a")).spaces)).toEqual([
+      { key: "home batteries", name: "Home batteries", color: "teal", recent: [both] },
+      { key: "kitchen", name: "Kitchen", color: "clay", recent: [both] },
     ]);
   });
 
@@ -64,30 +65,26 @@ describe("homeSpaces", () => {
     expect(catalog).toEqual([expect.objectContaining({ key: "kitchen", pinned: false })]);
   });
 
-  it("shows the three newest stored images of the space's active links", async () => {
-    const oldest = await save("a", ["kitchen"], { image: true });
-    const second = await save("a", ["kitchen"], { image: true });
+  it("gives each space its three newest active links, newest first, and only the owner's", async () => {
     await save("a", ["kitchen"]);
-    const third = await save("a", ["kitchen"], { image: true });
-    const done = await save("a", ["kitchen"], { image: true });
+    const third = await save("a", ["kitchen"]);
+    const second = await save("a", ["kitchen"]);
+    const done = await save("a", ["kitchen"]);
     await store.update("a", done, { state: "archived" });
-    await save("a", ["garden"], { image: true });
-    const newest = await save("a", ["kitchen"], { image: true });
+    await save("a", ["garden"]);
+    const newest = await save("a", ["kitchen"]);
+    await save("b", ["kitchen"]);
     await pin("a", "kitchen", "clay");
+    await pin("b", "kitchen", "clay");
     const [kitchen] = (await homeSpaces(deps(), "a")).spaces;
-    expect(kitchen?.mosaic).toEqual([
-      { linkId: newest, version: `v-${newest}`, fit: "cover" },
-      { linkId: third, version: `v-${third}`, fit: "cover" },
-      { linkId: second, version: `v-${second}`, fit: "cover" },
-    ]);
-    expect(kitchen?.mosaic.map((m) => m.linkId)).not.toContain(oldest);
+    expect(kitchen?.recent.map((l) => l.id)).toEqual([newest, second, third]);
   });
 
-  it(`looks for images among the newest ${MOSAIC_DEPTH} active links only`, async () => {
-    await save("a", ["kitchen"], { image: true });
-    for (let i = 0; i < MOSAIC_DEPTH; i++) await save("a", ["kitchen"]);
+  it("gives a space with no active links no recent links", async () => {
+    const done = await save("a", ["kitchen"]);
+    await store.update("a", done, { state: "archived" });
     await pin("a", "kitchen", "clay");
-    expect((await homeSpaces(deps(), "a")).spaces[0]?.mosaic).toEqual([]);
+    expect((await homeSpaces(deps(), "a")).spaces[0]?.recent).toEqual([]);
   });
 
   it("gives a pinned tag whose stored color is not a space color no color", async () => {
@@ -128,31 +125,5 @@ describe("openSpace", () => {
       expect((refusal as CoreError).code).toBe("not_found");
       expect((refusal as CoreError).message).not.toContain(name);
     }
-  });
-});
-
-describe("a retired icon", () => {
-  it("★ drops a retired icon from the mosaic while the new preview is pending", async () => {
-    const id = await save("a", ["Kitchen"]);
-    await pin("a", "kitchen", "clay");
-    const live = { store, search: new FakeSearch(store), images: store };
-    const recordAt = async (now: number, over: Partial<SnapshotRecord>) => {
-      const lease = await store.leaseSnapshot("a", id, new Date(now), new Date(now + 99_000));
-      if (!lease) throw new Error("expected a lease");
-      expect(await store.recordSnapshot("a", id, lease.claim, record(over))).toBe(true);
-    };
-    await recordAt(clock, {
-      status: "retrying",
-      nextFetchAt: new Date(clock + 50),
-      imageUrl: null,
-      iconUrls: ["https://ex.com/i.png"],
-    });
-    await store.writeImage("a", id, "https://ex.com/i.png", "icon", {
-      contentType: "image/png",
-      bytes: new Uint8Array([1]),
-    });
-    expect((await homeSpaces(live, "a")).spaces[0]?.mosaic.map((m) => m.linkId)).toEqual([id]);
-    await recordAt(clock + 50, { imageUrl: "https://ex.com/p.png" });
-    expect((await homeSpaces(live, "a")).spaces[0]?.mosaic).toEqual([]);
   });
 });

@@ -401,13 +401,17 @@ describe("Remove saved copy on the search page", () => {
   });
 });
 
+/** The parts of the first card's grey line. */
+const lineParts = (html: string) =>
+  [...parseHTML(html).document.querySelectorAll(".card-line > *")].map((e) => e.textContent);
+
 describe("the search page's cards", () => {
   it("shows the title as a link that opens in a new tab, the host and the date, and the summary", () => {
     const html = results([link({ summary: "Side-by-side <costs>" })]);
     expect(html).toContain(
       '<a href="https://example.com/a" target="_blank" rel="noopener noreferrer" data-open>A title</a>',
     );
-    expect(html).toContain("example.com, saved March 12");
+    expect(lineParts(html)).toEqual(["example.com", "saved March 12"]);
     expect(html).toContain("Side-by-side &lt;costs&gt;");
   });
 
@@ -448,7 +452,7 @@ describe("the search page's cards", () => {
     );
     expect(html).not.toMatch(/<i>|<u>|<script>x/);
     expect(html).toContain('value="&quot;&gt;&lt;script&gt;x"');
-    expect(html).toContain("a&amp;amp;b.example, saved");
+    expect(html).toContain("<span>a&amp;amp;b.example</span>");
   });
 
   it("shows a stored image from this site, by its versioned URL, and the plain tile otherwise", () => {

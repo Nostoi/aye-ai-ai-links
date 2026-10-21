@@ -5,7 +5,6 @@ import type { HandyView } from "../core/tools.js";
 import type { Link } from "../core/types.js";
 import { cardMenu, DIVIDER, type MenuItem } from "./card-menu.js";
 import { removeCopyItem } from "./copy-menu.js";
-import { copyHref } from "./copy-page.js";
 import { deleteLinkItem } from "./delete-link.js";
 import { displayTitle } from "./display-title.js";
 import { DONE_ITEM } from "./done-link.js";
@@ -18,24 +17,12 @@ export const PENCIL = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidd
 /** The cards' one menu row, which opens the edit dialog. */
 export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit title and picture…" };
 
-const BOOK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4.5 5.5a2 2 0 0 1 2-2H19v14H6.5a2 2 0 0 0-2 2z"/><path d="M4.5 19.5a2 2 0 0 0 2 2H19v-4"/></svg>`;
-
-/**
- * The menu row that opens a link's saved copy, in the same tab. For now only: #194 moves it to the
- * card's grey line on All links, space pages and search, and removes it from this menu.
- */
-export const readCopyItem = (linkId: string): MenuItem => ({
-  act: "read-copy",
-  icon: BOOK,
-  text: "Read saved copy",
-  href: copyHref(linkId),
-});
-
 /**
  * A card's ⋯ menu on the pages with the edit dialog (#192). An active link's menu opens with I'm
  * done with it and Keep handy, which reads Not handy anymore once `handy` is kept; both rows are
- * rendered and the script swaps them. A link you're done with gets neither. Then Edit, the saved
- * copy's rows when `copy` is there, and Delete link last.
+ * rendered and the script swaps them. A link you're done with gets neither. Then Edit, Remove saved
+ * copy when `copy` is there, and Delete link last. The copy itself opens from the card's grey line
+ * (`cardLine`).
  */
 export const editMenu = (
   link: Link,
@@ -49,7 +36,7 @@ export const editMenu = (
   return cardMenu(`More for ${displayTitle(link)}`, [
     ...first,
     EDIT_ITEM,
-    ...(copy ? [readCopyItem(link.id), removeCopyItem] : []),
+    ...(copy ? [removeCopyItem] : []),
     DIVIDER,
     deleteLinkItem,
   ]);

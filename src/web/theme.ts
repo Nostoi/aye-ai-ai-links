@@ -154,7 +154,7 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .result>.tile{border-radius:18px 0 0 18px}
 .result-body{position:relative;flex:1 1 320px;min-width:0;padding:18px 22px;overflow-wrap:anywhere}
 .result h2{font-size:19px;line-height:1.3;margin:0 0 4px;padding-right:28px}
-.result h2 a{text-decoration:none}
+.result h2 a{position:relative;text-decoration:none}
 .result p{margin:0 0 8px}
 .not-it{max-width:720px;background:var(--surface);border-radius:18px;padding:18px 22px}
 .not-it p{margin:0 0 4px}
@@ -207,8 +207,8 @@ img.handy-image{background:#fff}
 .result .card-menu-dot{background:color-mix(in srgb,var(--ink) 7%,transparent);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
 .result .card-menu summary:hover .card-menu-dot,.result .card-menu[open] .card-menu-dot{background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .card-menu-list{position:absolute;top:42px;right:-4px;width:max-content;padding:4px;border-radius:14px;background:var(--surface);border:1px solid color-mix(in srgb,var(--ink) 9%,transparent);box-shadow:0 12px 32px rgb(0 0 0 / .16),0 2px 6px rgb(0 0 0 / .06);transform-origin:top right;animation:menu-in .12s ease-out}
-.card-menu-list button,.card-menu-list a{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left;text-decoration:none}
-.card-menu-list button:hover,.card-menu-list button:focus-visible,.card-menu-list a:hover,.card-menu-list a:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.card-menu-list button{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left}
+.card-menu-list button:hover,.card-menu-list button:focus-visible{background:color-mix(in srgb,var(--ink) 7%,transparent)}
 .card-menu-list svg{flex:none;fill:none;stroke:var(--soft);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .card-menu-list hr{margin:4px 8px;border:0;border-top:1px solid var(--line)}
 @keyframes menu-in{from{opacity:0;transform:translateY(-4px) scale(.97)}}
@@ -247,8 +247,6 @@ img.handy-image{background:#fff}
 .choices,.swatches{display:flex;flex-wrap:wrap;gap:6px}
 .tag .swatch{width:44px;padding:0;border-radius:50%;background:var(--space);border:4px solid var(--surface);box-shadow:0 0 0 2px transparent}
 .tag .swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--ink)}
-.in-space{display:inline-flex;align-items:center;gap:6px;margin-right:8px;font-weight:600;color:var(--ink)}
-.in-space .dot{width:10px;height:10px;margin:0}
 .spaces,.handy{margin:64px 0 0}
 .spaces h2,.handy h2{margin-bottom:16px}
 .handy{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:4px}
@@ -286,7 +284,7 @@ img.handy-image{background:#fff}
 .faded .card-image{opacity:.4}
 .card-body{padding:14px 18px 18px;overflow-wrap:anywhere}
 .card-body h3{font-size:17px;line-height:1.3;margin:0 0 4px;overflow-wrap:anywhere}
-.card-body h3 a{text-decoration:none}
+.card-body h3 a{position:relative;text-decoration:none}
 .card-body p{margin:0 0 8px}
 .card-body p:last-child{margin:0}
 .card-why{font-size:15px;overflow-wrap:anywhere}
@@ -303,6 +301,12 @@ img.handy-image{background:#fff}
 .all-card .card-image{height:140px}
 .card-site{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
 .card-site .dot{flex:none;width:10px;height:10px;margin:0}
+.card-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
+.card-line>*{min-width:0}
+.card-line>:has(+ :not([hidden]))::after{content:"·";content:"·"/"";margin-left:6px}
+.card-line .line-space{display:inline-flex;align-items:center}
+.card-line .dot{flex:none;width:8px;height:8px;margin:0 6px 0 0}
+.card-line .saved-copy{display:inline-flex;align-items:center;min-height:44px;margin:-12px 0;color:var(--soft)}
 .all-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px}
 .copy-notice{flex-basis:100%;margin:0;color:var(--soft);font-size:14px}
 .copy-notice.needs-you{padding:10px 14px;border-radius:12px}

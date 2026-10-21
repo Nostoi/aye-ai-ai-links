@@ -12,9 +12,7 @@ import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { allPage } from "./all-page.js";
-import { cardMenu } from "./card-menu.js";
-import { copyHref } from "./copy-page.js";
-import { EDIT_ITEM, editMenu } from "./edit-link.js";
+import { editMenu } from "./edit-link.js";
 import { goneLine } from "./gone-line.js";
 import { homePage } from "./home-page.js";
 import { searchPage } from "./pages.js";
@@ -54,8 +52,9 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   ...over,
 });
 const dom = (html: string) => parseHTML(html).document;
+/** A card's links to its saved copy, wherever they are on the card. */
 const rows = (html: string, id: string) =>
-  [...dom(html).querySelectorAll(`[data-id="${id}"] .card-menu-list a`)].map((a) => [
+  [...dom(html).querySelectorAll(`[data-id="${id}"] a[href$="/copy"]`)].map((a) => [
     a.getAttribute("href"),
     a.getAttribute("data-act"),
     a.textContent,
@@ -64,66 +63,31 @@ const goneLinks = (html: string, id: string) =>
   [...dom(html).querySelectorAll(`[data-id="${id}"] .small-actions a`)].map((a) =>
     a.getAttribute("href"),
   );
-const ROW = (id: string) => [[`/links/${id}/copy`, "read-copy", "Read saved copy"]];
+const ROW = (id: string) => [[`/links/${id}/copy`, "read-copy", "Saved copy"]];
+const lineLink = (html: string, id: string) =>
+  dom(html).querySelector(`[data-id="${id}"] .card-line a.saved-copy`);
 
-describe("a card menu row with an href", () => {
-  it("renders an escaped <a> row, while a plain item stays a button", () => {
-    const html = cardMenu("More", [
-      EDIT_ITEM,
-      { act: "go", icon: "", text: "Go", href: `/a?x=1&y="2"` },
-    ]);
-    const d = dom(html);
-    expect(d.querySelectorAll(".card-menu-list button")).toHaveLength(1);
-    const a = d.querySelector(".card-menu-list a");
-    expect(a?.getAttribute("href")).toBe(`/a?x=1&y="2"`);
-    expect(html).toContain(`href="/a?x=1&amp;y=&quot;2&quot;"`);
-    expect(a?.getAttribute("data-act")).toBe("go");
-  });
-
-  it("is offered by editMenu only with a copy, after Edit, in the same tab", () => {
-    expect(dom(editMenu(link("7"))).querySelector("a")).toBeNull();
+describe("the card menu", () => {
+  it("never links the saved copy: the card's grey line does", () => {
     const d = dom(editMenu(link("7"), { copy: INFO }));
+    expect(d.querySelector("a")).toBeNull();
     expect(
       [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => e.textContent),
     ).toEqual([
       "I'm done with it",
       "Keep handy",
       "Edit title and picture…",
-      "Read saved copy",
       "Remove saved copy",
       "Delete link",
     ]);
-    const a = d.querySelector("a");
-    expect(a?.getAttribute("href")).toBe(copyHref("7"));
-    expect(a?.hasAttribute("data-open")).toBe(false);
-    expect(a?.hasAttribute("target")).toBe(false);
   });
 });
 
-describe("goneLine with a copy", () => {
-  it("puts the link first in an active link's buttons row", () => {
-    const d = dom(goneLine(link("1"), GONE, INFO));
-    const row = d.querySelector("[data-gone] .small-actions");
-    expect([...(row?.children ?? [])].map((e) => [e.tagName, e.textContent])).toEqual([
-      ["A", "Read the saved copy"],
-      ["BUTTON", "It still works"],
-      ["BUTTON", "I'm done with it"],
-    ]);
-    expect(row?.querySelector("a")?.getAttribute("href")).toBe("/links/1/copy");
-  });
-
-  it("gives a done link a row holding only the link", () => {
-    const d = dom(goneLine(link("1", { state: "archived" }), GONE, INFO));
-    expect([...d.querySelectorAll(".small-actions > *")].map((e) => e.tagName)).toEqual(["A"]);
-  });
-
-  it("is unchanged without a copy, and empty without a view", () => {
-    const active = link("1");
-    expect(goneLine(active, GONE, undefined)).toBe(goneLine(active, GONE));
-    expect(goneLine(active, GONE)).not.toContain("Read the saved copy");
-    expect(goneLine(link("1", { state: "archived" }), GONE)).not.toContain("small-actions");
-    expect(goneLine(active, null, INFO)).toBe("");
-    expect(goneLine(active, undefined, INFO)).toBe("");
+describe("goneLine", () => {
+  it("never links the saved copy: the card's grey line does", () => {
+    expect(dom(goneLine(link("1"), GONE)).querySelector("a")).toBeNull();
+    expect(dom(goneLine(link("1", { state: "archived" }), GONE)).querySelector("a")).toBeNull();
+    expect(goneLine(link("1"), null)).toBe("");
   });
 });
 
@@ -165,26 +129,30 @@ describe("the page builders", () => {
     ["a space", space],
   ];
 
-  it.each(builders)("%s: only cards in `copies` get the menu row", (_, build) => {
+  it.each(builders)("%s: only cards in `copies` link their copy, on the grey line", (_, build) => {
     const html = build({ copies });
     expect(rows(html, "1")).toEqual(ROW("1"));
+    expect(lineLink(html, "1")).not.toBeNull();
     expect(rows(html, "2")).toEqual([]);
     expect(rows(build(), "1")).toEqual([]);
   });
 
-  it.each(builders)("%s: the gone line links only a card with a copy", (_, build) => {
+  it.each(builders)("%s: a gone card with a copy links it once, on the grey line", (_, build) => {
     const html = build({ copies, gone });
-    expect(goneLinks(html, "1")).toEqual(["/links/1/copy"]);
-    expect(goneLinks(html, "2")).toEqual([]);
+    expect(rows(html, "1")).toEqual(ROW("1"));
+    expect(lineLink(html, "1")).not.toBeNull();
+    expect(goneLinks(html, "1")).toEqual([]);
+    expect(rows(html, "2")).toEqual([]);
   });
 
   it.each([
     ["all links", all],
     ["a space", space],
-  ])("%s done page: the menu and the gone line both link", (_, build) => {
+  ])("%s done page: the grey line links the copy, and the menu can remove it", (_, build) => {
     const html = build({ links: [link("1", { state: "archived" })], copies, gone, done: true });
-    expect(dom(html).querySelector(".card-menu")).not.toBeNull();
-    expect(goneLinks(html, "1")).toEqual(["/links/1/copy"]);
+    expect(dom(html).querySelector(".card-menu [data-act=remove-copy]")).not.toBeNull();
+    expect(rows(html, "1")).toEqual(ROW("1"));
+    expect(lineLink(html, "1")).not.toBeNull();
   });
 
   describe("home's gone card", () => {
@@ -274,7 +242,7 @@ describe("the pages' routes", () => {
     const mine = await save(SECOND_USER.id, "Quokka of B");
     const html = String((await other.send("/search?q=Quokka")).body);
     expect(html).not.toContain("Quokka of A");
-    expect(html).not.toContain("Read saved copy");
+    expect(dom(html).querySelector(".saved-copy")).toBeNull();
     expect(rows(html, mine)).toEqual([]);
   });
 
@@ -298,13 +266,14 @@ describe("the pages' routes", () => {
     expect(rows(html, oldest)).toEqual(ROW(oldest));
   });
 
-  it("all links: a gone archived link shows the gone line's link and the menu on /all/done", async () => {
+  it("all links: a gone archived link links its copy once, and has the menu, on /all/done", async () => {
     const { deps, save, flag, get } = await world();
     const id = await save("owner", "Gone and done", { copy: true });
     await flag(id);
     await deps.store.update("owner", id, { state: "archived" });
     const html = await get("/all/done");
-    expect(goneLinks(html, id)).toEqual([`/links/${id}/copy`]);
+    expect(rows(html, id)).toEqual(ROW(id));
+    expect(dom(html).querySelector(`[data-id="${id}"] [data-gone]`)).not.toBeNull();
     expect(dom(html).querySelector(".card-menu")).not.toBeNull();
   });
 

@@ -11,7 +11,7 @@ export const removeCopyItem: MenuItem = {
 
 /**
  * Remove saved copy on the cards inside `#root`, including those Show older links appends. It posts
- * `/links/copy/remove`, hides the card's Read and Remove rows (the gone line's link too), puts
+ * `/links/copy/remove`, hides the card's Remove row and its grey line's Saved copy link, puts
  * focus on the ⋯ and offers Undo, which posts `/links/copy/restore` and shows them again. A
  * refusal, or an Undo that does not succeed, is shown in `#error`. A block; needs `CARD_FETCH` and
  * `showUndo`.

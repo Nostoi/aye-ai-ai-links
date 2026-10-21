@@ -130,14 +130,6 @@ describe.each(BUILDERS)("the gone line on %s", (_, build) => {
   });
 });
 
-describe("the gone line's saved-copy link", () => {
-  it("carries data-act=read-copy with a copy, and the line is unchanged without one", () => {
-    const withCopy = dom(goneLine(link("1"), GONE, { madeAt: new Date(0) }));
-    expect(withCopy.querySelector("a")?.getAttribute("data-act")).toBe("read-copy");
-    expect(goneLine(link("1"), GONE)).not.toContain("read-copy");
-  });
-});
-
 describe.each(BUILDERS.slice(1))("the gone line on done pages of %s", (_, build) => {
   it("shows the line only: no buttons and no script", () => {
     const html = build([link("1", { state: "archived" })], gone("1"), true);

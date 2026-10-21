@@ -251,6 +251,6 @@ describe("the search page's spaces", () => {
     const page = html(await (await signedIn(world)).send("/search?q=quokka"));
     const result = parseHTML(page).document.querySelector(".result");
     expect(result?.className).toMatch(/space-[a-z]+/);
-    expect(result?.querySelector(".in-space")?.textContent?.trim()).toBe("Kitchen");
+    expect(result?.querySelector(".card-line .line-space")?.textContent?.trim()).toBe("Kitchen");
   });
 });

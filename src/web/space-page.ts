@@ -5,12 +5,12 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
+import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { doneLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
-import { hostOf } from "./host.js";
 import { keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -89,8 +89,6 @@ function card(
     copies = new Map(),
   }: Input,
 ): string {
-  const host = hostOf(link.url);
-  const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
   const why =
     link.why || done
       ? `<p class="card-why">${whyLine(link.why)}</p>`
@@ -102,9 +100,13 @@ ${tile(link, picture, "card-image")}
 ${editMenu(link, { copy: copies.get(link.id), handy: handy.get(link.id) })}
 <div class="card-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-<p class="small">${saved}</p>
-${why}
-${goneLine(link, gone.get(link.id), copies.get(link.id))}</div>
+${cardLine(link, {
+  // The page's own space goes without saying; another one, on an unpinned tag's page, is named.
+  space: space?.key === tag.key ? null : space,
+  copy: copies.get(link.id),
+  saved: savedOn(link.savedAt, now),
+})}${why}
+${goneLine(link, gone.get(link.id))}</div>
 </li>`;
 }
 

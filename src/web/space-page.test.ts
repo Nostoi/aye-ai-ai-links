@@ -67,6 +67,9 @@ const space = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
   });
 
 const dom = (html: string) => parseHTML(html).document;
+/** The parts of a card's grey line. */
+const lineParts = (card: Element | null | undefined) =>
+  [...(card?.querySelectorAll(".card-line > *") ?? [])].map((e) => e.textContent);
 const hrefs = (html: string, selector: string) =>
   [...dom(html).querySelectorAll(selector)].map((a) => a.getAttribute("href") as string);
 /** The `tag` a rendered href names, read the way the server reads it. */
@@ -166,8 +169,24 @@ describe("a space page", () => {
     const a = cards[0]?.querySelector("h3 a");
     expect(a?.getAttribute("target")).toBe("_blank");
     expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(html).toContain("ex.com, saved October 1");
+    expect(lineParts(cards[0])).toEqual(["ex.com", "saved October 1"]);
     expect(html).toContain("because 2");
+  });
+
+  it("names a card's space on its grey line only when it is not the page's own", () => {
+    const kitchen = tag({ key: "kitchen", name: "Kitchen", color: "clay", pinned: true });
+    const both = link("1", { tags: [...onTag("home batteries"), ...onTag("kitchen")] });
+    const own = dom(space({ catalog: [HOME, kitchen], links: [both] }));
+    expect(lineParts(own.querySelector("[data-id]"))).toEqual(["ex.com", "saved October 1"]);
+    // An unpinned tag's page has no color of its own, so the card's pinned space is named.
+    const loose = tag({ key: "loose" });
+    const elsewhere = link("2", { tags: [...onTag("loose"), ...onTag("kitchen")] });
+    const other = dom(space({ tag: loose, catalog: [loose, kitchen], links: [elsewhere] }));
+    expect(lineParts(other.querySelector("[data-id]"))).toEqual([
+      "Kitchen",
+      "ex.com",
+      "saved October 1",
+    ]);
   });
 
   it("uses only this site's stored images, never a page's own image URL", () => {
@@ -440,9 +459,10 @@ describe("the search page's space line", () => {
     });
     const [first, second] = [...dom(html).querySelectorAll(".result")];
     expect(first?.className).toContain("space-teal");
-    expect(first?.querySelector(".in-space")?.textContent?.trim()).toBe("Home batteries");
+    expect(lineParts(first)).toEqual(["Home batteries", "ex.com", "saved October 1"]);
+    expect(first?.querySelector(".card-line .line-space .dot")).not.toBeNull();
     expect(second?.className).not.toMatch(/space-/);
-    expect(second?.querySelector(".in-space")).toBeNull();
+    expect(lineParts(second)).toEqual(["ex.com", "saved October 1"]);
   });
 });
 

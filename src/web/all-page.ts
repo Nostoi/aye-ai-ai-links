@@ -7,6 +7,7 @@ import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
+import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { doneLinkScript } from "./done-link.js";
@@ -15,7 +16,7 @@ import { goneLine, goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
-import { siteLine, spaceClass, tile } from "./pages.js";
+import { spaceClass, tile } from "./pages.js";
 import { olderScript } from "./show-older.js";
 import { CARD_FETCH } from "./tell-why.js";
 
@@ -123,7 +124,7 @@ ${tile(link, picture, "card-image")}
 ${editMenu(link, { copy: copies.get(link.id), handy: handy.get(link.id) })}
 <div class="card-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-${siteLine(link, space)}${goneLine(link, gone.get(link.id), copies.get(link.id))}</div>
+${cardLine(link, { space, copy: copies.get(link.id) })}${goneLine(link, gone.get(link.id))}</div>
 </li>`;
 }
 

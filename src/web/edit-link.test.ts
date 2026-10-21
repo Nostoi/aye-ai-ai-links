@@ -112,7 +112,7 @@ describe("the card menu and the card data", () => {
     );
   const KEPT = { status: "kept", source: "stated", due: false } as const;
 
-  it("puts I'm done with it first, then Keep handy, Edit, the saved copy's rows and Delete link last", () => {
+  it("puts I'm done with it first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
     expect(labels(editMenu(link("7")))).toEqual([
       "BUTTON archive I'm done with it",
       "BUTTON keep Keep handy",
@@ -129,7 +129,6 @@ describe("the card menu and the card data", () => {
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
       "BUTTON edit Edit title and picture…",
-      "A read-copy Read saved copy",
       "BUTTON remove-copy Remove saved copy",
       "—",
       "BUTTON delete-link Delete link",
@@ -157,7 +156,6 @@ describe("the card menu and the card data", () => {
       ),
     ).toEqual([
       "BUTTON edit Edit title and picture…",
-      "A read-copy Read saved copy",
       "BUTTON remove-copy Remove saved copy",
       "—",
       "BUTTON delete-link Delete link",
@@ -378,7 +376,7 @@ function opened(
   ]),
   images: Map<string, ShownPicture> = new Map([["1", { version: PAGE, fit: "cover" }]]),
   links: Link[] = [link("1")],
-  where: "search" | "all" = "search",
+  where: "search" | "all" | "space" = "search",
 ) {
   const html = pages({ links, pictures, images })[where];
   const page = runPage(html, reply);
@@ -1070,11 +1068,12 @@ const serverBox = (picture: ShownPicture | undefined, cls: string) =>
 describe.each([
   ["search", "tile"],
   ["all", "card-image"],
+  ["space", "card-image"],
 ] as const)("on %s cards", (page, cls) => {
   it.each(pairs)("a Save from %s to %s draws exactly tile()'s box", async (from, to) => {
     const start = SHAPES[from].picture;
     const p = opened(
-      () => ({ status: 200, body: answer(SHAPES[to].answer) }),
+      () => ({ status: 200, body: answer({ ...SHAPES[to].answer, shown: "Saved title" }) }),
       startInfo,
       new Map(start ? [["1", start]] : []),
       [link("1")],
@@ -1086,6 +1085,7 @@ describe.each([
     await p.settle();
     expect(shape(p.$(`[data-id="1"] .${cls}`))).toEqual(shape(serverBox(SHAPES[to].picture, cls)));
     expect(p.$('[data-id="1"]').getAttribute("data-fit")).toBe(SHAPES[to].answer.fit ?? "");
+    expect(p.$('[data-id="1"] [data-card-title] a').textContent).toBe("Saved title");
   });
 });
 it("an Undo back to an icon draws tile()'s icon box again", async () => {

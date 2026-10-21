@@ -180,19 +180,50 @@ describe("the Handy tiles", () => {
 
   it("styles the menu as a card of full-width 44px rows, not a link", () => {
     expect(rule(".card-menu-list")).toMatch(/border-radius:14px;[^}]*box-shadow:/);
-    // A menu row that links (Read saved copy) is an <a> and looks the same.
-    const item = rule(".card-menu-list button,.card-menu-list a");
-    for (const part of [
-      "min-height:44px",
-      "width:100%",
-      "background:none",
-      "white-space:nowrap",
-      "text-decoration:none",
-    ]) {
+    const item = rule(".card-menu-list button");
+    for (const part of ["min-height:44px", "width:100%", "background:none", "white-space:nowrap"]) {
       expect(item).toContain(part);
     }
-    expect(item).not.toContain("underline");
-    expect(themeCss).toContain(".card-menu-list a:hover");
+  });
+
+  it("wraps a card's grey line, and draws a dot only before a part that shows", () => {
+    expect(rule(".card-line")).toContain("flex-wrap:wrap");
+    expect(rule(".card-line")).toContain("overflow-wrap:anywhere");
+    // The dot is the earlier part's, drawn only when a shown part follows, so a hidden Saved copy
+    // takes its dot along and the link itself carries none.
+    expect(themeCss).toContain('.card-line>:has(+ :not([hidden]))::after{content:"·"');
+    expect(themeCss).not.toMatch(/\.card-line[^{]*(::before)/);
+  });
+
+  it("gives the grey line's Saved copy a 44px tap area without growing the line", () => {
+    const link = rule(".card-line .saved-copy");
+    expect(link).toContain("min-height:44px");
+    expect(link).toMatch(/margin:-1[0-9]px 0/);
+  });
+
+  // Saved copy's tap area reaches up into the title above it. A positioned title link paints, and
+  // so takes taps, above a static one; a positioned Saved copy would take them back.
+  it.each([
+    ["a search result", "result", "result-body", "h2"],
+    ["a link card", "link-card", "card-body", "h3"],
+  ])("lets %s's title, not Saved copy, take a tap where they overlap", (_, card, body, h) => {
+    const html = `<li class="${card}"><div class="${body}"><${h} data-card-title><a href="/x">T</a></${h}><p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p></div></li>`;
+    expect(computed(el(html, `${h} a`), "position", "desktop")).toBe("relative");
+    expect(computed(el(html, ".saved-copy"), "position", "desktop")).toBeUndefined();
+  });
+
+  it("spaces every dot on the grey line alike: no part puts a gap before its own dot", () => {
+    const line = el(
+      '<p class="card-line"><span class="line-space"><span class="dot"></span>Kitchen</span><span>ex.com</span><a class="saved-copy">Saved copy</a></p>',
+      ".card-line",
+    );
+    // A dot is its part's ::after, so a part that is a flex box with a gap adds that gap to the
+    // dot's own 6px.
+    for (const part of line.children) {
+      for (const prop of ["gap", "column-gap"]) {
+        expect(computed(part, prop, "desktop"), `${part.className} ${prop}`).toBeUndefined();
+      }
+    }
   });
 
   it("gives a link in a small-actions row the buttons' 44px height", () => {

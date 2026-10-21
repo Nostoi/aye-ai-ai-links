@@ -112,7 +112,7 @@ describe("the card menu and the card data", () => {
     );
   const KEPT = { status: "kept", source: "stated", due: false } as const;
 
-  it("puts I'm done with it first, then Keep handy, Edit, the saved copy's rows and Delete link last", () => {
+  it("puts I'm done with it first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
     expect(labels(editMenu(link("7")))).toEqual([
       "BUTTON archive I'm done with it",
       "BUTTON keep Keep handy",
@@ -129,7 +129,6 @@ describe("the card menu and the card data", () => {
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
       "BUTTON edit Edit title and picture…",
-      "A read-copy Read saved copy",
       "BUTTON remove-copy Remove saved copy",
       "—",
       "BUTTON delete-link Delete link",
@@ -157,7 +156,6 @@ describe("the card menu and the card data", () => {
       ),
     ).toEqual([
       "BUTTON edit Edit title and picture…",
-      "A read-copy Read saved copy",
       "BUTTON remove-copy Remove saved copy",
       "—",
       "BUTTON delete-link Delete link",

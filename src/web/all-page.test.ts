@@ -123,11 +123,11 @@ describe("the All links page", () => {
     const [plain, colored] = [...dom(html).querySelectorAll(".link-card")];
     expect(plain?.className).not.toMatch(/space-/);
     expect(plain?.querySelector(".dot")).toBeNull();
-    expect(plain?.querySelector(".card-site")?.textContent?.trim()).toBe("site1.example");
+    const parts = (card: Element | undefined) =>
+      [...(card?.querySelectorAll(".card-line > *") ?? [])].map((e) => e.textContent);
+    expect(parts(plain)).toEqual(["site1.example"]);
     expect(colored?.className).toContain("space-clay");
-    expect(colored?.querySelector(".card-site")?.textContent?.trim()).toBe(
-      "Kitchen, kitchen.example",
-    );
+    expect(parts(colored)).toEqual(["Kitchen", "kitchen.example"]);
     const title = colored?.querySelector("h3 a");
     expect(title?.getAttribute("href")).toBe("https://kitchen.example/x");
     expect(title?.getAttribute("target")).toBe("_blank");

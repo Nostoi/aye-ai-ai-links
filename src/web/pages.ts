@@ -5,12 +5,12 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
+import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { doneLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
-import { hostOf } from "./host.js";
 import { initialsText } from "./initials.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript } from "./open-link.js";
@@ -152,19 +152,6 @@ export function tile(link: Link, picture: ShownPicture | undefined, className = 
 export const spaceClass = (space: Pick<Space, "color"> | null) =>
   space ? ` space-${space.color}` : "";
 
-/** A card's space (its color dot and name) and site, as All links and the Handy shelf show them. */
-export function siteLine(link: Link, space: Space | null): string {
-  const site = [space?.name, hostOf(link.url)].filter(Boolean).join(", ");
-  const dot = space ? `<span class="dot" aria-hidden="true"></span>` : "";
-  return site ? `<p class="card-site">${dot}${escapeHtml(site)}</p>\n` : "";
-}
-
-/** A space's name after its color dot, as a card names the space it is in. */
-const spaceName = (space: Space | null) =>
-  space
-    ? `<span class="in-space"><span class="dot" aria-hidden="true"></span>${escapeHtml(space.name)}</span> `
-    : "";
-
 function resultItem(
   link: Link,
   now: Date,
@@ -176,16 +163,13 @@ function resultItem(
   copy: CopyInfo | undefined,
   keep: boolean,
 ): string {
-  const host = hostOf(link.url);
-  const saved = `${host ? `${escapeHtml(host)}, saved` : "Saved"} ${savedOn(link.savedAt, now)}`;
   return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}
 <h2 data-card-title>${linkTitle(link)}</h2>
-<p class="small">${saved}</p>
-${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${spaceName(space)}${whyLine(link.why)}</p>
-${goneLine(link, gone, copy)}${keep ? handyControl(link, view) : ""}</div>
+${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now) })}${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
+${goneLine(link, gone)}${keep ? handyControl(link, view) : ""}</div>
 </li>`;
 }
 

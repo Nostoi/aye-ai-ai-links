@@ -57,16 +57,14 @@ const click = async (p: ReturnType<typeof runPage>, selector: string) => {
   await p.settle();
 };
 const REMOVE = "[data-id='7'] button[data-act=remove-copy]";
-const READ = "[data-id='7'] .card-menu-list a[data-act=read-copy]";
-const GONE_READ = "[data-id='7'] [data-gone] a[data-act=read-copy]";
+const READ = "[data-id='7'] .card-line a[data-act=read-copy]";
 
 describe("the Remove saved copy row's script", () => {
-  it("leaves another card's rows and gone link alone, through remove and Undo", async () => {
+  it("leaves another card's row and grey-line link alone, through remove and Undo", async () => {
     const p = load(() => ({ status: 204 }));
     const others = [
       "[data-id='8'] button[data-act=remove-copy]",
-      "[data-id='8'] .card-menu-list a[data-act=read-copy]",
-      "[data-id='8'] [data-gone] a[data-act=read-copy]",
+      "[data-id='8'] .card-line a[data-act=read-copy]",
     ];
     await click(p, REMOVE);
     expect(p.$(REMOVE).hidden).toBe(true);
@@ -88,7 +86,7 @@ describe("the Remove saved copy row's script", () => {
     expect(p.sent).toEqual([post("/links/copy/remove", { id: "7" })]);
   });
 
-  it("a 204 posts the id, hides both rows and the gone link, and offers Undo", async () => {
+  it("a 204 posts the id, hides the row and the grey line's link, and offers Undo", async () => {
     const p = load(() => ({ status: 204 }));
     const menu = p.$("[data-id='7'] details.card-menu");
     (menu as HTMLDetailsElement).open = true;
@@ -96,7 +94,6 @@ describe("the Remove saved copy row's script", () => {
     expect(p.sent).toEqual([post("/links/copy/remove", { id: "7" })]);
     expect(p.$(REMOVE).hidden).toBe(true);
     expect(p.$(READ).hidden).toBe(true);
-    expect(p.$(GONE_READ).hidden).toBe(true);
     expect((menu as HTMLDetailsElement).open).toBe(false);
     // Focus goes to the ⋯ first, so the Undo bar hands it back there when it closes.
     expect(p.focused()[0]).toBe(p.$("[data-id='7'] details.card-menu summary"));
@@ -110,7 +107,6 @@ describe("the Remove saved copy row's script", () => {
     expect(p.sent[1]).toEqual(post("/links/copy/restore", { id: "7" }));
     expect(p.$(REMOVE).hidden).toBe(false);
     expect(p.$(READ).hidden).toBe(false);
-    expect(p.$(GONE_READ).hidden).toBe(false);
   });
 
   it("an Undo that is refused shows the message and keeps the rows hidden", async () => {
@@ -135,7 +131,6 @@ describe("the Remove saved copy row's script", () => {
     expect(p.$("#results-error").textContent).toBe("That saved copy is not there any more.");
     expect(p.$(REMOVE).hidden).toBe(false);
     expect(p.$(READ).hidden).toBe(false);
-    expect(p.$(GONE_READ).hidden).toBe(false);
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 });

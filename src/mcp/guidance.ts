@@ -38,7 +38,7 @@ Keep handy: if the owner says they use a link regularly, send handy {action: "ke
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means stale, out of sight for good. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 

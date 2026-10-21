@@ -225,6 +225,20 @@ export async function getLinkWithText(
   return { link, snapshotText, savedCopy };
 }
 
+/** An opening brings a put-away link back to active (the state in the patch moves the stamp); a stale link stays stale. */
+async function withOpeningRule(
+  store: Pick<LinkStore, "get">,
+  owner: OwnerId,
+  id: string,
+  input: UpdateLinkInput,
+): Promise<UpdateLinkInput> {
+  if (input.opened !== true || input.state !== undefined) return input;
+  const link = await store.get(owner, id);
+  return link?.state === "archived" && link.putAwayAt !== null
+    ? { ...input, state: "active" }
+    : input;
+}
+
 /** Checks the input and builds the patch; throws before anything is written. */
 function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   const { tags, why, title, summary, state, snoozedUntil, opened } = input;
@@ -242,7 +256,10 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   const patch: LinkPatch = {};
   if (title !== undefined) patch.title = normalizeTitle(title);
   if (summary !== undefined) patch.summary = summary;
-  if (state !== undefined) patch.state = state;
+  if (state !== undefined) {
+    patch.state = state;
+    patch.putAwayAt = null;
+  }
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
   if (opened === true) patch.lastOpenedAt = now();
   if (tags !== undefined) patch.tags = normalizeTags(tags);
@@ -256,7 +273,8 @@ export async function updateLink(
   id: string,
   input: UpdateLinkInput,
 ): Promise<Link> {
-  const link = await store.update(owner, id, buildPatch(now, input));
+  const ruled = await withOpeningRule(store, owner, id, input);
+  const link = await store.update(owner, id, buildPatch(now, ruled));
   if (!link) throw notFound(id);
   return link;
 }
@@ -269,7 +287,8 @@ export async function updateLinkWithReceipt(
   input: UpdateLinkInput,
   extend?: string,
 ): Promise<{ link: Link; editId: string | null }> {
-  const result = await store.updateWithReceipt(owner, id, buildPatch(now, input), now(), extend);
+  const patch = buildPatch(now, await withOpeningRule(store, owner, id, input));
+  const result = await store.updateWithReceipt(owner, id, patch, now(), extend);
   if (!result) throw notFound(id);
   return result;
 }

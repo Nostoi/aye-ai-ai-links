@@ -33,7 +33,7 @@ const REDIRECT: Answer = { status: 0, type: "opaqueredirect" };
 const ok = (t: Tag): Answer => ({ status: 200, body: { tag: t } });
 
 /** The page in linkedom with its own script and the Undo bar's run against it, timers stubbed. */
-function load(answer: (sent: Sent) => Answer, tags: Tag[] = [KITCHEN, BAKING, HOME]) {
+function load(answer: (sent: Sent) => Answer, tags: Tag[] = [KITCHEN, BAKING, HOME], hash = "") {
   const html = tagsPage({ tags });
   const { document, window } = parseHTML(html);
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
@@ -71,18 +71,25 @@ function load(answer: (sent: Sent) => Answer, tags: Tag[] = [KITCHEN, BAKING, HO
       },
     });
   }
-  new Function("document", "fetch", "setTimeout", "clearTimeout", code)(
+  const scrolled: Element[] = [];
+  for (const el of document.querySelectorAll("li[data-key]")) {
+    (el as HTMLElement).scrollIntoView = () => {
+      scrolled.push(el);
+    };
+  }
+  new Function("document", "fetch", "setTimeout", "clearTimeout", "location", code)(
     document,
     fetch,
     () => 0,
     () => {},
+    { hash },
   );
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
   const row = (key: string) => $(`li[data-key="${key}"]`);
   const inRow = (key: string, selector: string) => row(key).querySelector(selector) as HTMLElement;
   const click = (el: HTMLElement) => el.dispatchEvent(new window.Event("click", { bubbles: true }));
   const settle = () => new Promise((r) => setTimeout(r, 0));
-  return { $, row, inRow, click, settle, sent, document, focused: () => focused };
+  return { $, row, inRow, click, settle, sent, document, scrolled, focused: () => focused };
 }
 
 const pressedOf = (el: HTMLElement) => el.getAttribute("aria-pressed");
@@ -260,6 +267,25 @@ describe("pinning on the page", () => {
 });
 
 describe("editing a tag on the page", () => {
+  it("opens the panel of the tag a #tag= address names, as a space page's Change link sends it", () => {
+    const odd = tag({ key: "c++ & ü/x#y", name: "C++ & ü" });
+    const hash = `#tag=${encodeURIComponent(odd.key)}`;
+    const page = load(() => ok(odd), [KITCHEN, odd], hash);
+    expect(page.inRow(odd.key, ".tag-edit").hidden).toBe(false);
+    expect(page.inRow(odd.key, '[data-action="edit"]').textContent).toBe("Close");
+    expect(page.inRow("kitchen", ".tag-edit").hidden).toBe(true);
+    expect(page.scrolled).toEqual([page.row(odd.key)]);
+  });
+
+  it.each(["#tag=nope", "", "#other=kitchen", "#tag="])(
+    "opens nothing for the address %j",
+    (hash) => {
+      const page = load(() => ok(KITCHEN), undefined, hash);
+      expect(page.document.querySelectorAll(".tag-edit:not([hidden])")).toHaveLength(0);
+      expect(page.scrolled).toEqual([]);
+    },
+  );
+
   it("Edit opens the panel and becomes Close; Close shuts it", () => {
     const page = load(() => ok(KITCHEN));
     const edit = page.inRow("kitchen", '[data-action="edit"]');

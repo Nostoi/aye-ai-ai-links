@@ -134,18 +134,18 @@ export function whyLine(why: Link["why"]): string {
 
 /**
  * The link's stored image served by this site (a cover photo, or an icon shown whole), else its
- * initials; `className` styles all three.
+ * initials; `className` styles all three. `data-pic` marks the box for the edit dialog.
  */
 export function tile(link: Link, picture: ShownPicture | undefined, className = "tile"): string {
   if (!picture) {
     const text = initialsText(link);
-    return `<div class="${className} initials-box" aria-hidden="true">${text ? `<span class="pic-initials">${escapeHtml(text)}</span>` : ""}</div>`;
+    return `<div class="${className} initials-box" data-pic aria-hidden="true">${text ? `<span class="pic-initials">${escapeHtml(text)}</span>` : ""}</div>`;
   }
-  const img = (cls: string) =>
-    `<img class="${cls}" src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(picture.version)}" alt="" loading="lazy">`;
+  const img = (cls: string, mark = "") =>
+    `<img class="${cls}"${mark} src="/images/${encodeURIComponent(link.id)}?v=${encodeURIComponent(picture.version)}" alt="" loading="lazy">`;
   return picture.fit === "cover"
-    ? img(className)
-    : `<div class="${className} icon-box" aria-hidden="true">${img("site-icon")}</div>`;
+    ? img(className, " data-pic")
+    : `<div class="${className} icon-box" data-pic aria-hidden="true">${img("site-icon")}</div>`;
 }
 
 /** The ` space-<color>` class of a space, or nothing for neutral. */
@@ -181,8 +181,8 @@ function resultItem(
   return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture)}
 <div class="result-body">
-${editMenu(link, copy, view)}
-<h2>${linkTitle(link)}</h2>
+${editMenu(link, { copy, handy: view })}
+<h2 data-card-title>${linkTitle(link)}</h2>
 <p class="small">${saved}</p>
 ${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${spaceName(space)}${whyLine(link.why)}</p>
 ${goneLine(link, gone, copy)}${keep ? handyControl(link, view) : ""}</div>

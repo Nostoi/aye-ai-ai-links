@@ -147,7 +147,9 @@ describe("the search page's images", () => {
     });
     const html = String((await owner.send("/search?q=quokka")).body);
     expect(html).toContain(`src="/images/${stored}?v=${await versionOf(w, stored)}"`);
-    expect(html.match(/<div class="tile initials-box" aria-hidden="true">/g)).toHaveLength(1);
+    expect(html.match(/<div class="tile initials-box" data-pic aria-hidden="true">/g)).toHaveLength(
+      1,
+    );
     expect(html).not.toContain("cdn.example");
   });
 });

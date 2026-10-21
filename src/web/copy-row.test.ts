@@ -82,7 +82,7 @@ describe("a card menu row with an href", () => {
 
   it("is offered by editMenu only with a copy, after Edit, in the same tab", () => {
     expect(dom(editMenu(link("7"))).querySelector("a")).toBeNull();
-    const d = dom(editMenu(link("7"), INFO));
+    const d = dom(editMenu(link("7"), { copy: INFO }));
     expect(
       [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => e.textContent),
     ).toEqual([

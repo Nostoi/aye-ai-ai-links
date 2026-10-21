@@ -664,11 +664,12 @@ const showCard = (target, answer) => {
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
   const label = answer.shown;
-  const heading = target.querySelector(".result-body h2, .card-body h3");
-  (heading.querySelector("a") || heading).textContent = label;
+  const heading = target.querySelector("[data-card-title]");
+  if (heading) (heading.querySelector("a") || heading).textContent = label;
   const named = target.querySelector(".card-menu summary .visually-hidden");
   if (named) named.textContent = "More for " + label;
-  const tile = target.querySelector(".tile, .card-image");
+  const tile = target.querySelector("[data-pic]");
+  if (!tile) return;
   const lazyImage = (cls) => {
     const img = document.createElement("img");
     img.className = cls;
@@ -692,6 +693,7 @@ const showCard = (target, answer) => {
       next.append(initials);
     }
   }
+  next.setAttribute("data-pic", "");
   tile.replaceWith(next);
 };
 const giveFocusBack = () => {

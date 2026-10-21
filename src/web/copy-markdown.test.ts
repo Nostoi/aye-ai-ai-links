@@ -93,7 +93,7 @@ describe("copyHtml safety", () => {
 
   it("removes a link's pair but keeps an image inside a kept link", () => {
     const html = copyHtml(`[![one](images/01-${NONCE})](https://e.example)`, refs());
-    expect(parse(html).querySelector("img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
+    expect(parse(html).querySelector("a img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
   });
 });
 

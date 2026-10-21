@@ -48,6 +48,7 @@ const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
 const A_TOOL_TITLE = "Quokka keeper login";
+const A_TIDY_TITLE = "Quokka relic for Tidy up";
 const A_DONE_URL = "https://a.example/remote-image";
 const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 
@@ -537,6 +538,7 @@ describe("owner isolation coverage", () => {
       marker: () => ["Quokka habitat notes", A_TAG_NAME, A_TOOL_TITLE],
     },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
+    "GET /tidy": { request: "/tidy", marker: () => A_TIDY_TITLE },
     "GET /spaces": {
       request: `/spaces?tag=${encodeURIComponent(A_TAG_NAME)}`,
       marker: () => [A_TAG_NAME, A_URL],
@@ -660,6 +662,15 @@ describe("owner isolation coverage", () => {
       title: A_TOOL_TITLE,
     });
     await keepHandy(seedDeps, A, handy.id, "stated");
+    // An old link of A's, never opened: Tidy up offers it.
+    const { link: old } = await saveLink(seedDeps, A, {
+      url: "https://a.example/old-relic",
+      savedBy: "seed",
+      title: A_TIDY_TITLE,
+    });
+    world.links
+      .prepare("UPDATE links SET saved_at = ? WHERE id = ?")
+      .run(Date.now() - 60 * 86_400_000, Number(old.id));
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,
@@ -758,6 +769,7 @@ describe("owner isolation coverage", () => {
     "POST /home/undo-state":
       "the two-owner test of POST /home/undo-state in web/home-routes.test.ts",
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
+    "POST /tidy/keep": "the two-owner test of POST /tidy/keep in web/tidy-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
     "POST /links/edit": "the two-owner test of POST /links/edit in web/edit-routes.test.ts",
     "POST /links/edit/undo":

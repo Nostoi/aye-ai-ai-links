@@ -10,6 +10,7 @@ import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
 import { spaceMissingPage, spacePage } from "./space-page.js";
 import { tagsPage } from "./tags-page.js";
+import { tidyPage } from "./tidy-page.js";
 
 /**
  * The snapshots are made with no AI set up. Each page, and each variant that changes its markup,
@@ -108,6 +109,7 @@ const pages: Record<string, () => string> = {
       shelf: "<section>shelf</section>",
       spaces: "<section>spaces</section>",
     }),
+  "home-with-tidy": () => homePage({ worth: worth([]), shelf: "", spaces: "", tidy: true }),
   "all-empty": () => allPage({ ...list, links: [] }),
   "all-with-links": () => allPage({ ...list, links: [...ONE, ...NO_WHY], older: "r1" }),
   "all-done": () => allPage({ ...list, links: [link("4", { state: "archived" })], done: true }),
@@ -142,6 +144,28 @@ const pages: Record<string, () => string> = {
       ],
       now: NOW,
     }),
+  "tidy-with-links": () =>
+    tidyPage({
+      queue: [
+        { link: link("1"), fit: null },
+        {
+          link: link("2", { lastOpenedAt: new Date("2026-05-02T10:00:00Z") }),
+          fit: {
+            id: "f1",
+            text: "the garden plan",
+            source: "inferred",
+            writtenBy: "Claude",
+            createdAt: NOW,
+          },
+        },
+      ],
+      hasFocus: true,
+      images: new Map(),
+      catalog: [KITCHEN],
+      now: NOW,
+    }),
+  "tidy-empty": () =>
+    tidyPage({ queue: [], hasFocus: false, images: new Map(), catalog: [], now: NOW }),
   "tags-empty": () => tagsPage({ tags: [] }),
   "tags-with-tags": () => tagsPage({ tags: [KITCHEN, BAKING] }),
   "connections-empty": () => connections(),

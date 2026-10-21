@@ -120,7 +120,7 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
-const ALREADY_DONE = "This link is already out of your lists. Reload.";
+export const ALREADY_DONE = "This link is already out of your lists. Reload.";
 
 export async function unsnoozeLink(
   deps: WorthDeps,
@@ -240,7 +240,7 @@ export async function tellWhy(
 const CHANGED_SINCE = "That link was changed since, so it stays as it is. Reload the page.";
 
 /** A missing or foreign link is not_found; one that no longer matches is a `conflict`. */
-async function changeIf(
+export async function changeIf(
   deps: Pick<WorthDeps, "store">,
   owner: OwnerId,
   id: string,

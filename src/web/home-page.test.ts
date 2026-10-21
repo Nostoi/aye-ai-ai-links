@@ -1174,3 +1174,33 @@ describe("the Worth a look cards' pictures", () => {
     expect(d.querySelector(`.worth-gone ${sel("also-pic")}`)).not.toBeNull();
   });
 });
+
+describe("Tidy up's start line", () => {
+  const html = (tidy?: boolean) =>
+    homePage({ worth: worth([card([])]), shelf: "", spaces: "", ...(tidy ? { tidy } : {}) });
+  const start = (h: string) => parseHTML(h).document.querySelector('.tidy-start a[href="/tidy"]');
+
+  it("offers a Start link to /tidy with its two lines when asked", () => {
+    const h = html(true);
+    expect(h).toContain("Clear out a few old links?");
+    expect(h).toContain("Five, one at a time. Nothing gets deleted.");
+    expect(start(h)?.textContent).toBe("Start");
+  });
+
+  it("is absent when not asked", () => {
+    expect(html()).not.toContain("Clear out a few old links?");
+    expect(start(html())).toBeNull();
+  });
+
+  it("sits after the spaces, at the bottom of the page", () => {
+    const h = homePage({ worth: worth([]), shelf: "", spaces: "<b>spaces</b>", tidy: true });
+    expect(h.indexOf("<b>spaces</b>")).toBeLessThan(h.indexOf("Clear out"));
+  });
+
+  it("is a control at least 44px tall with only theme tokens", () => {
+    const css = themeCss;
+    expect(css).toMatch(/\.tidy-start a[^{]*\{[^}]*min-height:44px/);
+    const rules = css.match(/\.tidy-start[^{]*\{[^}]*\}/g)?.join("") ?? "";
+    expect(rules).not.toMatch(/#[0-9a-f]{3,6}\b|amber/i);
+  });
+});

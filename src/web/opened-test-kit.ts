@@ -106,7 +106,13 @@ function start(
       },
     };
   };
-  const location = { href: "https://links.example/", pathname: "/", search: "", reload: () => {} };
+  const location = {
+    href: "https://links.example/",
+    pathname: "/",
+    search: "",
+    hash: "",
+    reload: () => {},
+  };
   const win = document.defaultView as unknown as typeof globalThis;
   const items = new Map<string, string>();
   if (stored !== undefined) items.set(ASK_KEY, JSON.stringify(stored));

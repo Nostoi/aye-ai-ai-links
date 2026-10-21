@@ -47,7 +47,7 @@ import { type SavedPage, savePage } from "../core/save-page.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/saved-copy.js";
 import type { LinkOrder } from "../core/search.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
-import { homeSpaces, openSpace } from "../core/spaces.js";
+import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
 import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
@@ -670,8 +670,27 @@ export function webApp({
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
     const keep = c.req.query("keep") === "1";
+    // `tag` limits the search to one of the owner's tags, as a space page's Search this space does;
+    // a blank one is no tag, and one the owner lacks gets the space page's 404.
+    const catalog = await deps.store.listTags(caller.owner);
+    const tagName = c.req.query("tag") ?? "";
+    let space: Tag | undefined;
+    if (tagName.trim() !== "") {
+      try {
+        space = findSpaceTag(catalog, tagName);
+      } catch (error) {
+        if (error instanceof CoreError && error.code === "not_found") {
+          return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);
+        }
+        throw error;
+      }
+    }
     // Keep mode lists only links that can go on the shelf.
-    const input = keep ? { query, state: "active" as const } : { query };
+    const input = {
+      query,
+      ...(keep ? { state: "active" as const } : {}),
+      ...(space ? { tag: space.key } : {}),
+    };
     const links = await searchLinks(deps, caller.owner, input, caller.savedBy);
     const images = await deps.images.imageVersions(
       caller.owner,
@@ -685,13 +704,13 @@ export function webApp({
       caller.owner,
       links.map((l) => l.id),
     );
-    const catalog = await deps.store.listTags(caller.owner);
     const views = await linkViews(deps, caller.owner, links);
     const handy = new Map([...views].map(([id, v]) => [id, v.handy]));
     const gone = new Map([...views].map(([id, v]) => [id, v.gone]));
     const now = (deps.now ?? (() => new Date()))();
     const html = searchPage({
       query,
+      space,
       links,
       now,
       images,
@@ -715,10 +734,14 @@ export function webApp({
     const { owner } = c.get("caller");
     const before = c.req.query("before");
     const done = state === "archived";
+    // Out of your lists has no sort: it never reads `order`, so its cursors are newest's.
+    let order: LinkOrder = "newest";
     try {
+      if (!done) order = checkedOrder(c.req.query("order"));
       const { tag, catalog, page } = await openSpace(deps, owner, {
         name,
         state,
+        order,
         limit: LINK_PAGE,
         ...(before === undefined ? {} : { before }),
       });
@@ -741,6 +764,7 @@ export function webApp({
       const html = spacePage({
         tag,
         catalog,
+        order,
         ...page,
         images,
         handy,
@@ -757,7 +781,7 @@ export function webApp({
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
       if (error.code === "not_found" && before !== undefined) {
-        return c.redirect(spaceHref(name, { done }), 303);
+        return c.redirect(spaceHref(name, { done, order }), 303);
       }
       if (error.code === "not_found")
         return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);

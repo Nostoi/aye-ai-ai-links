@@ -3,7 +3,7 @@ import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
-import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
+import type { LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
@@ -13,6 +13,7 @@ import { doneLinkScript, OUT_OF_LISTS, PUT_AWAY_MARKER } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
+import { orderNav } from "./link-orders.js";
 import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
 import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -36,12 +37,6 @@ export const allHref = (
 
 /** What `?order=` and `?before=` restart from when they were changed by hand. */
 export const ALL_RESTART = `Open <a href="/all">All links</a> again and page from the start.`;
-
-const ORDER_NAMES: Record<LinkOrder, string> = {
-  newest: "Newest first",
-  oldest: "Oldest first",
-  opened: "Recently opened",
-};
 
 type Input = {
   order: LinkOrder;
@@ -133,10 +128,6 @@ function empty({ order, done, later }: Input): string {
  */
 export function allPage(input: Input): string {
   const { order, links, older, done, view = "list" } = input;
-  const choices = LINK_ORDERS.map(
-    (o) =>
-      `<a href="${escapeHtml(allHref(o, { done }))}"${o === order ? ' aria-current="true"' : ""}>${ORDER_NAMES[o]}</a>`,
-  ).join(`<span aria-hidden="true">·</span>`);
   const list =
     links.length === 0
       ? `<p>${empty(input)}</p>`
@@ -154,7 +145,7 @@ export function allPage(input: Input): string {
 <h1>${done ? OUT_OF_LISTS : "All links"}</h1>
 <div class="all-tools">${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
 </div>
-<nav class="orders" aria-label="Order">${choices}</nav>
+${orderNav(order, (o) => allHref(o, { done }))}
 <p id="all-error" role="alert"></p>
 ${list}
 <div class="all-foot">${noticeLine(input)}${more}${other}</div>

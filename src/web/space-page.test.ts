@@ -91,43 +91,58 @@ describe("spaceHref", () => {
 });
 
 describe("a space page", () => {
-  it("heads the page with the space's color band, name and kind, and links to the Tags page", () => {
+  it("heads the page with the space's name and color dot and a quiet Change link to its panel", () => {
     const html = space();
-    const header = dom(html).querySelector(".band");
+    const header = dom(html).querySelector("header.page-head");
     expect(header?.className).toContain("space-teal");
-    expect(dom(html).querySelector("h1")?.textContent?.trim()).toBe("Home batteries");
-    expect(html).toContain("A topic you save links about");
-    expect(hrefs(html, ".band a")).toEqual(["/tags"]);
-    expect(html).toContain("Change this space");
+    expect(header?.querySelector("h1")?.textContent?.trim()).toBe("Home batteries");
+    expect(header?.querySelector("h1 .dot")).not.toBeNull();
+    expect(dom(html).querySelector(".band, .band-color")).toBeNull();
+    expect(hrefs(html, "header.page-head a")).toEqual(["/tags#tag=home%20batteries"]);
+    expect(dom(html).querySelector("header.page-head a")?.textContent).toBe("Change");
+    expect(html).not.toContain("Change this space");
+  });
+
+  it("sends Change to the Tags page with the key encoded, so any key comes back as itself", () => {
+    for (const key of [ODD_KEY, "a+b", "100%", HOSTILE]) {
+      const [href] = hrefs(space({ tag: tag({ key, name: key }) }), "header.page-head a");
+      expect(href?.startsWith("/tags#tag=")).toBe(true);
+      expect(new URLSearchParams((href as string).split("#")[1]).get("tag")).toBe(key);
+    }
   });
 
   it.each([
     ["no color", null],
     ["a stored color that is not a space color", "amber"],
     ["CSS in the color", "teal;x"],
-  ])("draws a neutral band for a tag with %s", (_, color) => {
+  ])("draws a neutral dot for a tag with %s", (_, color) => {
     const html = space({ tag: tag({ key: "k", color, pinned: true }) });
-    expect(dom(html).querySelector(".band")?.className).not.toMatch(/space-/);
+    expect(dom(html).querySelector("header.page-head")?.className).not.toMatch(/space-/);
     expect(html).not.toContain("space-amber");
     expect(html).not.toContain("teal;x");
   });
 
-  it("draws a neutral band for an unpinned tag that kept a space color, matching its cards", () => {
+  it("draws every dot of an unpinned tag that kept a space color with no space class, as its cards", () => {
     const kept = tag({ key: "baking", name: "Baking", color: "violet" });
     const links = [link("a", { tags: onTag("baking") })];
-    const html = space({ tag: kept, catalog: [kept], links });
-    expect(dom(html).querySelector(".band")?.className).not.toMatch(/space-/);
-    expect(dom(html).querySelector(".link-row")?.className).not.toMatch(/space-/);
-    const pinned = { ...kept, pinned: true };
-    const again = space({ tag: pinned, catalog: [pinned], links });
-    expect(dom(again).querySelector(".band")?.className).toContain("space-violet");
-    expect(dom(again).querySelector(".link-row")?.className).toContain("space-violet");
+    const dots = (html: string) =>
+      [...dom(html).querySelectorAll("header.page-head, .back-link, .link-row")].map(
+        (e) => e.className,
+      );
+    for (const done of [false, true]) {
+      const html = space({ tag: kept, catalog: [kept], links, done });
+      expect(dots(html), `done ${done}`).not.toEqual([]);
+      for (const className of dots(html)) expect(className).not.toMatch(/space-/);
+      const pinned = { ...kept, pinned: true };
+      const again = space({ tag: pinned, catalog: [pinned], links, done });
+      for (const className of dots(again)) expect(className).toContain("space-violet");
+    }
   });
 
-  it("gives an unpinned tag with no color a page with a neutral band", () => {
+  it("gives an unpinned tag with no color a page with a neutral dot", () => {
     const html = space({ tag: tag({ key: "baking", name: "Baking" }), catalog: [] });
     expect(dom(html).querySelector("h1")?.textContent?.trim()).toBe("Baking");
-    expect(dom(html).querySelector(".band")?.className).not.toMatch(/space-/);
+    expect(dom(html).querySelector("header.page-head")?.className).not.toMatch(/space-/);
   });
 
   it.each([
@@ -141,16 +156,32 @@ describe("a space page", () => {
       tag({ key: "p", kind: "project", kindSource: "inferred", projectStatus: "active" }),
       "Maybe a project you're working on (a guess)",
     ],
-    [tag({ key: "p" }), "A topic you save links about"],
-  ])("says what kind of space it is (%#)", (t, line) => {
-    expect(space({ tag: t })).toContain(line);
+  ])("says what a project is (%#)", (t, line) => {
+    expect(dom(space({ tag: t })).querySelector(".page-kind")?.textContent).toBe(line);
+  });
+
+  it("says nothing of kind for a topic", () => {
+    const html = space();
+    expect(dom(html).querySelector(".page-kind")).toBeNull();
+    expect(html).not.toContain("A topic you save links about");
   });
 
   it("shows a description only when the tag has one, escaped", () => {
-    expect(dom(space()).querySelector(".band-description")).toBeNull();
+    expect(dom(space()).querySelector(".page-description")).toBeNull();
     const html = space({ tag: { ...HOME, description: HOSTILE } });
-    expect(dom(html).querySelector(".band-description")?.textContent).toBe(HOSTILE);
+    expect(dom(html).querySelector(".page-description")?.textContent).toBe(HOSTILE);
     expect(html).not.toContain("<img src=x");
+  });
+
+  it("puts Search this space with the list controls, to a search within the space", () => {
+    for (const key of [HOME.key, ODD_KEY, HOSTILE]) {
+      const html = space({ tag: tag({ key, name: key, pinned: true }) });
+      const search = dom(html).querySelector("a.search-instead");
+      expect(search?.textContent).toBe("Search this space");
+      const url = new URL(search?.getAttribute("href") as string, ORIGIN);
+      expect([url.pathname, url.searchParams.get("tag")]).toEqual(["/search", key]);
+      expect(dom(html).querySelector(".view-switch")).not.toBeNull();
+    }
   });
 
   it("keeps a hostile name inert in the title and heading", () => {
@@ -275,6 +306,102 @@ describe("a space page", () => {
   });
 });
 
+describe("a space's sort orders", () => {
+  const tagIn = (href: string) => new URL(href, ORIGIN);
+
+  it("names the order in an address only when it is not newest, with the tag and cursor", () => {
+    const params = (href: string) => [...tagIn(href).searchParams.entries()];
+    expect(params(spaceHref("k"))).toEqual([["tag", "k"]]);
+    expect(params(spaceHref("k", { order: "newest" }))).toEqual([["tag", "k"]]);
+    expect(params(spaceHref("a b", { order: "opened", before: "r5.x" }))).toEqual([
+      ["tag", "a b"],
+      ["order", "opened"],
+      ["before", "r5.x"],
+    ]);
+    expect(tagIn(spaceHref("k", { order: "oldest", done: true })).pathname).toBe("/spaces/done");
+  });
+
+  it("offers all three orders as links to the space in that order", () => {
+    const d = dom(space({ links: [link("1")] }));
+    const choices = [...d.querySelectorAll("nav.orders a")];
+    expect(choices.map((a) => a.textContent)).toEqual([
+      "Newest first",
+      "Oldest first",
+      "Recently opened",
+    ]);
+    expect(
+      choices.map((a) => tagIn(a.getAttribute("href") as string).searchParams.get("order")),
+    ).toEqual([null, "oldest", "opened"]);
+    expect(choices.map((a) => tagOf(a.getAttribute("href") as string))).toEqual(
+      Array(3).fill("home batteries"),
+    );
+  });
+
+  it.each(["newest", "oldest", "opened"] as const)("marks %s as the current order", (order) => {
+    const d = dom(space({ order, links: [link("1")] }));
+    const current = [...d.querySelectorAll("nav.orders a[aria-current=true]")];
+    expect(current.map((a) => a.textContent)).toEqual([
+      { newest: "Newest first", oldest: "Oldest first", opened: "Recently opened" }[order],
+    ]);
+    const selected = d.querySelector("form.order-select option[selected]");
+    expect(selected?.textContent).toBe(current[0]?.textContent);
+  });
+
+  it("gives the phone a select in a form to this space, and the page script that submits it", () => {
+    const html = space({ order: "oldest", links: [link("1")] });
+    const d = dom(html);
+    const form = d.querySelector("form.order-select");
+    expect(form?.getAttribute("action")).toBe("/spaces");
+    expect(form?.querySelector("input[name=tag]")?.getAttribute("value")).toBe("home batteries");
+    expect(html).toContain('querySelector("form.order-select")');
+  });
+
+  it("pages in the same order: Show older links keeps it, and says Show more links off newest", () => {
+    const oldest = space({ order: "oldest", links: [link("1")], older: "o5.x" });
+    const a = dom(oldest).querySelector("#older");
+    expect(a?.textContent).toBe("Show more links");
+    const href = tagIn(a?.getAttribute("href") as string);
+    expect([href.searchParams.get("order"), href.searchParams.get("before")]).toEqual([
+      "oldest",
+      "o5.x",
+    ]);
+    const newest = dom(space({ links: [link("1")], older: "5.x" })).querySelector("#older");
+    expect(newest?.textContent).toBe("Show older links");
+    expect(tagIn(newest?.getAttribute("href") as string).searchParams.has("order")).toBe(false);
+  });
+
+  it("sends the link to Out of your lists with no order, as that view has no sort", () => {
+    const href = hrefs(space({ order: "oldest", links: [link("1")] }), "a.done-link")[0];
+    expect(tagIn(href as string).searchParams.has("order")).toBe(false);
+  });
+
+  it("groups Recently opened by the month of opening, not of saving", () => {
+    const opened = new Date("2026-10-05T00:00:00Z");
+    const html = space({
+      order: "opened",
+      links: [
+        link("2", { savedAt: new Date("2026-09-01T00:00:00Z"), lastOpenedAt: opened }),
+        link("1", { savedAt: new Date("2026-08-01T00:00:00Z"), lastOpenedAt: opened }),
+      ],
+    });
+    const sections = [...dom(html).querySelectorAll("#space-links > section.month")];
+    expect(sections.map((s) => s.querySelector("h2")?.textContent)).toEqual(["Opened in October"]);
+    expect(sections[0]?.querySelectorAll(".link-row")).toHaveLength(2);
+  });
+
+  it.each([
+    ["newest", false, "No links in this space yet."],
+    ["oldest", false, "No links in this space yet."],
+    ["opened", false, "Nothing in this space opened yet. Links you open from this site show here."],
+    ["newest", true, "No older links."],
+    ["oldest", true, "No more links."],
+    ["opened", true, "No more links."],
+  ] as const)("says an empty %s page (later %s) so", (order, later, text) => {
+    const paragraphs = [...dom(space({ order, later })).querySelectorAll("main p")];
+    expect(paragraphs.map((p) => p.textContent)).toContain(text);
+  });
+});
+
 describe("a space's links out of your lists", () => {
   const done = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
     space({ done: true, ...over });
@@ -304,8 +431,54 @@ describe("a space's links out of your lists", () => {
     expect(html).not.toContain("/home/why");
   });
 
-  it("says when nothing in the space is done", () => {
-    expect(done()).toContain("Nothing here is out of your lists yet.");
+  it("says when nothing in the space is done, in a card that explains what lands here", () => {
+    const card = dom(done()).querySelector(".done-empty");
+    expect(card?.querySelector("p:first-child")?.textContent).toBe(
+      "Nothing here is out of your lists yet.",
+    );
+    expect(card?.textContent).toContain(
+      "Links you mark stale or put away from this space wait here. Search still finds them.",
+    );
+    expect(dom(done()).querySelector("#space-links")).toBeNull();
+  });
+
+  it("tops the page with Back to the space, in its dot, above an Out of your lists heading with the switch", () => {
+    const d = dom(done({ links: [link("1", { state: "archived" })] }));
+    expect(
+      d.querySelector("header.page-head, .change-link, nav.orders, .search-instead"),
+    ).toBeNull();
+    const main = d.querySelector("main") as Element;
+    const back = main.querySelector("a.back-link") as Element;
+    expect(main.firstElementChild).toBe(back);
+    expect(back.textContent?.trim()).toBe("Back to Home batteries");
+    expect(back.className).toContain("space-teal");
+    expect(back.querySelector(".dot")).not.toBeNull();
+    const head = d.querySelector("h1");
+    expect(head?.textContent).toBe("Out of your lists");
+    expect(head?.parentElement?.querySelector(".view-switch")).not.toBeNull();
+    expect(d.querySelectorAll("h1")).toHaveLength(1);
+  });
+
+  it("keeps the card and the switch on a first page that has links, for the theme to hide", () => {
+    const d = dom(done({ links: [link("1", { state: "archived" })], older: "9.1" }));
+    expect(d.querySelector(".done-empty")).not.toBeNull();
+    expect(d.querySelector(".view-switch")).not.toBeNull();
+  });
+
+  it("gives a later page no card, only that no older links are left", () => {
+    const d = dom(done({ later: true }));
+    expect(d.querySelector(".done-empty")).toBeNull();
+    expect(d.querySelector("main")?.textContent).toContain("No older links.");
+    expect(d.querySelector("main")?.textContent).not.toContain("Nothing here is out of your lists");
+  });
+
+  it("shows the card, and hides the switch, only while no row is shown and no older link waits", () => {
+    const rule = (selector: string) =>
+      themeCss.split("}").find((r) => r.includes(selector) && r.includes("display:"));
+    const empty = ":not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older))";
+    expect(rule(".done-empty{")).toMatch(/display:none/);
+    expect(rule(`${empty} .done-empty`)).toMatch(/display:block/);
+    expect(rule(`${empty} .done-head .view-switch`)).toMatch(/display:none/);
   });
 });
 

@@ -189,6 +189,13 @@ const run = async (button, row) => {
 
 if (list) {
   markShared();
+  // A space page's Change link comes as #tag=<key>: open that tag's panel. An unknown key opens none.
+  const wanted = new URLSearchParams(location.hash.slice(1)).get("tag");
+  const wantedRow = wanted && [...list.querySelectorAll("li[data-key]")].find((r) => r.dataset.key === wanted);
+  if (wantedRow) {
+    toggleEdit(wantedRow.querySelector('button[data-action="edit"]'), wantedRow);
+    wantedRow.scrollIntoView();
+  }
   list.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
     const row = button && button.closest("li[data-key]");

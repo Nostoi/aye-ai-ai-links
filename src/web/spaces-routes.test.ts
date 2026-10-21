@@ -5,7 +5,7 @@ import { saveLink } from "../core/links.js";
 import { setTagColor, setTagPinned } from "../core/tag-space.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
-import { DIMS } from "../search/model.js";
+import { DIMS, MODEL_KEY } from "../search/model.js";
 
 const A = "owner";
 const B = SECOND_USER.id;
@@ -161,25 +161,26 @@ describe("a space page", () => {
     const asB = html(await b.send("/spaces?tag=kitchen"));
     expect(asA).toContain("Kitchen link of A");
     expect(asA).not.toContain("Kitchen link of B");
-    expect(asA).toMatch(/class="band space-clay"/);
+    expect(asA).toMatch(/class="page-head space-clay"/);
     expect(asB).toContain("Kitchen link of B");
     expect(asB).not.toContain("Kitchen link of A");
-    expect(asB).toMatch(/class="band space-violet"/);
+    expect(asB).toMatch(/class="page-head space-violet"/);
   });
 
-  it("colors the band only while the tag is pinned, keeping its color while unpinned", async () => {
+  it("colors the header dot only while the tag is pinned, keeping its color while unpinned", async () => {
     const world = await oauthWorld();
     await save(world, A, "https://a.example/k", ["Kitchen"]);
     await setTagColor(depsOf(world), A, { name: "kitchen", color: "clay" });
     const browser = await signedIn(world);
-    const band = async () =>
-      parseHTML(html(await browser.send("/spaces?tag=kitchen"))).document.querySelector(".band")
-        ?.className;
-    expect(await band()).toBe("band");
+    const header = async () =>
+      parseHTML(html(await browser.send("/spaces?tag=kitchen"))).document.querySelector(
+        "header.page-head",
+      )?.className;
+    expect(await header()).toBe("page-head");
     await setTagPinned(depsOf(world), A, { name: "kitchen", pinned: true });
-    expect(await band()).toBe("band space-clay");
+    expect(await header()).toBe("page-head space-clay");
     await setTagPinned(depsOf(world), A, { name: "kitchen", pinned: false });
-    expect(await band()).toBe("band");
+    expect(await header()).toBe("page-head");
   });
 
   it("sends a browser without a session to /login, and refuses another site's Origin", async () => {
@@ -193,6 +194,90 @@ describe("a space page", () => {
       const foreign = await browser.send(path, { headers: { origin: "https://evil.example" } });
       expect(foreign.status).toBe(403);
     }
+  });
+});
+
+describe("a space page's sort orders", () => {
+  const titlesOf = (page: string) =>
+    [...parseHTML(page).document.querySelectorAll(".link-row h3")].map((h) =>
+      h.textContent?.trim(),
+    );
+
+  async function seeded() {
+    const world = await oauthWorld();
+    const ids: string[] = [];
+    for (let i = 0; i < 25; i++) {
+      ids.push(await save(world, A, `https://a.example/${i}`, ["Kitchen"], `Link ${i}`));
+    }
+    await save(world, A, "https://a.example/other", ["Garden"], "Garden link");
+    return { world, ids, browser: await signedIn(world) };
+  }
+
+  it("lists the space oldest first and pages on in the same order", async () => {
+    const { browser } = await seeded();
+    const first = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
+    expect(titlesOf(first)[0]).toBe("Link 0");
+    expect(titlesOf(first)).toHaveLength(24);
+    const [older] = hrefsOf(first, "#older");
+    expect(older).toContain("order=oldest");
+    const second = await browser.send(older as string);
+    expect(second.status).toBe(200);
+    expect(titlesOf(html(second))).toEqual(["Link 24"]);
+    expect(html(second)).not.toContain("Garden link");
+  });
+
+  it("lists only the opened links of the space by recent opening", async () => {
+    const { world, ids, browser } = await seeded();
+    const deps = depsOf(world);
+    await deps.store.update(A, ids[3] as string, { lastOpenedAt: new Date(5_000_000) });
+    await deps.store.update(A, ids[7] as string, { lastOpenedAt: new Date(9_000_000) });
+    const page = html(await browser.send("/spaces?tag=kitchen&order=opened"));
+    expect(titlesOf(page)).toEqual(["Link 7", "Link 3"]);
+    const none = html(await browser.send("/spaces?tag=garden&order=opened"));
+    expect(none).toContain("Nothing in this space opened yet.");
+  });
+
+  it("answers an unknown order or another order's cursor with the 400 restart page", async () => {
+    const { browser } = await seeded();
+    const oldest = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
+    const [older] = hrefsOf(oldest, "#older");
+    const cursor = new URL(older as string, "https://x.example").searchParams.get("before");
+    for (const path of [
+      "/spaces?tag=kitchen&order=random",
+      `/spaces/done?tag=kitchen&before=${encodeURIComponent(cursor as string)}`,
+      `/spaces?tag=kitchen&before=${encodeURIComponent(cursor as string)}`,
+      `/spaces?tag=kitchen&order=opened&before=${encodeURIComponent(cursor as string)}`,
+    ]) {
+      const res = await browser.send(path);
+      expect(res.status, path).toBe(400);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  it("restarts a cursor naming no live link at the first page of the same order", async () => {
+    const { browser } = await seeded();
+    const res = await browser.send("/spaces?tag=kitchen&order=oldest&before=o1.999999");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/spaces?tag=kitchen&order=oldest");
+  });
+
+  it("gives Out of your lists no sort: it reads no order and lists newest first", async () => {
+    const world = await oauthWorld();
+    const first = await save(world, A, "https://a.example/1", ["Kitchen"], "Old one");
+    const second = await save(world, A, "https://a.example/2", ["Kitchen"], "New one");
+    for (const id of [first, second]) await archive(world, A, id);
+    const browser = await signedIn(world);
+    const plain = await browser.send("/spaces/done?tag=kitchen");
+    const asked = await browser.send("/spaces/done?tag=kitchen&order=oldest");
+    expect(titlesOf(html(plain))).toEqual(["New one", "Old one"]);
+    expect(titlesOf(html(asked))).toEqual(["New one", "Old one"]);
+    expect(parseHTML(html(asked)).document.querySelector("nav.orders")).toBeNull();
+  });
+
+  it("sends the Out of your lists address with no order, whatever the order of the space", async () => {
+    const { browser } = await seeded();
+    const page = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
+    expect(hrefsOf(page, "a.done-link")).toEqual(["/spaces/done?tag=kitchen"]);
   });
 });
 
@@ -240,6 +325,171 @@ describe("Your spaces on the home page", () => {
       expect(page).not.toContain("<img src=x");
       expect(page).toContain("&lt;img src=x onerror=alert(1)&gt;");
     }
+  });
+});
+
+describe("Search this space", () => {
+  const resultTitles = (page: string) =>
+    [...parseHTML(page).document.querySelectorAll(".result h2")].map((h) => h.textContent?.trim());
+  const embedder = new FakeEmbedder(DIMS);
+
+  /** Gives a link a stored meaning vector for `text`, so a search for exactly that finds it. */
+  async function embed(world: World, owner: string, id: string, text: string) {
+    await depsOf(world).vectorIndex.writeVector(
+      owner,
+      id,
+      MODEL_KEY,
+      `hash:${text}`,
+      await embedder.embedQuery(text),
+      new Date(0),
+    );
+  }
+
+  async function seeded() {
+    const world = await oauthWorld();
+    const inside = await save(world, A, "https://a.example/in", ["Kitchen"], "Quartz counters");
+    const outside = await save(world, A, "https://a.example/out", ["Garden"], "Quartz sample");
+    return { world, inside, outside, browser: await signedIn(world) };
+  }
+
+  it("finds words in the space only, and everywhere without the tag", async () => {
+    const { browser } = await seeded();
+    expect(resultTitles(html(await browser.send("/search?q=quartz&tag=Kitchen")))).toEqual([
+      "Quartz counters",
+    ]);
+    expect(resultTitles(html(await browser.send("/search?q=quartz"))).sort()).toEqual([
+      "Quartz counters",
+      "Quartz sample",
+    ]);
+  });
+
+  it("leaves out a link outside the space that matches only by its page text", async () => {
+    const { world, outside, browser } = await seeded();
+    const { changes } = world.links
+      .prepare("UPDATE snapshots SET text = ? WHERE link_id = ?")
+      .run("a long page about zebrafish tanks", Number(outside));
+    expect(changes).toBe(1);
+    expect(resultTitles(html(await browser.send("/search?q=zebrafish")))).toEqual([
+      "Quartz sample",
+    ]);
+    const within = html(await browser.send("/search?q=zebrafish&tag=kitchen"));
+    expect(resultTitles(within)).toEqual([]);
+    expect(within).not.toContain("Quartz sample");
+  });
+
+  it("leaves out a link outside the space that matches only by meaning", async () => {
+    const { world, outside, browser } = await seeded();
+    await embed(world, A, outside, "something unrelated to any word");
+    const everywhere = html(
+      await browser.send("/search?q=something%20unrelated%20to%20any%20word"),
+    );
+    expect(resultTitles(everywhere)).toContain("Quartz sample");
+    const within = html(
+      await browser.send("/search?q=something%20unrelated%20to%20any%20word&tag=kitchen"),
+    );
+    expect(resultTitles(within)).not.toContain("Quartz sample");
+  });
+
+  it("lists the space's newest links for a blank search, named by space, and finds out-of-list links too", async () => {
+    const { world, inside, browser } = await seeded();
+    const done = await save(world, A, "https://a.example/done", ["Kitchen"], "Old sink");
+    await archive(world, A, done);
+    const page = html(await browser.send("/search?q=&tag=kitchen"));
+    expect(resultTitles(page)).toEqual(["Old sink", "Quartz counters"]);
+    expect(page).not.toContain("Quartz sample");
+    expect(inside).toBeDefined();
+    const heading = parseHTML(page).document.querySelector("h1");
+    expect(heading?.textContent?.replace(/\s+/g, " ").trim()).toBe("Your newest links in Kitchen");
+  });
+
+  it("names the space in the heading of a word search too, in its color", async () => {
+    const { world, browser } = await seeded();
+    await setTagColor(depsOf(world), A, { name: "Kitchen", color: "clay" });
+    await setTagPinned(depsOf(world), A, { name: "Kitchen", pinned: true });
+    const d = parseHTML(html(await browser.send("/search?q=quartz&tag=kitchen"))).document;
+    expect(d.querySelector("h1")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "Best matches first in Kitchen",
+    );
+    expect(d.querySelector("h1 .dot")).not.toBeNull();
+    expect(d.querySelector("h1 .in-space")?.className).toContain("space-clay");
+  });
+
+  it("colors each result by the searched space when a link is in two", async () => {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/two", ["Garden", "Kitchen"], "Quartz twice");
+    for (const [name, color] of [
+      ["Garden", "violet"],
+      ["Kitchen", "clay"],
+    ] as const) {
+      await setTagColor(depsOf(world), A, { name, color });
+      await setTagPinned(depsOf(world), A, { name, pinned: true });
+    }
+    const browser = await signedIn(world);
+    const classOf = async (path: string) =>
+      parseHTML(html(await browser.send(path))).document.querySelector(".result")?.className;
+    expect(await classOf("/search?q=quartz")).toContain("space-violet");
+    expect(await classOf("/search?q=quartz&tag=kitchen")).toContain("space-clay");
+  });
+
+  it("says nothing in the space matched, with a link that runs the same words everywhere", async () => {
+    const { browser } = await seeded();
+    for (const keep of ["", "&keep=1"]) {
+      const page = html(await browser.send(`/search?q=nonexistentword&tag=kitchen${keep}`));
+      const d = parseHTML(page).document;
+      const body = d.querySelector("main")?.textContent?.replace(/\s+/g, " ");
+      expect(body).toContain("Nothing in Kitchen matched.");
+      expect(hrefsOf(page, "a.search-all")).toEqual([`/search?q=nonexistentword${keep}`]);
+    }
+  });
+
+  it("carries the tag and keep through the form and the Not it? links", async () => {
+    const { browser } = await seeded();
+    const page = html(await browser.send("/search?q=quartz&tag=kitchen&keep=1"));
+    const d = parseHTML(page).document;
+    const hidden = Object.fromEntries(
+      [...d.querySelectorAll("form.search-page input[type=hidden]")].map((i) => [
+        i.getAttribute("name"),
+        i.getAttribute("value"),
+      ]),
+    );
+    expect(hidden).toEqual({ keep: "1", tag: "kitchen" });
+    expect(hrefsOf(page, ".not-it a")).toEqual([
+      "/search?q=&tag=kitchen&keep=1",
+      "/search?q=quartz&keep=1",
+    ]);
+  });
+
+  it("carries a key with odd characters through the form and the links", async () => {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/odd", [ODD_NAME], "Odd one");
+    const browser = await signedIn(world);
+    const key = encodeURIComponent("c++ & ü/x#y");
+    const page = html(await browser.send(`/search?q=odd&tag=${key}`));
+    expect(resultTitles(page)).toEqual(["Odd one"]);
+    const d = parseHTML(page).document;
+    expect(d.querySelector("form.search-page input[name=tag]")?.getAttribute("value")).toBe(
+      "c++ & ü/x#y",
+    );
+    expect(hrefsOf(page, ".not-it a")[0]).toBe(`/search?q=&tag=${key}`);
+  });
+
+  it("treats a blank tag as no tag and gives an unknown or another owner's tag the same 404", async () => {
+    const world = await oauthWorld();
+    await addSecondUser(world);
+    await save(world, A, "https://a.example/mine", ["Kitchen"], "Quartz mine");
+    await save(world, B, "https://b.example/theirs", ["Pantrysecret"], "Quartz theirs");
+    const browser = await signedIn(world);
+    for (const tag of ["", "%20%20"]) {
+      const res = await browser.send(`/search?q=quartz&tag=${tag}`);
+      expect(res.status, tag).toBe(200);
+      expect(resultTitles(html(res))).toEqual(["Quartz mine"]);
+    }
+    const unknown = await browser.send("/search?q=quartz&tag=gardensecret");
+    const foreign = await browser.send("/search?q=quartz&tag=pantrysecret");
+    expect([unknown.status, foreign.status]).toEqual([404, 404]);
+    expect(foreign.headers.get("cache-control")).toBe("no-store");
+    expect(html(unknown).replace("gardensecret", "pantrysecret")).toBe(html(foreign));
+    expect(html(foreign)).not.toMatch(/pantrysecret|Quartz theirs|Quartz mine/i);
   });
 });
 

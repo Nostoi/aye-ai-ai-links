@@ -1,6 +1,6 @@
 import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
-import { linkSpace, type Space } from "../core/link-space.js";
+import { linkSpace, type Space, spaceColor } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
@@ -174,13 +174,36 @@ ${goneLine(link, gone)}${keep ? handyControl(link, view) : ""}</div>
 </li>`;
 }
 
+/** The ` space-<color>` class of a tag: neutral while it is unpinned (`spaceColor`). */
+export const tagSpaceClass = (tag: Pick<Tag, "color" | "pinned">) => {
+  const color = spaceColor(tag);
+  return spaceClass(color ? { color } : null);
+};
+
+/**
+ * The search page for `query`, within the space `tag` names, and in keep mode. Every part is
+ * encoded, so any words or key come back as themselves.
+ */
+export const searchHref = (query: string, { tag, keep }: { tag?: string; keep?: boolean } = {}) =>
+  `/search?q=${encodeURIComponent(query)}${tag === undefined ? "" : `&tag=${encodeURIComponent(tag)}`}${keep ? "&keep=1" : ""}`;
+
+/** What an empty search says, naming the space it was limited to. */
+function searchEmpty(query: string, keep: boolean, space: Tag | undefined): string {
+  const where = space ? ` in ${escapeHtml(space.name)}` : "";
+  if (query.trim() !== "") return space ? `Nothing${where} matched.` : "Nothing matched.";
+  if (keep) return `No active links${where} to keep handy.`;
+  return space ? `No links saved${where} yet.` : "No links saved yet.";
+}
+
 /**
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
  * `images` holds the image version of each link that has a stored image; `catalog`, the owner's
  * tags, gives each card its space (`linkSpace`). `keep` is the mode the Handy shelf's Add opens: it
  * asks for a link to keep handy, gives each card a visible Keep handy as well as the ⋯ menu's, and
- * carries itself through a search typed here. `pictures` holds
- * each card's picture info for the edit dialog; `copies` holds the links that have a saved copy.
+ * carries itself through a search typed here. `space`, a tag, is the space the door searched
+ * within: the heading names it, the form carries it, and each card's space is read within it.
+ * `pictures` holds each card's picture info for the edit dialog; `copies` holds the links that
+ * have a saved copy.
  */
 export const searchPage = ({
   query,
@@ -193,9 +216,11 @@ export const searchPage = ({
   keep = false,
   pictures = new Map(),
   copies = new Map(),
+  space,
   ask,
 }: {
   ask?: Ask | undefined;
+  space?: Tag | undefined;
   query: string;
   links: Link[];
   now: Date;
@@ -216,14 +241,14 @@ export const searchPage = ({
 <input id="q" name="q" type="search" value="${escapeHtml(query)}"${keep ? " autofocus" : ""}>
 <button class="primary" type="submit">Find it</button>
 </div>
-${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}</form>
-<h1>${query.trim() !== "" ? "Best matches first" : keep ? "Find the link to keep handy" : "Your newest links"}</h1>
+${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}${space ? `<input type="hidden" name="tag" value="${escapeHtml(space.key)}">\n` : ""}</form>
+<h1>${query.trim() !== "" ? "Best matches first" : keep ? "Find the link to keep handy" : "Your newest links"}${space ? ` in <span class="in-space${tagSpaceClass(space)}"><span class="dot" aria-hidden="true"></span>${escapeHtml(space.name)}</span>` : ""}</h1>
 ${keep ? `<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>\n` : ""}
 <p id="results-error" role="alert"></p>
-${links.length === 0 ? `<p>${query.trim() !== "" ? "Nothing matched." : keep ? "No active links to keep handy." : "No links saved yet."}</p>` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog), handy.get(l.id), gone.get(l.id), pictures.get(l.id), copies.get(l.id), keep)).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${searchEmpty(query, keep, space)}</p>${space ? `\n<p><a class="search-all" href="${searchHref(query, { keep })}">Search all your links</a></p>` : ""}` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog, space ? { within: space.key } : {}), handy.get(l.id), gone.get(l.id), pictures.get(l.id), copies.get(l.id), keep)).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
-<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="/search?q=${keep ? "&keep=1" : ""}">your newest links</a>.</p>
+<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="${searchHref("", { ...(space ? { tag: space.key } : {}), keep })}">your newest links</a>${space ? ` in ${escapeHtml(space.name)}${links.length === 0 ? "" : `, or <a class="search-all" href="${searchHref(query, { keep })}">search all your links</a>`}` : ""}.</p>
 </div>
 </main>
 ${ask ? "" : `${editDialog()}\n`}<script>

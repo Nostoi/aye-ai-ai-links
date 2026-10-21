@@ -165,6 +165,10 @@ export function isCopyDraft(value: unknown): value is CopyDraft {
   );
 }
 
+/** `mcpmarket.com/tools/x` for `https://mcpmarket.com/tools/x/`: an address as a link line's label. */
+export const linkLabel = (href: string): string =>
+  href.replace(/^[a-z][a-z0-9+.-]*:(\/\/)?/i, "").replace(/\/$/, "");
+
 /** The reference the copy rule writes for image `n` of a draft with this nonce. */
 export const imageRef = (n: number, nonce: string): string =>
   `images/${String(n).padStart(2, "0")}-${nonce}`;

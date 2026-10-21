@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import TurndownService from "turndown";
 import type { CopyDraft } from "../core/saved-copy.ts";
-import { imageRef, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
+import { imageRef, linkLabel, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
 
 const webUrl = (url: URL): boolean => url.protocol === "http:" || url.protocol === "https:";
 
@@ -42,10 +42,6 @@ function inlineLinkRule(td: TurndownService): LinkRule {
   if (!rules?.inlineLink) throw new Error("turndown has no inlineLink rule");
   return rules.inlineLink;
 }
-
-/** `mcpmarket.com/tools/x` for `https://mcpmarket.com/tools/x/`: the address as a link line's label. */
-const linkLabel = (href: string): string =>
-  href.replace(/^[a-z][a-z0-9+.-]*:(\/\/)?/i, "").replace(/\/$/, "");
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 const escapeAlt = (alt: string): string => collapse(alt).replace(/[\\[\]]/g, "\\$&");

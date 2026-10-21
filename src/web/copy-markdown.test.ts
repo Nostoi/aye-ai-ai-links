@@ -93,7 +93,7 @@ describe("copyHtml safety", () => {
 
   it("removes a link's pair but keeps an image inside a kept link", () => {
     const html = copyHtml(`[![one](images/01-${NONCE})](https://e.example)`, refs());
-    expect(parse(html).querySelector("a img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
+    expect(parse(html).querySelector("img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
   });
 });
 
@@ -188,6 +188,105 @@ describe("copyHtml rendering budget", () => {
       const start = performance.now();
       copyHtml(md, refs());
       expect(performance.now() - start).toBeLessThan(BUDGET_MS);
+    },
+    30_000,
+  );
+});
+
+describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
+  const A = "https://e.example/a";
+  const B = "https://e.example/b";
+  const hrefs = (html: string) => attrs(html, "href");
+  const noStray = (html: string) => {
+    expect(text(html)).not.toContain("](");
+    expect(text(html)).not.toMatch(/(^|\s)\[(\s|$)/);
+  };
+
+  it("shows the card, then one link to its address, with no stray brackets", () => {
+    const html = copyHtml(
+      `before\n\n[![](images/01.png)\n\n### Title\n\nAbout.\n\n](${A})\n\nafter`,
+      refs(),
+    );
+    expect(hrefs(html)).toEqual([A]);
+    expect(parse(html).querySelector("img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
+    expect(text(html)).toContain("Title");
+    expect(text(html)).toContain("About.");
+    noStray(html);
+  });
+
+  it("keeps two adjacent cards apart, each with its own address", () => {
+    const html = copyHtml(`[\n\n### One\n\n](${A})[\n\n### Two\n\n](${B})`, refs());
+    expect(hrefs(html)).toEqual([A, B]);
+    noStray(html);
+  });
+
+  it("repairs a card inside a blockquote and inside a list item, keeping the container", () => {
+    const quote = copyHtml(`> [\n>\n> ### T\n>\n> ](${A})\n\nout`, refs());
+    expect(parse(quote).querySelector("blockquote h3")?.textContent).toBe("T");
+    expect(hrefs(quote)).toEqual([A]);
+    noStray(quote);
+    const list = copyHtml(`- [\n\n  item\n\n  ](${A})\n- plain`, refs());
+    expect(parse(list).querySelectorAll("li")).toHaveLength(2);
+    expect(hrefs(list)).toEqual([A]);
+    noStray(list);
+  });
+
+  it("never pairs across a quote or list boundary", () => {
+    for (const md of [`[\n\n> ](${A})`, `> [\n\n](${A})`, `- [\n- ](${A})`]) {
+      const html = copyHtml(md, refs());
+      expect(hrefs(html)).toEqual([]);
+      expect(text(html)).toContain("](");
+    }
+  });
+
+  it("leaves a fenced code block holding the same text unchanged", () => {
+    const html = copyHtml(`\`\`\`\n[\n\n](${A})\n\`\`\``, refs());
+    expect(hrefs(html)).toEqual([]);
+    expect(parse(html).querySelector("pre code")?.textContent).toBe(`[\n\n](${A})\n`);
+  });
+
+  it("leaves a real link, and a closer with no opener, as they are", () => {
+    const real = copyHtml(`[\n\nstray\n\n[a](${A}) and more`, refs());
+    expect(hrefs(real)).toEqual([A]);
+    expect(parse(real).querySelector("a")?.textContent).toBe("a");
+    expect(text(real)).toContain("[");
+    const orphan = copyHtml(`](${A})`, refs());
+    expect(hrefs(orphan)).toEqual([]);
+    expect(text(orphan)).toContain(`](${A})`);
+  });
+
+  it("still refuses an unsafe repaired address", () => {
+    const html = copyHtml("[\n\ncard\n\n](javascript:alert(1))", refs());
+    expect(all(html).filter((e) => e.tagName === "A")).toHaveLength(0);
+    expect(html).not.toContain("javascript:");
+    expect(text(html)).toContain("card");
+  });
+
+  it("reads escaped parentheses in the address", () => {
+    const html = copyHtml("[\n\ncard\n\n](https://e.example/a\\(1\\))", refs());
+    expect(hrefs(html)).toEqual(["https://e.example/a(1)"]);
+  });
+
+  it("repairs a picture in a finished copy and in an unfinished one", () => {
+    for (const src of ["images/01.png", `images/01-${NONCE}`]) {
+      const html = copyHtml(`[![x](${src})\n\n](${A})`, refs());
+      expect(hrefs(html)).toEqual([A]);
+      expect(parse(html).querySelector("img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
+    }
+  });
+
+  it.each([
+    ["orphan closers", "](x)\n\n"],
+    ["orphan openers", "[\n\n"],
+    ["cards in quotes", "> [\n>\n> ](x)\n\n"],
+    ["pairs", "[\n\n](https://e.example/a)\n\n"],
+  ])(
+    "renders 2 MiB of %s within the budget",
+    (_name, unit) => {
+      const md = unit.repeat(Math.ceil((2 * 1024 * 1024) / unit.length));
+      const start = performance.now();
+      copyHtml(md, refs());
+      expect(performance.now() - start).toBeLessThan(10_000);
     },
     30_000,
   );

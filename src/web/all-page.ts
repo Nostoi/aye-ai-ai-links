@@ -7,16 +7,15 @@ import { LINK_ORDERS, type LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
-import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { doneLinkScript } from "./done-link.js";
-import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
-import { goneLine, goneScript } from "./gone-line.js";
+import { editDialog, editLinkScript } from "./edit-link.js";
+import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
-import { linkTitle, openedScript } from "./open-link.js";
+import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
+import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
-import { spaceClass, tile } from "./pages.js";
 import { olderScript } from "./show-older.js";
 import { CARD_FETCH } from "./tell-why.js";
 
@@ -64,6 +63,8 @@ type Input = {
   /** What to say about saved copies at the foot; shown on the first page of active links only. */
   notice?: CopyNotice | null;
   ask?: Ask | undefined;
+  /** The view the owner chose in this browser (`VIEW_COOKIE`); the list without one. */
+  view?: View;
 };
 
 /** GiB rounded down to `places` decimals; the tolerance keeps a configured tenth from reading one lower. */
@@ -89,23 +90,8 @@ const noticeLine = ({ notice, done, later }: Input): string =>
     ? `<p class="copy-notice${notice.kind === "high" ? "" : " needs-you"}">${escapeHtml(noticeText(notice))}</p>`
     : "";
 
-/** The time a card is grouped by: when it was opened in opened order, else when it was saved. */
-const groupTime = (link: Link, order: LinkOrder) =>
-  order === "opened" && link.lastOpenedAt ? link.lastOpenedAt : link.savedAt;
-
-/** "YYYY-MM" in UTC: the key a later page's first month joins the last one shown by. */
-const monthKey = (d: Date) => d.toISOString().slice(0, 7);
-
-/** "October"; the year is added when it is not the current one. Always read in UTC. */
-const monthName = (d: Date, now: Date) =>
-  d.toLocaleDateString("en-US", {
-    month: "long",
-    ...(d.getUTCFullYear() === now.getUTCFullYear() ? {} : { year: "numeric" }),
-    timeZone: "UTC",
-  });
-
-/** One card: the picture or a tint, the title, the space and site, and the ⋯ menu. No why. */
-function card(
+/** One row: the picture, the title, the why, the space and site, and the ⋯ menu. */
+function row(
   link: Link,
   {
     catalog,
@@ -118,38 +104,16 @@ function card(
   }: Input,
 ): string {
   const space = linkSpace(link, catalog);
-  const picture = images.get(link.id);
-  return `<li class="link-card all-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
-${tile(link, picture, "card-image")}
-${editMenu(link, { copy: copies.get(link.id), handy: handy.get(link.id) })}
-<div class="card-body">
-<h3 data-card-title>${linkTitle(link)}</h3>
-${cardLine(link, { space, copy: copies.get(link.id) })}${goneLine(link, gone.get(link.id))}</div>
-</li>`;
-}
-
-/** The links grouped into one section per UTC month, in the order given. */
-function months(input: Input): string {
-  const groups: { key: string; at: Date; links: Link[] }[] = [];
-  for (const link of input.links) {
-    const at = groupTime(link, input.order);
-    const key = monthKey(at);
-    const last = groups.at(-1);
-    if (last?.key === key) last.links.push(link);
-    else groups.push({ key, at, links: [link] });
-  }
-  return groups
-    .map(({ key, at, links }) => {
-      const name = monthName(at, input.now);
-      const heading = input.order === "opened" ? `Opened in ${name}` : name;
-      return `<section class="month" data-month="${key}">
-<h2>${heading}</h2>
-<ul class="link-cards">
-${links.map((l) => card(l, input)).join("\n")}
-</ul>
-</section>`;
-    })
-    .join("\n");
+  return linkRow(link, {
+    space,
+    lineSpace: space,
+    picture: images.get(link.id),
+    info: pictures.get(link.id),
+    copy: copies.get(link.id),
+    handy: handy.get(link.id),
+    gone: gone.get(link.id),
+    faded: done,
+  });
 }
 
 function empty({ order, done, later }: Input): string {
@@ -168,7 +132,7 @@ function empty({ order, done, later }: Input): string {
  * page, or null.
  */
 export function allPage(input: Input): string {
-  const { order, links, older, done } = input;
+  const { order, links, older, done, view = "list" } = input;
   const choices = LINK_ORDERS.map(
     (o) =>
       `<a href="${escapeHtml(allHref(o, { done }))}"${o === order ? ' aria-current="true"' : ""}>${ORDER_NAMES[o]}</a>`,
@@ -176,7 +140,7 @@ export function allPage(input: Input): string {
   const list =
     links.length === 0
       ? `<p>${empty(input)}</p>`
-      : `<div id="all-links">\n${months(input)}\n</div>`;
+      : `<div id="all-links">\n${monthSections(links, input, (l) => row(l, input))}\n</div>`;
   const more = older
     ? `<a class="show-older" id="older" href="${escapeHtml(allHref(order, { done, before: older }))}">${order === "newest" ? "Show older links" : "Show more links"}</a>`
     : "";
@@ -185,10 +149,10 @@ export function allPage(input: Input): string {
     : `<a class="done-link" href="${escapeHtml(allHref(order, { done: true }))}">Links you're done with</a>`;
   return page(
     `${done ? "Done · " : ""}All links · Aye-AI-AI Links`,
-    `<main class="all">
+    `<main class="all" data-view="${view}">
 <div class="all-head">
 <h1>${done ? "Links you're done with" : "All links"}</h1>
-<a class="search-instead" href="/search">Search instead</a>
+<div class="all-tools">${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
 </div>
 <nav class="orders" aria-label="Order">${choices}</nav>
 <p id="all-error" role="alert"></p>
@@ -197,6 +161,7 @@ ${list}
 </main>
 ${input.ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
+${viewScript}
 ${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
 ${done ? "" : `${doneLinkScript("all-links", "all-error")}\n`}</script>

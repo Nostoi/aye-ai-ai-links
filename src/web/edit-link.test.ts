@@ -1067,8 +1067,8 @@ const serverBox = (picture: ShownPicture | undefined, cls: string) =>
   ) as Element;
 describe.each([
   ["search", "tile"],
-  ["all", "card-image"],
-  ["space", "card-image"],
+  ["all", "row-pic"],
+  ["space", "row-pic"],
 ] as const)("on %s cards", (page, cls) => {
   it.each(pairs)("a Save from %s to %s draws exactly tile()'s box", async (from, to) => {
     const start = SHAPES[from].picture;

@@ -144,7 +144,9 @@ describe("a link with no title", () => {
   }
 
   it("names the card menu by the readable title, and keeps the stored title for the edit dialog", () => {
-    for (const c of CASES.filter((x) => ["All links", "the Handy shelf"].includes(x.name))) {
+    for (const c of CASES.filter((x) =>
+      ["All links", "a space page", "search results", "the Handy shelf"].includes(x.name),
+    )) {
       const { document } = parseHTML(c.html([link()]));
       expect(
         document.querySelector(".card-menu summary .visually-hidden")?.textContent,

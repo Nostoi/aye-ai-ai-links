@@ -5,18 +5,18 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
-import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { doneLinkScript } from "./done-link.js";
-import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
-import { goneLine, goneScript } from "./gone-line.js";
+import { editDialog, editLinkScript } from "./edit-link.js";
+import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
-import { linkTitle, openedScript } from "./open-link.js";
-import { escapeHtml, page, savedOn } from "./page.js";
-import { spaceClass, tile, whyLine } from "./pages.js";
+import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
+import { openedScript } from "./open-link.js";
+import { escapeHtml, page } from "./page.js";
+import { spaceClass } from "./pages.js";
 import { olderScript } from "./show-older.js";
-import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
+import { CARD_FETCH, tellWhyScript } from "./tell-why.js";
 
 /**
  * The URL of a tag's space page, or with `done` its links you're done with; `before` is a page's
@@ -69,13 +69,15 @@ type Input = {
   /** The links that have a saved copy. */
   copies?: Map<string, CopyInfo>;
   ask?: Ask | undefined;
+  /** The view the owner chose in this browser (`VIEW_COOKIE`); the list without one. */
+  view?: View;
 };
 
 /**
- * One card. An active link with no why asks Tell me why, in amber, "needs you"; a done one never
+ * One row. An active link with no why asks Tell me why, in amber, "needs you"; a done one never
  * does, and its picture is faded while its text stays at full contrast.
  */
-function card(
+function row(
   link: Link,
   {
     tag,
@@ -83,31 +85,24 @@ function card(
     images,
     handy,
     gone = new Map(),
-    now,
     done,
     pictures = new Map(),
     copies = new Map(),
   }: Input,
 ): string {
-  const why =
-    link.why || done
-      ? `<p class="card-why">${whyLine(link.why)}</p>`
-      : `${whyAnswer("p", "Why: ", "card-why")}\n${askWhy(link)}`;
   const space = linkSpace(link, catalog, { within: tag.key });
-  const picture = images.get(link.id);
-  return `<li class="link-card${spaceClass(space)}${done ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, pictures.get(link.id))}>
-${tile(link, picture, "card-image")}
-${editMenu(link, { copy: copies.get(link.id), handy: handy.get(link.id) })}
-<div class="card-body">
-<h3 data-card-title>${linkTitle(link)}</h3>
-${cardLine(link, {
-  // The page's own space goes without saying; another one, on an unpinned tag's page, is named.
-  space: space?.key === tag.key ? null : space,
-  copy: copies.get(link.id),
-  saved: savedOn(link.savedAt, now),
-})}${why}
-${goneLine(link, gone.get(link.id))}</div>
-</li>`;
+  return linkRow(link, {
+    space,
+    // The page's own space goes without saying; another one, on an unpinned tag's page, is named.
+    lineSpace: space?.key === tag.key ? null : space,
+    picture: images.get(link.id),
+    info: pictures.get(link.id),
+    copy: copies.get(link.id),
+    handy: handy.get(link.id),
+    gone: gone.get(link.id),
+    faded: done,
+    ask: !done,
+  });
 }
 
 /**
@@ -116,6 +111,7 @@ ${goneLine(link, gone.get(link.id))}</div>
  */
 const cardsScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
+${viewScript}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
@@ -128,6 +124,7 @@ ${doneLinkScript("space-links", "space-error")}
 /** The edit dialog, Delete link and the saved copy's Remove on the done cards, including those Show older links appends. */
 const doneScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
+${viewScript}
 ${removeCopyScript("space-links", "space-error")}
 ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
 </script>
@@ -139,7 +136,7 @@ ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScr
  * the links given; `older` is the cursor of the next page, or null.
  */
 export function spacePage(input: Input): string {
-  const { tag, links, older, done, later } = input;
+  const { tag, links, older, done, later, now, view = "list" } = input;
   const empty = later
     ? "No older links."
     : done
@@ -148,23 +145,23 @@ export function spacePage(input: Input): string {
   const list =
     links.length === 0
       ? `<p>${empty}</p>`
-      : `<ul class="link-cards" id="space-links">\n${links.map((l) => card(l, input)).join("\n")}\n</ul>`;
+      : `<div id="space-links">\n${monthSections(links, { order: "newest", now }, (l) => row(l, input))}\n</div>`;
   const more = older
     ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, before: older }))}">Show older links</a></p>\n`
     : "";
   const body = done
-    ? `<h2>Links you're done with</h2>
+    ? `<div class="list-head"><h2>Links you're done with</h2>${viewSwitch(view)}</div>
 <p class="small"><a class="back-link" href="${escapeHtml(spaceHref(tag.key))}">Back to ${escapeHtml(tag.name)}</a></p>
 <p id="space-error" role="alert"></p>
 ${list}
 ${more}`
-    : `<h2>Newest first</h2>
+    : `<div class="list-head"><h2>Newest first</h2>${viewSwitch(view)}</div>
 <p id="space-error" role="alert"></p>
 ${list}
 ${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">Links you're done with</a></p>`;
   return page(
     `${done ? "Done in " : ""}${tag.name} · Aye-AI-AI Links`,
-    `<main class="space">
+    `<main class="space" data-view="${view}">
 ${header(tag)}
 ${body}
 </main>

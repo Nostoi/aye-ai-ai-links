@@ -6,6 +6,7 @@ import type { Link, Tag } from "../core/types.js";
 import { allHref, allPage } from "./all-page.js";
 import { itRecordsOpenings, openAppended, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
+import { themeCss } from "./theme.js";
 
 const ORIGIN = "https://links.example";
 const NOW = new Date("2026-10-14T12:00:00Z");
@@ -116,11 +117,16 @@ describe("the All links page", () => {
     expect(texts(html, "section > h2")).toEqual(["Opened in October"]);
   });
 
-  it("shows a neutral card for an untagged link, a colored one for a pinned tag, with the site, and never a why or a count", () => {
+  it("shows a neutral row for an untagged link, a colored one for a pinned tag, with the why and the site, and never a count", () => {
     const html = all({
-      links: [link("1"), link("2", { tags: inKitchen, url: "https://kitchen.example/x" })],
+      links: [
+        link("1"),
+        link("2", { tags: inKitchen, url: "https://kitchen.example/x", why: null }),
+      ],
     });
-    const [plain, colored] = [...dom(html).querySelectorAll(".link-card")];
+    const [plain, colored] = [...dom(html).querySelectorAll(".link-row")];
+    expect(plain?.querySelector(".row-why")?.textContent).toBe('"because 1"');
+    expect(colored?.querySelector(".row-why")).toBeNull();
     expect(plain?.className).not.toMatch(/space-/);
     expect(plain?.querySelector(".dot")).toBeNull();
     const parts = (card: Element | undefined) =>
@@ -132,7 +138,6 @@ describe("the All links page", () => {
     expect(title?.getAttribute("href")).toBe("https://kitchen.example/x");
     expect(title?.getAttribute("target")).toBe("_blank");
     expect(title?.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(html).not.toContain("because");
     expect(html).not.toContain("Tell me why");
     expect(dom(html).querySelector("main")?.textContent).not.toMatch(/\d+ links?\b/);
     expect(outsideRefs(html)).toEqual([]);
@@ -143,14 +148,14 @@ describe("the All links page", () => {
       links: [link("1"), link("2")],
       images: new Map([["1", { version: "v9", fit: "cover" }]]),
     });
-    const [withImage, without] = [...dom(html).querySelectorAll(".link-card")];
+    const [withImage, without] = [...dom(html).querySelectorAll(".link-row")];
     expect(withImage?.querySelector("img")?.getAttribute("src")).toBe("/images/1?v=v9");
     expect(without?.querySelector("img")).toBeNull();
   });
 
   it("fades the cards on the done page, which links back in the same order", () => {
     const html = all({ done: true, order: "oldest", links: [link("1", { state: "archived" })] });
-    expect(dom(html).querySelector(".link-card")?.className).toContain("faded");
+    expect(dom(html).querySelector(".link-row")?.className).toContain("faded");
     expect(texts(html, "h1")).toEqual(["Links you're done with"]);
     expect(dom(html).querySelector("a.back-link")?.getAttribute("href")).toBe("/all?order=oldest");
     expect(dom(html).querySelector("a.done-link")).toBeNull();
@@ -381,11 +386,11 @@ describe("the saved-copy usage line", () => {
   });
 });
 
-describe("the All links card's picture", () => {
+describe("the All links row's picture", () => {
   it.each([
-    ["cover", { version: "v1", fit: "cover" }, "img.card-image"],
-    ["contain", { version: "v1", fit: "contain" }, "div.card-image.icon-box > img.site-icon"],
-    ["none", undefined, "div.card-image.initials-box > span.pic-initials"],
+    ["cover", { version: "v1", fit: "cover" }, "img.row-pic"],
+    ["contain", { version: "v1", fit: "contain" }, "div.row-pic.icon-box > img.site-icon"],
+    ["none", undefined, "div.row-pic.initials-box > span.pic-initials"],
   ] as const)("renders %s, on the done page too", (_, picture, selector) => {
     for (const done of [false, true]) {
       const html = all({
@@ -393,7 +398,50 @@ describe("the All links card's picture", () => {
         links: [link("1", { state: done ? "archived" : "active" })],
         images: new Map(picture ? [["1", picture]] : []),
       });
-      expect(dom(html).querySelector(`.link-card ${selector}`), `done ${done}`).not.toBeNull();
+      expect(dom(html).querySelector(`.link-row ${selector}`), `done ${done}`).not.toBeNull();
     }
+  });
+
+  it.each(["list", "pictures"] as const)(
+    "fades a done link's picture in the %s view, by the theme's own fade rule",
+    (view) => {
+      const html = all({ done: true, view, links: [link("1", { state: "archived" })] });
+      const fade = /([^{}]+)\{opacity:\.4\}/.exec(themeCss.slice(themeCss.indexOf(".faded")))?.[1];
+      expect(fade).toBeDefined();
+      const faded = dom(html).querySelectorAll(fade as string);
+      expect([...faded].map((e) => e.getAttribute("class"))).toEqual(["row-pic initials-box"]);
+      expect(dom(html).querySelector("main")?.getAttribute("data-view")).toBe(view);
+    },
+  );
+});
+
+describe("the List / Pictures switch on All links", () => {
+  it.each(["list", "pictures"] as const)("draws the page in the %s view it is given", (view) => {
+    for (const done of [false, true]) {
+      const d = dom(all({ view, done, links: [link("1")] }));
+      expect(d.querySelector("main")?.getAttribute("data-view")).toBe(view);
+      expect(
+        d.querySelector(`.view-switch [data-choice=${view}]`)?.getAttribute("aria-pressed"),
+      ).toBe("true");
+    }
+  });
+
+  it("shows the switch on an empty page too, and draws the list without a view given", () => {
+    const d = dom(all());
+    expect(d.querySelector("main")?.getAttribute("data-view")).toBe("list");
+    expect(d.querySelector(".view-switch")).not.toBeNull();
+    expect(d.querySelector("#all-links")).toBeNull();
+  });
+
+  it("keeps the view of rows that Show older links appended", async () => {
+    const first = all({ view: "pictures", links: [link("2")], older: "2.2" });
+    const next = all({ view: "pictures", links: [link("1")], later: true });
+    const p = runPage(first, () => ({ status: 200, text: next }));
+    p.dispatch(p.$("[data-choice=list]"), "click");
+    p.dispatch(p.$("#older"), "click");
+    await p.settle();
+    expect(p.document.querySelectorAll("#all-links > section")).toHaveLength(1);
+    expect(p.document.querySelectorAll("#all-links .link-row")).toHaveLength(2);
+    expect(p.$("main").getAttribute("data-view")).toBe("list");
   });
 });

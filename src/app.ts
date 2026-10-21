@@ -80,6 +80,8 @@ const CHECKED_PAGES = [
   "/home/bring-back",
   "/home/undo-state",
   "/home/why",
+  "/tidy",
+  "/tidy/keep",
   "/links/opened",
   "/links/edit",
   "/links/edit/undo",

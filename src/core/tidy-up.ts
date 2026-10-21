@@ -43,6 +43,12 @@ async function qualifying(deps: TidyDeps, owner: OwnerId, now: Date): Promise<Li
     .sort((a, b) => a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id));
 }
 
+/** The focus entries that count as "working on now": created within FOCUS_WINDOW_MS, newest first. */
+export async function currentFocus(deps: TidyDeps, owner: OwnerId): Promise<FocusEntry[]> {
+  const since = deps.now().getTime() - FOCUS_WINDOW_MS;
+  return (await recentFocus(deps, owner)).filter((f) => f.createdAt.getTime() >= since);
+}
+
 /**
  * Up to `limit` old links, oldest saved first, then lowest id. Gone links are left out: Home's
  * gone row asks about them. One keyword search per current focus entry, newest first.
@@ -54,8 +60,7 @@ export async function tidyQueue(
 ): Promise<TidyLink[]> {
   const now = deps.now();
   const picked = (await qualifying(deps, owner, now)).slice(0, limit);
-  const since = now.getTime() - FOCUS_WINDOW_MS;
-  const entries = (await recentFocus(deps, owner)).filter((f) => f.createdAt.getTime() >= since);
+  const entries = await currentFocus(deps, owner);
   const fits = new Map<string, FocusEntry>();
   if (picked.length > 0) {
     const all = await deps.store.listLinks(owner);

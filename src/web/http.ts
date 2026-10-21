@@ -51,6 +51,7 @@ import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
 import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
+import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue } from "../core/tidy-up.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
@@ -110,6 +111,7 @@ import { olderInvalidPage } from "./show-older.js";
 import { SPACE_RESTART, spaceHref, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
+import { tidyPage } from "./tidy-page.js";
 
 /** How many links a space page or All links shows at a time. */
 const LINK_PAGE = 24;
@@ -666,6 +668,19 @@ export function webApp({
     return c.html(page, 200, NO_STORE);
   });
 
+  // Tidy up (#198): a session of old links. Reading it writes nothing.
+  app.get("/tidy", session, async (c) => {
+    const { owner } = c.get("caller");
+    const queue = await tidyQueue(deps, owner, TIDY_SESSION);
+    const hasFocus = (await currentFocus(deps, owner)).length > 0;
+    const images = await deps.images.imageVersions(
+      owner,
+      queue.map((t) => t.link.id),
+    );
+    const catalog = await deps.store.listTags(owner);
+    return c.html(tidyPage({ queue, hasFocus, images, catalog, now: deps.now() }), 200, NO_STORE);
+  });
+
   app.get("/search", session, async (c) => {
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
@@ -1027,6 +1042,14 @@ export function webApp({
       const { id, editId } = c.get("body");
       await undoEdit(deps, owner, id, editId);
       return c.json(await cardState(owner, id), 200, NO_STORE);
+    }),
+  );
+
+  // Keep in Tidy up: the link stays in the lists and out of the next sessions for a while.
+  app.post("/tidy/keep", jsonBody(linkId), session, (c) =>
+    homeAction(c, async () => {
+      await keepInTidy(deps, c.get("caller").owner, c.get("body").id);
+      return done(c);
     }),
   );
 

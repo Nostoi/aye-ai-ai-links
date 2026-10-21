@@ -109,6 +109,7 @@ const pages: Record<string, () => string> = {
       shelf: "<section>shelf</section>",
       spaces: "<section>spaces</section>",
     }),
+  "home-with-tidy": () => homePage({ worth: worth([]), shelf: "", spaces: "", tidy: true }),
   "all-empty": () => allPage({ ...list, links: [] }),
   "all-with-links": () => allPage({ ...list, links: [...ONE, ...NO_WHY], older: "r1" }),
   "all-done": () => allPage({ ...list, links: [link("4", { state: "archived" })], done: true }),

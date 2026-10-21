@@ -51,7 +51,7 @@ import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
 import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
-import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue } from "../core/tidy-up.js";
+import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue, tidyReady } from "../core/tidy-up.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
@@ -664,7 +664,14 @@ export function webApp({
       [...items, ...suggestions].map((t) => t.link.id),
     );
     const shelf = handyShelf({ items, suggestions, catalog, images: shelfImages });
-    const page = homePage({ worth, shelf, spaces: spacesSection(spaces), ask: askOn(c, "Home") });
+    const tidy = await tidyReady(deps, owner);
+    const page = homePage({
+      worth,
+      shelf,
+      spaces: spacesSection(spaces),
+      tidy,
+      ask: askOn(c, "Home"),
+    });
     return c.html(page, 200, NO_STORE);
   });
 

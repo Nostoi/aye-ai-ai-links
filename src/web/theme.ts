@@ -261,6 +261,9 @@ img.handy-image{background:#fff}
 .tag .swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--ink)}
 .spaces,.handy{margin:64px 0 0}
 .spaces h2,.handy h2{margin-bottom:16px}
+.tidy-start{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 16px;margin:64px 0 0;padding-top:20px;border-top:1px solid var(--line)}
+.tidy-start p{margin:0}
+.tidy-start a{display:inline-flex;align-items:center;min-height:44px;padding:0 4px;color:var(--ink);font-weight:600;text-underline-offset:3px}
 .handy{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:4px}
 .handy>h2{grid-row:1;grid-column:1;margin:0}
 #handy-shelf{display:contents}

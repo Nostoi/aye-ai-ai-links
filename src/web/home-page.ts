@@ -260,6 +260,16 @@ addEventListener("pageshow", (event) => {
 });
 }`;
 
+/** Tidy up's quiet start line at the bottom of Home (#198); the route decides when to show it. */
+const TIDY_START = `<section class="tidy-start" aria-label="Tidy up">
+<div>
+<p>Clear out a few old links?</p>
+<p class="small">Five, one at a time. Nothing gets deleted.</p>
+</div>
+<a href="/tidy">Start</a>
+</section>
+`;
+
 /**
  * Home: the big question, the page's one heading, and one search field, then `shelf`, the Handy
  * shelf (#125), then "Worth a look today" when there is anything to show, then `spaces`, the "Your
@@ -272,11 +282,13 @@ export const homePage = ({
   worth,
   shelf,
   spaces,
+  tidy = false,
   ask,
 }: {
   worth: WorthCards;
   shelf: string;
   spaces: string;
+  tidy?: boolean;
   ask?: Ask | undefined;
 }) => {
   const section = worthSection(worth);
@@ -296,7 +308,7 @@ export const homePage = ({
 ${shelf}
 ${section}
 ${spaces}
-</main>
+${tidy ? TIDY_START : ""}</main>
 ${ownEdit ? `${editDialog()}\n` : ""}${SLASH_SCRIPT}
 <script>
 ${CARD_FETCH}

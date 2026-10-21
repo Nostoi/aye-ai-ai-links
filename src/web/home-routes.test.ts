@@ -521,3 +521,33 @@ describe("GET / with a link that seems gone (#128)", () => {
     expect(html.match(/<dialog class="edit-link"/g)).toHaveLength(1);
   });
 });
+
+describe("GET / Tidy up start line", () => {
+  const DAY = 86_400_000;
+  async function oldLinks(count: number) {
+    const world = await oauthWorld();
+    for (let i = 0; i < count; i++) {
+      const { link } = await saveLink(linkDeps(world), A, {
+        url: `https://a.example/tidy-old-${i}`,
+        savedBy: "seed",
+        title: `Old ${i}`,
+      });
+      world.links
+        .prepare("UPDATE links SET saved_at = ? WHERE id = ?")
+        .run(Date.now() - 60 * DAY, Number(link.id));
+    }
+    const browser = world.agent();
+    await browser.signIn();
+    return String((await browser.send("/")).body);
+  }
+
+  it("shows at exactly five qualifying links and links to /tidy", async () => {
+    const html = await oldLinks(5);
+    expect(html).toContain("Clear out a few old links?");
+    expect(html).toContain('href="/tidy"');
+  });
+
+  it("is absent at four", async () => {
+    expect(await oldLinks(4)).not.toContain("Clear out a few old links?");
+  });
+});

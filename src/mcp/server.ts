@@ -11,6 +11,7 @@ import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
 import type { LinkCheckStore } from "../core/link-check-store.js";
 import {
+  getLink,
   getLinkWithText,
   normalizeTitle,
   saveLink,
@@ -35,14 +36,15 @@ import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
-import { linkViews } from "../core/tools.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
+import { putAwayLink } from "../core/worth-a-look.js";
 import type { ProfileEntry, RecordChange } from "./changes.js";
 import * as guidance from "./guidance.js";
 import {
   applyHandy,
   applyHandyToSaved,
   HANDY_ACTIONS,
+  type HandyLink,
   linksWithHandy,
   linkWithHandy,
 } from "./handy.js";
@@ -138,6 +140,7 @@ const updateLinkInput = z.object({
   state: z.enum(STATES).optional(),
   snoozedUntil: timestamp.nullable().optional(),
   opened: z.literal(true).optional(),
+  putAway: z.literal(true).optional(),
 });
 const searchLinksInput = z.object({
   query: z.string(),
@@ -330,7 +333,10 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ id, snoozedUntil, handy, ...rest }) => {
+    async ({ id, snoozedUntil, handy, putAway, ...rest }) => {
+      if (putAway && (rest.state !== undefined || rest.opened || handy)) {
+        throw new CoreError("invalid_input", "putAway cannot be sent with state, handy or opened.");
+      }
       // One instant for the handy write, the link write and the view, so an opening sent with an
       // answer lands at the answer's millisecond, never a jittered one after it.
       const now = deps.now();
@@ -349,11 +355,23 @@ export function buildMcpServer(
           snoozedUntil: snoozedUntil === null ? null : new Date(snoozedUntil),
         }),
       };
-      const { link, editId } = receipts
-        ? await updateLinkWithReceipt(at, owner, id, patch, lastEdit.get(id))
-        : { link: await updateLink(at, owner, id, patch), editId: null };
+      const changed = Object.keys(patch).filter(
+        (k) => patch[k as keyof typeof patch] !== undefined,
+      );
+      if (putAway) {
+        // Put away first: a link that is not active is refused before anything else is written.
+        if (rest.tags) normalizeTags(rest.tags);
+        if (rest.title !== undefined) normalizeTitle(rest.title);
+        await putAwayLink(at, owner, id);
+      }
+      const { link, editId } =
+        putAway && changed.length === 0
+          ? { link: await getLink(at, owner, id), editId: null }
+          : receipts
+            ? await updateLinkWithReceipt(at, owner, id, patch, lastEdit.get(id))
+            : { link: await updateLink(at, owner, id, patch), editId: null };
       remember(link.id, editId);
-      const fields = Object.keys(patch).filter((k) => patch[k as keyof typeof patch] !== undefined);
+      const fields = putAway ? ["putAway", ...changed] : changed;
       if (fields.length > 0) {
         record({
           kind: "link",
@@ -544,17 +562,12 @@ export function buildMcpServer(
       const at = { ...deps, now: () => now };
       const { links, claimed } = await getDigest(at, owner);
       if (claimed.length > 0) record({ kind: "surfaced", linkIds: claimed });
-      const views = await linkViews(
+      const handied = await linksWithHandy(
         at,
         owner,
         links.map((d) => d.link),
       );
-      return {
-        links: links.map((d) => ({
-          ...d,
-          link: { ...d.link, handy: null, gone: null, ...views.get(d.link.id) },
-        })),
-      };
+      return { links: links.map((d, i) => ({ ...d, link: handied[i] as HandyLink })) };
     },
   );
 

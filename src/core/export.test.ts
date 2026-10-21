@@ -117,7 +117,7 @@ function setup(readGate: ReadGate = createReadGate()) {
   };
 }
 
-/** Builds the owner's zip, validates the real file with unzip and Python, and parses links.json with the v1 schema. */
+/** Builds the owner's zip, validates the real file with unzip and Python, and parses links.json with the manifest schema. */
 async function built(deps: ExportDeps, owner: OwnerId, stop: StopFlag = { stopped: false }) {
   const chunks: Uint8Array[] = [];
   const summary = await writeExport(
@@ -143,6 +143,19 @@ const copyFiles = (files: Map<string, Uint8Array>, n: number) =>
   [...files.keys()].filter((k) => k.startsWith(`copies/${n}/`));
 
 describe("writeExport", () => {
+  it("writes a version-2 links.json that keeps a put-away and a Tidy-kept link as they are", async () => {
+    const h = setup();
+    await h.save(A, 1, { state: "archived", putAwayAt: at(300) });
+    await h.save(A, 2, { tidyKeptAt: at(400) });
+    await h.save(A, 3);
+    const { manifest } = await built(h.deps, A);
+    expect(manifest.version).toBe(2);
+    expect(manifest.links.map((l) => [l.putAwayAt, l.tidyKeptAt])).toEqual([
+      [at(300).toISOString(), null],
+      [null, at(400).toISOString()],
+      [null, null],
+    ]);
+  });
   it("contents match the manifest both ways; pictures and copies are the stored bytes; copy.md is front matter + Markdown", async () => {
     const h = setup();
     const OWN = pic("image/png", "own-1");

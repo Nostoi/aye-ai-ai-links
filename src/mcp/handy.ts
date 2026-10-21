@@ -15,16 +15,40 @@ import type { Link, OwnerId, Source } from "../core/types.js";
 /** Keep handy at the MCP door: translates into core/tools.ts calls, and holds no rule. */
 
 /** A link as the door returns it: with its Keep handy view (null for an ordinary link) and its gone view (null unless flagged). */
-export type HandyLink = Link & { handy: HandyView | null; gone: GoneView | null };
+export type HandyLink = Omit<Link, "tidyKeptAt"> & {
+  handy: HandyView | null;
+  gone: GoneView | null;
+};
 
 type ViewDeps = Pick<ToolsDeps, "tools" | "checks" | "now">;
+
+/** The link fields `linkOutput` declares, picked by name so an internal field never reaches its strict schema. */
+function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> {
+  return {
+    id: l.id,
+    url: l.url,
+    urlKey: l.urlKey,
+    title: l.title,
+    summary: l.summary,
+    why: l.why,
+    tags: l.tags,
+    savedAt: l.savedAt,
+    savedBy: l.savedBy,
+    lastOpenedAt: l.lastOpenedAt,
+    lastSurfacedAt: l.lastSurfacedAt,
+    snoozedUntil: l.snoozedUntil,
+    putAwayAt: l.putAwayAt,
+    state: l.state,
+    snapshot: l.snapshot,
+  };
+}
 
 export async function linkWithHandy(
   deps: ViewDeps,
   owner: OwnerId,
   link: Link,
 ): Promise<HandyLink> {
-  return { ...link, ...(await linkView(deps, owner, link)) };
+  return { ...mcpLink(link), ...(await linkView(deps, owner, link)) };
 }
 
 /** Each link with its views, from one read of the owner's rows. */
@@ -34,7 +58,7 @@ export async function linksWithHandy(
   links: Link[],
 ): Promise<HandyLink[]> {
   const views = await linkViews(deps, owner, links);
-  return links.map((l) => ({ ...l, handy: null, gone: null, ...views.get(l.id) }));
+  return links.map((l) => ({ ...mcpLink(l), handy: null, gone: null, ...views.get(l.id) }));
 }
 
 /** The `handy` input's actions. */

@@ -38,7 +38,7 @@ Keep handy: if the owner says they use a link regularly, send handy {action: "ke
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived". Send opened: true when the owner opens the link.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means stale, out of sight for good. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
@@ -85,6 +85,7 @@ export const GET_DIGEST = `Get a few saved links worth bringing back to the owne
 
 Reasons:
 - focus_words: the link shares words with that focus entry (something the owner is working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave the link out of your nudge if it doesn't fit. Present a focus entry whose source is "inferred" as a guess.
+- came_back: the owner put this link away (putAwayAt) and that focus entry, written after, shares words with it. Judge fit as for focus_words; present an entry whose source is "inferred" as a guess. To return it to their lists, send update_link with state "active"; opened: true also does.
 - no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or when the owner opens it from the web page; any other opening, such as from a browser bookmark, is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.

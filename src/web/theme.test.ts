@@ -190,9 +190,11 @@ describe("the Handy tiles", () => {
   it("wraps a card's grey line, and draws a dot only before a part that shows", () => {
     expect(rule(".card-line")).toContain("flex-wrap:wrap");
     expect(rule(".card-line")).toContain("overflow-wrap:anywhere");
-    // The dot is the earlier part's, drawn only when a shown part follows, so a hidden Saved copy
+    // The dot is the earlier part's, drawn only when a shown part follows later, so a hidden Saved copy
     // takes its dot along and the link itself carries none.
-    expect(themeCss).toContain('.card-line>:has(+ :not([hidden]))::after{content:"·"');
+    expect(themeCss).toContain(
+      '.card-line>:not([hidden]):has(~ :not([hidden]))::after{content:"·"',
+    );
     expect(themeCss).not.toMatch(/\.card-line[^{]*(::before)/);
   });
 
@@ -732,6 +734,8 @@ describe("Home's Worth a look cards (#195)", () => {
         savedAt: new Date(0),
         savedBy: "t",
         lastOpenedAt: null,
+        putAwayAt: null,
+        tidyKeptAt: null,
         lastSurfacedAt: null,
         snoozedUntil: null,
         state: "active" as const,

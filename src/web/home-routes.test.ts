@@ -101,6 +101,27 @@ describe("the home card actions", () => {
     expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
+  it("/home/opened on a put-away link brings it back to active: putAwayAt cleared, opening recorded", async () => {
+    const { world, browser, id } = await home();
+    await linkDeps(world).store.update(A, id, {
+      state: "archived",
+      putAwayAt: new Date("2026-09-01T00:00:00Z"),
+    });
+    expect((await browser.send("/home/opened", post({ id }))).status).toBe(204);
+    expect(row(world, id)).toMatchObject({
+      state: "active",
+      put_away_at: null,
+      last_opened_at: expect.any(Number),
+    });
+  });
+
+  it("/home/opened on a stale link records the opening and leaves it stale", async () => {
+    const { world, browser, id } = await home();
+    await linkDeps(world).store.update(A, id, { state: "archived", putAwayAt: null });
+    expect((await browser.send("/home/opened", post({ id }))).status).toBe(204);
+    expect(row(world, id)).toMatchObject({ state: "archived", put_away_at: null });
+  });
+
   it("/links/opened, from any other page, records the opening only: not surfaced, not logged", async () => {
     const { world, browser, id } = await home();
     const res = await browser.send("/links/opened", post({ id }));
@@ -167,13 +188,127 @@ describe("the home card actions", () => {
     expect(row(world, id)).toEqual(before);
   });
 
-  it("/home/archive archives it and /home/unarchive makes it active again; a second undo is a 409", async () => {
+  it("/home/archive answers the change as JSON, and /home/undo-state with it makes the link active again; a second undo is a 409", async () => {
     const { world, browser, id } = await home();
-    expect((await browser.send("/home/archive", post({ id }))).status).toBe(204);
+    const res = await browser.send("/home/archive", post({ id }));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      before: { state: "active", putAwayAt: null, snoozedUntil: null },
+      after: { state: "archived", putAwayAt: null },
+    });
     expect(row(world, id).state).toBe("archived");
-    expect((await browser.send("/home/unarchive", post({ id }))).status).toBe(204);
+    const undo = post({ id, change: res.body });
+    expect((await browser.send("/home/undo-state", undo)).status).toBe(204);
     expect(row(world, id).state).toBe("active");
-    expect((await browser.send("/home/unarchive", post({ id }))).status).toBe(409);
+    expect((await browser.send("/home/undo-state", undo)).status).toBe(409);
+  });
+
+  it("/home/put-away marks it put away with an ISO date; its Undo restores the snooze it cleared", async () => {
+    const { world, browser, id } = await home();
+    await browser.send("/home/snooze", post({ id }));
+    const snoozed = row(world, id).snoozed_until;
+    expect(snoozed).not.toBeNull();
+    const res = await browser.send("/home/put-away", post({ id }));
+    expect(res.status).toBe(200);
+    const change = res.body as {
+      before: { snoozedUntil: string };
+      after: { state: string; putAwayAt: string };
+    };
+    expect(change.after.state).toBe("archived");
+    expect(new Date(change.after.putAwayAt).toISOString()).toBe(change.after.putAwayAt);
+    expect(typeof change.before.snoozedUntil).toBe("string");
+    expect(row(world, id)).toMatchObject({ state: "archived", snoozed_until: null });
+    expect(row(world, id).put_away_at).not.toBeNull();
+    expect((await browser.send("/home/undo-state", post({ id, change }))).status).toBe(204);
+    expect(row(world, id)).toMatchObject({ state: "active", snoozed_until: snoozed });
+    expect(row(world, id).put_away_at).toBeNull();
+  });
+
+  it("/home/put-away on a link that is already out of your lists is a 409, changing nothing", async () => {
+    const { world, browser, id } = await home();
+    await browser.send("/home/archive", post({ id }));
+    const before = row(world, id);
+    expect((await browser.send("/home/put-away", post({ id }))).status).toBe(409);
+    expect(row(world, id)).toEqual(before);
+  });
+
+  it("/home/bring-back makes a put-away link active, clears the marker and answers the change; a link already active is a 200 that writes nothing", async () => {
+    const { world, browser, id } = await home();
+    await browser.send("/home/put-away", post({ id }));
+    const res = await browser.send("/home/bring-back", post({ id }));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      before: { state: "archived" },
+      after: { state: "active", putAwayAt: null },
+    });
+    expect(row(world, id)).toMatchObject({ state: "active", put_away_at: null });
+    const before = row(world, id);
+    const again = await browser.send("/home/bring-back", post({ id }));
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({
+      before: { state: "active", putAwayAt: null },
+      after: { state: "active", putAwayAt: null },
+    });
+    expect(row(world, id)).toEqual(before);
+    const undone = await browser.send("/home/undo-state", post({ id, change: again.body }));
+    expect(undone.status).toBe(204);
+    expect(row(world, id)).toEqual(before);
+  });
+
+  it("/home/undo-state refuses a change that sends an active link back with a put-away date, 400, changing nothing", async () => {
+    const { world, browser, id } = await home();
+    const put = await browser.send("/home/put-away", post({ id }));
+    const good = put.body as { before: Record<string, unknown>; after: Record<string, unknown> };
+    const before = allRows(world);
+    const date = "2026-01-01T00:00:00.000Z";
+    for (const bad of [
+      { ...good, before: { ...good.before, state: "active", putAwayAt: date } },
+      { ...good, after: { ...good.after, state: "active", putAwayAt: date } },
+    ]) {
+      const res = await browser.send("/home/undo-state", post({ id, change: bad }));
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it("/home/undo-state is a 409 once the link has moved on (put away, then stale, then the first Undo)", async () => {
+    const { world, browser, id } = await home();
+    const put = await browser.send("/home/put-away", post({ id }));
+    await browser.send("/home/archive", post({ id }));
+    const before = row(world, id);
+    const res = await browser.send("/home/undo-state", post({ id, change: put.body }));
+    expect(res.status).toBe(409);
+    expect(row(world, id)).toEqual(before);
+  });
+
+  it("/home/undo-state refuses a change that is malformed with 400, changing nothing", async () => {
+    const { world, browser, id } = await home();
+    const archived = await browser.send("/home/archive", post({ id }));
+    const good = archived.body as {
+      before: Record<string, unknown>;
+      after: Record<string, unknown>;
+    };
+    const before = allRows(world);
+    for (const bad of [
+      undefined,
+      null,
+      "x",
+      {},
+      { before: good.before },
+      { after: good.after },
+      { ...good, before: { ...good.before, state: "gone" } },
+      { ...good, before: { ...good.before, putAwayAt: "soon" } },
+      { ...good, before: { ...good.before, putAwayAt: undefined } },
+      { ...good, before: { ...good.before, snoozedUntil: 5 } },
+      { ...good, before: { ...good.before, snoozedUntil: undefined } },
+      { ...good, after: { ...good.after, state: 3 } },
+      { ...good, after: { ...good.after, putAwayAt: "soon" } },
+      { ...good, after: { ...good.after, putAwayAt: undefined } },
+    ]) {
+      const res = await browser.send("/home/undo-state", post({ id, change: bad }));
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(allRows(world)).toEqual(before);
   });
 
   it("/home/archive after an AI archived the link is a 409, changing nothing", async () => {
@@ -240,7 +375,19 @@ const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
     { snoozedUntil: SEED_UNTIL, lastSurfacedAt: SEED_CLAIM },
   ],
   ["/home/archive", (id) => ({ id }), {}],
-  ["/home/unarchive", (id) => ({ id }), { state: "archived" }],
+  ["/home/put-away", (id) => ({ id }), {}],
+  ["/home/bring-back", (id) => ({ id }), { state: "archived" }],
+  [
+    "/home/undo-state",
+    (id) => ({
+      id,
+      change: {
+        before: { state: "active", putAwayAt: null, snoozedUntil: null },
+        after: { state: "archived", putAwayAt: null },
+      },
+    }),
+    { state: "archived" },
+  ],
   ["/home/why", (id) => ({ id, text: "because" }), {}],
 ];
 

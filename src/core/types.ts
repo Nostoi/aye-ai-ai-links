@@ -57,6 +57,10 @@ export type Link = {
   lastOpenedAt: Date | null;
   lastSurfacedAt: Date | null;
   snoozedUntil: Date | null;
+  /** Set only on an archived link the owner put away; null on a stale or active one. */
+  putAwayAt: Date | null;
+  /** When Tidy up last kept this link; internal, never sent over MCP. */
+  tidyKeptAt: Date | null;
   state: LinkState;
   /** Null only for a link that has no snapshot row. */
   snapshot: SnapshotSummary | null;
@@ -81,7 +85,18 @@ export type NewLink = Omit<Link, "id" | "snapshot">;
 
 /** Fields a patch may set; an absent (undefined) field is left untouched. */
 export type LinkPatch = Partial<
-  Pick<Link, "title" | "summary" | "why" | "tags" | "state" | "snoozedUntil" | "lastOpenedAt">
+  Pick<
+    Link,
+    | "title"
+    | "summary"
+    | "why"
+    | "tags"
+    | "state"
+    | "snoozedUntil"
+    | "lastOpenedAt"
+    | "putAwayAt"
+    | "tidyKeptAt"
+  >
 >;
 
 /** A note about the owner. `source` says how the writer learned it. */

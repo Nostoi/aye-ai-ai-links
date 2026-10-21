@@ -30,6 +30,8 @@ export const newLink = (n: number, savedAt: Date): NewLink => ({
   lastOpenedAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   state: "active",
 });
 

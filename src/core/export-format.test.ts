@@ -39,6 +39,8 @@ const link = (n: number, over: Partial<Link> = {}): Link => ({
   savedAt: T(n),
   savedBy: "claude-code",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -156,11 +158,11 @@ const keysDeep = (v: unknown): string[] =>
 
 describe("buildManifest", () => {
   const m = buildManifest(reads());
-  it("is a valid v1 links-only manifest, links in list order, in every state", () => {
+  it("is a valid v2 links-only manifest, links in list order, in every state", () => {
     expect(manifestSchema.safeParse(m).success).toBe(true);
     expect(m).toMatchObject({
       format: "aye-links-export",
-      version: 1,
+      version: 2,
       exportedAt: T(1000).toISOString(),
       includesFiles: false,
     });
@@ -243,7 +245,7 @@ describe("manifestSchema", () => {
       m.format = "other";
     });
     refuses((m) => {
-      m.version = 2;
+      m.version = 3;
     });
     refuses((m) => {
       m.links[0].id = "1";
@@ -300,6 +302,63 @@ describe("toNewLink", () => {
       ["topic", "inferred"],
       ["topic", "inferred"],
     ]);
+  });
+});
+
+describe("put-away and Tidy-kept dates (version 2)", () => {
+  const putAway = T(300);
+  const kept = T(400);
+  const r = () => {
+    const x = reads();
+    x.links = [
+      link(1, { putAwayAt: putAway, state: "archived" }),
+      link(2, { tidyKeptAt: kept }),
+      link(3),
+    ];
+    return x;
+  };
+  const written = () => JSON.parse(JSON.stringify(buildManifest(r())));
+  const restored = async (manifest: unknown) => {
+    const parsed = manifestSchema.parse(manifest);
+    const store = new FakeStore();
+    for (const l of parsed.links) await store.insertIfAbsent(A, toNewLink(l, parsed.tags));
+    return (await store.listLinks(A)).map((l) => [l.putAwayAt, l.tidyKeptAt]);
+  };
+  it("writes both dates, ISO or null, on every link", () => {
+    expect(buildManifest(r()).links.map((l) => [l.putAwayAt, l.tidyKeptAt])).toEqual([
+      [putAway.toISOString(), null],
+      [null, kept.toISOString()],
+      [null, null],
+    ]);
+  });
+  it("restores them into the store, exactly", async () => {
+    expect(await restored(written())).toEqual([
+      [putAway, null],
+      [null, kept],
+      [null, null],
+    ]);
+  });
+  it("reads a version-1 manifest, its links with both dates null", async () => {
+    const v1 = written();
+    v1.version = 1;
+    for (const l of v1.links) {
+      delete l.putAwayAt;
+      delete l.tidyKeptAt;
+    }
+    expect(await restored(v1)).toEqual([
+      [null, null],
+      [null, null],
+      [null, null],
+    ]);
+  });
+  it("refuses version 3", () => {
+    expect(manifestSchema.safeParse({ ...written(), version: 3 }).success).toBe(false);
+  });
+  it("refuses a version-2 link missing a date key, and a version-1 link that has one", () => {
+    const v2 = written();
+    delete v2.links[0].putAwayAt;
+    expect(manifestSchema.safeParse(v2).success).toBe(false);
+    expect(manifestSchema.safeParse({ ...written(), version: 1 }).success).toBe(false);
   });
 });
 

@@ -44,6 +44,8 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -74,6 +76,7 @@ describe("the card menu", () => {
       [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => e.textContent),
     ).toEqual([
       "It's stale",
+      "Put it away",
       "Keep handy",
       "Edit title and picture…",
       "Remove saved copy",

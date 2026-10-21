@@ -321,6 +321,11 @@ export const MIGRATIONS: Migration[] = [
   `,
   rebuildLinks,
   rebuildLinkEdits,
+  // Put away (#198): when an archived link was put away, and when Tidy up last kept a link. Additive.
+  `
+  ALTER TABLE links ADD COLUMN put_away_at INTEGER;
+  ALTER TABLE links ADD COLUMN tidy_kept_at INTEGER;
+  `,
 ];
 
 /**

@@ -8,7 +8,7 @@ import type { Ask } from "./ask-panel.js";
 import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript } from "./done-link.js";
+import { doneLinkScript, outOfListsMarker, STALE_MARKER } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { initialsText } from "./initials.js";
@@ -164,7 +164,7 @@ function resultItem(
   copy: CopyInfo | undefined,
   keep: boolean,
 ): string {
-  return `<li class="result${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
+  return `<li class="result${spaceClass(space)}${outOfListsMarker(link) === STALE_MARKER ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}

@@ -56,6 +56,8 @@ type LinkRow = {
   last_opened_at: number | null;
   last_surfaced_at: number | null;
   snoozed_until: number | null;
+  put_away_at: number | null;
+  tidy_kept_at: number | null;
   state: Link["state"];
 };
 
@@ -280,6 +282,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
+      expectedPutAwayAt?: Date;
     },
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
@@ -470,8 +473,8 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       row = this.db
         .prepare(
           `INSERT INTO links (owner_id, url, url_key, title, summary, why_text, why_source, saved_at,
-             saved_by, last_opened_at, last_surfaced_at, snoozed_until, state)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             saved_by, last_opened_at, last_surfaced_at, snoozed_until, put_away_at, tidy_kept_at, state)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (owner_id, url_key) DO NOTHING RETURNING id`,
         )
         .get(
@@ -487,6 +490,8 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
           toMs(link.lastOpenedAt),
           toMs(link.lastSurfacedAt),
           toMs(link.snoozedUntil),
+          toMs(link.putAwayAt),
+          toMs(link.tidyKeptAt),
           link.state,
         ) as { id: number } | undefined;
     } catch (e) {
@@ -531,6 +536,8 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     if (patch.state !== undefined) set("state", patch.state);
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));
     if (patch.lastOpenedAt !== undefined) set("last_opened_at", toMs(patch.lastOpenedAt));
+    if (patch.putAwayAt !== undefined) set("put_away_at", toMs(patch.putAwayAt));
+    if (patch.tidyKeptAt !== undefined) set("tidy_kept_at", toMs(patch.tidyKeptAt));
     if (patch.why !== undefined) {
       set("why_text", patch.why?.text ?? null);
       set("why_source", patch.why?.source ?? null);
@@ -545,6 +552,10 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     if (expected.snoozedUntil !== undefined) {
       where.push("snoozed_until IS ?");
       whereValues.push(toMs(expected.snoozedUntil));
+    }
+    if (expected.putAwayAt !== undefined) {
+      where.push("put_away_at IS ?");
+      whereValues.push(toMs(expected.putAwayAt));
     }
     if (expected.whySource !== undefined) {
       const sources = expected.whySource.filter((s) => s !== null);
@@ -589,19 +600,27 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       now,
       exceptKeptTools,
       exceptGone,
+      expectedPutAwayAt,
     }: {
       at: Date;
       notSurfacedAfter: Date;
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
+      expectedPutAwayAt?: Date;
     },
   ): SurfacedClaim[] {
+    // With an expected putAwayAt (a came-back claim) the link must be archived with exactly that marker,
+    // and a surfacing before the marker does not count against the cooldown.
+    const expected = expectedPutAwayAt ? toMs(expectedPutAwayAt) : null;
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
-       WHERE id = ? AND owner_id = ? AND state = 'active' AND deleted_at IS NULL
+       WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
+         AND (CASE WHEN ? IS NULL THEN state = 'active'
+                   ELSE state = 'archived' AND put_away_at = ? END)
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
-         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
+         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?
+              OR (? IS NOT NULL AND last_surfaced_at < ?))
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
            WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_checks c
@@ -615,8 +634,12 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       const row = previous.get(
         id,
         owner,
+        expected,
+        expected,
         toMs(now),
         toMs(notSurfacedAfter),
+        expected,
+        expected,
         exceptKeptTools ? 1 : 0,
         exceptGone ? 1 : 0,
       ) as { last_surfaced_at: number | null } | undefined;
@@ -735,6 +758,8 @@ function toLink(row: LinkRow, tagRows: LinkTag[], snap: SnapshotRow | undefined)
     lastOpenedAt: fromMs(row.last_opened_at),
     lastSurfacedAt: fromMs(row.last_surfaced_at),
     snoozedUntil: fromMs(row.snoozed_until),
+    putAwayAt: fromMs(row.put_away_at),
+    tidyKeptAt: fromMs(row.tidy_kept_at),
     state: row.state,
     snapshot: snap
       ? {

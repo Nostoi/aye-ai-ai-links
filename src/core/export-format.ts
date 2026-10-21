@@ -20,7 +20,7 @@ import {
 import { urlKey } from "./url-key.js";
 
 export const EXPORT_FORMAT = "aye-links-export";
-export const EXPORT_VERSION = 1;
+export const EXPORT_VERSION = 2;
 
 /** Exactly what `toISOString` writes for a finite date, extended years (`+010000-...`) included: the store keeps any instant. */
 const isStoredDate = (s: string) => {
@@ -80,6 +80,9 @@ const linkSchema = z.strictObject({
   lastOpenedAt: date.nullable(),
   lastSurfacedAt: date.nullable(),
   snoozedUntil: date.nullable(),
+  /** Version 2 and later: present there, absent in version 1 (the manifest's check enforces which). */
+  putAwayAt: date.nullable().optional(),
+  tidyKeptAt: date.nullable().optional(),
   page: z
     .strictObject({
       title: z.string().nullable(),
@@ -121,11 +124,11 @@ const linkSchema = z.strictObject({
   copy: copySchema.nullable(),
 });
 
-/** Version 1 of `links.json` (docs/specs/2026-10-18-export-design.md). #131 parses with it; a new key is a new version. */
+/** Versions 1 and 2 of `links.json` (docs/specs/2026-10-18-export-design.md). #131 parses with it; a new key is a new version. */
 export const manifestSchema = z
   .strictObject({
     format: z.literal(EXPORT_FORMAT),
-    version: z.literal(EXPORT_VERSION),
+    version: z.union([z.literal(1), z.literal(EXPORT_VERSION)]),
     exportedAt: date,
     includesFiles: z.boolean(),
     links: z.array(linkSchema),
@@ -149,6 +152,13 @@ export const manifestSchema = z
   })
   .superRefine((m, ctx) => {
     m.links.forEach((l, i) => {
+      for (const key of ["putAwayAt", "tidyKeptAt"] as const)
+        if ((l[key] !== undefined) !== m.version >= 2)
+          ctx.addIssue({
+            code: "custom",
+            path: ["links", i, key],
+            message: "present exactly when the version is 2",
+          });
       if (m.includesFiles !== (l.picture !== undefined))
         ctx.addIssue({
           code: "custom",
@@ -229,6 +239,8 @@ function manifestLink(link: Link, r: ManifestReads): ManifestLink {
     lastOpenedAt: isoOrNull(link.lastOpenedAt),
     lastSurfacedAt: isoOrNull(link.lastSurfacedAt),
     snoozedUntil: isoOrNull(link.snoozedUntil),
+    putAwayAt: isoOrNull(link.putAwayAt),
+    tidyKeptAt: isoOrNull(link.tidyKeptAt),
     page: snap?.fetchedAt
       ? {
           title: snap.title,
@@ -317,6 +329,8 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
     lastOpenedAt: orNull(entry.lastOpenedAt),
     lastSurfacedAt: orNull(entry.lastSurfacedAt),
     snoozedUntil: orNull(entry.snoozedUntil),
+    putAwayAt: orNull(entry.putAwayAt ?? null),
+    tidyKeptAt: orNull(entry.tidyKeptAt ?? null),
     state: entry.state,
   };
 }

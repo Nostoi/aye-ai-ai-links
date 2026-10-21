@@ -6,6 +6,7 @@ import type { LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link } from "../core/types.js";
 import { cardLine } from "./card-line.js";
+import { outOfListsMarker } from "./done-link.js";
 import { editData, editMenu } from "./edit-link.js";
 import { goneLine } from "./gone-line.js";
 import { linkTitle } from "./open-link.js";
@@ -71,7 +72,7 @@ export function linkRow(
 ${tile(link, picture, "row-pic")}
 <div class="row-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-${why}${cardLine(link, { space: lineSpace, copy })}${goneLine(link, gone)}</div>
+${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link) })}${goneLine(link, gone)}</div>
 ${editMenu(link, { copy, handy })}
 </li>`;
 }
@@ -84,7 +85,7 @@ const groupTime = (link: Link, order: LinkOrder) =>
 const monthKey = (d: Date) => d.toISOString().slice(0, 7);
 
 /** "October"; the year is added when it is not the current one. Always read in UTC. */
-const monthName = (d: Date, now: Date) =>
+export const monthName = (d: Date, now: Date) =>
   d.toLocaleDateString("en-US", {
     month: "long",
     ...(d.getUTCFullYear() === now.getUTCFullYear() ? {} : { year: "numeric" }),

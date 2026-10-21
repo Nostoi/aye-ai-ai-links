@@ -83,6 +83,8 @@ const baseLink = (): NewLink => ({
   savedAt: NOW,
   savedBy: "x",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

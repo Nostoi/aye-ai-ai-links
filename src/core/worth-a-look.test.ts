@@ -16,11 +16,13 @@ import { answerSuggestion, keepHandy, listSuggestions, type ToolItem } from "./t
 import type { Link, NewLink } from "./types.js";
 import {
   archiveLink,
+  bringBackLink,
   markOpened,
+  putAwayLink,
   SNOOZE_MS,
   snoozeLink,
   tellWhy,
-  unarchiveLink,
+  undoStateChange,
   unsnoozeLink,
   WORTH_SIZE,
   worthALook,
@@ -84,6 +86,8 @@ async function link(owner = A, over: Partial<NewLink> = {}): Promise<Link> {
       savedAt: at(-(n + 1) * DAY),
       savedBy: "t",
       lastOpenedAt: null,
+      putAwayAt: null,
+      tidyKeptAt: null,
       lastSurfacedAt: null,
       snoozedUntil: null,
       state: "active",
@@ -379,6 +383,28 @@ describe("worthALook", () => {
     }
   });
 
+  it("leads with at most one came-back link, ahead of a focus match, and no other came-back link shows", async () => {
+    const readers: Link[] = [];
+    for (let i = 0; i < 4; i++) readers.push(await link());
+    const away: Link[] = [];
+    for (let i = 0; i < 3; i++) {
+      away.push(await link(A, { state: "archived", putAwayAt: at(-3 * DAY) }));
+    }
+    await focus("fits", at(-DAY), [(readers[0] as Link).id, ...away.map((l) => l.id)]);
+    for (let d = 0; d < 6; d++) {
+      clock = at(d * DAY);
+      const { links } = await picked();
+      const back = links.filter((l) => l.reasons.some((r) => r.kind === "came_back"));
+      expect(back, `day ${d}`).toHaveLength(1);
+      expect(links[0], `day ${d}`).toBe(back[0]);
+      expect(away.map((l) => l.id)).toContain(links[0]?.link.id);
+      expect(
+        links.filter((l) => l.link.state === "archived"),
+        `day ${d}`,
+      ).toHaveLength(1);
+    }
+  });
+
   it("with no focus match, leads with the day's shuffle first, not the queue's first", async () => {
     const all: Link[] = [];
     for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
@@ -603,7 +629,7 @@ describe("It's stale", () => {
     await archiveLink(deps(), A, l.id);
     expect((await get(l.id)).state).toBe("archived");
     expect(await ids()).not.toContain(l.id);
-    await unarchiveLink(deps(), A, l.id);
+    await bringBackLink(deps(), A, l.id);
     expect((await get(l.id)).state).toBe("active");
   });
 
@@ -615,12 +641,27 @@ describe("It's stale", () => {
     expect(await get(l.id)).toEqual(before);
   });
 
-  it("undo of a link no longer archived is a conflict", async () => {
-    const l = await link();
-    await archiveLink(deps(), A, l.id);
-    await store.update(A, l.id, { state: "active", title: "changed elsewhere" });
+  it("Bring it back on a link already active is a quiet success that writes nothing", async () => {
+    const l = await link(A, {
+      snoozedUntil: at(DAY),
+      lastSurfacedAt: at(-DAY),
+      title: "elsewhere",
+    });
     const before = await get(l.id);
-    expect(await code(unarchiveLink(deps(), A, l.id))).toBe("conflict");
+    const change = await bringBackLink(deps(), A, l.id);
+    expect(change).toEqual({
+      before: { state: "active", putAwayAt: null, snoozedUntil: at(DAY) },
+      after: { state: "active", putAwayAt: null },
+    });
+    expect(await get(l.id)).toEqual(before);
+    await undoStateChange(deps(), A, l.id, change);
+    expect(await get(l.id)).toEqual(before);
+  });
+
+  it("Bring it back refuses an active link that carries a put-away date, writing nothing", async () => {
+    const l = await link(A, { putAwayAt: at(-DAY) });
+    const before = await get(l.id);
+    expect(await code(bringBackLink(deps(), A, l.id))).toBe("conflict");
     expect(await get(l.id)).toEqual(before);
   });
 
@@ -629,9 +670,142 @@ describe("It's stale", () => {
     const archived = await link(B, { state: "archived" });
     const before = structuredClone(store.all(B));
     expect(await code(archiveLink(deps(), A, theirs.id))).toBe("not_found");
-    expect(await code(unarchiveLink(deps(), A, theirs.id))).toBe("not_found");
-    expect(await code(unarchiveLink(deps(), A, archived.id))).toBe("not_found");
+    expect(await code(bringBackLink(deps(), A, theirs.id))).toBe("not_found");
+    expect(await code(bringBackLink(deps(), A, archived.id))).toBe("not_found");
     expect(store.all(B)).toEqual(before);
+  });
+});
+
+describe("put away, stale, bring back and their Undo", () => {
+  const stamp = at(-DAY);
+  const putAway = async () => {
+    const l = await link();
+    return (await store.update(A, l.id, { state: "archived", putAwayAt: stamp })) as Link;
+  };
+
+  it("put away: active becomes archived with the stamp, clears the snooze and returns before", async () => {
+    const l = await link(A, { snoozedUntil: at(DAY) });
+    const change = await putAwayLink(deps(), A, l.id);
+    expect(change).toEqual({
+      before: { state: "active", putAwayAt: null, snoozedUntil: at(DAY) },
+      after: { state: "archived", putAwayAt: NOW },
+    });
+    expect(await get(l.id)).toMatchObject({
+      state: "archived",
+      putAwayAt: NOW,
+      snoozedUntil: null,
+    });
+  });
+
+  it("put away refuses a link that is already put away or stale, writing nothing", async () => {
+    const stale = await link(A, { state: "archived" });
+    const away = await putAway();
+    const before = await get(away.id);
+    expect(await code(putAwayLink(deps(), A, stale.id))).toBe("conflict");
+    expect(await code(putAwayLink(deps(), A, away.id))).toBe("conflict");
+    expect(await get(away.id)).toEqual(before);
+  });
+
+  it("It's stale: from active and from put away, clearing the marker", async () => {
+    const active = await link();
+    const away = await putAway();
+    expect((await archiveLink(deps(), A, active.id)).before.state).toBe("active");
+    const change = await archiveLink(deps(), A, away.id);
+    expect(change).toEqual({
+      before: { state: "archived", putAwayAt: stamp, snoozedUntil: null },
+      after: { state: "archived", putAwayAt: null },
+    });
+    expect(await get(away.id)).toMatchObject({ state: "archived", putAwayAt: null });
+  });
+
+  it("It's stale refuses a link that is already stale", async () => {
+    const stale = await link(A, { state: "archived" });
+    expect(await code(archiveLink(deps(), A, stale.id))).toBe("conflict");
+  });
+
+  it("Bring it back: stale and put away both become active with no marker", async () => {
+    const stale = await link(A, { state: "archived" });
+    const away = await putAway();
+    expect((await bringBackLink(deps(), A, stale.id)).after).toEqual({
+      state: "active",
+      putAwayAt: null,
+    });
+    const change = await bringBackLink(deps(), A, away.id);
+    expect(change.before).toEqual({ state: "archived", putAwayAt: stamp, snoozedUntil: null });
+    expect(await get(away.id)).toMatchObject({ state: "active", putAwayAt: null });
+    expect((await bringBackLink(deps(), A, away.id)).before.state).toBe("active");
+  });
+
+  it("Undo of put away restores the active state and the snooze it cleared", async () => {
+    const l = await link(A, { snoozedUntil: at(DAY) });
+    const change = await putAwayLink(deps(), A, l.id);
+    await undoStateChange(deps(), A, l.id, change);
+    expect(await get(l.id)).toMatchObject({
+      state: "active",
+      putAwayAt: null,
+      snoozedUntil: at(DAY),
+    });
+  });
+
+  it("Undo of It's stale on a put-away link restores it put away, with the same date", async () => {
+    const away = await putAway();
+    const change = await archiveLink(deps(), A, away.id);
+    await undoStateChange(deps(), A, away.id, change);
+    expect(await get(away.id)).toMatchObject({ state: "archived", putAwayAt: stamp });
+  });
+
+  it("Undo of Bring it back restores a stale link to stale", async () => {
+    const stale = await link(A, { state: "archived" });
+    const change = await bringBackLink(deps(), A, stale.id);
+    await undoStateChange(deps(), A, stale.id, change);
+    expect(await get(stale.id)).toMatchObject({ state: "archived", putAwayAt: null });
+  });
+
+  it("a late Undo is a conflict: put away, then stale elsewhere, then the first Undo", async () => {
+    const l = await link();
+    const first = await putAwayLink(deps(), A, l.id);
+    await archiveLink(deps(), A, l.id);
+    const before = await get(l.id);
+    expect(await code(undoStateChange(deps(), A, l.id, first))).toBe("conflict");
+    expect(await get(l.id)).toEqual(before);
+    expect(before).toMatchObject({ state: "archived", putAwayAt: null });
+  });
+
+  it("Undo refuses a change that sends an active link back with a put-away date, writing nothing", async () => {
+    const l = await link();
+    const good = await putAwayLink(deps(), A, l.id);
+    const before = await get(l.id);
+    const activeWithDate = { state: "active" as const, putAwayAt: stamp };
+    for (const bad of [
+      { ...good, before: { ...good.before, ...activeWithDate } },
+      { ...good, after: { ...good.after, ...activeWithDate } },
+    ]) {
+      expect(await code(undoStateChange(deps(), A, l.id, bad))).toBe("invalid_input");
+      expect(await get(l.id)).toEqual(before);
+    }
+  });
+
+  it("Undo of another owner's link is not found, changing nothing", async () => {
+    const theirs = await link(B);
+    const change = await putAwayLink(deps(), B, theirs.id);
+    const before = structuredClone(store.all(B));
+    expect(await code(undoStateChange(deps(), A, theirs.id, change))).toBe("not_found");
+    expect(store.all(B)).toEqual(before);
+  });
+
+  it("Not now accepts a put-away link", async () => {
+    const away = await putAway();
+    await snoozeLink(deps(), A, away.id);
+    expect(await get(away.id)).toMatchObject({
+      state: "archived",
+      putAwayAt: stamp,
+      snoozedUntil: at(SNOOZE_MS),
+    });
+  });
+
+  it("Not now still refuses a stale link", async () => {
+    const stale = await link(A, { state: "archived" });
+    expect(await code(snoozeLink(deps(), A, stale.id))).toBe("conflict");
   });
 });
 

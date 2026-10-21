@@ -431,3 +431,65 @@ describe("save_link's handy", () => {
     expect(linkCount()).toBe(0);
   });
 });
+
+describe("update_link's putAway", () => {
+  const stored = async () => deps.store.get(A.owner, "1");
+
+  it("puts an active link away: archived, stamped now", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    const res = await call("update_link", { id: "1", putAway: true });
+    expect(res.isError).toBe(false);
+    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: NOW });
+  });
+
+  it("applies the other fields sent with it", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    const res = await call("update_link", { id: "1", putAway: true, summary: "s" });
+    expect(res.data.link.summary).toBe("s");
+    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: NOW });
+  });
+
+  it("refuses putAway with state or handy before anything is written", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    const withState = await call("update_link", { id: "1", putAway: true, state: "archived" });
+    const withHandy = await call("update_link", {
+      id: "1",
+      putAway: true,
+      summary: "changed",
+      handy: { action: "keep", source: "stated" },
+    });
+    expect(withState.isError).toBe(true);
+    expect(withHandy.isError).toBe(true);
+    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null, summary: null });
+    expect(row("1")).toBeUndefined();
+  });
+
+  it("refuses putAway with opened before anything is written", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    const res = await call("update_link", { id: "1", putAway: true, opened: true });
+    expect(res.isError).toBe(true);
+    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null, lastOpenedAt: null });
+  });
+
+  it("refuses putAway on a link that is not active, changing nothing", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    await call("update_link", { id: "1", state: "archived" });
+    const res = await call("update_link", { id: "1", putAway: true, summary: "changed" });
+    expect(res.isError).toBe(true);
+    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: null, summary: null });
+  });
+
+  it("state archived on a put-away link clears the stamp", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    await call("update_link", { id: "1", putAway: true });
+    await call("update_link", { id: "1", state: "archived" });
+    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: null });
+  });
+
+  it("an opening makes a put-away link active", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    await call("update_link", { id: "1", putAway: true });
+    await call("update_link", { id: "1", opened: true });
+    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null });
+  });
+});

@@ -6,7 +6,7 @@ import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { cardMenu, DIVIDER } from "./card-menu.js";
 import { deleteLinkItem, deleteLinkScript } from "./delete-link.js";
-import { DONE_ITEM } from "./done-link.js";
+import { BRING_BACK_ITEM, DONE_ITEM } from "./done-link.js";
 import { EDIT_ITEM, editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { NOT_HANDY } from "./keep-handy.js";
@@ -50,6 +50,8 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: NOW,
   savedBy: "t",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -115,6 +117,7 @@ describe("the card menu and the card data", () => {
   it("puts It's stale first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
     expect(labels(editMenu(link("7")))).toEqual([
       "BUTTON archive It's stale",
+      "BUTTON put-away Put it away",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -125,6 +128,7 @@ describe("the card menu and the card data", () => {
     const withCopy = editMenu(link("7"), { copy: { madeAt: new Date(0) } });
     expect(labels(withCopy)).toEqual([
       "BUTTON archive It's stale",
+      "BUTTON put-away Put it away",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -142,8 +146,9 @@ describe("the card menu and the card data", () => {
   });
 
   it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
-    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 3)).toEqual([
+    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 4)).toEqual([
       "BUTTON archive It's stale",
+      "BUTTON put-away Put it away",
       "BUTTON keep Keep handy (hidden)",
       "BUTTON not-handy Not handy anymore",
     ]);
@@ -152,6 +157,7 @@ describe("the card menu and the card data", () => {
   it("adds Not now after It's stale on Home's rows: the one six-row menu (#195)", () => {
     expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
       "BUTTON archive It's stale",
+      "BUTTON put-away Put it away",
       "BUTTON snooze Not now",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -167,8 +173,9 @@ describe("the card menu and the card data", () => {
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("leaves out It's stale and Not now when the card shows them as buttons (#195)", () => {
+  it("leaves out It's stale and Not now, not Put it away, when the card shows them as buttons (#195)", () => {
     expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
+      "BUTTON put-away Put it away",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -178,14 +185,25 @@ describe("the card menu and the card data", () => {
     ]);
   });
 
-  it("drops the first group for a link out of your lists: it can't be done again or kept", () => {
+  it("starts an archived link's menu at Edit, then Bring it back, Remove saved copy and Delete link", () => {
     expect(
       labels(
         editMenu(link("7", { state: "archived" }), { copy: { madeAt: new Date(0) }, handy: KEPT }),
       ),
     ).toEqual([
       "BUTTON edit Edit title and picture…",
+      "BUTTON bring-back Bring it back",
       "BUTTON remove-copy Remove saved copy",
+      "—",
+      "BUTTON delete-link Delete link",
+    ]);
+  });
+
+  it("gives an archived card on Home (the came-back lead) the same menu, with Bring it back", () => {
+    const put = link("7", { state: "archived", putAwayAt: new Date(0) });
+    expect(labels(editMenu(put, { onCard: true }))).toEqual([
+      "BUTTON edit Edit title and picture…",
+      "BUTTON bring-back Bring it back",
       "—",
       "BUTTON delete-link Delete link",
     ]);
@@ -308,7 +326,7 @@ describe("the card menu and the card data", () => {
       )?.outerHTML,
     );
     expect(editMenu(link("1", { state: "archived" }))).toBe(
-      cardMenu("More for Link 1", [EDIT_ITEM, DIVIDER, deleteLinkItem]),
+      cardMenu("More for Link 1", [EDIT_ITEM, BRING_BACK_ITEM, DIVIDER, deleteLinkItem]),
     );
   });
 });

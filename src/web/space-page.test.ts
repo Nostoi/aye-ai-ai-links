@@ -1,7 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { Link, Tag } from "../core/types.js";
-import { itRecordsOpenings, openAppended } from "./opened-test-kit.js";
+import { itRecordsOpenings, openAppended, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage } from "./pages.js";
 import { spaceHref, spacePage } from "./space-page.js";
@@ -35,6 +35,8 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -515,6 +517,27 @@ describe("openings on a space page (#124)", () => {
   describe("its links out of your lists", () => {
     itRecordsOpenings(() => space({ links: shown, done: true }), web, "/links/opened");
   });
+  describe("a put-away link opened on Out of your lists", () => {
+    const put = link("1", { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
+    const stale = link("2", { state: "archived" });
+    const html = () => space({ links: [put, stale], done: true });
+    it("leaves the page once the opening is recorded; a stale row stays", async () => {
+      const page = runPage(html());
+      page.dispatch(page.$("[data-id='2'] a[data-open]"), "click");
+      page.dispatch(page.$("[data-id='1'] a[data-open]"), "click");
+      await page.settle();
+      expect(page.sent.map((s) => s.body)).toEqual([{ id: "2" }, { id: "1" }]);
+      expect(page.$("[data-id='1']").hidden).toBe(true);
+      expect(page.$("[data-id='2']").hidden).toBeFalsy();
+    });
+    it("stays when the opening is refused", async () => {
+      const page = runPage(html(), () => ({ status: 500 }));
+      page.dispatch(page.$("[data-id='1'] a[data-open]"), "click");
+      await page.settle();
+      expect(page.sent).toHaveLength(1);
+      expect(page.$("[data-id='1']").hidden).toBeFalsy();
+    });
+  });
   it("records a link Show older links appended", async () => {
     const first = space({ links: [link("3")], older: "3.3" });
     const next = space({ links: [link("1")], older: null, later: true });
@@ -579,4 +602,70 @@ describe("the space card's picture", () => {
     const faded = dom(html).querySelectorAll(fade as string);
     expect([...faded].map((e) => e.getAttribute("class"))).toEqual(["row-pic initials-box"]);
   });
+});
+
+describe("Bring it back and the markers on a space's Out of your lists", () => {
+  const CHANGE = {
+    before: { state: "archived", putAwayAt: "2026-10-01T00:00:00.000Z", snoozedUntil: null },
+    after: { state: "active", putAwayAt: null },
+  };
+  const stale = (id: string) => link(id, { state: "archived" });
+  const put = (id: string) =>
+    link(id, { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
+  const back = (id: string) => `[data-id='${id}'] .card-menu button[data-act=bring-back]`;
+  const sentPosts = (p: ReturnType<typeof runPage>) => p.sent.filter((s) => s.body !== undefined);
+  const answer = (next: string) => (s: { url: string; body: unknown }) =>
+    s.body === undefined
+      ? { status: 200, text: next }
+      : s.url === "/home/bring-back"
+        ? { status: 200, body: CHANGE }
+        : { status: 204 };
+
+  it("ends each grey line with Put away or Stale", () => {
+    const html = space({ done: true, links: [put("1"), stale("2")] });
+    const lines = [...dom(html).querySelectorAll(".link-row .card-line")].map(
+      (l) => l.lastElementChild?.textContent,
+    );
+    expect(lines).toEqual(["Put away", "Stale"]);
+  });
+
+  it("puts no marker on an active row", () => {
+    const html = space({ links: [link("1")] });
+    expect(dom(html).querySelector(".link-row .card-line")?.textContent).not.toMatch(
+      /Put away|Stale/,
+    );
+  });
+
+  it.each([
+    ["a row drawn at load", false],
+    ["a row Show older links appended", true],
+  ])(
+    "posts /home/bring-back for %s, takes the row out and Undo sends the change back",
+    async (_, appended) => {
+      const first = space({ done: true, links: [put("1")], older: appended ? "c1" : null });
+      const next = space({ done: true, links: [put("9")], later: true });
+      const p = runPage(first, answer(next));
+      if (appended) {
+        p.dispatch(p.$("#older"), "click");
+        await p.settle();
+      }
+      const id = appended ? "9" : "1";
+      p.dispatch(p.$(back(id)), "click");
+      await p.settle();
+      expect(sentPosts(p)).toEqual([
+        { url: "/home/bring-back", body: { id }, redirect: "manual", keepalive: undefined },
+      ]);
+      expect(p.$(`[data-id='${id}']`).hidden).toBe(true);
+      expect(p.$("#undo-bar span").textContent?.trim()).toBe("Back in your lists.");
+      p.dispatch(p.$("#undo-bar button"), "click");
+      await p.settle();
+      expect(sentPosts(p).at(-1)).toEqual({
+        url: "/home/undo-state",
+        body: { id, change: CHANGE },
+        redirect: "manual",
+        keepalive: undefined,
+      });
+      expect(p.$(`[data-id='${id}']`).hidden).toBe(false);
+    },
+  );
 });

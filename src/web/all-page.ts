@@ -9,7 +9,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript, OUT_OF_LISTS } from "./done-link.js";
+import { doneLinkScript, OUT_OF_LISTS, PUT_AWAY_MARKER } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -164,8 +164,9 @@ ${CARD_FETCH}
 ${viewScript}
 ${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
-${done ? "" : `${doneLinkScript("all-links", "all-error")}\n`}</script>
-${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
+${doneLinkScript("all-links", "all-error")}
+</script>
+${openedScript("all-links", "/links/opened", done ? PUT_AWAY_MARKER : undefined)}${older ? olderScript("all-links") : ""}`,
     {
       menu: true,
       undo: true,

@@ -71,13 +71,32 @@ const PAGES: [string, string, (links: Link[], over?: { older?: string | null }) 
 
 type Action = { name: string; select: string; url: string; undo: string; json?: unknown };
 const card = (id: string) => `[data-id='${id}']`;
-type Key = "done" | "delete" | "keep" | "copy" | "still";
+type Key = "done" | "put" | "bring" | "delete" | "keep" | "copy" | "still";
+const CHANGE = {
+  before: { state: "active", putAwayAt: null, snoozedUntil: null },
+  after: { state: "archived", putAwayAt: null },
+};
 const ACTIONS: Record<Key, Action> = {
   done: {
     name: "It's stale",
     select: ".card-menu button[data-act=archive]",
     url: "/home/archive",
     undo: "Let go. You won't see it again unless you search for it.",
+    json: CHANGE,
+  },
+  put: {
+    name: "Put it away",
+    select: ".card-menu button[data-act=put-away]",
+    url: "/home/put-away",
+    undo: "Put away. Out of your lists but still saved. If you start something it fits, it'll come back.",
+    json: CHANGE,
+  },
+  bring: {
+    name: "Bring it back",
+    select: ".card-menu button[data-act=bring-back]",
+    url: "/home/bring-back",
+    undo: "Back in your lists.",
+    json: CHANGE,
   },
   delete: {
     name: "Delete link",
@@ -120,13 +139,21 @@ const fine = (s: Post): Answer => {
 };
 const sentUrls = (p: ReturnType<typeof runPage>) =>
   p.sent.filter((s) => s.body !== undefined).map((s) => s.url);
-const undoText = (p: ReturnType<typeof runPage>) => p.$("#undo-bar span").textContent;
+const undoText = (p: ReturnType<typeof runPage>) => p.$("#undo-bar span").textContent?.trim();
 const press = async (p: ReturnType<typeof runPage>, id: string, a: Action) => {
   p.dispatch(p.$(`${card(id)} ${a.select}`), "click");
   await p.settle();
 };
 
+/** Put it away is held against every other action on an active card, in both orders. */
+const PUT_PAIRS: [Key, Key][] = (["done", "delete", "keep", "copy", "still"] as const).flatMap(
+  (other) => [
+    ["put", other],
+    [other, "put"],
+  ],
+);
 const PAIRS: [Key, Key][] = [
+  ...PUT_PAIRS,
   ["done", "delete"],
   ["delete", "done"],
   ["keep", "delete"],
@@ -168,7 +195,7 @@ describe.each(PAGES)("%s: a card takes one action at a time", (_, errorId, html)
     },
   );
 
-  it.each(["done", "keep", "copy", "still"] as const)(
+  it.each(["done", "put", "keep", "copy", "still"] as const)(
     "Delete link posts once %s has finished, and its Undo is the one offered",
     async (firstKey) => {
       const first = ACTIONS[firstKey];
@@ -186,17 +213,18 @@ describe.each(PAGES)("%s: a card takes one action at a time", (_, errorId, html)
     ["fails on the network", { status: 0, networkFails: true }, false],
     ["answers with a body that is not JSON", { status: 200 }, true],
   ] as [string, Answer, boolean][])("an action that %s", (_title, bad, jsonOnly) => {
-    it.each((Object.keys(ACTIONS) as Key[]).filter((k) => !jsonOnly || ACTIONS[k].json))(
-      "leaves the card free for %s to be tried again",
-      async (key) => {
-        const a = ACTIONS[key];
-        const p = runPage(html(links), (s) => (s.url === a.url ? bad : fine(s)));
-        await press(p, "7", a);
-        expect(p.$("#undo-bar").hidden).toBe(true);
-        await press(p, "7", a);
-        expect(sentUrls(p)).toEqual([a.url, a.url]);
-      },
-    );
+    it.each(
+      (Object.keys(ACTIONS) as Key[]).filter(
+        (k) => k !== "bring" && (!jsonOnly || ACTIONS[k].json),
+      ),
+    )("leaves the card free for %s to be tried again", async (key) => {
+      const a = ACTIONS[key];
+      const p = runPage(html(links), (s) => (s.url === a.url ? bad : fine(s)));
+      await press(p, "7", a);
+      expect(p.$("#undo-bar").hidden).toBe(true);
+      await press(p, "7", a);
+      expect(sentUrls(p)).toEqual([a.url, a.url]);
+    });
   });
 });
 
@@ -209,7 +237,7 @@ describe("All links, on a card Show older appended", () => {
       s.body === undefined
         ? { status: 200, text: next }
         : s.url === "/home/archive"
-          ? { status: 204, wait: gate }
+          ? { status: 200, body: CHANGE, wait: gate }
           : { status: 204 },
     );
     p.dispatch(p.$("#older"), "click");
@@ -239,7 +267,8 @@ describe("the edit dialog's Delete link", () => {
         order: "newest",
         done: false,
       }),
-      (s) => (s.url === "/home/archive" ? { status: 204, wait: gate } : { status: 204 }),
+      (s) =>
+        s.url === "/home/archive" ? { status: 200, body: CHANGE, wait: gate } : { status: 204 },
     );
     const dialog = stubDialog(p);
     await press(p, "7", ACTIONS.done);
@@ -253,4 +282,57 @@ describe("the edit dialog's Delete link", () => {
     await p.settle();
     expect(undoText(p)).toBe("Let go. You won't see it again unless you search for it.");
   });
+});
+
+/** Bring it back lives on archived rows: search lists every state, the done pages only archived ones. */
+const archived = (id: string): Link => ({ ...link(id), state: "archived" });
+const DONE_PAGES: [string, string, (links: Link[]) => string][] = [
+  [
+    "Out of your lists on All links",
+    "all-error",
+    (links) => allPage({ ...common, links, older: null, gone, order: "newest", done: true }),
+  ],
+  [
+    "a space's Out of your lists",
+    "space-error",
+    (links) => spacePage({ ...common, links, older: null, gone, tag: KITCHEN, done: true }),
+  ],
+  ["search results", "results-error", (links) => searchPage({ ...common, links, query: "", gone })],
+];
+const BRING_PAIRS: [Key, Key][] = (["delete", "copy"] as const).flatMap((other) => [
+  ["bring", other],
+  [other, "bring"],
+]);
+
+describe.each(DONE_PAGES)("%s: Bring it back takes one action at a time", (_, errorId, html) => {
+  const links = [archived("7"), archived("8")];
+
+  it.each(BRING_PAIRS)("%s then %s sends nothing while the first is out", async (a, b) => {
+    const first = ACTIONS[a];
+    const { gate, release } = held();
+    const p = runPage(html(links), (s) =>
+      s.url === first.url ? { ...fine(s), wait: gate } : fine(s),
+    );
+    await press(p, "7", first);
+    await press(p, "7", ACTIONS[b]);
+    expect(sentUrls(p)).toEqual([first.url]);
+    release();
+    await p.settle();
+    expect(sentUrls(p)).toEqual([first.url]);
+    expect(undoText(p)).toBe(first.undo);
+    expect(p.$(`#${errorId}`).textContent).toBe("");
+  });
+
+  it.each(["Delete link", "Remove saved copy"])(
+    "%s posts once Bring it back has finished, and its Undo is the one offered",
+    async (name) => {
+      const next = name === "Delete link" ? ACTIONS.delete : ACTIONS.copy;
+      const p = runPage(html(links), fine);
+      await press(p, "7", ACTIONS.bring);
+      expect(undoText(p)).toBe("Back in your lists.");
+      await press(p, "7", next);
+      expect(sentUrls(p)).toEqual(["/home/bring-back", next.url]);
+      expect(undoText(p)).toBe(next.undo);
+    },
+  );
 });

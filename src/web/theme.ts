@@ -299,7 +299,7 @@ main:not([data-view=pictures]) .link-row:not([hidden]) ~ .link-row{border-top:1p
 .row-pic{flex:0 0 44px;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--pic);--icon:30px;--initials:16px}
 img.row-pic{display:block}
 .row-pic .site-icon{padding:3px;box-shadow:none}
-.faded .row-pic{opacity:.4}
+.faded .row-pic,.result.faded>.tile{opacity:.4}
 .row-body{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .row-body h3{font-size:17px;line-height:1.35;margin:0;overflow-wrap:anywhere}
 .row-body h3 a{position:relative;text-decoration:none}
@@ -334,7 +334,7 @@ main:not([data-view=pictures]) .link-row .card-menu-dot{background:none;-webkit-
 .card-site .dot{flex:none;width:10px;height:10px;margin:0}
 .card-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
 .card-line>*{min-width:0}
-.card-line>:has(+ :not([hidden]))::after{content:"·";content:"·"/"";margin-left:6px}
+.card-line>:not([hidden]):has(~ :not([hidden]))::after{content:"·";content:"·"/"";margin-left:6px}
 .card-line .line-space{display:inline-flex;align-items:center}
 .card-line .dot{flex:none;width:8px;height:8px;margin:0 6px 0 0}
 .card-line .saved-copy{display:inline-flex;align-items:center;min-height:44px;margin:-12px 0;color:var(--soft)}

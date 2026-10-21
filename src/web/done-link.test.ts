@@ -68,6 +68,21 @@ const allLinks = (
     done: false,
     later,
   });
+const CHANGE = {
+  before: { state: "active", putAwayAt: null, snoozedUntil: "2026-11-01T00:00:00.000Z" },
+  after: { state: "archived", putAwayAt: null },
+};
+const PUT_CHANGE = {
+  before: { state: "active", putAwayAt: null, snoozedUntil: null },
+  after: { state: "archived", putAwayAt: "2026-10-17T12:00:00.000Z" },
+};
+/** The answer a state action gets when nothing is wrong: the change as JSON; an Undo gets 204. */
+const fine = (s: Post): Answer =>
+  s.url === "/home/archive"
+    ? { status: 200, body: CHANGE }
+    : s.url === "/home/put-away"
+      ? { status: 200, body: PUT_CHANGE }
+      : { status: 204 };
 const click = async (p: ReturnType<typeof runPage>, selector: string) => {
   p.dispatch(p.$(selector), "click");
   await p.settle();
@@ -79,7 +94,7 @@ describe.each([
   ["the ⋯ menu's It's stale", MENU_DONE],
   ["the gone line's It's stale", GONE_DONE],
 ])("%s on All links", (_, button) => {
-  const load = (answer: (s: Post) => Answer = () => ({ status: 204 })) =>
+  const load = (answer: (s: Post) => Answer = fine) =>
     runPage(allLinks([link("7"), link("8"), link("9", SEPTEMBER)], { gone: ["7"] }), answer);
 
   it("posts /home/archive, hides the card, focuses the next card's ⋯ and offers Undo", async () => {
@@ -96,20 +111,20 @@ describe.each([
     );
   });
 
-  it("Undo posts /home/unarchive and shows the card again", async () => {
+  it("Undo posts /home/undo-state with the change it received and shows the card again", async () => {
     const p = load();
     await click(p, button("7"));
     await click(p, "#undo-bar button");
-    expect(p.sent[1]).toEqual(post("/home/unarchive", { id: "7" }));
+    expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change: CHANGE }));
     expect(p.$("[data-id='7']").hidden).toBe(false);
     expect(p.$("#all-error").textContent).toBe("");
   });
 
   it("a refused Undo says why and leaves the card hidden", async () => {
     const p = load((s) =>
-      s.url === "/home/unarchive"
+      s.url === "/home/undo-state"
         ? { status: 409, body: { code: "conflict", message: "Changed since." } }
-        : { status: 204 },
+        : fine(s),
     );
     await click(p, button("7"));
     await click(p, "#undo-bar button");
@@ -130,7 +145,7 @@ describe.each([
     const wait = new Promise<void>((r) => {
       release = r;
     });
-    const p = load(() => ({ status: 204, wait }));
+    const p = load(() => ({ status: 200, body: CHANGE, wait }));
     p.dispatch(p.$(button("7")), "click");
     p.dispatch(p.$(button("7")), "click");
     release();
@@ -144,7 +159,7 @@ describe.each([
   ["the gone line", GONE_DONE],
 ])("It's stale from %s on a month's only card", (_, button) => {
   it("hides the month, focuses the next month's card, and Undo shows both again", async () => {
-    const p = runPage(allLinks([link("7"), link("9", SEPTEMBER)], { gone: ["7"] }));
+    const p = runPage(allLinks([link("7"), link("9", SEPTEMBER)], { gone: ["7"] }), fine);
     const month = p.$("[data-id='7']").closest("section.month") as HTMLElement;
     await click(p, button("7"));
     expect(month.hidden).toBe(true);
@@ -158,9 +173,7 @@ describe.each([
   it("works on a card Show older appended, in a month of its own", async () => {
     const first = allLinks([link("1")], { older: "c1" });
     const next = allLinks([link("9", SEPTEMBER)], { later: true, gone: ["9"] });
-    const p = runPage(first, (s) =>
-      s.body === undefined ? { status: 200, text: next } : { status: 204 },
-    );
+    const p = runPage(first, (s) => (s.body === undefined ? { status: 200, text: next } : fine(s)));
     await click(p, "#older");
     await click(p, button("9"));
     expect(p.sent.at(-1)).toEqual(post("/home/archive", { id: "9" }));
@@ -193,7 +206,7 @@ describe("It's stale from the ⋯ menu on space pages and search", () => {
       "#results-error",
     ],
   ])("on %s hides the card and Undo shows it again", async (_, html, error) => {
-    const p = runPage(html());
+    const p = runPage(html(), fine);
     await click(p, MENU_DONE("7"));
     expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
     expect(p.$("[data-id='7']").hidden).toBe(true);
@@ -201,5 +214,45 @@ describe("It's stale from the ⋯ menu on space pages and search", () => {
     await click(p, "#undo-bar button");
     expect(p.$("[data-id='7']").hidden).toBe(false);
     expect(p.$(error).textContent).toBe("");
+  });
+});
+
+describe("Put it away from the ⋯ menu", () => {
+  const PUT = (id: string) => `[data-id='${id}'] .card-menu button[data-act=put-away]`;
+  const load = (answer: (s: Post) => Answer = fine) =>
+    runPage(allLinks([link("7"), link("8")]), answer);
+
+  it("posts /home/put-away, hides the card and offers the Put away bar", async () => {
+    const p = load();
+    await click(p, PUT("7"));
+    expect(p.sent).toEqual([post("/home/put-away", { id: "7" })]);
+    expect(p.$("[data-id='7']").hidden).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Put away. Out of your lists but still saved. If you start something it fits, it'll come back.",
+    );
+  });
+
+  it("Undo posts /home/undo-state with the change it received and shows the card again", async () => {
+    const p = load();
+    await click(p, PUT("7"));
+    await click(p, "#undo-bar button");
+    expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change: PUT_CHANGE }));
+    expect(p.$("[data-id='7']").hidden).toBe(false);
+  });
+
+  it("a refusal says why and leaves the card shown, with no Undo", async () => {
+    const p = load(() => ({ status: 409, body: { code: "conflict", message: "Already done." } }));
+    await click(p, PUT("7"));
+    expect(p.$("[data-id='7']").hidden).toBe(false);
+    expect(p.$("#all-error").textContent).toBe("Already done.");
+    expect(p.$("#undo-bar").hidden).toBe(true);
+  });
+
+  it("an answer that is not a change is a failure, not a take-out", async () => {
+    const p = load(() => ({ status: 200 }));
+    await click(p, PUT("7"));
+    expect(p.$("[data-id='7']").hidden).toBe(false);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect(p.$("#all-error").textContent).not.toBe("");
   });
 });

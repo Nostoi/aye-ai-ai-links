@@ -76,6 +76,7 @@ describe("the card menu", () => {
       [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => e.textContent),
     ).toEqual([
       "It's stale",
+      "Put it away",
       "Keep handy",
       "Edit title and picture…",
       "Remove saved copy",

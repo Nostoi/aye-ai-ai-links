@@ -58,6 +58,7 @@ describe("the Save page as served", () => {
       "saved-link",
       "saved-why",
       "why-kept",
+      "saved-state",
       "bring-back",
       "close",
       "close-note",
@@ -182,11 +183,19 @@ const ANSWER = {
   title: "A story",
   url: NEWS,
   why: "for the trip",
+  putAwayAt: null,
+};
+const CHANGE = {
+  before: { state: "archived", putAwayAt: null, snoozedUntil: null },
+  after: { state: "active", putAwayAt: null },
 };
 const answering =
   (body: Record<string, unknown>, others: Record<string, Answer> = {}) =>
   (sent: Sent): Answer =>
-    sent.url === "/save" ? { status: 200, body } : (others[sent.url] ?? { status: 204 });
+    sent.url === "/save"
+      ? { status: 200, body }
+      : (others[sent.url] ??
+        (sent.url === "/home/bring-back" ? { status: 200, body: CHANGE } : { status: 204 }));
 const visible = (el: HTMLElement) => !el.hasAttribute("hidden");
 
 describe("Save on the page", () => {
@@ -260,7 +269,26 @@ describe("Save on the page", () => {
     });
   });
 
-  it("archived: Bring it back posts /home/unarchive, then says Back in your list", async () => {
+  it.each([
+    ["stale", null, "Stale"],
+    ["put away", "2026-10-01T00:00:00.000Z", "Put away"],
+  ])("archived and %s: says %s before Bring it back", async (_, putAwayAt, text) => {
+    const page = load(answering({ ...ANSWER, state: "archived", putAwayAt }));
+    page.fire("#save-form", "submit");
+    await page.settle();
+    expect(visible(page.$("#saved-state"))).toBe(true);
+    expect(page.$("#saved-state").textContent).toBe(text);
+    expect(visible(page.$("#bring-back"))).toBe(true);
+  });
+
+  it("active: says nothing about being put away", async () => {
+    const page = load(answering(ANSWER));
+    page.fire("#save-form", "submit");
+    await page.settle();
+    expect(visible(page.$("#saved-state"))).toBe(false);
+  });
+
+  it("archived: Bring it back posts /home/bring-back, then says Back in your list", async () => {
     const page = load(answering({ ...ANSWER, state: "archived" }));
     page.fire("#save-form", "submit");
     await page.settle();
@@ -268,13 +296,14 @@ describe("Save on the page", () => {
     page.fire("#bring-back", "click");
     await page.settle();
     expect(page.sent[1]).toEqual({
-      url: "/home/unarchive",
+      url: "/home/bring-back",
       body: { id: "7" },
       redirect: "manual",
       keepalive: undefined,
     });
     expect(page.$("#save-heading").textContent).toBe("Back in your list");
     expect(visible(page.$("#bring-back"))).toBe(false);
+    expect(visible(page.$("#saved-state"))).toBe(false);
     expect(visible(page.$("#close"))).toBe(true);
   });
 
@@ -282,10 +311,8 @@ describe("Save on the page", () => {
     [409, "That link was changed since, so it stays as it is. Reload the page."],
     [404, "That link is gone. Reload the page."],
   ])("Bring it back refused with %i shows the route's message", async (status, message) => {
-    const unarchive = { status, body: { code: "x", message } };
-    const page = load(
-      answering({ ...ANSWER, state: "archived" }, { "/home/unarchive": unarchive }),
-    );
+    const refused = { status, body: { code: "x", message } };
+    const page = load(answering({ ...ANSWER, state: "archived" }, { "/home/bring-back": refused }));
     page.fire("#save-form", "submit");
     await page.settle();
     page.fire("#bring-back", "click");
@@ -383,7 +410,7 @@ describe("Save on the page", () => {
     page.fire("#bring-back", "click");
     page.fire("#bring-back", "click");
     await page.settle();
-    expect(page.sent.filter((s) => s.url === "/home/unarchive")).toHaveLength(1);
+    expect(page.sent.filter((s) => s.url === "/home/bring-back")).toHaveLength(1);
   });
 
   it("shows an answer's title and why as typed text, never as markup", async () => {

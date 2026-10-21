@@ -1,4 +1,5 @@
 import { SAVE_PATH } from "../auth/login-return.js";
+import { PUT_AWAY_MARKER, STALE_MARKER } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -39,6 +40,7 @@ ${hostLine(url)}
 <p class="small" id="saved-why" hidden></p>
 </div>
 <p id="why-kept" hidden></p>
+<p class="small" id="saved-state" hidden></p>
 <div class="actions">
 <button type="button" id="bring-back" hidden>Bring it back</button>
 <button class="primary" type="button" id="close">Close</button>
@@ -78,6 +80,7 @@ const savedLink = document.getElementById("saved-link");
 const anchor = savedLink.querySelector("a");
 const savedWhy = document.getElementById("saved-why");
 const whyKept = document.getElementById("why-kept");
+const savedState = document.getElementById("saved-state");
 const bringBack = document.getElementById("bring-back");
 const closeButton = document.getElementById("close");
 const closeNote = document.getElementById("close-note");
@@ -105,6 +108,8 @@ const show = (data) => {
       whyKept.hidden = false;
     }
     bringBack.hidden = data.state !== "archived";
+    savedState.textContent = data.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(STALE_MARKER)};
+    savedState.hidden = bringBack.hidden;
   }
   form.hidden = true;
   result.hidden = false;
@@ -145,19 +150,19 @@ form.addEventListener("submit", async (event) => {
     refused && typeof refused.message === "string" ? refused.message : await failure(res);
 });
 
-bringBack.addEventListener("click", async () => {
-  if (bringBack.disabled) return;
-  resultError.textContent = "";
-  bringBack.disabled = true;
-  const res = await post("/home/unarchive", { id: savedLink.dataset.id });
-  bringBack.disabled = false;
-  if (res && res.status === 204) {
-    heading.textContent = "Back in your list";
-    bringBack.hidden = true;
-  } else {
-    resultError.textContent = await failure(res);
-  }
-});
+bringBack.addEventListener("click", () =>
+  whileBusy(bringBack, async () => {
+    resultError.textContent = "";
+    const res = await post("/home/bring-back", { id: savedLink.dataset.id });
+    if (res && res.status === 200) {
+      heading.textContent = "Back in your list";
+      bringBack.hidden = true;
+      savedState.hidden = true;
+    } else {
+      resultError.textContent = await failure(res);
+    }
+  }),
+);
 
 closeButton.addEventListener("click", () => {
   window.close();

@@ -197,11 +197,6 @@ export async function bringBackLink(
   return { before: beforeOf(link), after: { state: "active", putAwayAt: null } };
 }
 
-/** The old Undo of It's stale, kept for the `/home/unarchive` route until the web moves to `bringBackLink`. */
-export async function unarchiveLink(deps: StateDeps, owner: OwnerId, id: string): Promise<void> {
-  await bringBackLink(deps, owner, id);
-}
-
 /** Undo of any of the three: only while the link matches change.after; restores change.before. */
 export async function undoStateChange(
   deps: StateDeps,

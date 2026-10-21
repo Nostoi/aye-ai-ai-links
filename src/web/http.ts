@@ -68,6 +68,7 @@ import {
   type OwnerId,
   SOURCES,
   type Source,
+  STATES,
   type Tag,
   type TagKind,
   TOOL_STATUSES,
@@ -75,10 +76,13 @@ import {
 } from "../core/types.js";
 import {
   archiveLink,
+  bringBackLink,
   markOpened,
+  putAwayLink,
+  type StateChange,
   snoozeLink,
   tellWhy,
-  unarchiveLink,
+  undoStateChange,
   unsnoozeLink,
   type WorthDeps,
   worthALook,
@@ -346,6 +350,50 @@ export const isToolJson = (value: unknown): value is ToolJson => {
     row.waitDays in WAITS
   );
 };
+/** A state action's `StateChange` as the page holds it between the action and its Undo: dates as ISO strings. */
+type StateChangeJson = {
+  before: { state: LinkState; putAwayAt: string | null; snoozedUntil: string | null };
+  after: { state: LinkState; putAwayAt: string | null };
+};
+
+const iso = (d: Date | null) => d?.toISOString() ?? null;
+const stateChangeJson = ({ before, after }: StateChange): StateChangeJson => ({
+  before: {
+    state: before.state,
+    putAwayAt: iso(before.putAwayAt),
+    snoozedUntil: iso(before.snoozedUntil),
+  },
+  after: { state: after.state, putAwayAt: iso(after.putAwayAt) },
+});
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+const isState = (value: unknown): value is LinkState =>
+  (STATES as readonly unknown[]).includes(value);
+
+/** A change the page sends back: both sides are present, with a state core knows and dates that parse. */
+export const isStateChangeJson = (value: unknown): value is StateChangeJson => {
+  if (!isRecord(value) || !isRecord(value.before) || !isRecord(value.after)) return false;
+  const { before, after } = value;
+  return (
+    isState(before.state) &&
+    isDateOrNull(before.putAwayAt) &&
+    isDateOrNull(before.snoozedUntil) &&
+    isState(after.state) &&
+    isDateOrNull(after.putAwayAt)
+  );
+};
+
+const date = (value: string | null) => (value === null ? null : new Date(value));
+const stateChange = ({ before, after }: StateChangeJson): StateChange => ({
+  before: {
+    state: before.state,
+    putAwayAt: date(before.putAwayAt),
+    snoozedUntil: date(before.snoozedUntil),
+  },
+  after: { state: after.state, putAwayAt: date(after.putAwayAt) },
+});
+
 /** An absent row is null; a missing member is refused, never read as null. */
 export const isToolJsonOrNull = (value: unknown): value is ToolJson | null =>
   value === null || isToolJson(value);
@@ -986,16 +1034,29 @@ export function webApp({
     }),
   );
 
-  app.post("/home/archive", jsonBody(linkId), session, (c) =>
-    homeAction(c, async () => {
-      await archiveLink(deps, c.get("caller").owner, c.get("body").id);
-      return done(c);
-    }),
-  );
+  // It's stale, Put it away and Bring it back answer the change they made; the page sends it
+  // back, as it got it, to `/home/undo-state`.
+  const stateActions = [
+    ["/home/archive", archiveLink],
+    ["/home/put-away", putAwayLink],
+    ["/home/bring-back", bringBackLink],
+  ] as const;
+  for (const [path, act] of stateActions) {
+    app.post(path, jsonBody(linkId), session, (c) =>
+      homeAction(c, async () =>
+        c.json(
+          stateChangeJson(await act(deps, c.get("caller").owner, c.get("body").id)),
+          200,
+          NO_STORE,
+        ),
+      ),
+    );
+  }
 
-  app.post("/home/unarchive", jsonBody(linkId), session, (c) =>
+  app.post("/home/undo-state", jsonBody({ ...linkId, change: isStateChangeJson }), session, (c) =>
     homeAction(c, async () => {
-      await unarchiveLink(deps, c.get("caller").owner, c.get("body").id);
+      const { id, change } = c.get("body");
+      await undoStateChange(deps, c.get("caller").owner, id, stateChange(change));
       return done(c);
     }),
   );

@@ -465,9 +465,16 @@ describe("the shelf's script", () => {
     expect(p.document.querySelector("#handy-shelf .handy-empty")).toBeNull();
   });
 
-  it("It's stale archives through /home/archive and offers Undo through /home/unarchive", async () => {
+  const STALE_CHANGE = {
+    before: { state: "active", putAwayAt: null, snoozedUntil: null },
+    after: { state: "archived", putAwayAt: null },
+  };
+  const archiveAnswer = (s: { url: string }) =>
+    s.url === "/home/archive" ? { status: 200, body: STALE_CHANGE } : { status: 204 };
+
+  it("It's stale archives through /home/archive and offers Undo through /home/undo-state with the change it got", async () => {
     const due = kept({}, true);
-    const p = shelfPage(home([due]), () => ({ status: 204 }), [home([]), home([due])]);
+    const p = shelfPage(home([due]), archiveAnswer, [home([]), home([due])]);
     p.dispatch(p.$("button[data-act=done]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: due.link.id } });
@@ -477,13 +484,16 @@ describe("the shelf's script", () => {
     expect(shelfIds(p)).toEqual([]);
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
-    expect(urls(p)).toEqual(["/home/archive", "/", "/home/unarchive", "/"]);
+    expect(urls(p)).toEqual(["/home/archive", "/", "/home/undo-state", "/"]);
+    expect(p.sent[2]).toMatchObject({
+      body: { id: due.link.id, change: STALE_CHANGE },
+    });
     expect(shelfIds(p)).toEqual([due.link.id]);
   });
 
   it("the menu's It's stale archives, refreshes the shelf and offers Undo, which brings the tile back", async () => {
     const tool = kept();
-    const p = shelfPage(home([tool]), () => ({ status: 204 }), [home([]), home([tool])]);
+    const p = shelfPage(home([tool]), archiveAnswer, [home([]), home([tool])]);
     p.dispatch(p.$(".card-menu button[data-act=archive]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: tool.link.id } });
@@ -493,7 +503,8 @@ describe("the shelf's script", () => {
     );
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
-    expect(urls(p)).toEqual(["/home/archive", "/", "/home/unarchive", "/"]);
+    expect(urls(p)).toEqual(["/home/archive", "/", "/home/undo-state", "/"]);
+    expect(p.sent[2]).toMatchObject({ body: { id: tool.link.id, change: STALE_CHANGE } });
     expect(shelfIds(p)).toEqual([tool.link.id]);
   });
 
@@ -606,7 +617,7 @@ describe("the shelf's script", () => {
       gone.$("#undo-bar button"),
     ]);
     // It's stale on the only tile: nothing is left, so focus goes to the heading and then to Undo.
-    const done = shelfPage(home([due]), () => ({ status: 204 }), [home([])]);
+    const done = shelfPage(home([due]), () => ({ status: 200, body: STALE_CHANGE }), [home([])]);
     done.dispatch(done.$("button[data-act=done]"), "click");
     await done.settle();
     expect(done.focused().slice(-2)).toEqual([done.$("#handy-title"), done.$("#undo-bar button")]);
@@ -617,7 +628,11 @@ describe("the shelf's script", () => {
     async (act) => {
       const [a, b] = [kept(), kept()];
       const answer = (s: Post): Answer =>
-        s.url === "/tools/not-handy" ? { status: 200, body: MOVED } : { status: 204 };
+        s.url === "/tools/not-handy"
+          ? { status: 200, body: MOVED }
+          : s.url === "/home/archive"
+            ? { status: 200, body: STALE_CHANGE }
+            : { status: 204 };
       const p = shelfPage(home([a, b]), answer, [home([b]), home([a, b])]);
       p.dispatch(p.$(`[data-id="${a.link.id}"] .card-menu button[data-act=${act}]`), "click");
       await p.settle();

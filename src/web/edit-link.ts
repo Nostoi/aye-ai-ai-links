@@ -7,7 +7,7 @@ import { cardMenu, DIVIDER, type MenuItem } from "./card-menu.js";
 import { removeCopyItem } from "./copy-menu.js";
 import { deleteLinkItem } from "./delete-link.js";
 import { displayTitle } from "./display-title.js";
-import { DONE_ITEM } from "./done-link.js";
+import { BRING_BACK_ITEM, DONE_ITEM, PUT_AWAY_ITEM } from "./done-link.js";
 import { initialsText } from "./initials.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
 import { NOT_NOW_ITEM } from "./not-now.js";
@@ -20,11 +20,12 @@ export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit titl
 
 /**
  * A card's ⋯ menu on the pages with the edit dialog (#192). An active link's menu opens with It's
- * stale and Keep handy, which reads Not handy anymore once `handy` is kept; both rows are
- * rendered and the script swaps them. A link out of your lists gets neither. Then Edit, Remove saved
- * copy when `copy` is there, and Delete link last. The copy itself opens from the card's grey line
- * (`cardLine`). Home's rows add Not now after It's stale (`notNow`); Home's featured card
- * shows both as buttons, so its menu leaves them out (`onCard`).
+ * stale, Put it away and Keep handy, which reads Not handy anymore once `handy` is kept; both
+ * Keep rows are rendered and the script swaps them. A link out of your lists starts at Edit and
+ * offers Bring it back after it. Then Remove saved copy when `copy` is there, and Delete link
+ * last. The copy itself opens from the card's grey line (`cardLine`). Home's rows add Not now
+ * after Put it away (`notNow`); Home's featured card shows It's stale and Not now as buttons, so
+ * its menu leaves those two out (`onCard`).
  */
 export const editMenu = (
   link: Link,
@@ -41,14 +42,21 @@ export const editMenu = (
   } = {},
 ) => {
   const kept = handy?.status === "kept";
-  const put = onCard ? [] : [DONE_ITEM, ...(notNow ? [NOT_NOW_ITEM] : [])];
-  const first =
-    link.state === "active"
-      ? [...put, { ...KEEP_ITEM, hidden: kept }, { ...NOT_HANDY, hidden: !kept }, DIVIDER]
-      : [];
+  const active = link.state === "active";
+  const first = active
+    ? [
+        ...(onCard ? [] : [DONE_ITEM]),
+        PUT_AWAY_ITEM,
+        ...(notNow && !onCard ? [NOT_NOW_ITEM] : []),
+        { ...KEEP_ITEM, hidden: kept },
+        { ...NOT_HANDY, hidden: !kept },
+        DIVIDER,
+      ]
+    : [];
   return cardMenu(`More for ${displayTitle(link)}`, [
     ...first,
     EDIT_ITEM,
+    ...(active ? [] : [BRING_BACK_ITEM]),
     ...(copy ? [removeCopyItem] : []),
     DIVIDER,
     deleteLinkItem,

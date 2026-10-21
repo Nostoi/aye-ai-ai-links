@@ -482,10 +482,13 @@ describe("GET / and the Handy shelf", () => {
     const { world, browser, id } = await tools();
     await keepHandy(at(world, daysAgo(31)), A, id, "stated");
     const row = toolRow(world, id);
-    expect((await browser.send("/home/archive", post({ id }))).status).toBe(204);
+    const archived = await browser.send("/home/archive", post({ id }));
+    expect(archived.status).toBe(200);
     expect(shelf(String((await browser.send("/")).body))).toHaveLength(0);
     expect(toolRow(world, id)).toEqual(row);
-    expect((await browser.send("/home/unarchive", post({ id }))).status).toBe(204);
+    expect(
+      (await browser.send("/home/undo-state", post({ id, change: archived.body }))).status,
+    ).toBe(204);
     expect(shelf(String((await browser.send("/")).body)).map((t) => t.dataset.id)).toEqual([id]);
     expect(toolRow(world, id)).toEqual(row);
   });

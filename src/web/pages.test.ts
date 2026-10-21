@@ -583,3 +583,25 @@ describe("the search card's tile", () => {
     expect(parseHTML(html).document.querySelector(`.result ${selector}`)).not.toBeNull();
   });
 });
+
+describe("search results fade only stale links", () => {
+  it("gives a stale result the faded class, and a put-away or active one not", () => {
+    const html = searchPage({
+      query: "x",
+      now: NOW,
+      links: [
+        link({ id: "1", url: "https://example.com/1" }),
+        link({ id: "2", url: "https://example.com/2", state: "archived" }),
+        link({
+          id: "3",
+          url: "https://example.com/3",
+          state: "archived",
+          putAwayAt: new Date("2026-10-01T00:00:00Z"),
+        }),
+      ],
+    });
+    const faded = (id: string) =>
+      parseHTML(html).document.querySelector(`[data-id="${id}"]`)?.classList.contains("faded");
+    expect([faded("1"), faded("2"), faded("3")]).toEqual([false, true, false]);
+  });
+});

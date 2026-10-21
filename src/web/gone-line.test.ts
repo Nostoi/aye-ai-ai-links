@@ -237,7 +237,13 @@ describe("the gone line's buttons", () => {
   });
 
   it("It's stale posts /home/archive, hides the card, and its Undo restores it", async () => {
-    const p = load(() => ({ status: 204 }));
+    const change = {
+      before: { state: "active", putAwayAt: null, snoozedUntil: null },
+      after: { state: "archived", putAwayAt: null },
+    };
+    const p = load((s) =>
+      s.url === "/home/archive" ? { status: 200, body: change } : { status: 204 },
+    );
     await click(p, "button[data-act=gone-done]");
     expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
     expect(p.$("li[data-id]").hidden).toBe(true);
@@ -245,7 +251,7 @@ describe("the gone line's buttons", () => {
       "Let go. You won't see it again unless you search for it.",
     );
     await click(p, "#undo-bar button");
-    expect(p.sent[1]).toEqual(post("/home/unarchive", { id: "7" }));
+    expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change }));
     expect(p.$("li[data-id]").hidden).toBe(false);
   });
 

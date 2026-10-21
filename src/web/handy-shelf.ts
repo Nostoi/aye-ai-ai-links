@@ -226,12 +226,13 @@ if (handy) {
     try {
       if (done) {
         const res = await post("/home/archive", { id });
-        if (!res || res.status !== 204) {
+        const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
+        if (!change || !change.before || !change.after) {
           handyError.textContent = await failure(res);
           return;
         }
         dropped = await refreshShelf(from);
-        offerUndo(${JSON.stringify(STALE_UNDO.text)}, "/home/unarchive", { id }, from, ${JSON.stringify(STALE_UNDO.title)});
+        offerUndo(${JSON.stringify(STALE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(STALE_UNDO.title)});
         return;
       }
       if (act === "still-works") {

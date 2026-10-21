@@ -140,7 +140,7 @@ describe("Worth a look today", () => {
     expect(row?.querySelector("a.button")).toBeNull();
   });
 
-  it("gives a row the six-row menu and the featured card the menu without its visible two", () => {
+  it("gives a row the seven-row menu and the featured card the menu without its visible two", () => {
     const [first, second] = [card([]), card([])];
     const copies = new Map([
       [first?.link.id as string, COPY],
@@ -149,6 +149,7 @@ describe("Worth a look today", () => {
     const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
     expect(menuRows(d.querySelector(".worth-row"))).toEqual([
       "archive",
+      "put-away",
       "snooze",
       "keep",
       "not-handy (hidden)",
@@ -157,6 +158,7 @@ describe("Worth a look today", () => {
       "delete-link",
     ]);
     expect(menuRows(d.querySelector(".worth-feature"))).toEqual([
+      "put-away",
       "keep",
       "not-handy (hidden)",
       "edit",
@@ -491,6 +493,13 @@ const SNOOZE = {
   claimedAt: "2026-10-14T10:00:00.000Z",
   previousSurfacedAt: "2026-09-01T10:00:00.000Z",
 };
+const CHANGE = {
+  before: { state: "active", putAwayAt: null, snoozedUntil: null },
+  after: { state: "archived", putAwayAt: null },
+};
+/** What nothing wrong answers: It's stale the change as JSON, anything else 204. */
+const fine = (s: Post): Answer =>
+  s.url === "/home/archive" ? { status: 200, body: CHANGE } : { status: 204 };
 const REDIRECT: Answer = { status: 0, type: "opaqueredirect" };
 const ROW = {
   status: "kept",
@@ -501,11 +510,7 @@ const ROW = {
 };
 
 /** Home with the Handy shelf (empty unless given), run with its scripts. */
-const home = (
-  links: DigestLink[],
-  answer: (s: Post) => Answer = () => ({ status: 204 }),
-  extra: Extra = {},
-) =>
+const home = (links: DigestLink[], answer: (s: Post) => Answer = fine, extra: Extra = {}) =>
   runPage(
     homePage({
       worth: worth(links, extra),
@@ -629,7 +634,7 @@ describe("the home page's script", () => {
     const p = home(cards, (s) =>
       s.url === "/home/snooze"
         ? { status: 200, body: SNOOZE, wait: held }
-        : { status: 204, wait: held },
+        : { ...fine(s), wait: held },
     );
     p.dispatch(p.$(`.feature-quiet button[data-act=${a}]`), "click");
     p.dispatch(p.$(`.feature-quiet button[data-act=${b}]`), "click");
@@ -719,7 +724,7 @@ describe("the home page's script", () => {
     );
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
-    expect(p.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id } });
+    expect(p.sent[1]).toMatchObject({ url: "/home/undo-state", body: { id, change: CHANGE } });
     expect(hidden(p, id)).toBe(false);
   });
 
@@ -735,7 +740,8 @@ describe("the home page's script", () => {
 
   it.each([
     ["a redirect to the sign-in page", "archive", REDIRECT],
-    ["a 200 instead of a 204", "archive", { status: 200, body: {} }],
+    ["a 200 with no change", "archive", { status: 200, body: {} }],
+    ["a 204 with no change", "archive", { status: 204 }],
     ["a redirect to the sign-in page", "snooze", REDIRECT],
     ["a 204 with no snooze", "snooze", { status: 204 }],
   ])("keeps the card and offers no Undo when %s answers %s", async (_, act, answer) => {
@@ -766,9 +772,7 @@ describe("the home page's script", () => {
     const cards = two();
     const id = cards[0]?.link.id as string;
     const p = home(cards, (s) =>
-      s.url === "/home/unarchive"
-        ? { status: 409, body: { message: "Changed since." } }
-        : { status: 204 },
+      s.url === "/home/undo-state" ? { status: 409, body: { message: "Changed since." } } : fine(s),
     );
     p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
     await p.settle();
@@ -788,7 +792,7 @@ describe("the home page's script", () => {
     const snooze = new Promise((r) => (refused = r));
     const p = home(cards, (s) =>
       s.url === "/home/archive"
-        ? { status: 204, wait: archive }
+        ? { status: 200, body: CHANGE, wait: archive }
         : s.url === "/home/snooze"
           ? {
               status: 409,
@@ -1050,7 +1054,7 @@ describe("Keep handy on a Worth a look card", () => {
 describe("the Worth a look gone row (#128)", () => {
   const ROWS = { check: { result: "alive" }, previous: { result: "dead" } };
 
-  it("is the last row, amber while it seems gone, with the gone line and the six-row menu", () => {
+  it("is the last row, amber while it seems gone, with the gone line and the seven-row menu", () => {
     const g = link({ why: null });
     const d = dom(render([card([]), card([]), card([])], { gone: g }));
     const rows = [...d.querySelectorAll(".worth-row")];
@@ -1061,7 +1065,7 @@ describe("the Worth a look gone row (#128)", () => {
     expect(last.querySelector("[data-gone] p.small")?.textContent).toBe("This page seems gone");
     expect(shownButtons(last)).toEqual(["still-works It still works", "gone-done It's stale"]);
     expect(menuRows(last)[0]).toBe("archive");
-    expect(menuRows(last)).toHaveLength(6);
+    expect(menuRows(last)).toHaveLength(7);
     expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
     expect(last.querySelector(".ask")).toBeNull();
     expect(themeCss).toMatch(
@@ -1096,7 +1100,7 @@ describe("the Worth a look gone row (#128)", () => {
     expect(dom(render([])).querySelector(".worth")).toBeNull();
   });
 
-  const open = (answer: (s: Post) => Answer = () => ({ status: 204 }), copy = false) => {
+  const open = (answer: (s: Post) => Answer = fine, copy = false) => {
     const g = link();
     const p = home([card([])], answer, {
       gone: g,
@@ -1124,7 +1128,7 @@ describe("the Worth a look gone row (#128)", () => {
     expect((row().querySelector("[data-gone]") as HTMLElement).hidden).toBe(false);
   });
 
-  it("It's stale on the warning line archives once, and Undo unarchives", async () => {
+  it("It's stale on the warning line archives once, and Undo sends the change back", async () => {
     const { p, g, row } = open();
     p.dispatch(p.$(".worth-gone button[data-act=gone-done]"), "click");
     await p.settle();
@@ -1133,7 +1137,10 @@ describe("the Worth a look gone row (#128)", () => {
     expect(row().hidden).toBe(true);
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
-    expect(p.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id: g.id } });
+    expect(p.sent[1]).toMatchObject({
+      url: "/home/undo-state",
+      body: { id: g.id, change: CHANGE },
+    });
     expect(row().hidden).toBe(false);
   });
 

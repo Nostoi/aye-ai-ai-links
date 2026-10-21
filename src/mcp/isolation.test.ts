@@ -752,7 +752,11 @@ describe("owner isolation coverage", () => {
     "POST /home/snooze": "the two-owner test of POST /home/snooze in web/home-routes.test.ts",
     "POST /home/unsnooze": "the two-owner test of POST /home/unsnooze in web/home-routes.test.ts",
     "POST /home/archive": "the two-owner test of POST /home/archive in web/home-routes.test.ts",
-    "POST /home/unarchive": "the two-owner test of POST /home/unarchive in web/home-routes.test.ts",
+    "POST /home/put-away": "the two-owner test of POST /home/put-away in web/home-routes.test.ts",
+    "POST /home/bring-back":
+      "the two-owner test of POST /home/bring-back in web/home-routes.test.ts",
+    "POST /home/undo-state":
+      "the two-owner test of POST /home/undo-state in web/home-routes.test.ts",
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
     "POST /links/edit": "the two-owner test of POST /links/edit in web/edit-routes.test.ts",

@@ -22,7 +22,6 @@ import {
   SNOOZE_MS,
   snoozeLink,
   tellWhy,
-  unarchiveLink,
   undoStateChange,
   unsnoozeLink,
   WORTH_SIZE,
@@ -630,7 +629,7 @@ describe("It's stale", () => {
     await archiveLink(deps(), A, l.id);
     expect((await get(l.id)).state).toBe("archived");
     expect(await ids()).not.toContain(l.id);
-    await unarchiveLink(deps(), A, l.id);
+    await bringBackLink(deps(), A, l.id);
     expect((await get(l.id)).state).toBe("active");
   });
 
@@ -647,7 +646,7 @@ describe("It's stale", () => {
     await archiveLink(deps(), A, l.id);
     await store.update(A, l.id, { state: "active", title: "changed elsewhere" });
     const before = await get(l.id);
-    expect(await code(unarchiveLink(deps(), A, l.id))).toBe("conflict");
+    expect(await code(bringBackLink(deps(), A, l.id))).toBe("conflict");
     expect(await get(l.id)).toEqual(before);
   });
 
@@ -656,8 +655,8 @@ describe("It's stale", () => {
     const archived = await link(B, { state: "archived" });
     const before = structuredClone(store.all(B));
     expect(await code(archiveLink(deps(), A, theirs.id))).toBe("not_found");
-    expect(await code(unarchiveLink(deps(), A, theirs.id))).toBe("not_found");
-    expect(await code(unarchiveLink(deps(), A, archived.id))).toBe("not_found");
+    expect(await code(bringBackLink(deps(), A, theirs.id))).toBe("not_found");
+    expect(await code(bringBackLink(deps(), A, archived.id))).toBe("not_found");
     expect(store.all(B)).toEqual(before);
   });
 });
@@ -778,12 +777,6 @@ describe("put away, stale, bring back and their Undo", () => {
   it("Not now still refuses a stale link", async () => {
     const stale = await link(A, { state: "archived" });
     expect(await code(snoozeLink(deps(), A, stale.id))).toBe("conflict");
-  });
-
-  it("the old unarchiveLink route brings a stale link back", async () => {
-    const stale = await link(A, { state: "archived" });
-    await unarchiveLink(deps(), A, stale.id);
-    expect(await get(stale.id)).toMatchObject({ state: "active", putAwayAt: null });
   });
 });
 

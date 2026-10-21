@@ -164,7 +164,8 @@ ${CARD_FETCH}
 ${viewScript}
 ${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
-${done ? "" : `${doneLinkScript("all-links", "all-error")}\n`}</script>
+${doneLinkScript("all-links", "all-error")}
+</script>
 ${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     {
       menu: true,

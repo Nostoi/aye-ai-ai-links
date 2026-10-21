@@ -121,12 +121,13 @@ ${doneLinkScript("space-links", "space-error")}
 </script>
 `;
 
-/** The edit dialog, Delete link and the saved copy's Remove on the done cards, including those Show older links appends. */
+/** The edit dialog, Delete link, Bring it back and the saved copy's Remove on the done cards, including those Show older links appends. */
 const doneScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
 ${viewScript}
 ${removeCopyScript("space-links", "space-error")}
 ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
+${doneLinkScript("space-links", "space-error")}
 </script>
 `;
 

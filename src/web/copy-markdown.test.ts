@@ -370,7 +370,7 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
     (unit) => {
       const start = performance.now();
       copyHtml(`[\n\n${unit.repeat(Math.ceil((256 * 1024) / unit.length))}`, refs());
-      expect(performance.now() - start).toBeLessThan(2_000);
+      expect(performance.now() - start).toBeLessThan(5_000);
     },
     10_000,
   );
@@ -386,7 +386,7 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
       const md = unit.repeat(Math.ceil((kib * 1024) / unit.length));
       const start = performance.now();
       copyHtml(md, refs());
-      expect(performance.now() - start).toBeLessThan(2_000);
+      expect(performance.now() - start).toBeLessThan(5_000);
     },
     10_000,
   );

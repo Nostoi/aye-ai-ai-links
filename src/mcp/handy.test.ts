@@ -464,6 +464,13 @@ describe("update_link's putAway", () => {
     expect(row("1")).toBeUndefined();
   });
 
+  it("refuses putAway with opened before anything is written", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    const res = await call("update_link", { id: "1", putAway: true, opened: true });
+    expect(res.isError).toBe(true);
+    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null, lastOpenedAt: null });
+  });
+
   it("refuses putAway on a link that is not active, changing nothing", async () => {
     await call("save_link", { url: "https://example.com/t" });
     await call("update_link", { id: "1", state: "archived" });

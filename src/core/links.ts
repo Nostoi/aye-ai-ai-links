@@ -225,18 +225,37 @@ export async function getLinkWithText(
   return { link, snapshotText, savedCopy };
 }
 
-/** An opening brings a put-away link back to active (the state in the patch moves the stamp); a stale link stays stale. */
-async function withOpeningRule(
+/**
+ * An opening brings a put-away link back to active; a stale link stays stale. The stamp read here
+ * guards the reactivation (`reactivate`), a write of its own, so a link that changed meanwhile is
+ * left as the other action set it.
+ */
+async function putAwayStamp(
   store: Pick<LinkStore, "get">,
   owner: OwnerId,
   id: string,
   input: UpdateLinkInput,
-): Promise<UpdateLinkInput> {
-  if (input.opened !== true || input.state !== undefined) return input;
+): Promise<Date | null> {
+  if (input.opened !== true || input.state !== undefined) return null;
   const link = await store.get(owner, id);
-  return link?.state === "archived" && link.putAwayAt !== null
-    ? { ...input, state: "active" }
-    : input;
+  return link?.state === "archived" ? link.putAwayAt : null;
+}
+
+async function reactivate(
+  store: Pick<LinkStore, "updateIf">,
+  owner: OwnerId,
+  id: string,
+  stamp: Date | null,
+  link: Link,
+): Promise<Link> {
+  if (stamp === null) return link;
+  const result = await store.updateIf(
+    owner,
+    id,
+    { state: "archived", putAwayAt: stamp },
+    { state: "active", putAwayAt: null },
+  );
+  return result?.applied ? result.link : link;
 }
 
 /** Checks the input and builds the patch; throws before anything is written. */
@@ -273,10 +292,10 @@ export async function updateLink(
   id: string,
   input: UpdateLinkInput,
 ): Promise<Link> {
-  const ruled = await withOpeningRule(store, owner, id, input);
-  const link = await store.update(owner, id, buildPatch(now, ruled));
+  const stamp = await putAwayStamp(store, owner, id, input);
+  const link = await store.update(owner, id, buildPatch(now, input));
   if (!link) throw notFound(id);
-  return link;
+  return reactivate(store, owner, id, stamp, link);
 }
 
 /** `updateLink` for the in-app AI: the store also records what the edit replaced, and `editId` is its id for Undo (null when no covered field changed). */
@@ -287,10 +306,10 @@ export async function updateLinkWithReceipt(
   input: UpdateLinkInput,
   extend?: string,
 ): Promise<{ link: Link; editId: string | null }> {
-  const patch = buildPatch(now, await withOpeningRule(store, owner, id, input));
-  const result = await store.updateWithReceipt(owner, id, patch, now(), extend);
+  const stamp = await putAwayStamp(store, owner, id, input);
+  const result = await store.updateWithReceipt(owner, id, buildPatch(now, input), now(), extend);
   if (!result) throw notFound(id);
-  return result;
+  return { ...result, link: await reactivate(store, owner, id, stamp, result.link) };
 }
 
 /**

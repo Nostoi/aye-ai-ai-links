@@ -334,8 +334,8 @@ export function buildMcpServer(
       },
     },
     async ({ id, snoozedUntil, handy, putAway, ...rest }) => {
-      if (putAway && (rest.state !== undefined || handy)) {
-        throw new CoreError("invalid_input", "putAway cannot be sent with state or handy.");
+      if (putAway && (rest.state !== undefined || rest.opened || handy)) {
+        throw new CoreError("invalid_input", "putAway cannot be sent with state, handy or opened.");
       }
       // One instant for the handy write, the link write and the view, so an opening sent with an
       // answer lands at the answer's millisecond, never a jittered one after it.

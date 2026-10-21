@@ -462,6 +462,27 @@ describe("recordOpening", () => {
     });
   });
 
+  it.each([
+    ["updateLink", updateLink],
+    ["updateLinkWithReceipt", updateLinkWithReceipt],
+  ] as const)("%s: a link made stale after the opening read stays stale", async (_name, write) => {
+    const { store, deps } = setup();
+    const link = await putAway(deps, "put away");
+    // Another request marks the link stale right after this one read it as put away.
+    const racing = Object.create(store) as FakeStore;
+    racing.get = async (owner, id) => {
+      const read = await store.get(owner, id);
+      await store.update(owner, id, { state: "archived", putAwayAt: null });
+      return read;
+    };
+    await write({ ...deps, store: racing }, "a", link.id, { opened: true });
+    expect(store.all("a")[0]).toMatchObject({
+      state: "archived",
+      putAwayAt: null,
+      lastOpenedAt: T0,
+    });
+  });
+
   it("makes a put-away link active when an update sends opened, with or without a receipt", async () => {
     const { store, deps } = setup();
     const one = await putAway(deps, "put away");

@@ -57,7 +57,7 @@ const KEEP_HANDY = `<div class="ask">
 /** A kept tile's ⋯ menu: the link menu's first group (#192), with Keep handy already done. */
 const menu = (link: Link) => cardMenu(`More for ${displayTitle(link)}`, [DONE_ITEM, NOT_HANDY]);
 
-/** The space's dot and the site's host, without the space's name (All links uses `siteLine`). */
+/** The space's dot and the site's host, without the space's name or a saved copy (the list cards use `cardLine`). */
 function hostLine(link: Link, space: Space | null): string {
   const host = hostOf(link.url);
   if (!host) return "";

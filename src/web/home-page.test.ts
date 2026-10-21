@@ -1,11 +1,14 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { DigestLink, DigestReason } from "../core/digest.js";
-import type { ShownPicture } from "../core/image-store.js";
+import type { PictureInfo, ShownPicture } from "../core/image-store.js";
+import type { CopyInfo } from "../core/saved-copy.js";
+import type { LinkView } from "../core/tools.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
+import { copyHref } from "./copy-page.js";
 import { handyShelf } from "./handy-shelf.js";
-import { homePage } from "./home-page.js";
-import { runPage } from "./opened-test-kit.js";
+import { homePage, type WorthCards } from "./home-page.js";
+import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { spacesSection } from "./spaces-section.js";
 import { themeCss } from "./theme.js";
@@ -42,17 +45,20 @@ const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => 
   link: link(over),
   reasons,
 });
-const render = (
-  links: DigestLink[],
-  images = new Map<string, ShownPicture>(),
-  catalog: Tag[] = [],
-  gone: Link | null = null,
-) =>
-  homePage({
-    worth: { links, images, now: NOW, catalog, gone, goneCopy: null },
-    shelf: "",
-    spaces: "",
-  });
+const GONE: LinkView = {
+  handy: null,
+  gone: { since: new Date("2026-10-01T00:00:00Z"), checkedAt: NOW },
+};
+const COPY: CopyInfo = { madeAt: new Date("2026-03-12T10:00:00Z") };
+
+type Extra = Partial<Omit<WorthCards, "links">>;
+const worth = (links: DigestLink[], extra: Extra = {}): WorthCards => {
+  const views = new Map<string, LinkView>(extra.views ?? []);
+  if (extra.gone && !views.has(extra.gone.id)) views.set(extra.gone.id, GONE);
+  return { links, images: new Map(), now: NOW, catalog: [], gone: null, ...extra, views };
+};
+const render = (links: DigestLink[], extra: Extra = {}) =>
+  homePage({ worth: worth(links, extra), shelf: "", spaces: "" });
 const tag = (key: string, over: Partial<Tag> = {}): Tag => ({
   key,
   name: key,
@@ -74,47 +80,133 @@ const on = (...keys: string[]): Pick<Link, "tags"> => ({
   })),
 });
 const dom = (html: string) => parseHTML(html).document;
-const pill = (html: string) => dom(html).querySelector(".worth-lead .reason")?.textContent;
+const reasonOf = (html: string) => dom(html).querySelector(".worth-feature .reason")?.textContent;
+/** A card's menu rows, in order, each as its act, marked when hidden for the script to show. */
+const menuRows = (el: Element | null) =>
+  [...(el?.querySelectorAll("details.card-menu .card-menu-list button") ?? [])].map(
+    (b) => `${(b as HTMLElement).dataset.act}${(b as HTMLElement).hidden ? " (hidden)" : ""}`,
+  );
+/** Buttons a card shows outside its ⋯ menu. */
+const shownButtons = (el: Element | null) =>
+  [...(el?.querySelectorAll("button") ?? [])]
+    .filter((b) => !b.closest("details.card-menu") && !b.closest("form"))
+    .map((b) => `${(b as HTMLElement).dataset.act} ${b.textContent}`);
 
 describe("Worth a look today", () => {
   it("is left out when there is nothing to show", () => {
     const html = render([]);
     expect(html).not.toContain("Worth a look today");
     expect(html).toContain("What are you trying to remember?");
+    expect(dom(html).querySelector("#edit-link")).toBeNull();
   });
 
-  it("shows one large card and up to two small ones, each with its id", () => {
+  it("asks the page's question as its one heading, labelling the search field", () => {
+    const d = dom(render([]));
+    expect(d.querySelectorAll("h1")).toHaveLength(1);
+    const label = d.querySelector("h1 label[for=q]");
+    expect(label?.textContent).toBe("What are you trying to remember?");
+    expect(d.querySelector("#q")).not.toBeNull();
+  });
+
+  it("shows the first pick as the featured card and the others as Also today rows, in order", () => {
     const cards = [card([]), card([]), card([])];
     const d = dom(render(cards));
-    expect(d.querySelectorAll(".worth-lead")).toHaveLength(1);
-    expect(d.querySelectorAll(".worth-small")).toHaveLength(2);
+    expect(d.querySelectorAll(".worth-feature")).toHaveLength(1);
+    expect(d.querySelectorAll(".worth-row")).toHaveLength(2);
+    expect(d.querySelector("h3.also-today")?.textContent).toBe("Also today");
     expect([...d.querySelectorAll("[data-id]")].map((e) => (e as HTMLElement).dataset.id)).toEqual(
       cards.map((c) => c.link.id),
     );
+    expect((d.querySelector(".worth-feature") as HTMLElement).dataset.id).toBe(cards[0]?.link.id);
   });
 
-  it("gives the large card Open it, and each card Not now, I'm done with it and Keep handy", () => {
+  it("leaves out Also today when there is only the featured card", () => {
+    const d = dom(render([card([])]));
+    expect(d.querySelector(".also-today")).toBeNull();
+    expect(d.querySelector(".worth-rows")).toBeNull();
+  });
+
+  it("gives the featured card Open it, I'm done with it and Not now, and a row only its ⋯", () => {
     const d = dom(render([card([]), card([])]));
-    const lead = d.querySelector(".worth-lead") as HTMLElement;
-    const open = lead.querySelector("a.button[data-open]") as HTMLAnchorElement;
+    const feature = d.querySelector(".worth-feature") as HTMLElement;
+    const open = feature.querySelector("a.button.primary[data-open]") as HTMLAnchorElement;
     expect(open.textContent).toBe("Open it");
-    expect(open.getAttribute("href")).toBe(lead.querySelector("h3 a")?.getAttribute("href"));
-    const acts = (el: Element) =>
-      [...el.querySelectorAll("button[data-act]")].map((b) => [
-        (b as HTMLElement).dataset.act,
-        b.textContent,
-      ]);
-    // #125 adds Keep handy as Worth a look's fourth choice.
-    const both = [
-      ["snooze", "Not now"],
-      ["archive", "I'm done with it"],
-      ["keep", "Keep handy"],
-    ];
-    expect(acts(lead)).toEqual(both);
-    expect(acts(d.querySelector(".worth-small") as Element)).toEqual(both);
+    expect(open.getAttribute("href")).toBe(feature.querySelector("h3 a")?.getAttribute("href"));
+    expect(shownButtons(feature)).toEqual(["archive I'm done with it", "snooze Not now"]);
+    const row = d.querySelector(".worth-row");
+    expect(shownButtons(row)).toEqual([]);
+    expect(row?.querySelector("a.button")).toBeNull();
   });
 
-  it("opens every link in a new tab, and records the opening from the title and Open it", () => {
+  it("gives a row the six-row menu and the featured card the menu without its visible two", () => {
+    const [first, second] = [card([]), card([])];
+    const copies = new Map([
+      [first?.link.id as string, COPY],
+      [second?.link.id as string, COPY],
+    ]);
+    const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
+    expect(menuRows(d.querySelector(".worth-row"))).toEqual([
+      "archive",
+      "snooze",
+      "keep",
+      "not-handy (hidden)",
+      "edit",
+      "remove-copy",
+      "delete-link",
+    ]);
+    expect(menuRows(d.querySelector(".worth-feature"))).toEqual([
+      "keep",
+      "not-handy (hidden)",
+      "edit",
+      "remove-copy",
+      "delete-link",
+    ]);
+    const noCopy = dom(render([card([]), card([])]));
+    expect(menuRows(noCopy.querySelector(".worth-row"))).not.toContain("remove-copy");
+  });
+
+  it("shows Not handy anymore for a pick that is kept by now, and Keep handy for one declined", () => {
+    const [kept, declined] = [card([]), card([])];
+    const view = (status: "kept" | "declined"): LinkView => ({
+      handy: { status, source: "stated", due: false },
+      gone: null,
+    });
+    const views = new Map([
+      [kept?.link.id as string, view("kept")],
+      [declined?.link.id as string, view("declined")],
+    ]);
+    const d = dom(render([kept as DigestLink, declined as DigestLink], { views }));
+    expect(menuRows(d.querySelector(".worth-feature"))).toContain("keep (hidden)");
+    expect(menuRows(d.querySelector(".worth-feature"))).toContain("not-handy");
+    expect(menuRows(d.querySelector(".worth-row"))).toContain("keep");
+    expect(menuRows(d.querySelector(".worth-row"))).toContain("not-handy (hidden)");
+  });
+
+  it("has one filled button outside the search: Open it, and none for a link it can't open", () => {
+    const filled = (html: string) =>
+      [...dom(html).querySelectorAll(".primary")].filter(
+        (b) => !b.closest("form.home-search") && !b.closest("dialog") && !b.closest("[hidden]"),
+      );
+    const shown = filled(render([card([], { why: null }), card([]), card([])]));
+    expect(shown.map((b) => b.textContent)).toEqual(["Open it"]);
+    expect(filled(render([card([], { url: "javascript:alert(1)" }), card([])]))).toEqual([]);
+  });
+
+  it("links the featured card's saved copy on its grey line, and never a row's", () => {
+    const [first, second] = [card([]), card([])];
+    const copies = new Map([
+      [first?.link.id as string, COPY],
+      [second?.link.id as string, COPY],
+    ]);
+    const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
+    const saved = d.querySelector(".worth-feature .card-line a.saved-copy");
+    expect(saved?.getAttribute("href")).toBe(copyHref(first?.link.id as string));
+    expect(saved?.getAttribute("data-act")).toBe("read-copy");
+    expect(d.querySelector(".worth-row [data-act=read-copy]")).toBeNull();
+    expect(dom(render([card([])])).querySelector("[data-act=read-copy]")).toBeNull();
+  });
+
+  it("opens every link in a new tab, and records the opening from the titles and Open it", () => {
     const d = dom(render([card([]), card([])]));
     const anchors = [...d.querySelectorAll("main a[href^='https://']")];
     expect(anchors).toHaveLength(3);
@@ -128,14 +220,14 @@ describe("Worth a look today", () => {
   it("does not link a stored non-web URL, and offers no Open it for it", () => {
     const html = render([card([], { url: "javascript:alert(1)", title: "Odd" })]);
     expect(html).not.toContain("javascript:");
-    expect(dom(html).querySelector(".worth-lead a")).toBeNull();
-    expect(dom(html).querySelector(".worth-lead h3")?.textContent).toBe("Odd");
+    expect(dom(html).querySelector(".worth-feature a[data-open]")).toBeNull();
+    expect(dom(html).querySelector(".worth-feature h3")?.textContent).toBe("Odd");
   });
 
-  describe("the reason on the large card", () => {
+  describe("the reason on the featured card", () => {
     it("quotes a focus entry the owner gave as what they said", () => {
       for (const source of ["stated", "asked"] as const) {
-        expect(pill(render([card([focus("home batteries", source)])]))).toBe(
+        expect(reasonOf(render([card([focus("home batteries", source)])]))).toBe(
           `You said you're working on "home batteries"`,
         );
       }
@@ -143,21 +235,21 @@ describe("Worth a look today", () => {
 
     it("never says 'You said' for an inferred focus entry, and calls it a guess", () => {
       const html = render([card([focus("home batteries", "inferred")])]);
-      expect(pill(html)).toBe(`Maybe you're working on "home batteries" (a guess)`);
+      expect(reasonOf(html)).toBe(`Maybe you're working on "home batteries" (a guess)`);
       expect(html).not.toContain("You said");
     });
 
     it("says a link not opened lately was saved over a month ago", () => {
-      expect(pill(render([card([{ kind: "not_opened_recently" }])]))).toBe(
+      expect(reasonOf(render([card([{ kind: "not_opened_recently" }])]))).toBe(
         "You saved this over a month ago",
       );
     });
 
     it("falls back to the saved date for no why or never shown", () => {
       for (const kind of ["no_why", "never_surfaced"] as const) {
-        expect(pill(render([card([{ kind }])]))).toBe("You saved this March 12");
+        expect(reasonOf(render([card([{ kind }])]))).toBe("You saved this March 12");
       }
-      expect(pill(render([card([], { savedAt: new Date("2025-03-12T10:00:00Z") })]))).toBe(
+      expect(reasonOf(render([card([], { savedAt: new Date("2025-03-12T10:00:00Z") })]))).toBe(
         "You saved this March 12, 2025",
       );
     });
@@ -166,48 +258,71 @@ describe("Worth a look today", () => {
       const html = render([
         card([{ kind: "no_why" }, { kind: "not_opened_recently" }, focus("x", "stated")]),
       ]);
-      expect(pill(html)).toBe(`You said you're working on "x"`);
+      expect(reasonOf(html)).toBe(`You said you're working on "x"`);
+    });
+
+    it("is a line with the space's dot, not a pill", () => {
+      const d = dom(render([card([])]));
+      expect(d.querySelector(".worth-feature .reason .dot")?.getAttribute("aria-hidden")).toBe(
+        "true",
+      );
+      expect(themeCss).not.toMatch(/\.reason\{[^}]*border-radius:999px/);
     });
   });
 
-  it("shows the why: quoted when the owner gave it, as a guess when inferred", () => {
+  it("shows the featured why quoted, as a guess when inferred, and the date only when the reason lacks it", () => {
     const said = dom(render([card([{ kind: "not_opened_recently" }])]));
-    expect(said.querySelector(".worth-lead .meta")?.textContent).toBe(
-      'Saved March 12, "to compare"',
-    );
-    const guessed = dom(render([card([], { why: { text: "maybe solar", source: "inferred" } })]));
-    expect(guessed.querySelector(".worth-lead .meta")?.textContent).toBe('"maybe solar" (a guess)');
-    const small = dom(render([card([]), card([], { why: { text: "x", source: "inferred" } })]));
-    expect(small.querySelector(".worth-small .meta")?.textContent).toBe(
-      'Saved March 12, "x" (a guess)',
-    );
+    expect(said.querySelector(".feature-why")?.textContent).toBe('"to compare"');
+    const parts = (d: Document) =>
+      [...d.querySelectorAll(".worth-feature .card-line > *")].map((p) => p.textContent);
+    expect(parts(said)).toEqual(["example.com", "saved March 12"]);
+    const plain = dom(render([card([], { why: { text: "maybe solar", source: "inferred" } })]));
+    expect(plain.querySelector(".feature-why")?.textContent).toBe("Why (a guess): maybe solar");
+    expect(parts(plain)).toEqual(["example.com"]);
   });
 
-  it("asks why, in amber, only on cards with no why", () => {
-    const html = render([card([], { why: null }), card([]), card([], { why: null })]);
+  it("shows a row's why, a guess as a guess, and its site and date when it has none", () => {
+    const d = dom(
+      render([
+        card([]),
+        card([], { why: { text: "x", source: "inferred" } }),
+        card([], { why: { text: "y", source: "stated" } }),
+        card([], { why: null }),
+      ]),
+    );
+    const rows = [...d.querySelectorAll(".worth-row")];
+    expect(rows[0]?.querySelector(".also-why")?.textContent).toBe("Why (a guess): x");
+    expect(rows[1]?.querySelector(".also-why")?.textContent).toBe('"y"');
+    expect(rows[2]?.querySelector(".also-why")).toBeNull();
+    expect(
+      [...(rows[2]?.querySelectorAll(".card-line > *") ?? [])].map((p) => p.textContent),
+    ).toEqual(["example.com", "saved March 12"]);
+  });
+
+  it("asks why, in amber, on the featured card only", () => {
+    const html = render([card([], { why: null }), card([], { why: null })]);
     const d = dom(html);
     const needy = [...d.querySelectorAll(".needs-you")];
-    expect(needy.map((e) => (e as HTMLElement).dataset.id)).toEqual([String(n - 2), String(n)]);
-    for (const el of needy) {
-      expect(el.tagName).toBe("ARTICLE");
-      expect(el.querySelector(".ask")?.textContent).toContain("Why did you save this?");
-      expect(el.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
-    }
-    expect(d.querySelectorAll("button[data-act=why]")).toHaveLength(2);
-    expect(d.querySelectorAll("form.why-form")).toHaveLength(2);
+    expect(needy).toHaveLength(1);
+    expect(needy[0]?.classList.contains("worth-feature")).toBe(true);
+    expect(needy[0]?.querySelector(".ask")?.textContent).toContain("Why did you save this?");
+    expect(needy[0]?.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
+    expect(needy[0]?.querySelector(".feature-why [data-why-answer]")).not.toBeNull();
+    expect(d.querySelectorAll("button[data-act=why]")).toHaveLength(1);
+    expect(d.querySelector(".worth-row .ask")).toBeNull();
   });
 
-  it("uses amber only for the needs-you card and its Tell me why, never a reason pill or a tile", () => {
+  it("uses amber only for what needs you and its Tell me why, never a reason or a picture", () => {
     const rules = [...themeCss.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel = "", body = ""]) => ({
       sel: sel.trim(),
       body,
     }));
     const amber = rules.filter((r) => /amber/.test(r.body)).map((r) => r.sel);
-    for (const sel of amber)
-      expect(sel, sel).not.toMatch(/reason|tile|worth-image|worth-lead\b(?!\.needs)/);
-    expect(amber).toEqual(expect.arrayContaining([".needs-you", ".tell-why"]));
+    for (const sel of amber) expect(sel, sel).not.toMatch(/reason|tile|image|-pic/);
+    expect(amber).toEqual(expect.arrayContaining([".tell-why"]));
+    expect(amber.some((s) => s.split(",").includes(".needs-you"))).toBe(true);
     const html = render([card([{ kind: "no_why" }], { why: null })]);
-    for (const el of dom(html).querySelectorAll(".reason, .worth-image, .worth-tile")) {
+    for (const el of dom(html).querySelectorAll(".reason, [data-pic]")) {
       expect(el.className).not.toMatch(/amber|needs-you|tell-why/);
     }
   });
@@ -225,7 +340,7 @@ describe("Worth a look today", () => {
       card([], on("loose")),
       card([], on("plain", "needy")),
     ];
-    const d = dom(render(cards, new Map(), catalog));
+    const d = dom(render(cards, { catalog }));
     const classOf = (i: number) =>
       (d.querySelector(`[data-id="${cards[i]?.link.id}"]`) as HTMLElement).className;
     expect(
@@ -248,17 +363,40 @@ describe("Worth a look today", () => {
     };
     const withImage = card([], { snapshot: remote });
     const without = card([], { snapshot: remote });
-    const html = render(
-      [withImage, without],
-      new Map([[withImage.link.id, { version: "v1", fit: "cover" }]]),
-    );
+    const html = render([withImage, without], {
+      images: new Map([[withImage.link.id, { version: "v1", fit: "cover" }]]),
+    });
     expect(outsideRefs(html)).toEqual([]);
     expect(html).not.toContain("images.example");
     const d = dom(html);
-    expect(d.querySelector(".worth-lead img")?.getAttribute("src")).toBe(
+    expect(d.querySelector(".worth-feature img")?.getAttribute("src")).toBe(
       `/images/${withImage.link.id}?v=v1`,
     );
-    expect(d.querySelector(".worth-small img")).toBeNull();
+    expect(d.querySelector(".worth-row img")).toBeNull();
+  });
+
+  it("gives every card, the gone row too, the edit dialog's data, one title marker and one picture", () => {
+    const gone = link();
+    const pictures = new Map<string, PictureInfo>([
+      [gone.id, { own: true, pageVersion: "page-v1", pageFit: "cover" }],
+    ]);
+    const images = new Map<string, ShownPicture>([[gone.id, { version: "own-v1", fit: "cover" }]]);
+    const d = dom(render([card([]), card([])], { gone, pictures, images }));
+    const cards = [...d.querySelectorAll("#worth-cards [data-id]")] as HTMLElement[];
+    expect(cards).toHaveLength(3);
+    for (const c of cards) {
+      expect(c.hasAttribute("data-title"), c.className).toBe(true);
+      expect(c.querySelectorAll("[data-card-title]"), c.className).toHaveLength(1);
+      expect(c.querySelectorAll("[data-pic]"), c.className).toHaveLength(1);
+    }
+    const goneRow = d.querySelector(".worth-gone") as HTMLElement;
+    expect(goneRow.dataset.own).toBe("1");
+    expect(goneRow.dataset.pageVersion).toBe("page-v1");
+    expect(goneRow.dataset.version).toBe("own-v1");
+  });
+
+  it("puts the edit dialog on the page once there are cards", () => {
+    expect(dom(render([card([])])).querySelectorAll("dialog#edit-link")).toHaveLength(1);
   });
 
   it("renders hostile titles, whys and focus text as inert text", () => {
@@ -271,264 +409,14 @@ describe("Worth a look today", () => {
     expect(d.querySelectorAll("main img")).toHaveLength(0);
     expect(d.querySelectorAll("main script")).toHaveLength(0);
     expect(outsideRefs(html)).toEqual([]);
-    expect(d.querySelector(".worth-lead h3")?.textContent).toBe(evil);
-  });
-});
-
-type Answer = { status: number; type?: string; body?: unknown };
-type Sent = { url: string; body: unknown; redirect: unknown; keepalive: unknown };
-const REDIRECT: Answer = { status: 0, type: "opaqueredirect" };
-
-/** The page in linkedom with its scripts, except the menu's, run against it. */
-function load(answer: (sent: Sent) => Answer, links: DigestLink[]) {
-  const html = render(links);
-  const { document, window } = parseHTML(html);
-  const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    .map((m) => m[1] ?? "")
-    .filter((s) => !s.includes("sign-out"))
-    .join("\n");
-  const sent: Sent[] = [];
-  const fetch = async (
-    url: string,
-    init: { body: string; redirect?: string; keepalive?: boolean },
-  ) => {
-    const request = {
-      url,
-      body: JSON.parse(init.body),
-      redirect: init.redirect,
-      keepalive: init.keepalive,
-    };
-    sent.push(request);
-    const a = answer(request);
-    return {
-      status: a.status,
-      ok: a.status >= 200 && a.status < 300,
-      type: a.type ?? "basic",
-      json: async () => {
-        if (a.body === undefined) throw new SyntaxError("no body");
-        return a.body;
-      },
-    };
-  };
-  const location = { reloads: 0, reload: () => location.reloads++ };
-  const onWindow = new Map<string, (event: unknown) => void>();
-  new Function(
-    "document",
-    "fetch",
-    "location",
-    "addEventListener",
-    "setTimeout",
-    "clearTimeout",
-    code,
-  )(
-    document,
-    fetch,
-    location,
-    (type: string, fn: (event: unknown) => void) => onWindow.set(type, fn),
-    () => 0,
-    () => {},
-  );
-  const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  const dispatch = (selector: string, type: string, init: Record<string, unknown> = {}) => {
-    const event = new window.Event(type, { bubbles: true, cancelable: true });
-    Object.assign(event, init);
-    $(selector).dispatchEvent(event);
-    return event;
-  };
-  const settle = () => new Promise((r) => setTimeout(r, 0));
-  const hidden = (id: string) => $(`[data-id="${id}"]`).hidden;
-  return {
-    $,
-    dispatch,
-    sent,
-    settle,
-    location,
-    hidden,
-    fire: (t: string, e: unknown) => onWindow.get(t)?.(e),
-  };
-}
-
-describe("the home page's script", () => {
-  const two = () => [card([]), card([], { why: null })];
-
-  it("records an opening from Open it or the title with a keepalive post, without stopping the link", async () => {
-    const cards = two();
-    const page = load(() => ({ status: 204 }), cards);
-    const first = page.dispatch(".worth-lead a.button", "click");
-    page.dispatch(".worth-small h3 a", "click");
-    await page.settle();
-    expect(first.defaultPrevented).toBe(false);
-    expect(page.sent).toEqual([
-      { url: "/home/opened", body: { id: cards[0]?.link.id }, redirect: "manual", keepalive: true },
-      { url: "/home/opened", body: { id: cards[1]?.link.id }, redirect: "manual", keepalive: true },
-    ]);
-  });
-
-  it("records a middle click, and not a right click", async () => {
-    const page = load(() => ({ status: 204 }), two());
-    page.dispatch(".worth-lead h3 a", "auxclick", { button: 2 });
-    await page.settle();
-    expect(page.sent).toEqual([]);
-    page.dispatch(".worth-lead h3 a", "auxclick", { button: 1 });
-    await page.settle();
-    expect(page.sent.map((s) => s.url)).toEqual(["/home/opened"]);
-  });
-
-  it("Not now hides the card and offers Undo, which sends back the snooze it got and shows the card", async () => {
-    const cards = two();
-    const id = cards[0]?.link.id as string;
-    const snooze = {
-      until: "2026-10-28T10:00:00.000Z",
-      claimedAt: "2026-10-14T10:00:00.000Z",
-      previousSurfacedAt: "2026-09-01T10:00:00.000Z",
-    };
-    const page = load(
-      (s) => (s.url === "/home/snooze" ? { status: 200, body: snooze } : { status: 204 }),
-      cards,
-    );
-    page.dispatch(".worth-lead button[data-act=snooze]", "click");
-    await page.settle();
-    expect(page.sent[0]).toMatchObject({ url: "/home/snooze", body: { id }, redirect: "manual" });
-    expect(page.hidden(id)).toBe(true);
-    expect(page.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
-    page.dispatch("#undo-bar button", "click");
-    await page.settle();
-    expect(page.sent[1]).toMatchObject({ url: "/home/unsnooze" });
-    expect(page.sent[1]?.body).toEqual({ id, ...snooze });
-    expect(page.hidden(id)).toBe(false);
-  });
-
-  it("I'm done hides the card and offers Undo, which puts it back", async () => {
-    const cards = two();
-    const id = cards[1]?.link.id as string;
-    const page = load(() => ({ status: 204 }), cards);
-    page.dispatch(".worth-small button[data-act=archive]", "click");
-    await page.settle();
-    expect(page.sent[0]).toMatchObject({ url: "/home/archive", body: { id } });
-    expect(page.hidden(id)).toBe(true);
-    expect(page.$("#undo-bar span").textContent).toBe("Moved out of your list.");
-    page.dispatch("#undo-bar button", "click");
-    await page.settle();
-    expect(page.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id } });
-    expect(page.hidden(id)).toBe(false);
-  });
-
-  it.each([
-    ["a redirect to the sign-in page", "archive", REDIRECT],
-    ["a 200 instead of a 204", "archive", { status: 200, body: {} }],
-    ["a redirect to the sign-in page", "snooze", REDIRECT],
-    ["a 204 with no snooze", "snooze", { status: 204 }],
-  ])(
-    "puts the card back and offers no Undo when the action gets %s (%s)",
-    async (_, act, answer) => {
-      const cards = two();
-      const page = load(() => answer, cards);
-      page.dispatch(`.worth-lead button[data-act=${act}]`, "click");
-      await page.settle();
-      expect(page.hidden(cards[0]?.link.id as string)).toBe(false);
-      expect(page.$("#undo-bar").hidden).toBe(true);
-      expect(page.$("#home-error").textContent).toMatch(/did not work/);
-    },
-  );
-
-  it.each([
-    ["snooze", "This link is already put off. Reload."],
-    ["archive", "Changed since."],
-  ])(
-    "puts the card back with the refusal's words and offers no Undo when %s gets a 409",
-    async (act, message) => {
-      const cards = two();
-      const page = load(() => ({ status: 409, body: { code: "conflict", message } }), cards);
-      page.dispatch(`.worth-lead button[data-act=${act}]`, "click");
-      await page.settle();
-      expect(page.hidden(cards[0]?.link.id as string)).toBe(false);
-      expect(page.$("#undo-bar").hidden).toBe(true);
-      expect(page.$("#home-error").textContent).toBe(message);
-      expect(page.sent).toHaveLength(1);
-    },
-  );
-
-  it("keeps the card gone and says why when Undo is refused", async () => {
-    const cards = two();
-    const id = cards[0]?.link.id as string;
-    const page = load(
-      (s) =>
-        s.url === "/home/unarchive"
-          ? { status: 409, body: { message: "Changed since." } }
-          : { status: 204 },
-      cards,
-    );
-    page.dispatch(".worth-lead button[data-act=archive]", "click");
-    await page.settle();
-    page.dispatch("#undo-bar button", "click");
-    await page.settle();
-    expect(page.hidden(id)).toBe(true);
-    expect(page.$("#home-error").textContent).toBe("Changed since.");
-  });
-
-  it("Tell me why opens a field; a saved answer replaces the question and the amber", async () => {
-    const cards = two();
-    const id = cards[1]?.link.id as string;
-    const page = load(() => ({ status: 204 }), cards);
-    const form = page.$(".needs-you form.why-form");
-    expect(form.hidden).toBe(true);
-    page.dispatch(".needs-you button[data-act=why]", "click");
-    expect(form.hidden).toBe(false);
-    (form.querySelector("input") as HTMLInputElement).value = "  for the <kitchen>  ";
-    page.dispatch(".needs-you form.why-form", "submit");
-    await page.settle();
-    expect(page.sent).toEqual([
-      {
-        url: "/home/why",
-        body: { id, text: "  for the <kitchen>  " },
-        redirect: "manual",
-        keepalive: undefined,
-      },
-    ]);
-    const article = page.$(`[data-id="${id}"]`);
-    expect(article.classList.contains("needs-you")).toBe(false);
-    expect(article.querySelector(".ask")).toBeNull();
-    expect(article.querySelector(".meta")?.textContent).toBe('Saved March 12, "for the <kitchen>"');
-  });
-
-  it("sends no blank answer, and shows the refusal of one that was not saved", async () => {
-    const cards = two();
-    const page = load(
-      () => ({ status: 409, body: { message: "This link already has a reason. Reload." } }),
-      cards,
-    );
-    page.dispatch(".needs-you button[data-act=why]", "click");
-    const input = page.$(".needs-you form.why-form input") as HTMLInputElement;
-    input.value = "   ";
-    page.dispatch(".needs-you form.why-form", "submit");
-    await page.settle();
-    expect(page.sent).toEqual([]);
-    input.value = "because";
-    page.dispatch(".needs-you form.why-form", "submit");
-    await page.settle();
-    expect(page.$("#home-error").textContent).toBe("This link already has a reason. Reload.");
-    expect(page.$(".needs-you")).not.toBeNull();
-  });
-
-  it("reloads when shown again from the back-forward cache", () => {
-    const page = load(() => ({ status: 204 }), two());
-    page.fire("pageshow", { persisted: false });
-    expect(page.location.reloads).toBe(0);
-    page.fire("pageshow", { persisted: true });
-    expect(page.location.reloads).toBe(1);
+    expect(d.querySelector(".worth-feature h3")?.textContent).toBe(evil);
+    expect(d.querySelector(".worth-row h4")?.textContent).toBe(evil);
   });
 });
 
 it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
   const html = homePage({
-    worth: {
-      links: [card([])],
-      images: new Map(),
-      now: NOW,
-      catalog: [],
-      gone: null,
-      goneCopy: null,
-    },
+    worth: worth([card([])]),
     shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
     spaces: spacesSection([]),
   });
@@ -544,30 +432,434 @@ it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", 
   );
 });
 
-describe("Keep handy on a Worth a look card", () => {
-  const withShelf = (links: DigestLink[]) =>
+const SNOOZE = {
+  until: "2026-10-28T10:00:00.000Z",
+  claimedAt: "2026-10-14T10:00:00.000Z",
+  previousSurfacedAt: "2026-09-01T10:00:00.000Z",
+};
+const REDIRECT: Answer = { status: 0, type: "opaqueredirect" };
+const ROW = {
+  status: "kept",
+  source: "stated",
+  since: "2026-10-14T10:00:00.000Z",
+  answeredAt: null,
+  waitDays: 30,
+};
+
+/** Home with the Handy shelf (empty unless given), run with its scripts. */
+const home = (
+  links: DigestLink[],
+  answer: (s: Post) => Answer = () => ({ status: 204 }),
+  extra: Extra = {},
+) =>
+  runPage(
     homePage({
-      worth: { links, images: new Map(), now: NOW, catalog: [], gone: null, goneCopy: null },
+      worth: worth(links, extra),
+      shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
+      spaces: "",
+    }),
+    answer,
+  );
+const urls = (p: ReturnType<typeof runPage>) => p.sent.map((s) => s.url);
+/** Whether the Worth a look card is hidden; the Handy shelf may hold a tile with the same id. */
+const hidden = (p: ReturnType<typeof runPage>, id: string) =>
+  (p.$(`#worth-cards [data-id="${id}"]`) as HTMLElement).hidden;
+/** Clicks a card's menu row, as the owner opens the ⋯ and picks it. */
+const pick = (p: ReturnType<typeof runPage>, id: string, act: string) => {
+  const menu = p.$(`[data-id="${id}"] details.card-menu`) as HTMLDetailsElement;
+  menu.open = true;
+  p.dispatch(p.$(`[data-id="${id}"] .card-menu button[data-act=${act}]`), "click");
+  return menu;
+};
+const two = () => [card([]), card([])];
+
+describe("the home page's script", () => {
+  it("records an opening from Open it or a row's title with a keepalive post, without stopping the link", async () => {
+    const cards = two();
+    const p = home(cards);
+    const first = p.dispatch(p.$(".worth-feature a.button"), "click");
+    p.dispatch(p.$(".worth-row h4 a"), "click");
+    await p.settle();
+    expect(first.defaultPrevented).toBe(false);
+    expect(p.sent).toEqual([
+      { url: "/home/opened", body: { id: cards[0]?.link.id }, redirect: "manual", keepalive: true },
+      { url: "/home/opened", body: { id: cards[1]?.link.id }, redirect: "manual", keepalive: true },
+    ]);
+  });
+
+  it("Not now on the featured card hides it once put off, and Undo sends back the snooze and shows it", async () => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE } : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    await p.settle();
+    expect(p.sent[0]).toMatchObject({ url: "/home/snooze", body: { id }, redirect: "manual" });
+    expect(hidden(p, id)).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toMatchObject({ url: "/home/unsnooze" });
+    expect(p.sent[1]?.body).toEqual({ id, ...SNOOZE });
+    expect(hidden(p, id)).toBe(false);
+  });
+
+  it("Not now in a row's menu closes the menu, posts once and hides the row", async () => {
+    const cards = two();
+    const id = cards[1]?.link.id as string;
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE } : { status: 204 },
+    );
+    const menu = pick(p, id, "snooze");
+    await p.settle();
+    expect(menu.open).toBe(false);
+    expect(urls(p)).toEqual(["/home/snooze"]);
+    expect(hidden(p, id)).toBe(true);
+  });
+
+  it("sends nothing for a second Not now while the first is unanswered", async () => {
+    const cards = two();
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    answer(null);
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/snooze"]);
+    expect(hidden(p, cards[0]?.link.id as string)).toBe(true);
+  });
+
+  it.each([
+    [
+      "Not now, then I'm done with it",
+      "snooze",
+      "archive",
+      "/home/snooze",
+      "Hidden for two weeks.",
+    ],
+    [
+      "I'm done with it, then Not now",
+      "archive",
+      "snooze",
+      "/home/archive",
+      "Moved out of your list.",
+    ],
+  ])("sends one action for a card: %s before the first is answered", async (_, a, b, url, undo) => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze"
+        ? { status: 200, body: SNOOZE, wait: held }
+        : { status: 204, wait: held },
+    );
+    p.dispatch(p.$(`.feature-quiet button[data-act=${a}]`), "click");
+    p.dispatch(p.$(`.feature-quiet button[data-act=${b}]`), "click");
+    answer(null);
+    await p.settle();
+    expect(urls(p)).toEqual([url]);
+    expect(hidden(p, id)).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe(undo);
+  });
+
+  it("sends nothing from a row's menu while that row's Not now is unanswered", async () => {
+    const cards = two();
+    const id = cards[1]?.link.id as string;
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+    );
+    pick(p, id, "snooze");
+    pick(p, id, "archive");
+    pick(p, id, "keep");
+    answer(null);
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/snooze"]);
+    expect(p.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
+  });
+
+  it("keeps a card deleted while its Not now was out, and frees it again after Undo", async () => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    pick(p, id, "delete-link");
+    await p.settle();
+    expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
+    answer(null);
+    await p.settle();
+    expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
+    expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(hidden(p, id)).toBe(false);
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/snooze", "/links/delete", "/links/restore", "/home/snooze"]);
+    expect(hidden(p, id)).toBe(true);
+  });
+
+  it("I'm done with it on the featured card archives once, hides it, and Undo puts it back", async () => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    const p = home(cards);
+    p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
+    await p.settle();
+    expect(p.sent).toHaveLength(1);
+    expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id } });
+    expect(hidden(p, id)).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id } });
+    expect(hidden(p, id)).toBe(false);
+  });
+
+  it("I'm done with it in a row's menu archives exactly once", async () => {
+    const cards = two();
+    const id = cards[1]?.link.id as string;
+    const p = home(cards);
+    pick(p, id, "archive");
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/archive"]);
+    expect(hidden(p, id)).toBe(true);
+  });
+
+  it.each([
+    ["a redirect to the sign-in page", "archive", REDIRECT],
+    ["a 200 instead of a 204", "archive", { status: 200, body: {} }],
+    ["a redirect to the sign-in page", "snooze", REDIRECT],
+    ["a 204 with no snooze", "snooze", { status: 204 }],
+  ])("keeps the card and offers no Undo when %s answers %s", async (_, act, answer) => {
+    const cards = two();
+    const p = home(cards, () => answer);
+    p.dispatch(p.$(`.feature-quiet button[data-act=${act}]`), "click");
+    await p.settle();
+    expect(hidden(p, cards[0]?.link.id as string)).toBe(false);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect(p.$("#home-error").textContent).toMatch(/did not work/);
+  });
+
+  it.each([
+    ["snooze", "This link is already put off. Reload."],
+    ["archive", "Changed since."],
+  ])("keeps the card with the refusal's words when %s gets a 409", async (act, message) => {
+    const cards = two();
+    const p = home(cards, () => ({ status: 409, body: { code: "conflict", message } }));
+    p.dispatch(p.$(`.feature-quiet button[data-act=${act}]`), "click");
+    await p.settle();
+    expect(hidden(p, cards[0]?.link.id as string)).toBe(false);
+    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect(p.$("#home-error").textContent).toBe(message);
+    expect(p.sent).toHaveLength(1);
+  });
+
+  it("keeps the card gone and says why when Undo is refused", async () => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    const p = home(cards, (s) =>
+      s.url === "/home/unarchive"
+        ? { status: 409, body: { message: "Changed since." } }
+        : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
+    await p.settle();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(hidden(p, id)).toBe(true);
+    expect(p.$("#home-error").textContent).toBe("Changed since.");
+  });
+
+  it("★ a Not now refused after I'm done with it went through leaves the card out", async () => {
+    // [Hiding at Not now's click and showing the card again on its refusal, restoring an archived card.]
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    let archived = (_: unknown) => {};
+    let refused = (_: unknown) => {};
+    const archive = new Promise((r) => (archived = r));
+    const snooze = new Promise((r) => (refused = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/archive"
+        ? { status: 204, wait: archive }
+        : s.url === "/home/snooze"
+          ? {
+              status: 409,
+              body: {
+                code: "conflict",
+                message: "This link is already moved out of your list. Reload.",
+              },
+              wait: snooze,
+            }
+          : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    archived(null);
+    await p.settle();
+    expect(hidden(p, id)).toBe(true);
+    refused(null);
+    await p.settle();
+    expect(hidden(p, id)).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe("Moved out of your list.");
+  });
+
+  it("Tell me why on the featured card saves the answer in place of the question and the amber", async () => {
+    const cards = [card([], { why: null }), card([])];
+    const id = cards[0]?.link.id as string;
+    const p = home(cards);
+    const form = p.$(".needs-you form.why-form");
+    expect(form.hidden).toBe(true);
+    p.dispatch(p.$(".needs-you button[data-act=why]"), "click");
+    expect(form.hidden).toBe(false);
+    (form.querySelector("input") as HTMLInputElement).value = "  for the <kitchen>  ";
+    p.dispatch(form, "submit");
+    await p.settle();
+    expect(p.sent).toEqual([
+      {
+        url: "/home/why",
+        body: { id, text: "  for the <kitchen>  " },
+        redirect: "manual",
+        keepalive: undefined,
+      },
+    ]);
+    const article = p.$(`[data-id="${id}"]`);
+    expect(article.classList.contains("needs-you")).toBe(false);
+    expect(article.querySelector(".ask")).toBeNull();
+    const answer = article.querySelector(".feature-why [data-why-answer]") as HTMLElement;
+    expect(answer.hidden).toBe(false);
+    expect(answer.textContent).toBe('"for the <kitchen>"');
+  });
+
+  it("sends no blank answer, and shows the refusal of one that was not saved", async () => {
+    const p = home([card([], { why: null })], () => ({
+      status: 409,
+      body: { message: "This link already has a reason. Reload." },
+    }));
+    p.dispatch(p.$(".needs-you button[data-act=why]"), "click");
+    const input = p.$(".needs-you form.why-form input") as HTMLInputElement;
+    input.value = "   ";
+    p.dispatch(p.$(".needs-you form.why-form"), "submit");
+    await p.settle();
+    expect(p.sent).toEqual([]);
+    input.value = "because";
+    p.dispatch(p.$(".needs-you form.why-form"), "submit");
+    await p.settle();
+    expect(p.$("#home-error").textContent).toBe("This link already has a reason. Reload.");
+    expect(p.$(".needs-you")).not.toBeNull();
+  });
+
+  it("Delete link on the only card takes it out, focuses the page's heading and offers Undo", async () => {
+    const cards = [card([])];
+    const id = cards[0]?.link.id as string;
+    const p = home(cards);
+    pick(p, id, "delete-link");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/delete"]);
+    expect(p.document.querySelector(`[data-id="${id}"]`)).toBeNull();
+    expect(p.focused().at(-2)?.tagName).toBe("H1");
+    expect(p.focused().at(-1)).toBe(p.$("#undo-bar button"));
+    expect(p.$("#undo-bar span").textContent).toBe("Link deleted.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/delete", "/links/restore"]);
+    expect(p.document.querySelector(`[data-id="${id}"]`)).not.toBeNull();
+  });
+
+  it("Remove saved copy hides the featured card's Saved copy link", async () => {
+    const cards = [card([])];
+    const id = cards[0]?.link.id as string;
+    const p = home(cards, () => ({ status: 204 }), { copies: new Map([[id, COPY]]) });
+    pick(p, id, "remove-copy");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/copy/remove"]);
+    expect((p.$(".worth-feature .saved-copy") as HTMLElement).hidden).toBe(true);
+  });
+
+  it.each([
+    ["the featured card", 0, "feature-pic"],
+    ["a row", 1, "also-pic"],
+  ])("Edit on %s shows the saved title and picture there", async (_, i, box) => {
+    const cards = two();
+    const id = cards[i]?.link.id as string;
+    const p = home(cards, (s) =>
+      s.url === "/links/edit"
+        ? {
+            status: 200,
+            body: {
+              title: "Renamed",
+              shown: "Renamed",
+              url: cards[i]?.link.url,
+              initials: "RE",
+              version: null,
+              fit: null,
+              picture: { own: false, pageVersion: null, pageFit: null },
+              editId: "e1",
+            },
+          }
+        : { status: 204 },
+    );
+    stubDialog(p);
+    pick(p, id, "edit");
+    (p.$("#edit-title") as HTMLInputElement).value = "Renamed";
+    p.dispatch(p.$("#edit-link form"), "submit");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/edit"]);
+    expect(p.$(`[data-id="${id}"] [data-card-title] a`).textContent).toBe("Renamed");
+    const pic = p.$(`[data-id="${id}"] [data-pic]`);
+    expect(pic.className).toBe(`${box} initials-box`);
+    expect(p.$("#home-error").textContent).toBe("");
+  });
+});
+
+it("reloads when shown again from the back-forward cache", () => {
+  const html = render(two());
+  const { document, DOMParser } = parseHTML(html);
+  const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((m) => m[1] ?? "")
+    .filter((s) => !s.includes("sign-out"))
+    .join("\n");
+  const location = { reloads: 0, reload: () => location.reloads++ };
+  const onWindow = new Map<string, (event: unknown) => void>();
+  new Function("document", "location", "addEventListener", "DOMParser", "window", code)(
+    document,
+    location,
+    (type: string, fn: (event: unknown) => void) => onWindow.set(type, fn),
+    DOMParser,
+    document.defaultView,
+  );
+  onWindow.get("pageshow")?.({ persisted: false });
+  expect(location.reloads).toBe(0);
+  onWindow.get("pageshow")?.({ persisted: true });
+  expect(location.reloads).toBe(1);
+});
+
+describe("Keep handy on a Worth a look card", () => {
+  const withShelf = (links: DigestLink[], extra: Extra = {}) =>
+    homePage({
+      worth: worth(links, extra),
       shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
       spaces: "",
     });
-  const ROW = {
-    status: "kept",
-    source: "stated",
-    since: "2026-10-14T10:00:00.000Z",
-    answeredAt: null,
-    waitDays: 30,
-  };
 
-  it("hides the card, keeps the link, puts it on the shelf, and Undo sends back the rows and shows the card", async () => {
-    const cards = [card([]), card([])];
-    const id = cards[0]?.link.id as string;
+  it("from a row's menu hides the row, puts the link on the shelf, and Undo sends back the rows and shows it", async () => {
+    const cards = two();
+    const id = cards[1]?.link.id as string;
     const onShelf = homePage({
-      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null, goneCopy: null },
+      worth: worth([]),
       shelf: handyShelf({
         items: [
           {
-            link: cards[0]?.link as Link,
+            link: cards[1]?.link as Link,
             tool: {
               status: "kept",
               source: "stated",
@@ -593,10 +885,10 @@ describe("Keep handy on a Worth a look card", () => {
           ? { status: 200, body: { tool: ROW, previous: null } }
           : { status: 204 },
     );
-    p.dispatch(p.$(".worth-lead button[data-act=keep]"), "click");
+    pick(p, id, "keep");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/tools/keep", body: { id }, redirect: "manual" });
-    expect((p.$(".worth-lead") as HTMLElement).hidden).toBe(true);
+    expect(hidden(p, id)).toBe(true);
     expect(p.document.querySelector(`#handy-shelf [data-id="${id}"]`)).not.toBeNull();
     expect(p.$("#undo-bar span").textContent).toBe("Kept on your Handy shelf.");
     p.dispatch(p.$("#undo-bar button"), "click");
@@ -606,83 +898,125 @@ describe("Keep handy on a Worth a look card", () => {
       tool: ROW,
       previous: null,
     });
-    expect((p.$(".worth-lead") as HTMLElement).hidden).toBe(false);
-    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep", "/", "/tools/undo", "/"]);
-    expect(p.sent.some((s) => s.url === "/home/opened")).toBe(false);
+    expect(hidden(p, id)).toBe(false);
+    expect(urls(p)).toEqual(["/tools/keep", "/", "/tools/undo", "/"]);
   });
 
-  it("puts the card back with the refusal's words, offers no Undo and refreshes nothing on a 409", async () => {
+  it("keeps the card with the refusal's words, offers no Undo and refreshes nothing on a 409", async () => {
     const cards = [card([])];
     const message = "That link's Keep handy state changed. Reload the page.";
     const p = runPage(withShelf(cards), () => ({
       status: 409,
       body: { code: "conflict", message },
     }));
-    p.dispatch(p.$(".worth-lead button[data-act=keep]"), "click");
+    pick(p, cards[0]?.link.id as string, "keep");
     await p.settle();
-    expect((p.$(".worth-lead") as HTMLElement).hidden).toBe(false);
+    expect(hidden(p, cards[0]?.link.id as string)).toBe(false);
     expect(p.$("#home-error").textContent).toBe(message);
     expect(p.$("#undo-bar").hidden).toBe(true);
-    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep"]);
+    expect(urls(p)).toEqual(["/tools/keep"]);
+  });
+
+  it("Not handy anymore on a pick kept by now leaves the card, swaps the row, and Undo swaps it back", async () => {
+    const cards = [card([])];
+    const id = cards[0]?.link.id as string;
+    const views = new Map<string, LinkView>([
+      [id, { handy: { status: "kept", source: "stated", due: false }, gone: null }],
+    ]);
+    const moved = { tool: { ...ROW, status: "declined" }, previous: ROW };
+    const p = runPage(withShelf(cards, { views }), (s) =>
+      s.body === undefined
+        ? { status: 200, text: withShelf(cards, { views }) }
+        : s.url === "/tools/not-handy"
+          ? { status: 200, body: moved }
+          : { status: 204 },
+    );
+    pick(p, id, "not-handy");
+    await p.settle();
+    const row = (act: string) => p.$(`[data-id="${id}"] .card-menu button[data-act=${act}]`);
+    expect(hidden(p, id)).toBe(false);
+    expect(row("keep").hidden).toBe(false);
+    expect(row("not-handy").hidden).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent.find((s) => s.url === "/tools/undo")?.body).toEqual({ id, ...moved });
+    expect(row("keep").hidden).toBe(true);
+    expect(row("not-handy").hidden).toBe(false);
+    expect(urls(p)).toEqual(["/tools/not-handy", "/", "/tools/undo", "/"]);
   });
 });
 
-describe("the Worth a look gone card (#128)", () => {
-  const goneLink = () => link({ why: null });
-  const html = (links: DigestLink[], gone: Link | null) => render(links, new Map(), [], gone);
+describe("the Worth a look gone row (#128)", () => {
   const ROWS = { check: { result: "alive" }, previous: { result: "dead" } };
 
-  it("is the last card in the side column, small, amber, with its two buttons and nothing else", () => {
-    const g = goneLink();
-    const d = dom(html([card([]), card([]), card([])], g));
-    const side = [...d.querySelectorAll(".worth-side > article")];
-    const last = side[side.length - 1] as HTMLElement;
+  it("is the last row, amber while it seems gone, with the gone line and the six-row menu", () => {
+    const g = link({ why: null });
+    const d = dom(render([card([]), card([]), card([])], { gone: g }));
+    const rows = [...d.querySelectorAll(".worth-row")];
+    const last = rows[rows.length - 1] as HTMLElement;
+    expect(rows).toHaveLength(3);
     expect(last.dataset.id).toBe(g.id);
-    expect(side).toHaveLength(3);
-    expect(last.className).toMatch(/worth-small worth-gone needs-you/);
-    expect(last.querySelector("p.small")?.textContent).toBe("This page seems gone");
-    expect([...last.querySelectorAll("button")].map((b) => [b.dataset.act, b.textContent])).toEqual(
-      [
-        ["archive", "I'm done with it"],
-        ["still-works", "It still works"],
-      ],
+    expect(last.classList.contains("worth-gone")).toBe(true);
+    expect(last.querySelector("[data-gone] p.small")?.textContent).toBe("This page seems gone");
+    expect(shownButtons(last)).toEqual([
+      "still-works It still works",
+      "gone-done I'm done with it",
+    ]);
+    expect(menuRows(last)[0]).toBe("archive");
+    expect(menuRows(last)).toHaveLength(6);
+    expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
+    expect(last.querySelector(".ask")).toBeNull();
+    expect(themeCss).toMatch(
+      /,\.worth-gone:has\(\[data-gone\]:not\(\[hidden\]\)\)\{outline:2px solid var\(--amber\)/,
     );
-    expect(last.textContent).not.toMatch(/Not now|Keep handy|Tell me why/);
-    expect(last.querySelector(".worth-body")?.textContent?.replace(g.title ?? "", "")).not.toMatch(
-      /\d/,
-    );
-    expect(last.querySelector("h3 a")?.getAttribute("href")).toBe(g.url);
   });
 
-  it("stands alone and small when there are no reading picks, never in the lead slot", () => {
-    const d = dom(html([], goneLink()));
+  it("keeps Read the saved copy on its warning line when it has a copy, and only then", () => {
+    const g = link();
+    const withCopy = dom(render([card([])], { gone: g, copies: new Map([[g.id, COPY]]) }));
+    const reads = [...withCopy.querySelectorAll(".worth-gone [data-act=read-copy]")];
+    expect(reads.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Read the saved copy", copyHref(g.id)],
+    ]);
+    expect(reads[0]?.previousElementSibling?.hasAttribute("data-gone")).toBe(true);
+    expect(menuRows(withCopy.querySelector(".worth-gone"))).toContain("remove-copy");
+    expect(
+      dom(render([card([])], { gone: link() })).querySelector("[data-act=read-copy]"),
+    ).toBeNull();
+    expect(themeCss).toContain("[data-gone][hidden]+.gone-copy{display:none}");
+  });
+
+  it("stands alone when there are no reading picks, with no Also today heading", () => {
+    const d = dom(render([], { gone: link() }));
     expect(d.querySelector("#worth")?.textContent).toBe("Worth a look today");
-    expect(d.querySelectorAll(".worth-lead")).toHaveLength(0);
-    const only = d.querySelectorAll("#worth-cards article");
-    expect(only).toHaveLength(1);
-    expect(only[0]?.className).toMatch(/worth-small worth-gone/);
-    // The theme sizes a side column that is the grid's first child as one small card.
-    expect(d.getElementById("worth-cards")?.firstElementChild?.className).toBe("worth-side");
+    expect(d.querySelector(".worth-feature")).toBeNull();
+    expect(d.querySelector(".also-today")).toBeNull();
+    expect(d.querySelectorAll("#worth-cards .worth-gone")).toHaveLength(1);
   });
 
   it("leaves home without a Worth a look section when there is nothing at all", () => {
-    expect(dom(html([], null)).querySelector(".worth")).toBeNull();
+    expect(dom(render([])).querySelector(".worth")).toBeNull();
   });
 
-  const open = (answer: (s: Sent) => Answer = () => ({ status: 204 })) => {
-    const g = goneLink();
-    const p = runPage(html([card([])], g), answer);
-    return { p, g, gone: () => p.$(".worth-gone") as HTMLElement };
+  const open = (answer: (s: Post) => Answer = () => ({ status: 204 }), copy = false) => {
+    const g = link();
+    const p = home([card([])], answer, {
+      gone: g,
+      copies: copy ? new Map([[g.id, COPY]]) : new Map(),
+    });
+    return { p, g, row: () => p.$(".worth-gone") as HTMLElement };
   };
 
-  it("It still works posts the id, hides the card, and Undo sends back the answer's rows and shows it", async () => {
-    const { p, g, gone } = open((s) =>
+  it("It still works hides the warning and keeps the row; Undo brings the warning back", async () => {
+    const { p, g, row } = open((s) =>
       s.url === "/links/still-works" ? { status: 200, body: ROWS } : { status: 204 },
     );
     p.dispatch(p.$(".worth-gone button[data-act=still-works]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/links/still-works", body: { id: g.id } });
-    expect(gone().hidden).toBe(true);
+    expect(row().hidden).toBe(false);
+    expect((row().querySelector("[data-gone]") as HTMLElement).hidden).toBe(true);
     expect(p.$("#undo-bar span").textContent).toBe("Marked as working.");
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
@@ -690,44 +1024,28 @@ describe("the Worth a look gone card (#128)", () => {
       url: "/links/still-works/undo",
       body: { id: g.id, ...ROWS },
     });
-    expect(gone().hidden).toBe(false);
+    expect((row().querySelector("[data-gone]") as HTMLElement).hidden).toBe(false);
   });
 
-  it("an Undo the server refuses shows its message and leaves the card hidden", async () => {
-    const message = "This link was checked since, so it stays as it is.";
-    const { p, gone } = open((s) =>
-      s.url === "/links/still-works"
-        ? { status: 200, body: ROWS }
-        : { status: 409, body: { code: "conflict", message } },
-    );
-    p.dispatch(p.$(".worth-gone button[data-act=still-works]"), "click");
+  it("I'm done with it on the warning line archives once, and Undo unarchives", async () => {
+    const { p, g, row } = open();
+    p.dispatch(p.$(".worth-gone button[data-act=gone-done]"), "click");
     await p.settle();
-    p.dispatch(p.$("#undo-bar button"), "click");
-    await p.settle();
-    expect(gone().hidden).toBe(true);
-    expect(p.$("#home-error").textContent).toBe(message);
-  });
-
-  it("a refused It still works puts the card back with the message and offers no Undo", async () => {
-    const message = "This link isn't marked as gone. Reload the page.";
-    const { p, gone } = open(() => ({ status: 409, body: { code: "conflict", message } }));
-    p.dispatch(p.$(".worth-gone button[data-act=still-works]"), "click");
-    await p.settle();
-    expect(gone().hidden).toBe(false);
-    expect(p.$("#home-error").textContent).toBe(message);
-    expect(p.$("#undo-bar").hidden).toBe(true);
-  });
-
-  it("I'm done with it archives as on any card, and Undo unarchives", async () => {
-    const { p, g, gone } = open();
-    p.dispatch(p.$(".worth-gone button[data-act=archive]"), "click");
-    await p.settle();
-    expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: g.id } });
-    expect(gone().hidden).toBe(true);
+    expect(urls(p)).toEqual(["/home/archive"]);
+    expect(p.sent[0]).toMatchObject({ body: { id: g.id } });
+    expect(row().hidden).toBe(true);
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toMatchObject({ url: "/home/unarchive", body: { id: g.id } });
-    expect(gone().hidden).toBe(false);
+    expect(row().hidden).toBe(false);
+  });
+
+  it("Remove saved copy hides the warning line's Read the saved copy", async () => {
+    const { p, g } = open(() => ({ status: 204 }), true);
+    pick(p, g.id, "remove-copy");
+    await p.settle();
+    expect(urls(p)).toEqual(["/links/copy/remove"]);
+    expect((p.$(".worth-gone .gone-copy") as HTMLElement).hidden).toBe(true);
   });
 });
 
@@ -740,15 +1058,15 @@ describe("the Worth a look cards' pictures", () => {
       (c: string) => `div.${c}.icon-box > img.site-icon`,
     ],
     ["none", undefined, (c: string) => `div.${c}.initials-box > span.pic-initials`],
-  ] as const)("renders %s in the lead, a small card and the gone card", (_, picture, sel) => {
-    const lead = card([]);
-    const small = card([]);
+  ] as const)("renders %s on the featured card, a row and the gone row", (_, picture, sel) => {
+    const feature = card([]);
+    const row = card([]);
     const gone = link();
     const images = new Map<string, ShownPicture>();
-    if (picture) for (const l of [lead.link, small.link, gone]) images.set(l.id, picture);
-    const d = dom(render([lead, small], images, [], gone));
-    expect(d.querySelector(`.worth-lead ${sel("worth-image")}`)).not.toBeNull();
-    expect(d.querySelector(`.worth-small:not(.worth-gone) ${sel("worth-tile")}`)).not.toBeNull();
-    expect(d.querySelector(`.worth-gone ${sel("worth-tile")}`)).not.toBeNull();
+    if (picture) for (const l of [feature.link, row.link, gone]) images.set(l.id, picture);
+    const d = dom(render([feature, row], { images, gone }));
+    expect(d.querySelector(`.worth-feature ${sel("feature-pic")}`)).not.toBeNull();
+    expect(d.querySelector(`.worth-row:not(.worth-gone) ${sel("also-pic")}`)).not.toBeNull();
+    expect(d.querySelector(`.worth-gone ${sel("also-pic")}`)).not.toBeNull();
   });
 });

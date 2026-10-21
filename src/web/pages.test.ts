@@ -29,7 +29,6 @@ const EMPTY_HOME = {
     now: new Date(0),
     catalog: [],
     gone: null,
-    goneCopy: null,
   },
   shelf: "",
   spaces: "",

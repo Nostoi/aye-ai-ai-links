@@ -16,7 +16,7 @@ export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: "I'm don
  */
 export const doneLinkScript = (root: string, error: string) => `const doneCard = (() => {
   const busy = new WeakSet();
-  return async (card) => {
+  const done = async (card) => {
     if (busy.has(card)) return;
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const doneAlert = document.getElementById(${JSON.stringify(error)});
@@ -36,6 +36,8 @@ export const doneLinkScript = (root: string, error: string) => `const doneCard =
       else doneAlert.textContent = await failure(back);
     });
   };
+  done.busy = busy;
+  return done;
 })();
 {
 const doneRoot = document.getElementById(${JSON.stringify(root)});

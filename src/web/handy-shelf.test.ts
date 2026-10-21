@@ -326,7 +326,6 @@ const NO_WORTH: WorthCards = {
   now: new Date("2026-10-16T00:00:00Z"),
   catalog: [],
   gone: null,
-  goneCopy: null,
 };
 const home = (items: ShelfItem[], suggestions: ToolItem[] = []) =>
   homePage({ worth: NO_WORTH, shelf: render(items, suggestions), spaces: "" });

@@ -2,6 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { SPACE_COLORS } from "../core/tag-space.js";
 import { editDialog } from "./edit-link.js";
+import { tile } from "./pages.js";
 import { askCss, themeCss, tokens } from "./theme.js";
 
 const channel = (n: number) => {
@@ -226,6 +227,26 @@ describe("the Handy tiles", () => {
     ["any card's Tell me why", `<div>${title}${ask(false)}${line}</div>`, ".tell-why"],
     ["any card's open why field", `<div>${title}${ask(true)}${line}</div>`, ".why-form input"],
     ["any card's why Save", `<div>${title}${ask(true)}${line}</div>`, ".why-form button"],
+    [
+      "Home's featured title",
+      `<main><article class="worth-card worth-feature">${title}<div class="feature-why"><p>"x"</p></div>${line}</article></main>`,
+      "h3 a",
+    ],
+    [
+      "Home's featured Tell me why",
+      `<main><article class="worth-card worth-feature">${title}<div class="feature-why">${ask(false)}</div>${line}</article></main>`,
+      ".tell-why",
+    ],
+    [
+      "Home's featured open why field",
+      `<main><article class="worth-card worth-feature">${title}<div class="feature-why">${ask(true)}</div>${line}</article></main>`,
+      ".why-form input",
+    ],
+    [
+      "Home's featured why Save",
+      `<main><article class="worth-card worth-feature">${title}<div class="feature-why">${ask(true)}</div>${line}</article></main>`,
+      ".why-form button",
+    ],
   ])("lets %s, not Saved copy, take a tap where they overlap", (_, html, pick) => {
     const target = el(html, pick);
     const copy = target.ownerDocument.querySelector(".saved-copy") as Element;
@@ -247,6 +268,24 @@ describe("the Handy tiles", () => {
       expect(around.filter(Boolean), width).toEqual([]);
       expect(sideOf(copy, width).filter(Boolean), width).toEqual([]);
     }
+  });
+
+  it("★ leaves a Handy tile's title link unplaced, so its overlay makes the whole tile the link", () => {
+    // [A title rule keyed on data-card-title, or shared with the Worth cards, placing it.]
+    const html =
+      '<article class="handy-tile"><div class="handy-caption"><h3 data-card-title><a href="/x">T</a></h3></div></article>';
+    for (const width of ["desktop", "phone"] as const) {
+      expect(computed(el(html, "h3 a"), "position", width), width).toBeUndefined();
+    }
+  });
+
+  it("gives a Handy tile its own card surface, corners and shadow, shared with no other card", () => {
+    const own = rule(".handy-tile");
+    for (const part of ["background:var(--surface)", "border-radius:18px", "box-shadow:"]) {
+      expect(own).toContain(part);
+    }
+    expect(themeCss).not.toMatch(/(^|\}|,)[^{}]*\.worth[^{}]*,\.handy-tile[ {,]/m);
+    expect(themeCss).not.toMatch(/(^|\}|,)\.handy-tile[^{}]*,[^{}]*\.worth/m);
   });
 
   it("spaces every dot on the grey line alike: no part puts a gap before its own dot", () => {
@@ -536,12 +575,12 @@ describe("a picture-less card in a coloured space (#193)", () => {
       `<li class="link-row space-clay"><div class="row-pic initials-box">${initials}</div></li>`,
     ],
     [
-      "Worth a look's lead",
-      `<article class="worth-card space-clay"><div class="worth-image initials-box">${initials}</div></article>`,
+      "Home's featured card",
+      `<article class="worth-card worth-feature space-clay"><div class="feature-pic initials-box">${initials}</div></article>`,
     ],
     [
-      "Worth a look's small card",
-      `<article class="worth-card worth-small space-clay"><div class="worth-tile initials-box">${initials}</div></article>`,
+      "an Also today row",
+      `<article class="worth-row space-clay"><div class="also-pic initials-box">${initials}</div></article>`,
     ],
     [
       "a Handy tile",
@@ -599,8 +638,8 @@ describe("icons and initials", () => {
       }
     },
   );
-  it.each(["row-pic", "worth-image", "tile", "worth-tile", "handy-image"])(
-    "★ centres a div.%s box with flex",
+  it.each(["row-pic", "feature-pic", "tile", "also-pic", "handy-image"])(
+    "★ centres a div.%s box with flex on a wide screen",
     (cls) => {
       expect(computed(el(`<div class="${cls} icon-box"></div>`, "div"), "display", "desktop")).toBe(
         "flex",
@@ -621,8 +660,8 @@ describe("icons and initials", () => {
     expect(computed(tile, "--icon", "desktop")).toBe("72px");
     expect(computed(tile, "--icon", "phone")).toBe("56px");
     expect(
-      computed(el('<div class="worth-image icon-box"></div>', "div"), "--icon", "desktop"),
-    ).toBe("112px");
+      computed(el('<div class="feature-pic icon-box"></div>', "div"), "--icon", "desktop"),
+    ).toBe("80px");
   });
   it("puts the icon on the plate token, light in both modes, and drops .handy-initials", () => {
     expect(tokens.light.plate).toBe("#FFFFFF");
@@ -630,6 +669,115 @@ describe("icons and initials", () => {
     expect(computed(preview, "background", "desktop")).toBe("var(--plate)");
     expect(themeCss).not.toContain("handy-initials");
   });
+});
+
+describe("Home's Worth a look cards (#195)", () => {
+  const feature = (inner: string, pick: string) =>
+    el(`<article class="worth-card worth-feature">${inner}</article>`, pick);
+  const row = (inner: string, pick: string) =>
+    el(`<div class="worth-rows"><article class="worth-row">${inner}</article></div>`, pick);
+  const areas = (width: "desktop" | "phone") =>
+    computed(feature("", "article"), "grid-template-areas", width) ?? "";
+
+  it("puts the featured picture at 120px on a wide screen and 64px on a phone", () => {
+    const pic = feature('<div class="feature-pic"></div>', ".feature-pic");
+    expect(computed(pic, "width", "desktop")).toBe("120px");
+    expect(computed(pic, "height", "desktop")).toBe("120px");
+    expect(computed(pic, "width", "phone")).toBe("64px");
+    expect(computed(pic, "height", "phone")).toBe("64px");
+  });
+
+  it("sets Open it beside the quiet pair on a wide screen; on a phone, full width with the ⋯ beside it and the pair below", () => {
+    expect(areas("desktop")).toContain('"open quiet');
+    expect(areas("desktop")).toMatch(/"reason reason reason menu"/);
+    expect(areas("phone")).toContain('"open menu"');
+    expect(areas("phone")).toContain('"quiet quiet"');
+    const open = feature(
+      '<div class="feature-open"><a class="button primary">Open it</a></div>',
+      "a",
+    );
+    expect(computed(open, "width", "phone")).toBe("100%");
+    expect(computed(open, "justify-content", "phone")).toBe("center");
+  });
+
+  it("keeps I'm done with it and Not now as quiet text buttons at least 44px tall", () => {
+    const quiet = feature(
+      '<div class="feature-quiet"><button data-act="archive">I\'m done with it</button></div>',
+      "button",
+    );
+    for (const width of ["desktop", "phone"] as const) {
+      expect(computed(quiet, "background", width), width).toBe("none");
+      expect(computed(quiet, "border", width), width).toBe("0");
+      expect(
+        Number.parseInt(computed(quiet, "min-height", width) ?? "", 10),
+      ).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  it.each([
+    ["initials", undefined],
+    ["a site icon", { version: "v1", fit: "contain" as const }],
+    ["a cover picture", { version: "v1", fit: "cover" as const }],
+  ])(
+    "hides a row's picture of %s on a phone, leaving it in the page for the edit dialog",
+    (_, picture) => {
+      const link = {
+        id: "1",
+        url: "https://example.com/a",
+        urlKey: "example.com/a",
+        title: "Batteries",
+        summary: null,
+        why: null,
+        tags: [],
+        savedAt: new Date(0),
+        savedBy: "t",
+        lastOpenedAt: null,
+        lastSurfacedAt: null,
+        snoozedUntil: null,
+        state: "active" as const,
+        snapshot: null,
+      };
+      const pic = row(tile(link, picture, "also-pic"), "[data-pic]");
+      expect(computed(pic, "display", "desktop")).not.toBe("none");
+      expect(computed(pic, "display", "phone")).toBe("none");
+    },
+  );
+
+  it("gives each card's ⋯ its own cell instead of the card's corner", () => {
+    const fm = feature('<details class="card-menu"></details>', "details");
+    const rm = row('<details class="card-menu"></details>', "details");
+    for (const menu of [fm, rm]) expect(computed(menu, "position", "desktop")).toBe("relative");
+    expect(computed(fm, "grid-area", "desktop")).toBe("menu");
+  });
+
+  it("shows the reason in its space's colour, mixed toward ink, and never amber", () => {
+    const reason = feature('<p class="reason"></p>', ".reason");
+    const color = computed(reason, "color", "desktop") ?? "";
+    expect(color).toContain("var(--space,var(--soft))");
+    expect(color).not.toContain("amber");
+  });
+
+  it.each([
+    ["every card shown", false, [false, false], true],
+    ["one row taken out", false, [true, false], true],
+    ["every row taken out", false, [true, true], false],
+    ["the featured card taken out", true, [false, false], false],
+  ])(
+    "shows the Also today heading only between a shown featured card and a shown row, with %s",
+    (_, featureHidden, hidden, shows) => {
+      const feature = `<article class="worth-card worth-feature"${featureHidden ? " hidden" : ""}></article>`;
+      const rows = hidden
+        .map((h) => `<article class="worth-row"${h ? " hidden" : ""}></article>`)
+        .join("");
+      for (const w of ["desktop", "phone"] as const) {
+        const heading = el(
+          `<div id="worth-cards">${feature}<h3 class="also-today">Also today</h3><div class="worth-rows">${rows}</div></div>`,
+          "h3",
+        );
+        expect(computed(heading, "display", w) !== "none", w).toBe(shows);
+      }
+    },
+  );
 });
 
 describe("the edit dialog's Delete", () => {

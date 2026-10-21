@@ -6,6 +6,7 @@ import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage } from "./pages.js";
 import { spaceHref, spacePage } from "./space-page.js";
 import { tagsPage } from "./tags-page.js";
+import { themeCss } from "./theme.js";
 
 const ORIGIN = "https://links.example";
 const NOW = new Date("2026-10-14T12:00:00Z");
@@ -114,11 +115,11 @@ describe("a space page", () => {
     const links = [link("a", { tags: onTag("baking") })];
     const html = space({ tag: kept, catalog: [kept], links });
     expect(dom(html).querySelector(".band")?.className).not.toMatch(/space-/);
-    expect(dom(html).querySelector(".link-card")?.className).not.toMatch(/space-/);
+    expect(dom(html).querySelector(".link-row")?.className).not.toMatch(/space-/);
     const pinned = { ...kept, pinned: true };
     const again = space({ tag: pinned, catalog: [pinned], links });
     expect(dom(again).querySelector(".band")?.className).toContain("space-violet");
-    expect(dom(again).querySelector(".link-card")?.className).toContain("space-violet");
+    expect(dom(again).querySelector(".link-row")?.className).toContain("space-violet");
   });
 
   it("gives an unpinned tag with no color a page with a neutral band", () => {
@@ -159,7 +160,7 @@ describe("a space page", () => {
   it("lists the links newest first as given, each in the space's color, opening in a new tab", () => {
     const links = [link("2", { tags: onTag("home batteries") }), link("1")];
     const html = space({ links, images: new Map([["2", { version: "v2", fit: "cover" }]]) });
-    const cards = [...dom(html).querySelectorAll("#space-links > li")];
+    const cards = [...dom(html).querySelectorAll("#space-links .link-row")];
     expect(cards.map((c) => c.querySelector("h3")?.textContent?.trim())).toEqual([
       "Link 2",
       "Link 1",
@@ -169,24 +170,48 @@ describe("a space page", () => {
     const a = cards[0]?.querySelector("h3 a");
     expect(a?.getAttribute("target")).toBe("_blank");
     expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(lineParts(cards[0])).toEqual(["ex.com", "saved October 1"]);
-    expect(html).toContain("because 2");
+    expect(lineParts(cards[0])).toEqual(["ex.com"]);
+    expect(cards[0]?.querySelector(".row-why")?.textContent).toBe('"because 2"');
+  });
+
+  it("groups the rows by the UTC month they were saved, as All links does", () => {
+    const html = space({
+      links: [
+        link("2", { savedAt: new Date("2026-10-01T00:00:00Z") }),
+        link("1", { savedAt: new Date("2025-12-31T23:59:59Z") }),
+      ],
+    });
+    const sections = [...dom(html).querySelectorAll("#space-links > section.month")];
+    expect(sections.map((s) => s.getAttribute("data-month"))).toEqual(["2026-10", "2025-12"]);
+    expect(sections.map((s) => s.querySelector("h2")?.textContent)).toEqual([
+      "October",
+      "December 2025",
+    ]);
   });
 
   it("names a card's space on its grey line only when it is not the page's own", () => {
     const kitchen = tag({ key: "kitchen", name: "Kitchen", color: "clay", pinned: true });
     const both = link("1", { tags: [...onTag("home batteries"), ...onTag("kitchen")] });
     const own = dom(space({ catalog: [HOME, kitchen], links: [both] }));
-    expect(lineParts(own.querySelector("[data-id]"))).toEqual(["ex.com", "saved October 1"]);
+    expect(lineParts(own.querySelector("[data-id]"))).toEqual(["ex.com"]);
     // An unpinned tag's page has no color of its own, so the card's pinned space is named.
     const loose = tag({ key: "loose" });
     const elsewhere = link("2", { tags: [...onTag("loose"), ...onTag("kitchen")] });
     const other = dom(space({ tag: loose, catalog: [loose, kitchen], links: [elsewhere] }));
-    expect(lineParts(other.querySelector("[data-id]"))).toEqual([
-      "Kitchen",
-      "ex.com",
-      "saved October 1",
-    ]);
+    expect(lineParts(other.querySelector("[data-id]"))).toEqual(["Kitchen", "ex.com"]);
+  });
+
+  it.each(["list", "pictures"] as const)("draws the page in the %s view it is given", (view) => {
+    for (const done of [false, true]) {
+      const d = dom(space({ view, done, links: [link("1")] }));
+      expect(d.querySelector("main")?.getAttribute("data-view")).toBe(view);
+      expect(
+        d.querySelector(`.view-switch [data-choice=${view}]`)?.getAttribute("aria-pressed"),
+      ).toBe("true");
+    }
+    const empty = dom(space({ view }));
+    expect(empty.querySelector("main")?.getAttribute("data-view")).toBe(view);
+    expect(empty.querySelector(".view-switch")).not.toBeNull();
   });
 
   it("uses only this site's stored images, never a page's own image URL", () => {
@@ -210,7 +235,7 @@ describe("a space page", () => {
 
   it("asks Tell me why, as home does, on an active link with no why, and not on one with a why", () => {
     const d = dom(space({ links: [link("1", { why: null }), link("2")] }));
-    const [needy, known] = [...d.querySelectorAll("#space-links > li")];
+    const [needy, known] = [...d.querySelectorAll("#space-links .link-row")];
     expect(needy?.querySelector(".ask")?.textContent).toContain("Why did you save this?");
     expect(needy?.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
     expect(needy?.querySelector("form.why-form")?.hasAttribute("hidden")).toBe(true);
@@ -265,11 +290,11 @@ describe("a space's links you're done with", () => {
     const html = done({
       links: [link("1", { state: "archived", why: null, tags: onTag("home batteries") })],
     });
-    const card = dom(html).querySelector("#space-links > li");
+    const card = dom(html).querySelector("#space-links .link-row");
     expect(card?.className).toContain("faded");
     expect(card?.querySelector("h3")?.textContent?.trim()).toBe("Link 1");
     expect(card?.querySelector(".ask, button[data-act=why], form.why-form")).toBeNull();
-    expect(card?.querySelector(".card-why")?.textContent).toBe("No why yet");
+    expect(card?.querySelector(".row-why")).toBeNull();
     expect(card?.outerHTML).not.toMatch(/amber|needs/);
     expect(html).not.toContain("/home/why");
   });
@@ -355,9 +380,9 @@ describe("Tell me why on a space card", () => {
     ]);
     const card = r.document.querySelector('[data-id="7"]') as HTMLElement;
     expect(card.querySelector(".ask")).toBeNull();
-    const why = card.querySelector(".card-why") as HTMLElement;
+    const why = card.querySelector(".row-why") as HTMLElement;
     expect(why.hidden).toBe(false);
-    expect(why.textContent).toBe('Why: "for the <attic>"');
+    expect(why.textContent).toBe('"for the <attic>"');
   });
 
   it("shows the refusal's words on a 409 and keeps the question", async () => {
@@ -376,7 +401,7 @@ describe("Show older links", () => {
     const r = await clickOlder(first, { ok: true, redirected: false, text: next });
     expect(r.prevented).toBe(true);
     expect(new URL(r.asked[0] as string, ORIGIN).searchParams.get("before")).toBe("2.2");
-    const titles = [...r.document.querySelectorAll("#space-links > li h3")].map((h) =>
+    const titles = [...r.document.querySelectorAll("#space-links .link-row h3")].map((h) =>
       h.textContent?.trim(),
     );
     expect(titles).toEqual(["Link 3", "Link 2", "Link 1"]);
@@ -421,7 +446,7 @@ describe("Show older links", () => {
     await settle();
     expect(posted).toEqual(["/home/why"]);
     expect(card.querySelector(".ask")).toBeNull();
-    expect(card.querySelector("[data-why-answer]")?.textContent).toBe('Why: "for the shed"');
+    expect(card.querySelector(".row-why[data-why-answer]")?.textContent).toBe('"for the shed"');
   });
 
   it("moves the button on to the page after when there are more", async () => {
@@ -436,7 +461,7 @@ describe("Show older links", () => {
     const r = await clickOlder(first, { ok: true, redirected: false, text: empty });
     expect(r.location.href).toBe(`${ORIGIN}/spaces?tag=x`);
     expect(r.document.getElementById("older")).toBeNull();
-    expect(r.document.querySelectorAll("#space-links > li")).toHaveLength(2);
+    expect(r.document.querySelectorAll("#space-links .link-row")).toHaveLength(2);
   });
 
   it.each([
@@ -445,7 +470,7 @@ describe("Show older links", () => {
   ])("navigates to the next page when the request %s", async (_, answer) => {
     const r = await clickOlder(first, { ...answer, text: next });
     expect(r.location.href).toBe(r.asked[0]);
-    expect(r.document.querySelectorAll("#space-links > li")).toHaveLength(2);
+    expect(r.document.querySelectorAll("#space-links .link-row")).toHaveLength(2);
   });
 });
 
@@ -531,9 +556,9 @@ describe("Keep handy on a space page", () => {
 
 describe("the space card's picture", () => {
   it.each([
-    ["cover", { version: "v1", fit: "cover" }, "img.card-image"],
-    ["contain", { version: "v1", fit: "contain" }, "div.card-image.icon-box > img.site-icon"],
-    ["none", undefined, "div.card-image.initials-box > span.pic-initials"],
+    ["cover", { version: "v1", fit: "cover" }, "img.row-pic"],
+    ["contain", { version: "v1", fit: "contain" }, "div.row-pic.icon-box > img.site-icon"],
+    ["none", undefined, "div.row-pic.initials-box > span.pic-initials"],
   ] as const)("renders %s, on the done page too", (_, picture, selector) => {
     for (const done of [false, true]) {
       const html = space({
@@ -543,5 +568,12 @@ describe("the space card's picture", () => {
       });
       expect(dom(html).querySelector(`#space-links ${selector}`), `done ${done}`).not.toBeNull();
     }
+  });
+
+  it("fades a done link's picture, by the theme's own fade rule", () => {
+    const html = space({ done: true, links: [link("1", { state: "archived" })] });
+    const fade = /([^{}]+)\{opacity:\.4\}/.exec(themeCss.slice(themeCss.indexOf(".faded")))?.[1];
+    const faded = dom(html).querySelectorAll(fade as string);
+    expect([...faded].map((e) => e.getAttribute("class"))).toEqual(["row-pic initials-box"]);
   });
 });

@@ -174,7 +174,7 @@ describe("the Handy tiles", () => {
   it("opens the menu from the ⋯ at the card's right edge, above the next card", () => {
     expect(phone).not.toContain(".handy-tile .card-menu-list");
     expect(themeCss).toContain(
-      ".handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-card:has(.card-menu[open]){z-index:5}",
+      ".handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-row:has(.card-menu[open]){z-index:5}",
     );
   });
 
@@ -203,13 +203,50 @@ describe("the Handy tiles", () => {
 
   // Saved copy's tap area reaches up into the title above it. A positioned title link paints, and
   // so takes taps, above a static one; a positioned Saved copy would take them back.
+  const line = '<p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p>';
+  const ask = (open: boolean) =>
+    `<div class="ask"><p class="small">Why did you save this?</p><button class="tell-why" type="button">Tell me why</button><form class="why-form"${open ? "" : " hidden"}><input name="why"><button class="primary" type="submit">Save</button></form></div>`;
+  const row = (view: string, above: string) =>
+    `<main data-view="${view}"><li class="link-row"><div class="row-body"><h3 data-card-title><a href="/x">T</a></h3>${above}${line}</div></li></main>`;
+  const title = '<h3 data-card-title><a href="/x">T</a></h3>';
   it.each([
-    ["a search result", "result", "result-body", "h2"],
-    ["a link card", "link-card", "card-body", "h3"],
-  ])("lets %s's title, not Saved copy, take a tap where they overlap", (_, card, body, h) => {
-    const html = `<li class="${card}"><div class="${body}"><${h} data-card-title><a href="/x">T</a></${h}><p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p></div></li>`;
-    expect(computed(el(html, `${h} a`), "position", "desktop")).toBe("relative");
-    expect(computed(el(html, ".saved-copy"), "position", "desktop")).toBeUndefined();
+    [
+      "a search result's title",
+      `<main><li class="result"><div class="result-body"><h2 data-card-title><a href="/x">T</a></h2>${line}</div></li></main>`,
+      "h2 a",
+    ],
+    ["a list row's title", row("list", ""), "h3 a"],
+    ["a Pictures card's title", row("pictures", ""), "h3 a"],
+    ["a list row's Tell me why", row("list", ask(false)), ".tell-why"],
+    ["a Pictures card's Tell me why", row("pictures", ask(false)), ".tell-why"],
+    ["a list row's open why field", row("list", ask(true)), ".why-form input"],
+    ["a Pictures card's open why field", row("pictures", ask(true)), ".why-form input"],
+    ["a list row's why Save", row("list", ask(true)), ".why-form button"],
+    ["a Pictures card's why Save", row("pictures", ask(true)), ".why-form button"],
+    ["any card's Tell me why", `<div>${title}${ask(false)}${line}</div>`, ".tell-why"],
+    ["any card's open why field", `<div>${title}${ask(true)}${line}</div>`, ".why-form input"],
+    ["any card's why Save", `<div>${title}${ask(true)}${line}</div>`, ".why-form button"],
+  ])("lets %s, not Saved copy, take a tap where they overlap", (_, html, pick) => {
+    const target = el(html, pick);
+    const copy = target.ownerDocument.querySelector(".saved-copy") as Element;
+    const shared = (() => {
+      let n = target.parentElement;
+      while (n && !n.contains(copy)) n = n.parentElement;
+      return n;
+    })();
+    const sideOf = (from: Element, width: "desktop" | "phone") => {
+      const out: (string | undefined)[] = [];
+      for (let n: Element | null = from; n && n !== shared; n = n.parentElement) {
+        out.push(computed(n, "position", width));
+      }
+      return out;
+    };
+    for (const width of ["desktop", "phone"] as const) {
+      const [own, ...around] = sideOf(target, width);
+      expect(own, width).toBe("relative");
+      expect(around.filter(Boolean), width).toEqual([]);
+      expect(sideOf(copy, width).filter(Boolean), width).toEqual([]);
+    }
   });
 
   it("spaces every dot on the grey line alike: no part puts a gap before its own dot", () => {
@@ -311,22 +348,36 @@ describe("the card menu on every card", () => {
   });
 
   it("leaves result and link cards unclipped, so the open menu shows, and rounds their pictures instead", () => {
-    for (const card of [".result", ".link-card"]) {
+    for (const card of [".result", ".link-row"]) {
       expect(rule(card), card).not.toContain("overflow:hidden");
       expect(rule(card), card).toContain("position:relative");
     }
     expect(rule(".result>.tile")).toBe("border-radius:18px 0 0 18px");
     expect(phone).toContain(".result>.tile{border-radius:18px 18px 0 0}");
-    expect(rule(".card-image")).toContain("border-radius:18px 18px 0 0");
+    // The list's white card is one box per month; it never clips, so its first and last rows round.
+    expect(rule(".link-rows")).not.toContain("overflow:hidden");
+    const pic = el(
+      '<main data-view="pictures"><ul class="link-rows"><li class="link-row"><img class="row-pic"></li></ul></main>',
+      "img",
+    );
+    expect(computed(pic, "border-radius", "desktop")).toBe("18px 18px 0 0");
   });
 
-  it("wraps a long unbroken title inside its card, clear of the menu button", () => {
+  it("wraps a long unbroken title, host or why inside its row, clear of the menu button", () => {
     expect(rule(".result-body")).toContain("position:relative");
     expect(rule(".result-body")).toContain("overflow-wrap:anywhere");
     expect(rule(".result h2")).toContain("padding-right:28px");
-    expect(rule(".card-body h3")).toContain("overflow-wrap:anywhere");
-    // The rest of a card's text too, such as a space card's long "host, saved <date>" line.
-    expect(rule(".card-body")).toContain("overflow-wrap:anywhere");
+    expect(rule(".row-body h3")).toContain("overflow-wrap:anywhere");
+    // A flex item keeps its content's width unless told otherwise, so a 135-character host
+    // would push the row wider than a 390px phone without min-width:0.
+    expect(rule(".row-body")).toContain("overflow-wrap:anywhere");
+    expect(rule(".row-body")).toContain("min-width:0");
+    expect(rule(".link-row")).toContain("min-width:0");
+    expect(rule(".card-line>*")).toContain("min-width:0");
+    for (const w of ["desktop", "phone"] as const) {
+      const row = el('<main data-view="list"><li class="link-row"></li></main>', "li");
+      expect(computed(row, "padding", w), w).toMatch(/^1[24]px (52|60)px 1[24]px 1[26]px$/);
+    }
   });
 
   it("on a phone, opens every card's menu from its own right edge", () => {
@@ -481,8 +532,8 @@ describe("a picture-less card in a coloured space (#193)", () => {
       `<li class="result space-clay"><div class="tile initials-box">${initials}</div></li>`,
     ],
     [
-      "an All links or space card",
-      `<li class="link-card space-clay"><div class="card-image initials-box">${initials}</div></li>`,
+      "an All links or space row",
+      `<li class="link-row space-clay"><div class="row-pic initials-box">${initials}</div></li>`,
     ],
     [
       "Worth a look's lead",
@@ -548,7 +599,7 @@ describe("icons and initials", () => {
       }
     },
   );
-  it.each(["card-image", "worth-image", "tile", "worth-tile", "handy-image"])(
+  it.each(["row-pic", "worth-image", "tile", "worth-tile", "handy-image"])(
     "★ centres a div.%s box with flex",
     (cls) => {
       expect(computed(el(`<div class="${cls} icon-box"></div>`, "div"), "display", "desktop")).toBe(
@@ -591,5 +642,80 @@ describe("the edit dialog's Delete", () => {
         expect(computed(at, "display", width), `${at.className} on ${width}`).not.toBe("none");
       }
     }
+  });
+});
+
+describe("the quiet list and the Pictures view (#194)", () => {
+  /** A row's picture box (or `pick`) on a page in `view`, done (`faded`) or not. */
+  const inView = (view: "list" | "pictures", pick = ".row-pic", faded = false) =>
+    el(
+      `<main data-view="${view}"><ul class="link-rows"><li class="link-row${faded ? " faded" : ""}"><div class="row-pic initials-box"></div><div class="row-body"><p class="row-why"></p></div></li></ul></main>`,
+      pick,
+    );
+
+  it("draws the list's picture as a small fixed square, and the Pictures view's across the card", () => {
+    expect(computed(inView("list"), "width", "desktop")).toBe("44px");
+    expect(computed(inView("list"), "height", "desktop")).toBe("44px");
+    expect(computed(inView("list"), "width", "phone")).toBe("40px");
+    expect(computed(inView("list"), "height", "phone")).toBe("40px");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(inView("pictures"), "width", w), w).toBe("100%");
+      expect(computed(inView("pictures"), "height", w), w).toBe("140px");
+    }
+  });
+
+  it.each([
+    ["none hidden", [false, false, false]],
+    ["the first hidden", [true, false, false]],
+    ["a middle one hidden", [false, true, false]],
+    ["the last hidden", [false, false, true]],
+  ])("draws a divider only between two shown rows of a month, with %s", (_, hidden) => {
+    const rows = hidden.map((h) => `<li class="link-row"${h ? " hidden" : ""}></li>`).join("");
+    for (const w of ["desktop", "phone"] as const) {
+      const list = el(`<main data-view="list"><ul class="link-rows">${rows}</ul></main>`, "ul");
+      const shown = [...list.children].filter((row) => !row.hasAttribute("hidden"));
+      const borders = shown.map((row) => computed(row, "border-top", w) ?? "none");
+      expect(borders, w).toEqual(
+        shown.map((_, i) =>
+          i === 0 ? expect.stringMatching(/^(none|0)$/) : "1px solid var(--line)",
+        ),
+      );
+    }
+  });
+
+  it("sizes the icon and initials inside the picture box for each view", () => {
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(inView("list"), "--icon", w), w).toBe("30px");
+      expect(computed(inView("list"), "--initials", w), w).toBe("16px");
+      expect(computed(inView("pictures"), "--icon", w), w).toBe("80px");
+      expect(computed(inView("pictures"), "--initials", w), w).toBe("40px");
+    }
+  });
+
+  it("fades a done link's picture in both views, and never its words", () => {
+    for (const view of ["list", "pictures"] as const) {
+      expect(computed(inView(view, ".row-pic", true), "opacity", "desktop"), view).toBe(".4");
+      expect(computed(inView(view, ".row-why", true), "opacity", "desktop"), view).toBeUndefined();
+      expect(computed(inView(view, ".row-pic", false), "opacity", "desktop"), view).toBeUndefined();
+    }
+  });
+
+  it("keeps a why to one line on a desktop row, two on a phone, and whole on a picture card", () => {
+    expect(computed(inView("list", ".row-why"), "white-space", "desktop")).toBe("nowrap");
+    expect(computed(inView("list", ".row-why"), "text-overflow", "desktop")).toBe("ellipsis");
+    expect(computed(inView("list", ".row-why"), "-webkit-line-clamp", "phone")).toBe("2");
+    expect(computed(inView("pictures", ".row-why"), "white-space", "desktop")).toBe("normal");
+  });
+
+  it("lays the rows in one white card per month, and the Pictures view in a grid of cards", () => {
+    expect(computed(inView("list", "ul"), "display", "desktop")).toBeUndefined();
+    expect(computed(inView("list", "ul"), "background", "desktop")).toBe("var(--surface)");
+    expect(computed(inView("pictures", "ul"), "display", "desktop")).toBe("grid");
+    expect(computed(inView("pictures", "li"), "background", "desktop")).toBe("var(--surface)");
+  });
+
+  it("gives the switch's buttons 44px", () => {
+    const b = el('<div class="view-switch"><button aria-pressed="true"></button></div>', "button");
+    expect(computed(b, "min-height", "desktop")).toBe("44px");
   });
 });

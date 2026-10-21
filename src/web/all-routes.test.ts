@@ -93,9 +93,9 @@ describe("the All links routes", () => {
         pages.push(html(sent));
         next = hrefsOf(html(sent), "#older")[0];
       }
-      const counts = pages.map((p) => hrefsOf(p, ".link-card h3 a").length);
+      const counts = pages.map((p) => hrefsOf(p, ".link-row h3 a").length);
       expect(counts).toEqual([24, 24, 3]);
-      const seen = pages.flatMap((p) => hrefsOf(p, ".link-card h3 a"));
+      const seen = pages.flatMap((p) => hrefsOf(p, ".link-row h3 a"));
       expect(new Set(seen).size).toBe(51);
       const first = { newest: 50, oldest: 0, opened: 29 }[order];
       expect(seen[0]).toBe(`https://a.example/${first}`);

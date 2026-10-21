@@ -1,4 +1,5 @@
 import { type Context, Hono } from "hono";
+import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import {
   type PageContext,
@@ -95,6 +96,7 @@ import { displayTitle } from "./display-title.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
+import { VIEW_COOKIE, viewOf } from "./link-rows.js";
 import { savedOn } from "./page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
@@ -701,6 +703,7 @@ export function webApp({
         done,
         later,
         ask: askOn(c, tag.name),
+        view: viewOf(getCookie(c, VIEW_COOKIE)),
       });
       return c.html(html, 200, NO_STORE);
     } catch (error) {
@@ -765,6 +768,7 @@ export function webApp({
         done,
         later,
         ask: askOn(c, "All links"),
+        view: viewOf(getCookie(c, VIEW_COOKIE)),
       });
       return c.html(html, 200, NO_STORE);
     } catch (error) {

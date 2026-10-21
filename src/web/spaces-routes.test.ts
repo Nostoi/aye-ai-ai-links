@@ -142,7 +142,7 @@ describe("a space page", () => {
     expect(older).toBeDefined();
     const second = await browser.send(older as string);
     expect(second.status).toBe(200);
-    const links = [first, html(second)].flatMap((p) => hrefsOf(p, ".link-card h3 a"));
+    const links = [first, html(second)].flatMap((p) => hrefsOf(p, ".link-row h3 a"));
     expect(new Set(links).size).toBe(25);
     expect(hrefsOf(html(second), "#older")).toEqual([]);
   });
@@ -252,5 +252,37 @@ describe("the search page's spaces", () => {
     const result = parseHTML(page).document.querySelector(".result");
     expect(result?.className).toMatch(/space-[a-z]+/);
     expect(result?.querySelector(".card-line .line-space")?.textContent?.trim()).toBe("Kitchen");
+  });
+});
+
+describe("the List / Pictures choice on All links and space pages", () => {
+  const ROUTES = ["/all", "/all/done", "/spaces?tag=Kitchen", "/spaces/done?tag=Kitchen"];
+  const viewOn = async (browser: Awaited<ReturnType<typeof signedIn>>, path: string) =>
+    parseHTML(html(await browser.send(path)))
+      .document.querySelector("main")
+      ?.getAttribute("data-view");
+
+  it("draws each page in the view this browser's cookie names, and the list without one", async () => {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/q", ["Kitchen"], "Quokka kitchen");
+    const browser = await signedIn(world);
+    for (const path of ROUTES) expect(await viewOn(browser, path), path).toBe("list");
+    browser.cookies.set("aye_view", "pictures");
+    for (const path of ROUTES) expect(await viewOn(browser, path), path).toBe("pictures");
+    for (const junk of ["list", "PICTURES", "pictures%20", "grid"]) {
+      browser.cookies.set("aye_view", junk);
+      expect(await viewOn(browser, "/all"), junk).toBe("list");
+    }
+  });
+
+  it("answers Show older links in the same view, so the rows it appends match", async () => {
+    const world = await oauthWorld();
+    for (let i = 0; i < 25; i++) await save(world, A, `https://a.example/${i}`, ["Kitchen"]);
+    const browser = await signedIn(world);
+    browser.cookies.set("aye_view", "pictures");
+    const first = html(await browser.send("/spaces?tag=Kitchen"));
+    const older = parseHTML(first).document.getElementById("older")?.getAttribute("href");
+    expect(older).toContain("before=");
+    expect(await viewOn(browser, older as string)).toBe("pictures");
   });
 });

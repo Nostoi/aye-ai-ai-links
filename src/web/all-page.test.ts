@@ -156,7 +156,10 @@ describe("the All links page", () => {
   it("fades the cards on the done page, which links back in the same order", () => {
     const html = all({ done: true, order: "oldest", links: [link("1", { state: "archived" })] });
     expect(dom(html).querySelector(".link-row")?.className).toContain("faded");
-    expect(texts(html, "h1")).toEqual(["Links you're done with"]);
+    expect(texts(html, "h1")).toEqual(["Out of your lists"]);
+    expect(dom(html).querySelector("title")?.textContent).toBe(
+      "Out of your lists · All links · Aye-AI-AI Links",
+    );
     expect(dom(html).querySelector("a.back-link")?.getAttribute("href")).toBe("/all?order=oldest");
     expect(dom(html).querySelector("a.done-link")).toBeNull();
   });
@@ -205,10 +208,10 @@ describe("the All links page", () => {
   it.each([
     [{}, "No links yet."],
     [{ order: "opened" as const }, "Nothing opened yet. Links you open from this site show here."],
-    [{ done: true }, "Nothing here is done yet."],
+    [{ done: true }, "Nothing here is out of your lists yet."],
     [
       { done: true, order: "opened" as const },
-      "You haven't opened any of the links you're done with.",
+      "You haven't opened any of the links out of your lists.",
     ],
     [{ later: true }, "No older links."],
     [{ later: true, order: "oldest" as const }, "No more links."],
@@ -279,7 +282,7 @@ describe("openings on All links (#124)", () => {
   describe("its active links", () => {
     itRecordsOpenings(() => all({ links: shown }), web, "/links/opened");
   });
-  describe("its links you're done with", () => {
+  describe("its links out of your lists", () => {
     itRecordsOpenings(() => all({ links: shown, done: true }), web, "/links/opened");
   });
   it("records a link Show older links appended", async () => {

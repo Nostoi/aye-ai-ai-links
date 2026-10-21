@@ -251,7 +251,9 @@ describe("a space page", () => {
     const html = space({ later: true });
     expect(html).toContain("No older links.");
     expect(html).not.toContain("No links in this space yet.");
-    expect(space({ later: true, done: true })).not.toContain("Nothing here is done yet.");
+    expect(space({ later: true, done: true })).not.toContain(
+      "Nothing here is out of your lists yet.",
+    );
   });
 
   it("shows Show older links only when older links exist, as a real link to the next page", () => {
@@ -263,7 +265,7 @@ describe("a space page", () => {
     expect(older.searchParams.get("before")).toBe("100.1");
   });
 
-  it("links to the links you're done with", () => {
+  it("links to the links out of your lists", () => {
     const done = hrefs(space(), "a.done-link").map((h) => new URL(h, ORIGIN));
     expect(done.map((u) => [u.pathname, u.searchParams.get("tag")])).toEqual([
       ["/spaces/done", "home batteries"],
@@ -271,13 +273,14 @@ describe("a space page", () => {
   });
 });
 
-describe("a space's links you're done with", () => {
+describe("a space's links out of your lists", () => {
   const done = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
     space({ done: true, ...over });
 
   it("is headed so, links back to the space, and pages within the done view", () => {
     const html = done({ links: [link("1", { state: "archived" })], older: "9.1" });
-    expect(html).toContain("Links you're done with");
+    expect(html).toContain("Out of your lists");
+    expect(dom(html).querySelector("title")?.textContent).toContain("Out of your lists in ");
     const back = hrefs(html, "a.back-link").map((h) => new URL(h, ORIGIN));
     expect(back.map((u) => [u.pathname, u.searchParams.get("tag")])).toEqual([
       ["/spaces", "home batteries"],
@@ -300,7 +303,7 @@ describe("a space's links you're done with", () => {
   });
 
   it("says when nothing in the space is done", () => {
-    expect(done()).toContain("Nothing here is done yet.");
+    expect(done()).toContain("Nothing here is out of your lists yet.");
   });
 });
 
@@ -509,7 +512,7 @@ describe("openings on a space page (#124)", () => {
   describe("its active links", () => {
     itRecordsOpenings(() => space({ links: shown }), web, "/links/opened");
   });
-  describe("its links you're done with", () => {
+  describe("its links out of your lists", () => {
     itRecordsOpenings(() => space({ links: shown, done: true }), web, "/links/opened");
   });
   it("records a link Show older links appended", async () => {

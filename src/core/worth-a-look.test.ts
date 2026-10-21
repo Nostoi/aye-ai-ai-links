@@ -597,7 +597,7 @@ describe("Not now", () => {
   });
 });
 
-describe("I'm done with it", () => {
+describe("It's stale", () => {
   it("archives the link, and undo makes it active again", async () => {
     const l = await link();
     await archiveLink(deps(), A, l.id);

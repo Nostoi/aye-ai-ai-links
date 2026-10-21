@@ -10,7 +10,7 @@ import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript } from "./done-link.js";
+import { doneLinkScript, STALE_LABEL } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
@@ -67,7 +67,7 @@ function opening(classes: string, link: Link, cards: WorthCards): string {
 /**
  * The featured card: the reason with its space's dot, the title, the why (or Tell me why, in
  * amber), the grey line with the saved date when the reason doesn't say it and Saved copy, Open it
- * (the page's one filled button), I'm done with it and Not now, the ⋯ without those two, and a
+ * (the page's one filled button), It's stale and Not now, the ⋯ without those two, and a
  * small picture.
  */
 function featured(d: DigestLink, cards: WorthCards): string {
@@ -84,7 +84,7 @@ function featured(d: DigestLink, cards: WorthCards): string {
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>
 ${cardLine(link, { copy, ...saved })}${open}<div class="feature-quiet">
-<button type="button" data-act="archive">I'm done with it</button>
+<button type="button" data-act="archive">${STALE_LABEL}</button>
 <button type="button" data-act="snooze">Not now</button>
 </div>
 ${editMenu(link, { copy, handy: cards.views?.get(link.id)?.handy, onCard: true })}
@@ -163,7 +163,7 @@ document.addEventListener("keydown", (event) => {
 
 /**
  * Home's own card actions, after the shared ones (`takeOut`, `doneCard`, `refreshShelf`):
- * - The featured card's I'm done with it is `doneCard`, as the menu's row is (`doneLinkScript`).
+ * - The featured card's It's stale is `doneCard`, as the menu's row is (`doneLinkScript`).
  * - Not now, Keep handy and Not handy anymore post first and change the card only once the server
  *   agrees, so a refusal never brings back a card another action took out. Each runs in
  *   `whileBusy`, so a card takes no other action, Delete link included, until it has finished.
@@ -252,7 +252,7 @@ addEventListener("pageshow", (event) => {
  * shelf (#125), then "Worth a look today" when there is anything to show, then `spaces`, the "Your
  * spaces" section (#96). Opening a card's link is recorded with `/home/opened`, which also marks it
  * shown; openings from the shelf are recorded without that. The cards' Delete link, Remove saved
- * copy, Edit, I'm done with it, gone line and Tell me why are the shared scripts'; the rest is
+ * copy, Edit, It's stale, gone line and Tell me why are the shared scripts'; the rest is
  * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's.
  */
 export const homePage = ({

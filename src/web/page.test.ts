@@ -57,7 +57,7 @@ function load() {
       return nextId++;
     },
     (id: number) => timers.delete(id),
-  ) as (message: string, undo: () => Promise<void>) => void;
+  ) as (message: string, undo: () => Promise<void>, title?: string) => void;
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
   const bar = $("#undo-bar");
   const undoButton = $("#undo-bar button");
@@ -99,6 +99,16 @@ describe("the Undo bar", () => {
     expect(p.bar.hidden).toBe(false);
     expect(p.$("#undo-bar span").textContent).toBe("Kitchen unpinned.");
     expect(p.focused()).toBe(p.undoButton);
+  });
+
+  it("shows an optional bold title before the message, and drops it for the next message", () => {
+    const p = load();
+    p.showUndo("You won't see it again.", async () => {}, "Let go.");
+    expect(p.$("#undo-bar span strong")?.textContent).toBe("Let go.");
+    expect(p.$("#undo-bar span").textContent).toBe("Let go. You won't see it again.");
+    p.showUndo("Kitchen unpinned.", async () => {});
+    expect(p.$("#undo-bar span strong")).toBeNull();
+    expect(p.$("#undo-bar span").textContent).toBe("Kitchen unpinned.");
   });
 
   it("closes UNDO_BAR_MS after focus leaves it", () => {

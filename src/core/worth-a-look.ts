@@ -113,7 +113,7 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
-const ALREADY_DONE = "This link is already moved out of your list. Reload.";
+const ALREADY_DONE = "This link is already out of your lists. Reload.";
 
 export async function unsnoozeLink(
   deps: WorthDeps,
@@ -127,12 +127,12 @@ export async function unsnoozeLink(
   await changeIf(deps, owner, id, { snoozedUntil: snooze.until }, { snoozedUntil: null });
 }
 
-/** I'm done with it. */
+/** It's stale. */
 export async function archiveLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
   await changeIf(deps, owner, id, { state: "active" }, { state: "archived" }, ALREADY_DONE);
 }
 
-/** The Undo of I'm done with it: makes the link active only while it is still archived. */
+/** The Undo of It's stale: makes the link active only while it is still archived. */
 export async function unarchiveLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
   await changeIf(deps, owner, id, { state: "archived" }, { state: "active" });
 }

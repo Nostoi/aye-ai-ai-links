@@ -478,7 +478,7 @@ describe("GET / and the Handy shelf", () => {
     expect(tiles[1]?.textContent).toContain("Still using?");
   });
 
-  it("Done archives: the tool leaves the shelf and Undo brings it back, its Keep handy row untouched", async () => {
+  it("It's stale archives: the tool leaves the shelf and Undo brings it back, its Keep handy row untouched", async () => {
     const { world, browser, id } = await tools();
     await keepHandy(at(world, daysAgo(31)), A, id, "stated");
     const row = toolRow(world, id);

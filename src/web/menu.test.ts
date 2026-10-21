@@ -179,7 +179,7 @@ describe("the account menu's dismissal", () => {
 });
 
 const ITEMS = [
-  { act: "done", icon: "", text: "I'm done with it" },
+  { act: "done", icon: "", text: "It's stale" },
   DIVIDER,
   { act: "edit", icon: "", text: "Edit" },
 ];

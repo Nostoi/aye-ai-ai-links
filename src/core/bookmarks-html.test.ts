@@ -70,7 +70,7 @@ describe("bookmarksHtml", () => {
     expect(anchors[0]).toContain(">A B C D E F G H</A>");
   });
 
-  it("a link in two spaces is in both folders; an archived one only in Done; a loose one after the spaces", () => {
+  it("a link in two spaces is in both folders; an archived one only in Out of your lists; a loose one after the spaces", () => {
     const html = bookmarksHtml(
       [
         L(1, { tags: [tagOf(cabin), tagOf(garden)] }),
@@ -93,7 +93,7 @@ describe("bookmarksHtml", () => {
       "<DT><A https://ex.com/1",
       "</DL><p>",
       "<DT><A https://ex.com/3",
-      "<DT><H3>Done</H3>",
+      "<DT><H3>Out of your lists</H3>",
       "<DT><A https://ex.com/2",
       "</DL><p>",
       "</DL><p>",
@@ -153,7 +153,7 @@ describe("bookmarksHtml", () => {
       "<DD>Sizing the battery for the cabin",
       "</DL><p>",
       '<DT><A HREF="https://tools.example.org/regex" ADD_DATE="1758355200">Regex tester</A>',
-      "<DT><H3>Done</H3>",
+      "<DT><H3>Out of your lists</H3>",
       "<DL><p>",
       "</DL><p>",
       "</DL><p>",

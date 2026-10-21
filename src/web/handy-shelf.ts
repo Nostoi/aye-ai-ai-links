@@ -4,7 +4,7 @@ import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu } from "./card-menu.js";
 import { displayTitle } from "./display-title.js";
-import { DONE_ITEM } from "./done-link.js";
+import { DONE_ITEM, STALE_LABEL, STALE_UNDO } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { NOT_HANDY } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
@@ -31,7 +31,7 @@ const STILL_USING = `<div class="ask">
 <p class="small">Still using?</p>
 <div class="actions small-actions">
 <button type="button" data-act="still-using">Yes</button>
-<button type="button" data-act="done">Done</button>
+<button type="button" data-act="done">${STALE_LABEL}</button>
 </div>
 </div>`;
 
@@ -42,7 +42,7 @@ const GONE_ASK = `<div class="ask">
 <p class="small">${SEEMS_GONE}</p>
 <div class="actions small-actions">
 <button type="button" data-act="still-works">It works</button>
-<button type="button" data-act="done">Done</button>
+<button type="button" data-act="done">${STALE_LABEL}</button>
 </div>
 </div>`;
 
@@ -193,12 +193,12 @@ const SHELF_ACTS = {
   "suggest-yes": (id) => ["/tools/suggestion", { id, keep: true }, null],
   "suggest-no": (id) => ["/tools/suggestion", { id, keep: false }, "Not kept handy."],
 };
-const offerUndo = (message, route, body, from) =>
+const offerUndo = (message, route, body, from, title) =>
   showUndo(message, async () => {
     const back = await post(route, body);
     if (back && back.status === 204) await refreshShelf(from);
     else handyError.textContent = await failure(back);
-  });
+  }, title);
 if (handy) {
   handy.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
@@ -212,7 +212,7 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    // Done on a tile's ask and the menu's I'm done with it (archive) are the same action.
+    // It's stale on a tile's ask and the menu's It's stale (archive) are the same action.
     const done = act === "done" || act === "archive";
     if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
@@ -231,7 +231,7 @@ if (handy) {
           return;
         }
         dropped = await refreshShelf(from);
-        offerUndo("Moved out of your list.", "/home/unarchive", { id }, from);
+        offerUndo(${JSON.stringify(STALE_UNDO.text)}, "/home/unarchive", { id }, from, ${JSON.stringify(STALE_UNDO.title)});
         return;
       }
       if (act === "still-works") {

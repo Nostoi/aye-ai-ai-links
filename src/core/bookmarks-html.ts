@@ -33,7 +33,7 @@ const folder = (name: string, links: Link[]): string[] => [
 
 /**
  * The Netscape bookmark format browsers import: a folder per space, then loose active
- * links, then "Done" for archived ones.
+ * links, then "Out of your lists" for archived ones.
  */
 export function bookmarksHtml(links: Link[], catalog: Tag[], exportedAt: Date): string {
   const active = links.filter((l) => l.state !== "archived");
@@ -55,7 +55,7 @@ export function bookmarksHtml(links: Link[], catalog: Tag[], exportedAt: Date): 
     ),
     ...active.filter((l) => !l.tags.some((t) => spaceKeys.has(t.key))).flatMap(entry),
     ...folder(
-      "Done",
+      "Out of your lists",
       links.filter((l) => l.state === "archived"),
     ),
     "</DL><p>",

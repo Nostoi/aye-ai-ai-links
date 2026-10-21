@@ -377,7 +377,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <nav class="orders" aria-label="Order"><a href="/all" aria-current="true">Newest first</a><span aria-hidden="true">·</span><a href="/all?order=oldest">Oldest first</a><span aria-hidden="true">·</span><a href="/all?order=opened">Recently opened</a></nav>
 <p id="all-error" role="alert"></p>
 <p>No links yet.</p>
-<div class="all-foot"><a class="done-link" href="/all/done">Links you're done with</a></div>
+<div class="all-foot"><a class="done-link" href="/all/done">Out of your lists</a></div>
 </main>
 <dialog class="edit-link" id="edit-link" aria-labelledby="edit-link-title">
 <form class="edit-form" novalidate>
@@ -896,7 +896,7 @@ if (copyRoot) {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("I'm done with it") stays in the page, hidden.
+  // A card moved out of the list ("It's stale") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -960,11 +960,11 @@ const doneCard = (card) =>
       return;
     }
     const putBack = takeOut(listRoot, card, false);
-    showUndo("Moved out of your list.", async () => {
+    showUndo("You won't see it again unless you search for it.", async () => {
       const back = await post("/home/unarchive", { id });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
-    });
+    }, "Let go.");
   });
 {
 const doneRoot = document.getElementById("all-links");
@@ -1067,7 +1067,7 @@ const showUndo = (() => {
     }
   });
   let offers = 0;
-  const show = (message, undo) => {
+  const show = (message, undo, title) => {
     offers++;
     if (current) {
       clearTimeout(current.timer);
@@ -1077,7 +1077,13 @@ const showUndo = (() => {
     const action = { undo, running: false };
     action.ceiling = setTimeout(() => close(action), 45000);
     current = action;
-    text.textContent = message;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
     button.disabled = false;
     bar.hidden = false;
     arm(action);

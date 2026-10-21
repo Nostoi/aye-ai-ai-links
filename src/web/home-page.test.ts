@@ -518,6 +518,21 @@ describe("the home page's script", () => {
     expect(hidden(p, id)).toBe(true);
   });
 
+  it("sends nothing for a second Not now while the first is unanswered", async () => {
+    const cards = two();
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+    );
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+    answer(null);
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/snooze"]);
+    expect(hidden(p, cards[0]?.link.id as string)).toBe(true);
+  });
+
   it("I'm done with it on the featured card archives once, hides it, and Undo puts it back", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;

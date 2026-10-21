@@ -55,5 +55,9 @@ if (orderForm) {
     orderField.setAttribute("name", orderField.value === "" ? "" : "order");
     orderForm.submit();
   });
+  document.defaultView.addEventListener("pageshow", () => {
+    for (const option of orderField.querySelectorAll("option")) option.selected = option.defaultSelected;
+    orderField.setAttribute("name", "order");
+  });
 }
 }`;

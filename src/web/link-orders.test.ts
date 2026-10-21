@@ -67,5 +67,33 @@ describe("orderSelect", () => {
     it("leaves the empty newest choice nameless, so it sends no order, and names it again after", () => {
       expect(choose("opened", "", "oldest")).toEqual(["order", "", "order"]);
     });
+
+    it("puts the select back to what the server rendered, named order, when the page is shown again", () => {
+      const { document, window } = parseHTML(
+        orderSelect("oldest", { action: "/spaces", hidden: { tag: "k" } }),
+      );
+      const field = document.querySelector("select") as HTMLSelectElement;
+      const options = [...document.querySelectorAll("option")];
+      // linkedom has no selection state apart from the attribute, so each option keeps its own.
+      const chosen = options.map((o) => o.hasAttribute("selected"));
+      options.forEach((o, i) => {
+        const initial = chosen[i];
+        Object.defineProperties(o, {
+          defaultSelected: { get: () => initial },
+          selected: { get: () => chosen[i], set: (on: boolean) => (chosen[i] = on) },
+        });
+      });
+      new Function("document", orderSelectScript)(document);
+      Object.defineProperty(field, "value", { get: () => "" });
+      (document.querySelector("form") as HTMLFormElement).submit = () => {};
+      // The owner picks Newest first; the script drops the name; Back shows the page again.
+      chosen.fill(false);
+      chosen[0] = true;
+      field.dispatchEvent(new window.Event("change", { bubbles: true }));
+      expect(field.getAttribute("name")).toBe("");
+      window.dispatchEvent(new window.Event("pageshow"));
+      expect(chosen).toEqual([false, true, false]);
+      expect(field.getAttribute("name")).toBe("order");
+    });
   });
 });

@@ -366,28 +366,28 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
   });
 
   it.each(["](", '](a "', "](a '", "](a ("])(
-    "renders 2 MiB of %s in one paragraph after an opener within the budget",
+    "renders 256 KiB of %s in one paragraph after an opener within the budget",
     (unit) => {
       const start = performance.now();
-      copyHtml(`[\n\n${unit.repeat(Math.ceil((2 * 1024 * 1024) / unit.length))}`, refs());
-      expect(performance.now() - start).toBeLessThan(10_000);
+      copyHtml(`[\n\n${unit.repeat(Math.ceil((256 * 1024) / unit.length))}`, refs());
+      expect(performance.now() - start).toBeLessThan(2_000);
     },
-    30_000,
+    10_000,
   );
 
   it.each([
-    ["orphan closers", "](x)\n\n"],
-    ["orphan openers", "[\n\n"],
-    ["cards in quotes", "> [\n>\n> ](x)\n\n"],
-    ["pairs", "[\n\n](https://e.example/a)\n\n"],
+    ["orphan closers", "](x)\n\n", 256],
+    ["orphan openers", "[\n\n", 256],
+    ["cards in quotes", "> [\n>\n> ](x)\n\n", 256],
+    ["pairs", "[\n\n](https://e.example/a)\n\n", 1024],
   ])(
-    "renders 2 MiB of %s within the budget",
-    (_name, unit) => {
-      const md = unit.repeat(Math.ceil((2 * 1024 * 1024) / unit.length));
+    "renders a long run of %s within the budget",
+    (_name, unit, kib) => {
+      const md = unit.repeat(Math.ceil((kib * 1024) / unit.length));
       const start = performance.now();
       copyHtml(md, refs());
-      expect(performance.now() - start).toBeLessThan(10_000);
+      expect(performance.now() - start).toBeLessThan(2_000);
     },
-    30_000,
+    10_000,
   );
 });

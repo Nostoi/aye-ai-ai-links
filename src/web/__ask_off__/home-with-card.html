@@ -714,28 +714,27 @@ if (goneRoot) {
     const buttons = [...line.querySelectorAll("button")];
     if (buttons.some((b) => b.disabled)) return;
     buttons.forEach((b) => (b.disabled = true));
-    if (button.dataset.act !== "still-works") {
-      await doneCard(card);
-      buttons.forEach((b) => (b.disabled = false));
-      return;
-    }
-    const id = card.dataset.id;
-    await whileBusy(card, async () => {
-      goneError.textContent = "";
-      const res = await post("/links/still-works", { id });
-      const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
-      if (!moved || !moved.check) {
-        goneError.textContent = await failure(res);
-        return;
-      }
-      line.hidden = true;
-      showUndo("Marked as working.", async () => {
-        const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
-        if (back && back.status === 204) line.hidden = false;
-        else goneError.textContent = await failure(back);
+    try {
+      if (button.dataset.act !== "still-works") return await doneCard(card);
+      const id = card.dataset.id;
+      await whileBusy(card, async () => {
+        goneError.textContent = "";
+        const res = await post("/links/still-works", { id });
+        const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+        if (!moved || !moved.check) {
+          goneError.textContent = await failure(res);
+          return;
+        }
+        line.hidden = true;
+        showUndo("Marked as working.", async () => {
+          const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
+          if (back && back.status === 204) line.hidden = false;
+          else goneError.textContent = await failure(back);
+        });
       });
-    });
-    buttons.forEach((b) => (b.disabled = false));
+    } finally {
+      buttons.forEach((b) => (b.disabled = false));
+    }
   });
 }
 }

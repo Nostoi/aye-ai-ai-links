@@ -203,15 +203,44 @@ describe("the Handy tiles", () => {
 
   // Saved copy's tap area reaches up into the title above it. A positioned title link paints, and
   // so takes taps, above a static one; a positioned Saved copy would take them back.
+  const line = '<p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p>';
+  const ask = (open: boolean) =>
+    `<div class="ask"><p class="small">Why did you save this?</p><button class="tell-why" type="button">Tell me why</button><form class="why-form"${open ? "" : " hidden"}><input name="why"><button class="primary" type="submit">Save</button></form></div>`;
+  const row = (view: string, above: string) =>
+    `<main data-view="${view}"><li class="link-row"><div class="row-body"><h3 data-card-title><a href="/x">T</a></h3>${above}${line}</div></li></main>`;
+  const title = '<h3 data-card-title><a href="/x">T</a></h3>';
   it.each([
-    ["a search result", "result", "result-body", "h2", null],
-    ["a list row", "link-row", "row-body", "h3", "list"],
-    ["a Pictures card", "link-row", "row-body", "h3", "pictures"],
-  ])("lets %s's title, not Saved copy, take a tap where they overlap", (_, card, body, h, view) => {
-    const html = `<main${view ? ` data-view="${view}"` : ""}><li class="${card}"><div class="${body}"><${h} data-card-title><a href="/x">T</a></${h}><p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p></div></li></main>`;
+    [
+      "a search result's title",
+      `<main><li class="result"><div class="result-body"><h2 data-card-title><a href="/x">T</a></h2>${line}</div></li></main>`,
+      "h2 a",
+    ],
+    ["a list row's title", row("list", ""), "h3 a"],
+    ["a Pictures card's title", row("pictures", ""), "h3 a"],
+    ["a list row's Tell me why", row("list", ask(false)), ".tell-why"],
+    ["a Pictures card's Tell me why", row("pictures", ask(false)), ".tell-why"],
+    ["a list row's open why field", row("list", ask(true)), ".why-form input"],
+    ["a Pictures card's open why field", row("pictures", ask(true)), ".why-form input"],
+    ["any card's Tell me why", `<div>${title}${ask(false)}${line}</div>`, ".tell-why"],
+    ["any card's open why field", `<div>${title}${ask(true)}${line}</div>`, ".why-form input"],
+  ])("lets %s, not Saved copy, take a tap where they overlap", (_, html, pick) => {
+    const target = el(html, pick);
+    const copy = target.ownerDocument.querySelector(".saved-copy") as Element;
+    const shared = (() => {
+      let n = target.parentElement;
+      while (n && !n.contains(copy)) n = n.parentElement;
+      return n;
+    })();
+    const sideOf = (from: Element, width: "desktop" | "phone") => {
+      const out: (string | undefined)[] = [];
+      for (let n: Element | null = from; n && n !== shared; n = n.parentElement) {
+        out.push(computed(n, "position", width));
+      }
+      return out;
+    };
     for (const width of ["desktop", "phone"] as const) {
-      expect(computed(el(html, `${h} a`), "position", width), width).toBe("relative");
-      expect(computed(el(html, ".saved-copy"), "position", width), width).toBeUndefined();
+      expect(sideOf(target, width), width).toContain("relative");
+      expect(sideOf(copy, width).filter(Boolean), width).toEqual([]);
     }
   });
 

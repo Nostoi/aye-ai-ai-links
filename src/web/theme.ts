@@ -223,7 +223,7 @@ img.handy-image{background:#fff}
 .handy-control{align-items:center;font-size:14px;color:var(--soft)}
 .handy-on{display:inline-flex;align-items:center;gap:6px}
 .needs-you{outline:2px solid var(--amber);outline-offset:-2px}
-.ask{margin:0 0 14px}
+.ask{position:relative;margin:0 0 14px}
 .ask p{margin:0 0 8px}
 .tell-why{min-height:44px;padding:0 16px;font-size:14px;background:var(--amber-bg);color:var(--amber-ink);border:0}
 .why-form{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}

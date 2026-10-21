@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   claimDueTool,
+  claimSurfaced,
   compareIds,
   DIGEST_SIZE,
   type DigestReason,
@@ -21,6 +22,7 @@ import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
 import type { LinkStore } from "./store.js";
 import { keepHandy, notHandy, stillUsing } from "./tools.js";
 import type { FocusEntry, Link, NewLink, Source } from "./types.js";
+import { bringBackLink, putAwayLink } from "./worth-a-look.js";
 
 const OWNER = "o";
 const DAY = 86_400_000;
@@ -759,5 +761,215 @@ describe("getDigest's still_using_check", () => {
     const before = structuredClone(store.all(OWNER));
     expect((await previewDigest(deps(), OWNER)).links.map((d) => d.link.id)).toEqual([reading.id]);
     expect(store.all(OWNER)).toEqual(before);
+  });
+});
+
+describe("came back", () => {
+  const AWAY = at(-3 * DAY);
+  const cameBack = (entry: FocusEntry, putAwayAt = AWAY): DigestReason => ({
+    kind: "came_back",
+    focus: entry,
+    putAwayAt,
+  });
+  /** A put-away link: archived with its marker, surfaced (if ever) before it was put away. */
+  const away = (over: Partial<NewLink> = {}) =>
+    link({ state: "archived", putAwayAt: AWAY, lastSurfacedAt: null, ...over });
+  const previewed = async () => (await previewDigest(deps(), OWNER)).links;
+  const previewIds = async () => (await previewed()).map((d) => d.link.id);
+
+  it("gives a link put away before a matching focus entry a came_back reason carrying the entry and the marker", async () => {
+    const l = await away();
+    const entry = await focus("solar", at(-DAY), "inferred");
+    keyword.hits.set("solar", [l.id]);
+    expect(await reasonsOf(l.id)).toEqual([cameBack(entry), { kind: "never_surfaced" }]);
+  });
+
+  it("asks for put-away links only, across the whole library, and marks the link surfaced at now", async () => {
+    const l = await away();
+    await link();
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [l.id]);
+    await getDigest(deps(), OWNER);
+    expect(keyword.calls).toContainEqual({
+      query: "solar",
+      filters: { state: "archived" },
+      limit: 2,
+      traced: false,
+    });
+    expect((await store.get(OWNER, l.id))?.lastSurfacedAt).toEqual(NOW);
+  });
+
+  it("does not search the archive when nothing is put away", async () => {
+    await link({ state: "archived" });
+    await focus("solar", at(-DAY));
+    await previewIds();
+    expect(keyword.calls).toEqual([]);
+  });
+
+  it("does not bring back a link put away after the matching entry was written", async () => {
+    const l = await away({ putAwayAt: at(-HOUR) });
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [l.id]);
+    expect(await previewIds()).toEqual([]);
+    await focus("wind", at(-HOUR + 1));
+    keyword.hits.set("wind", [l.id]);
+    expect(await previewIds()).toEqual([l.id]);
+  });
+
+  it("does not bring back a stale link that shares the words", async () => {
+    const stale = await link({ state: "archived", putAwayAt: null });
+    const active = await link();
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [stale.id, active.id]);
+    expect(await previewIds()).toEqual([active.id]);
+  });
+
+  it("brings back a put-away kept tool, but not a put-away gone link", async () => {
+    const tool = await away();
+    const gone = await away();
+    await keepHandy(deps(), OWNER, tool.id, "stated");
+    await flag(gone.id);
+    const entry = await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [gone.id, tool.id]);
+    expect(await previewIds()).toEqual([tool.id]);
+    const digest = await getDigest(deps(), OWNER);
+    expect(digest.links.map((d) => d.link.id)).toEqual([tool.id]);
+    expect(digest.links[0]?.reasons[0]).toEqual(cameBack(entry));
+    expect((await store.get(OWNER, gone.id))?.lastSurfacedAt).toBeNull();
+  });
+
+  it("stays out while snoozed", async () => {
+    const l = await away({ snoozedUntil: at(DAY) });
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [l.id]);
+    expect(await previewIds()).toEqual([]);
+  });
+
+  it("is offered when it was last surfaced before it was put away, even inside the cooldown", async () => {
+    const l = await away({ lastSurfacedAt: at(-4 * DAY) });
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [l.id]);
+    expect(await previewIds()).toEqual([l.id]);
+  });
+
+  it("is left alone for the cooldown once surfaced since it was put away", async () => {
+    const l = await away();
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [l.id]);
+    expect(await digestIds()).toEqual([l.id]);
+    clock = at(SURFACE_COOLDOWN_MS - 1);
+    expect(await previewIds()).toEqual([]);
+    clock = at(SURFACE_COOLDOWN_MS);
+    expect(await previewIds()).toEqual([l.id]);
+  });
+
+  it("offers three of five matches, and different three on different days", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push((await away()).id);
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", ids);
+    const offered = new Set<string>();
+    for (let day = 0; day < 8; day++) {
+      clock = at(day * DAY);
+      const picks = await previewIds();
+      expect(picks).toHaveLength(FOCUS_MATCHES_PER_ENTRY);
+      offered.add([...picks].sort().join());
+    }
+    expect(offered.size).toBeGreaterThan(1);
+  });
+
+  it("offers nothing once the focus entry leaves the window", async () => {
+    const l = await away({ putAwayAt: at(-40 * DAY) });
+    await focus("solar", at(-FOCUS_WINDOW_MS - 1));
+    keyword.hits.set("solar", [l.id]);
+    expect(await previewIds()).toEqual([]);
+  });
+
+  it("finds a put-away link ranked behind stale matches", async () => {
+    const outranking = [];
+    for (let i = 0; i < 3; i++) outranking.push(await link({ state: "archived", putAwayAt: null }));
+    const l = await away();
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [...outranking.map((o) => o.id), l.id]);
+    expect(await previewIds()).toEqual([l.id]);
+  });
+
+  it("matches on the next build once the search finds the link, as a summary added later makes it", async () => {
+    const l = await away();
+    await focus("solar", at(-DAY));
+    expect(await previewIds()).toEqual([]);
+    keyword.hits.set("solar", [l.id]);
+    expect(await previewIds()).toEqual([l.id]);
+  });
+
+  it("takes the focus slots ahead of focus_words links", async () => {
+    const reading = [];
+    for (let i = 0; i < FOCUS_SLOTS; i++) reading.push(await link());
+    const back = await away();
+    await focus("older", at(-2 * DAY));
+    await focus("newer", at(-DAY));
+    keyword.hits.set(
+      "newer",
+      reading.map((r) => r.id),
+    );
+    keyword.hits.set("older", [back.id]);
+    expect((await previewIds()).slice(0, FOCUS_SLOTS)).toEqual([
+      back.id,
+      ...reading.slice(0, FOCUS_SLOTS - 1).map((r) => r.id),
+    ]);
+  });
+
+  it("never offers another owner's put-away link", async () => {
+    const theirs = (
+      await store.insertIfAbsent("other", {
+        url: "https://ex.com/theirs",
+        urlKey: "https://ex.com/theirs",
+        title: null,
+        summary: null,
+        why: null,
+        tags: [],
+        savedAt: at(-DAY),
+        savedBy: "t",
+        lastOpenedAt: null,
+        putAwayAt: AWAY,
+        tidyKeptAt: null,
+        lastSurfacedAt: null,
+        snoozedUntil: null,
+        state: "archived",
+      })
+    ).link;
+    await focus("solar", at(-DAY));
+    keyword.hits.set("solar", [theirs.id]);
+    expect(await previewIds()).toEqual([]);
+    expect((await getDigest(deps(), OWNER)).claimed).toEqual([]);
+    expect((await store.get("other", theirs.id))?.lastSurfacedAt).toBeNull();
+  });
+
+  describe("claiming", () => {
+    it("applies with the selected marker", async () => {
+      const l = await away();
+      const claimed = await claimSurfaced(deps(), OWNER, [l.id], { putAwayAt: AWAY });
+      expect(claimed.map((c) => c.link.id)).toEqual([l.id]);
+      expect((await store.get(OWNER, l.id))?.lastSurfacedAt).toEqual(NOW);
+    });
+
+    it("does not apply after Bring it back and putting it away again between selection and claim", async () => {
+      clock = AWAY;
+      const l = await link({ lastSurfacedAt: null });
+      await putAwayLink(deps(), OWNER, l.id);
+      clock = NOW;
+      await focus("solar", at(-DAY));
+      keyword.hits.set("solar", [l.id]);
+      const racingStore = racing(async () => {
+        await bringBackLink(deps(), OWNER, l.id);
+        clock = at(-HOUR);
+        await putAwayLink(deps(), OWNER, l.id);
+        clock = NOW;
+      });
+      const digest = await getDigest(deps({ store: racingStore }), OWNER);
+      expect(digest.links).toEqual([]);
+      expect(digest.claimed).toEqual([]);
+      expect((await store.get(OWNER, l.id))?.lastSurfacedAt).toBeNull();
+    });
   });
 });

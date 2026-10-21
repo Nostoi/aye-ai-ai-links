@@ -166,6 +166,7 @@ export const updateTagOutput = z.strictObject({ tag: tagOutput });
 // Adding a reason is a breaking change for a client holding an earlier tools/list (ROADMAP #39).
 const digestReasonOutput = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput }),
+  z.strictObject({ kind: z.literal("came_back"), focus: focusEntryOutput, putAwayAt: timestamp }),
   z.strictObject({ kind: z.literal("no_why") }),
   z.strictObject({ kind: z.literal("not_opened_recently") }),
   z.strictObject({ kind: z.literal("never_surfaced") }),

@@ -606,23 +606,35 @@ export class FakeStore
       now,
       exceptKeptTools,
       exceptGone,
+      expectedPutAwayAt,
     }: {
       at: Date;
       notSurfacedAfter: Date;
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
+      expectedPutAwayAt?: Date;
     },
   ): Promise<SurfacedClaim[]> {
     const claimed: SurfacedClaim[] = [];
     for (const id of new Set(ids)) {
       const found = this.owned(owner).get(id);
+      const stateFits =
+        expectedPutAwayAt === undefined
+          ? found?.state === "active"
+          : found?.state === "archived" &&
+            found.putAwayAt?.getTime() === expectedPutAwayAt.getTime();
+      // A came-back claim is blocked only by a surfacing since the marker, and only inside the cooldown.
+      const surfacedSince =
+        expectedPutAwayAt === undefined ||
+        (found?.lastSurfacedAt != null && found.lastSurfacedAt >= expectedPutAwayAt);
       if (
-        found?.state !== "active" ||
+        !found ||
+        !stateFits ||
         (found.snoozedUntil !== null && found.snoozedUntil > now) ||
         (exceptKeptTools === true && this.toolRows.get(owner)?.get(id)?.status === "kept") ||
         (exceptGone === true && (this.checkRows.get(owner)?.get(id)?.flaggedAt ?? null) !== null) ||
-        (found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
+        (surfacedSince && found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
       ) {
         continue;
       }

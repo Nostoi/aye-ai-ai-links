@@ -1361,6 +1361,74 @@ export function describeStoreContract(
         expect(await h.store.claimSurfaced(A, ids, when)).toEqual([]);
       });
 
+      describe("with an expected putAwayAt", () => {
+        const away = new Date("2026-02-20T00:00:00Z");
+        const expecting = { ...when, expectedPutAwayAt: away };
+        const claimIds = async (owner: string, ids: string[], w = expecting) =>
+          (await h.store.claimSurfaced(owner, ids, w)).map((c) => c.link.id);
+
+        it("claims only an archived link carrying exactly that marker, for its owner", async () => {
+          const match = await insert(A, 1, { state: "archived", putAwayAt: away });
+          const other = await insert(A, 2, { state: "archived", putAwayAt: ms(away, 1) });
+          const stale = await insert(A, 3, { state: "archived" });
+          const active = await insert(A, 4);
+          const theirs = await insert(B, 5, { state: "archived", putAwayAt: away });
+
+          expect(await claimIds(A, [other.id, stale.id, active.id, theirs.id])).toEqual([]);
+          for (const l of [other, stale, active]) {
+            expect((await h.store.get(A, l.id))?.lastSurfacedAt, l.id).toBeNull();
+          }
+          expect((await h.store.get(B, theirs.id))?.lastSurfacedAt).toBeNull();
+
+          const [claim] = await h.store.claimSurfaced(A, [match.id], expecting);
+          expect(claim?.link.id).toBe(match.id);
+          expect(claim?.previousSurfacedAt).toBeNull();
+          expect((await h.store.get(A, match.id))?.lastSurfacedAt).toEqual(now);
+        });
+
+        it("is blocked by a surfacing since the marker inside the cooldown, not by one before the marker or one older than the cooldown", async () => {
+          const before = await insert(A, 1, {
+            state: "archived",
+            putAwayAt: away,
+            lastSurfacedAt: ms(cutoff, 1), // inside the cooldown, but before the marker
+          });
+          const since = await insert(A, 2, {
+            state: "archived",
+            putAwayAt: away,
+            lastSurfacedAt: away, // at the marker, inside the cooldown
+          });
+          const oldAway = ms(cutoff, -2 * 86_400_000);
+          const sinceOld = await insert(A, 3, {
+            state: "archived",
+            putAwayAt: oldAway,
+            lastSurfacedAt: ms(cutoff, -86_400_000), // after the marker, outside the cooldown
+          });
+          expect(await claimIds(A, [before.id, since.id])).toEqual([before.id]);
+          expect(await claimIds(A, [sinceOld.id], { ...when, expectedPutAwayAt: oldAway })).toEqual(
+            [sinceOld.id],
+          );
+          expect((await h.store.get(A, since.id))?.lastSurfacedAt).toEqual(away);
+        });
+
+        it("skips a snoozed link", async () => {
+          const snoozed = await insert(A, 1, {
+            state: "archived",
+            putAwayAt: away,
+            snoozedUntil: ms(now, 1),
+          });
+          expect(await claimIds(A, [snoozed.id])).toEqual([]);
+          expect((await h.store.get(A, snoozed.id))?.lastSurfacedAt).toBeNull();
+        });
+
+        it("does not apply after Bring it back and putting it away again", async () => {
+          const link = await insert(A, 1, { state: "archived", putAwayAt: away });
+          await h.store.update(A, link.id, { state: "active", putAwayAt: null });
+          await h.store.update(A, link.id, { state: "archived", putAwayAt: ms(away, 5) });
+          expect(await claimIds(A, [link.id])).toEqual([]);
+          expect((await h.store.get(A, link.id))?.lastSurfacedAt).toBeNull();
+        });
+      });
+
       it("claims nothing for an empty list, and never for another owner", async () => {
         const mine = await insert(A, 1);
         expect(await h.store.claimSurfaced(A, [], when)).toEqual([]);

@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import {
   claimSurfaced,
   compareIds,
   type DigestDeps,
   type DigestLink,
+  dayRank,
   previewDigest,
   unclaimSurfaced,
 } from "./digest.js";
@@ -22,10 +22,6 @@ export const WORTH_SIZE = 3;
 export const SNOOZE_MS = 14 * DAY_MS;
 
 export type WorthDeps = DigestDeps;
-
-/** A link's place in one day's shuffle: the same all that day (UTC), different the next. */
-const dayRank = (day: number, id: string) =>
-  createHash("sha256").update(`${day}:${id}`).digest("hex");
 
 /**
  * The earliest-flagged gone link the owner could act on: active, not snoozed at `now`, not a kept
@@ -54,7 +50,9 @@ async function gonePick(deps: WorthDeps, owner: OwnerId): Promise<Link | null> {
 /**
  * Worth a look: at most one gone link, and reading picks for the other slots of WORTH_SIZE. The
  * digest never offers a gone link, so the gone pick is not among the reading picks. Leaves out the
- * links in `suggestions`: the caller passes the suggestions it shows on the shelf.
+ * links in `suggestions`: the caller passes the suggestions it shows on the shelf. A put-away link that
+ * came back leads, and at most one does, so every came-back link shown carries its reason; the
+ * other came-back links wait for a later build. Else a focus match leads.
  */
 export async function worthALook(
   deps: WorthDeps,
@@ -65,9 +63,13 @@ export async function worthALook(
   const shown = new Set(suggestions.map((s) => s.link.id));
   if (gone) shown.add(gone.id);
   const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY, shown);
-  const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
+  const isCameBack = (d: DigestLink) => d.reasons.some((r) => r.kind === "came_back");
+  const lead =
+    links.find(isCameBack) ?? links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
   const day = Math.floor(deps.now().getTime() / DAY_MS);
-  const ranked = links.filter((d) => d !== lead).map((d) => ({ d, rank: dayRank(day, d.link.id) }));
+  const ranked = links
+    .filter((d) => d !== lead && !isCameBack(d))
+    .map((d) => ({ d, rank: dayRank(day, d.link.id) }));
   ranked.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
   const shuffled = ranked.map((r) => r.d);
   const reading = (lead ? [lead, ...shuffled] : shuffled).slice(0, WORTH_SIZE - (gone ? 1 : 0));

@@ -55,6 +55,7 @@ describe("get_digest guidance", () => {
   it("names every reason, and the cautions that go with focus words and openings", () => {
     for (const kind of [
       "focus_words",
+      "came_back",
       "no_why",
       "not_opened_recently",
       "never_surfaced",
@@ -62,6 +63,11 @@ describe("get_digest guidance", () => {
     ]) {
       expect(GET_DIGEST).toContain(`- ${kind}:`);
     }
+    const cameBack = GET_DIGEST.split("\n").find((l) => l.startsWith("- came_back:")) ?? "";
+    expect(cameBack).toContain("put this link away");
+    expect(cameBack).toContain("putAwayAt");
+    expect(cameBack).toContain('source is "inferred" as a guess');
+    expect(cameBack).toContain('state "active"');
     expect(GET_DIGEST).toContain("not proof it is relevant");
     expect(GET_DIGEST).toContain('source is "inferred" as a guess');
     expect(GET_DIGEST).toContain('update_link as "asked"');

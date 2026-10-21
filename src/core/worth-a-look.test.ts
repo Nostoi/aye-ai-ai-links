@@ -384,6 +384,28 @@ describe("worthALook", () => {
     }
   });
 
+  it("leads with at most one came-back link, ahead of a focus match, and no other came-back link shows", async () => {
+    const readers: Link[] = [];
+    for (let i = 0; i < 4; i++) readers.push(await link());
+    const away: Link[] = [];
+    for (let i = 0; i < 3; i++) {
+      away.push(await link(A, { state: "archived", putAwayAt: at(-3 * DAY) }));
+    }
+    await focus("fits", at(-DAY), [(readers[0] as Link).id, ...away.map((l) => l.id)]);
+    for (let d = 0; d < 6; d++) {
+      clock = at(d * DAY);
+      const { links } = await picked();
+      const back = links.filter((l) => l.reasons.some((r) => r.kind === "came_back"));
+      expect(back, `day ${d}`).toHaveLength(1);
+      expect(links[0], `day ${d}`).toBe(back[0]);
+      expect(away.map((l) => l.id)).toContain(links[0]?.link.id);
+      expect(
+        links.filter((l) => l.link.state === "archived"),
+        `day ${d}`,
+      ).toHaveLength(1);
+    }
+  });
+
   it("with no focus match, leads with the day's shuffle first, not the queue's first", async () => {
     const all: Link[] = [];
     for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());

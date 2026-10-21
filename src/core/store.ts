@@ -144,7 +144,10 @@ export interface LinkStore {
    * Foreign, unknown, malformed and no-longer-eligible ids are skipped, never an error; an id
    * given twice is claimed once. With `exceptKeptTools`, a link whose Keep handy row is `kept` is
    * skipped too; with `exceptGone`, a link flagged as gone by its dead-link check (#128) is. Both
-   * are judged in the same step; core says when (the digest's picks). On an error nothing is written.
+   * are judged in the same step; core says when (the digest's picks). With `expectedPutAwayAt`, the
+   * claim is for a came-back pick instead: it applies only to an archived link whose putAwayAt is
+   * exactly that (to the millisecond), and a surfacing blocks it only when it is at or after that
+   * marker and within the cooldown. On an error nothing is written.
    */
   claimSurfaced(
     owner: OwnerId,
@@ -155,6 +158,7 @@ export interface LinkStore {
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
+      expectedPutAwayAt?: Date;
     },
   ): Promise<SurfacedClaim[]>;
 

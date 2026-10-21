@@ -282,6 +282,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
+      expectedPutAwayAt?: Date;
     },
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
@@ -599,19 +600,27 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       now,
       exceptKeptTools,
       exceptGone,
+      expectedPutAwayAt,
     }: {
       at: Date;
       notSurfacedAfter: Date;
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
+      expectedPutAwayAt?: Date;
     },
   ): SurfacedClaim[] {
+    // With an expected putAwayAt (a came-back claim) the link must be archived with exactly that marker,
+    // and a surfacing before the marker does not count against the cooldown.
+    const expected = expectedPutAwayAt ? toMs(expectedPutAwayAt) : null;
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
-       WHERE id = ? AND owner_id = ? AND state = 'active' AND deleted_at IS NULL
+       WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
+         AND (CASE WHEN ? IS NULL THEN state = 'active'
+                   ELSE state = 'archived' AND put_away_at = ? END)
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
-         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
+         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?
+              OR (? IS NOT NULL AND last_surfaced_at < ?))
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
            WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_checks c
@@ -625,8 +634,12 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       const row = previous.get(
         id,
         owner,
+        expected,
+        expected,
         toMs(now),
         toMs(notSurfacedAfter),
+        expected,
+        expected,
         exceptKeptTools ? 1 : 0,
         exceptGone ? 1 : 0,
       ) as { last_surfaced_at: number | null } | undefined;

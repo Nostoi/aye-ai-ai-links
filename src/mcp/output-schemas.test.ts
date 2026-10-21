@@ -779,6 +779,37 @@ describe.each(ERAS)("put-away on the wire, %s era", (era) => {
       expect(link).not.toHaveProperty("tidyKeptAt");
     }
   });
+
+  it("get_digest returns a put-away link with a came_back reason that passes the schema", async () => {
+    const { db, app } = freshApp();
+    const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
+    const call = async (tool: string, args: unknown) => {
+      const res = (await callTool(app, era, tool, args)).result;
+      expect(res.isError, `${tool}: ${JSON.stringify(res)}`).toBeUndefined();
+      const verdict = new AjvJsonSchemaValidator().getValidator(tools[tool].outputSchema)(
+        res.structuredContent,
+      );
+      expect(verdict.valid, `${tool}: ${JSON.stringify(verdict)}`).toBe(true);
+      return res.structuredContent;
+    };
+    await call("save_link", {
+      url: "https://example.com/q",
+      title: "Quokka",
+      why: { text: "w", source: "stated" },
+    });
+    db.prepare("UPDATE links SET state = 'archived', put_away_at = ? WHERE id = 1").run(
+      AWAY.getTime(),
+    );
+    await call("add_profile", { addFocus: [{ text: "quokka", source: "inferred" }] });
+    const digest = await call("get_digest", {});
+    expect(digest.links.map((d: Json) => d.link.id)).toEqual(["1"]);
+    expect(digest.links[0].reasons[0]).toMatchObject({
+      kind: "came_back",
+      putAwayAt: AWAY.toISOString(),
+      focus: { text: "quokka", source: "inferred" },
+    });
+    expect(digest.links[0].link.putAwayAt).toBe(AWAY.toISOString());
+  });
 });
 
 describe("the MCP link projection", () => {

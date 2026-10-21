@@ -279,8 +279,9 @@ img.handy-image{background:#fff}
 .band-head>a,.done-link,.back-link{display:inline-flex;align-items:center;min-height:44px;font-size:15.5px}
 .space h2{margin-bottom:16px}
 .link-rows{list-style:none;padding:0;margin:0;background:var(--surface);border-radius:20px;box-shadow:0 1px 2px #0000000f}
-.link-row{position:relative;display:flex;align-items:center;gap:16px;min-width:0;max-width:none;margin:0;padding:14px 60px 14px 16px;border-top:1px solid var(--line)}
-.link-row:first-child{border-top:0;border-radius:20px 20px 0 0}
+.link-row{position:relative;display:flex;align-items:center;gap:16px;min-width:0;max-width:none;margin:0;padding:14px 60px 14px 16px}
+main:not([data-view=pictures]) .link-row:not([hidden]) ~ .link-row{border-top:1px solid var(--line)}
+.link-row:first-child{border-radius:20px 20px 0 0}
 .link-row:last-child{border-radius:0 0 20px 20px}
 .link-row:only-child{border-radius:20px}
 .row-pic{flex:0 0 44px;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--pic);--icon:30px;--initials:16px}

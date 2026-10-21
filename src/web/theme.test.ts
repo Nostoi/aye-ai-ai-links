@@ -630,6 +630,25 @@ describe("the quiet list and the Pictures view (#194)", () => {
     }
   });
 
+  it.each([
+    ["none hidden", [false, false, false]],
+    ["the first hidden", [true, false, false]],
+    ["a middle one hidden", [false, true, false]],
+    ["the last hidden", [false, false, true]],
+  ])("draws a divider only between two shown rows of a month, with %s", (_, hidden) => {
+    const rows = hidden.map((h) => `<li class="link-row"${h ? " hidden" : ""}></li>`).join("");
+    for (const w of ["desktop", "phone"] as const) {
+      const list = el(`<main data-view="list"><ul class="link-rows">${rows}</ul></main>`, "ul");
+      const shown = [...list.children].filter((row) => !row.hasAttribute("hidden"));
+      const borders = shown.map((row) => computed(row, "border-top", w) ?? "none");
+      expect(borders, w).toEqual(
+        shown.map((_, i) =>
+          i === 0 ? expect.stringMatching(/^(none|0)$/) : "1px solid var(--line)",
+        ),
+      );
+    }
+  });
+
   it("sizes the icon and initials inside the picture box for each view", () => {
     for (const w of ["desktop", "phone"] as const) {
       expect(computed(inView("list"), "--icon", w), w).toBe("30px");

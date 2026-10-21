@@ -533,6 +533,57 @@ describe("the home page's script", () => {
     expect(hidden(p, cards[0]?.link.id as string)).toBe(true);
   });
 
+  it.each([
+    [
+      "Not now, then I'm done with it",
+      "snooze",
+      "archive",
+      "/home/snooze",
+      "Hidden for two weeks.",
+    ],
+    [
+      "I'm done with it, then Not now",
+      "archive",
+      "snooze",
+      "/home/archive",
+      "Moved out of your list.",
+    ],
+  ])("sends one action for a card: %s before the first is answered", async (_, a, b, url, undo) => {
+    const cards = two();
+    const id = cards[0]?.link.id as string;
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze"
+        ? { status: 200, body: SNOOZE, wait: held }
+        : { status: 204, wait: held },
+    );
+    p.dispatch(p.$(`.feature-quiet button[data-act=${a}]`), "click");
+    p.dispatch(p.$(`.feature-quiet button[data-act=${b}]`), "click");
+    answer(null);
+    await p.settle();
+    expect(urls(p)).toEqual([url]);
+    expect(hidden(p, id)).toBe(true);
+    expect(p.$("#undo-bar span").textContent).toBe(undo);
+  });
+
+  it("sends nothing from a row's menu while that row's Not now is unanswered", async () => {
+    const cards = two();
+    const id = cards[1]?.link.id as string;
+    let answer = (_: unknown) => {};
+    const held = new Promise((r) => (answer = r));
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: held } : { status: 204 },
+    );
+    pick(p, id, "snooze");
+    pick(p, id, "archive");
+    pick(p, id, "keep");
+    answer(null);
+    await p.settle();
+    expect(urls(p)).toEqual(["/home/snooze"]);
+    expect(p.$("#undo-bar span").textContent).toBe("Hidden for two weeks.");
+  });
+
   it("I'm done with it on the featured card archives once, hides it, and Undo puts it back", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;

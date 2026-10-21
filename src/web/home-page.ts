@@ -225,7 +225,7 @@ const homeActs = {
     );
   },
 };
-const homeBusy = new WeakSet();
+const homeBusy = doneCard.busy;
 if (worthCards) {
   worthCards.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");

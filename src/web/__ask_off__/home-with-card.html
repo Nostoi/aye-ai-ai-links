@@ -669,7 +669,7 @@ if (deleteRoot) {
 }
 const doneCard = (() => {
   const busy = new WeakSet();
-  return async (card) => {
+  const done = async (card) => {
     if (busy.has(card)) return;
     const listRoot = document.getElementById("worth-cards");
     const doneAlert = document.getElementById("home-error");
@@ -689,6 +689,8 @@ const doneCard = (() => {
       else doneAlert.textContent = await failure(back);
     });
   };
+  done.busy = busy;
+  return done;
 })();
 {
 const doneRoot = document.getElementById("worth-cards");
@@ -1156,7 +1158,7 @@ const homeActs = {
     );
   },
 };
-const homeBusy = new WeakSet();
+const homeBusy = doneCard.busy;
 if (worthCards) {
   worthCards.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");

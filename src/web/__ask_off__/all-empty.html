@@ -946,7 +946,7 @@ if (deleteRoot) {
 }
 const doneCard = (() => {
   const busy = new WeakSet();
-  return async (card) => {
+  const done = async (card) => {
     if (busy.has(card)) return;
     const listRoot = document.getElementById("all-links");
     const doneAlert = document.getElementById("all-error");
@@ -966,6 +966,8 @@ const doneCard = (() => {
       else doneAlert.textContent = await failure(back);
     });
   };
+  done.busy = busy;
+  return done;
 })();
 {
 const doneRoot = document.getElementById("all-links");

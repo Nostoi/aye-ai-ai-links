@@ -1027,7 +1027,7 @@ if (deleteRoot) {
 }
 const doneCard = (() => {
   const busy = new WeakSet();
-  return async (card) => {
+  const done = async (card) => {
     if (busy.has(card)) return;
     const listRoot = document.getElementById("space-links");
     const doneAlert = document.getElementById("space-error");
@@ -1047,6 +1047,8 @@ const doneCard = (() => {
       else doneAlert.textContent = await failure(back);
     });
   };
+  done.busy = busy;
+  return done;
 })();
 {
 const doneRoot = document.getElementById("space-links");

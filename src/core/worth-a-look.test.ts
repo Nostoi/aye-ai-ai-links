@@ -641,10 +641,25 @@ describe("It's stale", () => {
     expect(await get(l.id)).toEqual(before);
   });
 
-  it("undo of a link no longer archived is a conflict", async () => {
-    const l = await link();
-    await archiveLink(deps(), A, l.id);
-    await store.update(A, l.id, { state: "active", title: "changed elsewhere" });
+  it("Bring it back on a link already active is a quiet success that writes nothing", async () => {
+    const l = await link(A, {
+      snoozedUntil: at(DAY),
+      lastSurfacedAt: at(-DAY),
+      title: "elsewhere",
+    });
+    const before = await get(l.id);
+    const change = await bringBackLink(deps(), A, l.id);
+    expect(change).toEqual({
+      before: { state: "active", putAwayAt: null, snoozedUntil: at(DAY) },
+      after: { state: "active", putAwayAt: null },
+    });
+    expect(await get(l.id)).toEqual(before);
+    await undoStateChange(deps(), A, l.id, change);
+    expect(await get(l.id)).toEqual(before);
+  });
+
+  it("Bring it back refuses an active link that carries a put-away date, writing nothing", async () => {
+    const l = await link(A, { putAwayAt: at(-DAY) });
     const before = await get(l.id);
     expect(await code(bringBackLink(deps(), A, l.id))).toBe("conflict");
     expect(await get(l.id)).toEqual(before);
@@ -718,7 +733,7 @@ describe("put away, stale, bring back and their Undo", () => {
     const change = await bringBackLink(deps(), A, away.id);
     expect(change.before).toEqual({ state: "archived", putAwayAt: stamp, snoozedUntil: null });
     expect(await get(away.id)).toMatchObject({ state: "active", putAwayAt: null });
-    expect(await code(bringBackLink(deps(), A, away.id))).toBe("conflict");
+    expect((await bringBackLink(deps(), A, away.id)).before.state).toBe("active");
   });
 
   it("Undo of put away restores the active state and the snooze it cleared", async () => {
@@ -754,6 +769,20 @@ describe("put away, stale, bring back and their Undo", () => {
     expect(await code(undoStateChange(deps(), A, l.id, first))).toBe("conflict");
     expect(await get(l.id)).toEqual(before);
     expect(before).toMatchObject({ state: "archived", putAwayAt: null });
+  });
+
+  it("Undo refuses a change that sends an active link back with a put-away date, writing nothing", async () => {
+    const l = await link();
+    const good = await putAwayLink(deps(), A, l.id);
+    const before = await get(l.id);
+    const activeWithDate = { state: "active" as const, putAwayAt: stamp };
+    for (const bad of [
+      { ...good, before: { ...good.before, ...activeWithDate } },
+      { ...good, after: { ...good.after, ...activeWithDate } },
+    ]) {
+      expect(await code(undoStateChange(deps(), A, l.id, bad))).toBe("invalid_input");
+      expect(await get(l.id)).toEqual(before);
+    }
   });
 
   it("Undo of another owner's link is not found, changing nothing", async () => {

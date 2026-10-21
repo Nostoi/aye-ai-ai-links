@@ -191,6 +191,9 @@ export async function bringBackLink(
   id: string,
 ): Promise<StateChange> {
   const link = await current(deps, owner, id);
+  if (link.state === "active" && link.putAwayAt === null) {
+    return { before: beforeOf(link), after: { state: "active", putAwayAt: null } };
+  }
   if (link.state !== "archived") throw new CoreError("conflict", CHANGED_SINCE);
   const expected = { state: "archived" as const, putAwayAt: link.putAwayAt };
   await changeIf(deps, owner, id, expected, { state: "active", putAwayAt: null });
@@ -204,6 +207,11 @@ export async function undoStateChange(
   id: string,
   change: StateChange,
 ): Promise<void> {
+  for (const side of [change.before, change.after]) {
+    if (side.state === "active" && side.putAwayAt !== null) {
+      throw new CoreError("invalid_input", "That can't be undone. Reload the page.");
+    }
+  }
   await changeIf(deps, owner, id, change.after, change.before);
 }
 

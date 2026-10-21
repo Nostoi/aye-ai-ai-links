@@ -232,7 +232,7 @@ describe("the home card actions", () => {
     expect(row(world, id)).toEqual(before);
   });
 
-  it("/home/bring-back makes a put-away link active, clears the marker and answers the change; an active link is a 409", async () => {
+  it("/home/bring-back makes a put-away link active, clears the marker and answers the change; a link already active is a 200 that writes nothing", async () => {
     const { world, browser, id } = await home();
     await browser.send("/home/put-away", post({ id }));
     const res = await browser.send("/home/bring-back", post({ id }));
@@ -243,8 +243,32 @@ describe("the home card actions", () => {
     });
     expect(row(world, id)).toMatchObject({ state: "active", put_away_at: null });
     const before = row(world, id);
-    expect((await browser.send("/home/bring-back", post({ id }))).status).toBe(409);
+    const again = await browser.send("/home/bring-back", post({ id }));
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({
+      before: { state: "active", putAwayAt: null },
+      after: { state: "active", putAwayAt: null },
+    });
     expect(row(world, id)).toEqual(before);
+    const undone = await browser.send("/home/undo-state", post({ id, change: again.body }));
+    expect(undone.status).toBe(204);
+    expect(row(world, id)).toEqual(before);
+  });
+
+  it("/home/undo-state refuses a change that sends an active link back with a put-away date, 400, changing nothing", async () => {
+    const { world, browser, id } = await home();
+    const put = await browser.send("/home/put-away", post({ id }));
+    const good = put.body as { before: Record<string, unknown>; after: Record<string, unknown> };
+    const before = allRows(world);
+    const date = "2026-01-01T00:00:00.000Z";
+    for (const bad of [
+      { ...good, before: { ...good.before, state: "active", putAwayAt: date } },
+      { ...good, after: { ...good.after, state: "active", putAwayAt: date } },
+    ]) {
+      const res = await browser.send("/home/undo-state", post({ id, change: bad }));
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(allRows(world)).toEqual(before);
   });
 
   it("/home/undo-state is a 409 once the link has moved on (put away, then stale, then the first Undo)", async () => {

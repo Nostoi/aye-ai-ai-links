@@ -36,6 +36,8 @@ const link = (id: string): Link => ({
   savedAt: NOW,
   savedBy: "t",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

@@ -192,12 +192,13 @@ export interface LinkRemover {
 }
 
 /**
- * What a conditional write expects of a link. `snoozedUntil` matches to the millisecond, and
+ * What a conditional write expects of a link. `snoozedUntil` and `putAwayAt` match to the millisecond, and
  * `whySource` lists the accepted sources of its why, with null for no why.
  */
 export type LinkExpectation = {
   state?: LinkState;
   snoozedUntil?: Date | null;
+  putAwayAt?: Date | null;
   whySource?: (Source | null)[];
 };
 

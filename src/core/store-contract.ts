@@ -1280,6 +1280,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt: null,
             snoozedUntil: null,
+            putAwayAt: null,
+            tidyKeptAt: null,
             state: "active",
             ...over,
           })
@@ -1384,6 +1386,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt,
             snoozedUntil: null,
+            putAwayAt: null,
+            tidyKeptAt: null,
             state: "active",
           })
         ).link;
@@ -1437,6 +1441,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt: null,
             snoozedUntil: null,
+            putAwayAt: null,
+            tidyKeptAt: null,
             state: "active",
             ...over,
           })
@@ -1492,6 +1498,48 @@ export function describeStoreContract(
         expect((await h.store.get(A, guess.id))?.why).toEqual(answer);
         expect((await h.store.get(A, said.id))?.why).toEqual({ text: "s", source: "stated" });
         expect((await h.store.get(A, asked.id))?.why).toEqual({ text: "a", source: "asked" });
+      });
+
+      it("starts a new link with no put-away date and no Keep date, and update sets and clears each", async () => {
+        const saved = await saveLink(deps(), A, { url: "https://ex.com/new", savedBy: "t" });
+        expect(saved.link).toMatchObject({ putAwayAt: null, tidyKeptAt: null });
+        const link = await seed(A, 1);
+        const date = new Date("2026-05-06T07:08:09.123Z");
+        const set = await h.store.update(A, link.id, { putAwayAt: date });
+        expect(set).toMatchObject({ putAwayAt: date, tidyKeptAt: null });
+        const both = await h.store.update(A, link.id, { tidyKeptAt: date });
+        expect(both).toMatchObject({ putAwayAt: date, tidyKeptAt: date });
+        const cleared = await h.store.update(A, link.id, { putAwayAt: null });
+        expect(cleared).toMatchObject({ putAwayAt: null, tidyKeptAt: date });
+        const clearedKept = await h.store.update(A, link.id, { tidyKeptAt: null });
+        expect(clearedKept).toMatchObject({ putAwayAt: null, tidyKeptAt: null });
+        expect(await h.store.get(A, link.id)).toEqual(clearedKept);
+      });
+
+      it("expects putAwayAt to the millisecond, null meaning not set, and writes nothing on a mismatch", async () => {
+        const date = new Date("2026-05-06T07:08:09.123Z");
+        const away = await seed(A, 1, { state: "archived", putAwayAt: date });
+        const stale = await seed(A, 2, { state: "archived" });
+        const before = structuredClone(await h.all(A));
+        for (const [link, expected] of [
+          [away, { putAwayAt: null }],
+          [away, { putAwayAt: new Date(date.getTime() + 1) }],
+          [stale, { putAwayAt: date }],
+        ] as const) {
+          const result = await h.store.updateIf(A, link.id, expected, { state: "active" });
+          expect(result?.applied, JSON.stringify(expected)).toBe(false);
+        }
+        expect(await h.all(A)).toEqual(before);
+        const matched = await h.store.updateIf(
+          A,
+          away.id,
+          { putAwayAt: new Date(date) },
+          { state: "active", putAwayAt: null },
+        );
+        expect(matched?.applied).toBe(true);
+        expect(matched?.link).toMatchObject({ state: "active", putAwayAt: null });
+        const none = await h.store.updateIf(A, stale.id, { putAwayAt: null }, { title: "x" });
+        expect(none?.applied).toBe(true);
       });
 
       it("never matches another owner's link: null, and that link is unchanged", async () => {

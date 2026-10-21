@@ -25,6 +25,8 @@ const L = (n: number, over: Partial<Link> = {}): Link => ({
   savedAt: new Date(Date.UTC(2026, 9, 1) + n * 1000),
   savedBy: "claude-code",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

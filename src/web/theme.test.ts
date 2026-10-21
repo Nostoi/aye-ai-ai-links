@@ -732,6 +732,8 @@ describe("Home's Worth a look cards (#195)", () => {
         savedAt: new Date(0),
         savedBy: "t",
         lastOpenedAt: null,
+        putAwayAt: null,
+        tidyKeptAt: null,
         lastSurfacedAt: null,
         snoozedUntil: null,
         state: "active" as const,

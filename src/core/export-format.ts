@@ -317,6 +317,8 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
     lastOpenedAt: orNull(entry.lastOpenedAt),
     lastSurfacedAt: orNull(entry.lastSurfacedAt),
     snoozedUntil: orNull(entry.snoozedUntil),
+    putAwayAt: null,
+    tidyKeptAt: null,
     state: entry.state,
   };
 }

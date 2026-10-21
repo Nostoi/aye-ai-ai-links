@@ -514,6 +514,8 @@ export class FakeStore
       (expected.state === undefined || found.state === expected.state) &&
       (expected.snoozedUntil === undefined ||
         (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
+      (expected.putAwayAt === undefined ||
+        (found.putAwayAt?.getTime() ?? null) === (expected.putAwayAt?.getTime() ?? null)) &&
       (expected.whySource === undefined || expected.whySource.includes(found.why?.source ?? null));
     if (!matches) return { link: this.view(owner, found), applied: false };
     return { link: (await this.update(owner, id, patch)) as Link, applied: true };

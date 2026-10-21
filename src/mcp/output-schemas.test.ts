@@ -15,7 +15,7 @@ import type { Caller } from "../auth/caller.js";
 import type { getDigest } from "../core/digest.js";
 import type { filingContext } from "../core/filing-context.js";
 import type { GoneView } from "../core/link-check.js";
-import type { getLinkWithText, saveLink, updateLink } from "../core/links.js";
+import { type getLinkWithText, saveLink, type updateLink } from "../core/links.js";
 import type { listLinks } from "../core/list-links.js";
 import type { addProfile, editProfile, getProfile, profileContext } from "../core/profile.js";
 import { copyLimits } from "../core/saved-copy.js";
@@ -27,12 +27,13 @@ import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
+import { linkWithHandy } from "./handy.js";
 import {
   type addProfileOutput,
   type getDigestOutput,
   getLinkOutput,
   type getProfileOutput,
-  type linkOutput,
+  linkOutput,
   type linkResultOutput,
   type listLinksOutput,
   type profileOutput,
@@ -495,14 +496,15 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
 describe.each(ERAS)("a result that breaks its schema after a write, %s era", (era) => {
   // The advertised schema allows extra keys, so the server's own check is what must refuse them.
   it.each([
-    ["an extra key on the link", (link: Link) => ({ ...link, stray: 1 })],
+    ["an unknown state on the link", (link: Link) => ({ ...link, state: "deleted" }), "state"],
     [
       "an extra key inside a tag",
       (link: Link) => ({ ...link, tags: link.tags.map((t) => ({ ...t, stray: 1 })) }),
+      "stray",
     ],
   ])(
     "with %s is logged and tells the agent the change was saved and must not be retried",
-    async (_name, spoil) => {
+    async (_name, spoil, culprit) => {
       const { db, deps, app } = freshApp();
       await callTool(app, era, "save_link", {
         url: "https://example.com/a",
@@ -523,7 +525,7 @@ describe.each(ERAS)("a result that breaks its schema after a write, %s era", (er
       });
       expect(logged).toHaveBeenCalledTimes(1);
       expect(String(logged.mock.calls[0]?.[0])).toContain("output schema");
-      expect(JSON.stringify(logged.mock.calls[0]?.[1])).toContain("stray");
+      expect(JSON.stringify(logged.mock.calls[0]?.[1])).toContain(culprit);
       expect(res.isError).toBe(true);
       expect(res.structuredContent).toBeUndefined();
       expect(res.content[0].text).toContain("was saved");
@@ -678,7 +680,7 @@ type Wire<T> = T extends Date
 type Handied<T> = T extends Date
   ? T
   : T extends Link
-    ? T & { handy: HandyView | null; gone: GoneView | null }
+    ? Omit<T, "tidyKeptAt"> & { handy: HandyView | null; gone: GoneView | null }
     : T extends (infer U)[]
       ? Handied<U>[]
       : T extends object
@@ -734,5 +736,59 @@ describe("output schemas against core's types (checked by tsc)", () => {
     expectTypeOf<z.output<typeof getDigestOutput>>().toEqualTypeOf<
       Wire<Handied<Omit<Returned<typeof getDigest>, "claimed">>>
     >();
+  });
+});
+
+describe.each(ERAS)("put-away on the wire, %s era", (era) => {
+  const AWAY = new Date("2026-10-01T08:00:00.123Z");
+
+  it("active, stale and put-away links pass every link tool's schema, carry putAwayAt and never tidyKeptAt", async () => {
+    const { db, app } = freshApp();
+    const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
+    const validators = new AjvJsonSchemaValidator();
+    const urls = ["active", "stale", "away"].map((n) => `https://example.com/${n}`);
+    for (const url of urls) await callTool(app, era, "save_link", { url });
+    db.prepare("UPDATE links SET state = 'archived' WHERE id IN (2, 3)").run();
+    db.prepare("UPDATE links SET put_away_at = ?, tidy_kept_at = ? WHERE id = 3").run(
+      AWAY.getTime(),
+      AWAY.getTime(),
+    );
+    const expected: Record<string, string | null> = {
+      "1": null,
+      "2": null,
+      "3": AWAY.toISOString(),
+    };
+    const links: Json[] = [];
+    const run = async (tool: string, args: unknown) => {
+      const res = (await callTool(app, era, tool, args)).result;
+      expect(res.isError, `${tool}: ${JSON.stringify(res)}`).toBeUndefined();
+      const verdict = validators.getValidator(tools[tool].outputSchema)(res.structuredContent);
+      expect(verdict.valid, `${tool}: ${JSON.stringify(verdict)}`).toBe(true);
+      return res.structuredContent;
+    };
+    links.push(...(await run("list_links", {})).links);
+    for (const [i, url] of urls.entries()) {
+      const id = String(i + 1);
+      links.push((await run("get_link", { id })).link);
+      links.push((await run("update_link", { id, summary: `s${id}` })).link);
+      links.push((await run("save_link", { url })).link);
+    }
+    expect(links).toHaveLength(12);
+    for (const link of links) {
+      expect(link.putAwayAt, `link ${link.id}`).toBe(expected[link.id]);
+      expect(link).not.toHaveProperty("tidyKeptAt");
+    }
+  });
+});
+
+describe("the MCP link projection", () => {
+  it("drops fields the output schema does not declare, so an extra field still validates", async () => {
+    const { deps } = freshApp();
+    const { link } = await saveLink(deps, A.owner, { url: "https://example.com/x", savedBy: "t" });
+    const extra = { ...link, tidyKeptAt: new Date(), futureField: 1 };
+    const projected = await linkWithHandy(deps, A.owner, extra as Link);
+    expect(projected).not.toHaveProperty("tidyKeptAt");
+    expect(projected).not.toHaveProperty("futureField");
+    expect(linkOutput.safeParse(JSON.parse(JSON.stringify(projected))).success).toBe(true);
   });
 });

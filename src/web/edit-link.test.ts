@@ -50,6 +50,8 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: NOW,
   savedBy: "t",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

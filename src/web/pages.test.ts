@@ -375,6 +375,8 @@ const link = (over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-03-12T10:00:00Z"),
   savedBy: "claude",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

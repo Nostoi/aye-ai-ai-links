@@ -84,6 +84,8 @@ async function link(owner = A, over: Partial<NewLink> = {}): Promise<Link> {
       savedAt: at(-(n + 1) * DAY),
       savedBy: "t",
       lastOpenedAt: null,
+      putAwayAt: null,
+      tidyKeptAt: null,
       lastSurfacedAt: null,
       snoozedUntil: null,
       state: "active",

@@ -39,6 +39,8 @@ const link = (n: number, over: Partial<Link> = {}): Link => ({
   savedAt: T(n),
   savedBy: "claude-code",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

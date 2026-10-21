@@ -177,6 +177,7 @@ describe("POST /save", () => {
       title: "A story",
       url: NEW,
       why: "for the trip",
+      putAwayAt: null,
     });
   });
 
@@ -201,10 +202,20 @@ describe("POST /save", () => {
       title: "Saved before",
       url: NEW,
       why: null,
+      putAwayAt: null,
     });
     expect(linkRow(world, A)).toMatchObject([
       { title: "Saved before", saved_by: "claude", state: "archived" },
     ]);
+  });
+
+  it("a repeat save of a put-away link answers its put-away date, as ISO", async () => {
+    const { world, browser } = await signedIn();
+    const { link } = await saveLink(linkDeps(world), A, { url: NEW, savedBy: "claude" });
+    const at = new Date("2026-10-01T08:00:00.123Z");
+    await linkDeps(world).store.update(A, link.id, { state: "archived", putAwayAt: at });
+    const res = await save(browser, { url: NEW, title: null, why: null });
+    expect(res.body).toMatchObject({ state: "archived", putAwayAt: at.toISOString() });
   });
 
   it("over a stated why, keeps it and answers whyKept false with the stored why", async () => {

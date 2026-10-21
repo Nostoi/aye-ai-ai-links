@@ -162,6 +162,8 @@ export async function saveLink(
     lastOpenedAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
+    putAwayAt: null,
+    tidyKeptAt: null,
     state: "active",
   });
   let link = result.link;

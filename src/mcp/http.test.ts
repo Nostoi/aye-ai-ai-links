@@ -312,6 +312,7 @@ describe("MCP door over HTTP", () => {
         savedAt: "2026-10-11T12:00:00.000Z",
         savedBy: "claude-code",
         lastOpenedAt: null,
+        putAwayAt: null,
         lastSurfacedAt: null,
         snoozedUntil: null,
         state: "active",
@@ -336,7 +337,7 @@ describe("MCP door over HTTP", () => {
   });
 
   it("every tool equals the direct core call with the same clock", async () => {
-    const plain = (link: Link) => ({ ...link, handy: null, gone: null });
+    const plain = ({ tidyKeptAt: _, ...link }: Link) => ({ ...link, handy: null, gone: null });
     const input = {
       url: "https://example.com/p",
       title: "Parity",

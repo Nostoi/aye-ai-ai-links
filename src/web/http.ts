@@ -310,6 +310,7 @@ const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
   title: link.title,
   url: link.url,
   why: link.why?.text ?? null,
+  putAwayAt: link.putAwayAt?.toISOString() ?? null,
 });
 
 /** A Keep handy row as the page holds it between an action and its Undo: dates as ISO strings. */

@@ -84,6 +84,7 @@ export const linkOutput = z.strictObject({
   lastOpenedAt: timestamp.nullable(),
   lastSurfacedAt: timestamp.nullable(),
   snoozedUntil: timestamp.nullable(),
+  putAwayAt: timestamp.nullable(),
   state: z.enum(STATES),
   snapshot: snapshotOutput.nullable(),
   handy: handyOutput.nullable(),

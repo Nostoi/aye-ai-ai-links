@@ -35,7 +35,6 @@ import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
-import { linkViews } from "../core/tools.js";
 import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import type { ProfileEntry, RecordChange } from "./changes.js";
 import * as guidance from "./guidance.js";
@@ -43,6 +42,7 @@ import {
   applyHandy,
   applyHandyToSaved,
   HANDY_ACTIONS,
+  type HandyLink,
   linksWithHandy,
   linkWithHandy,
 } from "./handy.js";
@@ -544,17 +544,12 @@ export function buildMcpServer(
       const at = { ...deps, now: () => now };
       const { links, claimed } = await getDigest(at, owner);
       if (claimed.length > 0) record({ kind: "surfaced", linkIds: claimed });
-      const views = await linkViews(
+      const handied = await linksWithHandy(
         at,
         owner,
         links.map((d) => d.link),
       );
-      return {
-        links: links.map((d) => ({
-          ...d,
-          link: { ...d.link, handy: null, gone: null, ...views.get(d.link.id) },
-        })),
-      };
+      return { links: links.map((d, i) => ({ ...d, link: handied[i] as HandyLink })) };
     },
   );
 

@@ -19,6 +19,8 @@ const link = (url = "https://ex.com/7"): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
+  putAwayAt: null,
+  tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",

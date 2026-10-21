@@ -66,9 +66,9 @@ function hostLine(link: Link, space: Space | null): string {
 }
 
 /**
- * A postcard: the stored image (or the space color with initials) fills the card, and the title,
- * opening the link and recorded by `openedScript`, sits over a fade with the host under it. `after`
- * holds the tile's panel and menu.
+ * A compact card: the stored image (or the initials) as a small square, and beside it the title,
+ * opening the link and recorded by `openedScript`, with the host under it. `after` holds the
+ * tile's ask, which the theme puts on its own line, and its menu.
  */
 function card(
   { link }: ToolItem,
@@ -78,9 +78,8 @@ function card(
   attrs = "",
 ): string {
   const space = linkSpace(link, catalog);
-  const picture = images.get(link.id);
-  return `<article class="handy-tile${picture?.fit === "cover" ? " photo" : ""}${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
-${tile(link, picture, "handy-image")}
+  return `<article class="handy-tile${classes}${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${attrs}>
+${tile(link, images.get(link.id), "handy-image")}
 <div class="handy-caption">
 <h3>${linkTitle(link)}</h3>
 ${hostLine(link, space)}</div>

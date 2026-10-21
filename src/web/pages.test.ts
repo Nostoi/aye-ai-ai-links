@@ -204,7 +204,7 @@ const PAGES: [string, string][] = [
           key: "kitchen",
           name: "Kitchen",
           color: "clay",
-          mosaic: [{ linkId: "1", version: "v", fit: "cover" }],
+          recent: [],
         },
       ]),
     }),

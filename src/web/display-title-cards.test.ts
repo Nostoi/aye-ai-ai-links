@@ -7,6 +7,7 @@ import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { searchPage } from "./pages.js";
 import { spacePage } from "./space-page.js";
+import { spacesSection } from "./spaces-section.js";
 
 /** A link with no title shows a readable one on every card; the address stays the link's target (#197). */
 
@@ -152,6 +153,15 @@ describe("a link with no title", () => {
     }
     const { document } = parseHTML(allPage({ ...list, links: [link()] }));
     expect(document.querySelector("[data-id]")?.getAttribute("data-title")).toBe("");
+  });
+
+  it("names a space's recent link on Home by its readable title", () => {
+    const html = spacesSection([
+      { key: "kitchen", name: "Kitchen", color: null, recent: [link()] },
+    ]);
+    const { document } = parseHTML(html);
+    expect(document.querySelector(".home-space-recent > *")?.textContent).toBe("Post by @alice");
+    expect(html).not.toMatch(/>https?:\/\//);
   });
 
   it("keeps decoded markup in an address as text in the heading and the menu label", () => {

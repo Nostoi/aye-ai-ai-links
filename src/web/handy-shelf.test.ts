@@ -107,11 +107,13 @@ describe("the Handy shelf", () => {
     expect(tile?.className).toContain("space-clay");
   });
 
-  it("fills a tile with the link's stored image, from this site, with no alt text", () => {
+  it("shows the link's stored image as the tile's small picture, from this site, with no alt text", () => {
     const item = kept({ title: "Attendance" });
     const [tile] = tiles(
       render([item], [], [], new Map([[item.link.id, { version: "v7", fit: "cover" }]])),
     );
+    // The words sit beside the picture, never over it, so no tile is a photo postcard (#195).
+    expect(tile?.classList.contains("photo")).toBe(false);
     const img = tile?.querySelector("img.handy-image") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(`/images/${item.link.id}?v=v7`);
     expect(img.getAttribute("alt")).toBe("");
@@ -119,7 +121,7 @@ describe("the Handy shelf", () => {
     expect(tile?.querySelector(".pic-initials")).toBeNull();
   });
 
-  it("★ an icon tile shows the icon whole, without .photo, keeping the dark caption", () => {
+  it("★ an icon tile shows the icon whole, without .photo", () => {
     const item = kept({ title: "Attendance" });
     const [t] = tiles(
       render([item], [], [], new Map([[item.link.id, { version: "v7", fit: "contain" }]])),

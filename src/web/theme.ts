@@ -154,7 +154,7 @@ img.tile{display:block;width:168px;height:auto;contain:size;object-fit:cover}
 .result>.tile{border-radius:18px 0 0 18px}
 .result-body{position:relative;flex:1 1 320px;min-width:0;padding:18px 22px;overflow-wrap:anywhere}
 .result h2{font-size:19px;line-height:1.3;margin:0 0 4px;padding-right:28px}
-.result h2 a{text-decoration:none}
+.result h2 a{position:relative;text-decoration:none}
 .result p{margin:0 0 8px}
 .not-it{max-width:720px;background:var(--surface);border-radius:18px;padding:18px 22px}
 .not-it p{margin:0 0 4px}
@@ -284,7 +284,7 @@ img.handy-image{background:#fff}
 .faded .card-image{opacity:.4}
 .card-body{padding:14px 18px 18px;overflow-wrap:anywhere}
 .card-body h3{font-size:17px;line-height:1.3;margin:0 0 4px;overflow-wrap:anywhere}
-.card-body h3 a{text-decoration:none}
+.card-body h3 a{position:relative;text-decoration:none}
 .card-body p{margin:0 0 8px}
 .card-body p:last-child{margin:0}
 .card-why{font-size:15px;overflow-wrap:anywhere}
@@ -301,11 +301,11 @@ img.handy-image{background:#fff}
 .all-card .card-image{height:140px}
 .card-site{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
 .card-site .dot{flex:none;width:10px;height:10px;margin:0}
-.card-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;margin:2px 0 4px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
+.card-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;font-size:14px;color:var(--soft);overflow-wrap:anywhere}
 .card-line>*{min-width:0}
 .card-line>:has(+ :not([hidden]))::after{content:"·";content:"·"/"";margin-left:6px}
-.card-line .line-space{display:inline-flex;align-items:center;gap:6px}
-.card-line .dot{flex:none;width:8px;height:8px;margin:0}
+.card-line .line-space{display:inline-flex;align-items:center}
+.card-line .dot{flex:none;width:8px;height:8px;margin:0 6px 0 0}
 .card-line .saved-copy{display:inline-flex;align-items:center;min-height:44px;margin:-12px 0;color:var(--soft)}
 .all-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px}
 .copy-notice{flex-basis:100%;margin:0;color:var(--soft);font-size:14px}

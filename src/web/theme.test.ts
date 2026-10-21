@@ -201,6 +201,31 @@ describe("the Handy tiles", () => {
     expect(link).toMatch(/margin:-1[0-9]px 0/);
   });
 
+  // Saved copy's tap area reaches up into the title above it. A positioned title link paints, and
+  // so takes taps, above a static one; a positioned Saved copy would take them back.
+  it.each([
+    ["a search result", "result", "result-body", "h2"],
+    ["a link card", "link-card", "card-body", "h3"],
+  ])("lets %s's title, not Saved copy, take a tap where they overlap", (_, card, body, h) => {
+    const html = `<li class="${card}"><div class="${body}"><${h} data-card-title><a href="/x">T</a></${h}><p class="card-line"><a class="saved-copy" href="/c">Saved copy</a></p></div></li>`;
+    expect(computed(el(html, `${h} a`), "position", "desktop")).toBe("relative");
+    expect(computed(el(html, ".saved-copy"), "position", "desktop")).toBeUndefined();
+  });
+
+  it("spaces every dot on the grey line alike: no part puts a gap before its own dot", () => {
+    const line = el(
+      '<p class="card-line"><span class="line-space"><span class="dot"></span>Kitchen</span><span>ex.com</span><a class="saved-copy">Saved copy</a></p>',
+      ".card-line",
+    );
+    // A dot is its part's ::after, so a part that is a flex box with a gap adds that gap to the
+    // dot's own 6px.
+    for (const part of line.children) {
+      for (const prop of ["gap", "column-gap"]) {
+        expect(computed(part, prop, "desktop"), `${part.className} ${prop}`).toBeUndefined();
+      }
+    }
+  });
+
   it("gives a link in a small-actions row the buttons' 44px height", () => {
     expect(rule(".small-actions button,.small-actions a")).toContain("min-height:44px");
   });

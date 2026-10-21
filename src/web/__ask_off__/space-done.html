@@ -435,6 +435,16 @@ const failure = async (res) => {
     ? data.message
     : "That did not work. Reload the page and try again.";
 };
+const cardBusy = new WeakSet();
+const whileBusy = async (card, run) => {
+  if (cardBusy.has(card)) return;
+  cardBusy.add(card);
+  try {
+    return await run();
+  } finally {
+    cardBusy.delete(card);
+  }
+};
 {
 const viewRoot = document.querySelector("main[data-view]");
 const choices = [...document.querySelectorAll(".view-switch button[data-choice]")];
@@ -453,26 +463,26 @@ const copyError = document.getElementById("space-error");
 if (copyRoot) {
   copyRoot.addEventListener("click", async (event) => {
     const button = event.target.closest(".card-menu button[data-act=remove-copy]");
-    if (!button || button.disabled) return;
+    if (!button) return;
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
-    const id = card.dataset.id;
-    const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
     menu.open = false;
-    copyError.textContent = "";
-    button.disabled = true;
-    const res = await post("/links/copy/remove", { id });
-    button.disabled = false;
-    if (!res || res.status !== 204) {
-      copyError.textContent = await failure(res);
-      return;
-    }
-    for (const row of rows) row.hidden = true;
-    menu.querySelector("summary").focus();
-    showUndo("Saved copy removed.", async () => {
-      const back = await post("/links/copy/restore", { id });
-      if (back && back.status === 204) for (const row of rows) row.hidden = false;
-      else copyError.textContent = await failure(back);
+    await whileBusy(card, async () => {
+      const id = card.dataset.id;
+      const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
+      copyError.textContent = "";
+      const res = await post("/links/copy/remove", { id });
+      if (!res || res.status !== 204) {
+        copyError.textContent = await failure(res);
+        return;
+      }
+      for (const row of rows) row.hidden = true;
+      menu.querySelector("summary").focus();
+      showUndo("Saved copy removed.", async () => {
+        const back = await post("/links/copy/restore", { id });
+        if (back && back.status === 204) for (const row of rows) row.hidden = false;
+        else copyError.textContent = await failure(back);
+      });
     });
   });
 }
@@ -838,17 +848,13 @@ const takeOut = (listRoot, card, remove) => {
     if (month) month.hidden = false;
   };
 };
-const deleteCard = (() => {
-  const busy = new WeakSet();
-  return async (card) => {
-    if (busy.has(card)) return;
+const deleteCard = (card) =>
+  whileBusy(card, async () => {
     const listRoot = document.getElementById("space-links");
     const deleteAlert = document.getElementById("space-error");
     const id = card.dataset.id;
     deleteAlert.textContent = "";
-    busy.add(card);
     const res = await post("/links/delete", { id });
-    busy.delete(card);
     if (!res || res.status !== 204) {
       deleteAlert.textContent = await failure(res);
       return;
@@ -859,8 +865,7 @@ const deleteCard = (() => {
       if (back && back.status === 204) putBack();
       else deleteAlert.textContent = await failure(back);
     });
-  };
-})();
+  });
 {
 const deleteRoot = document.getElementById("space-links");
 if (deleteRoot) {

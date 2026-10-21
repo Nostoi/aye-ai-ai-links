@@ -21,7 +21,11 @@ export const whyAnswer = (tag: "p" | "span", prefix: string, className?: string)
 
 /**
  * `post` sends JSON without following a redirect, answering null when the request fails;
- * `failure` is a refusal's own message, or a generic one.
+ * `failure` is a refusal's own message, or a generic one. `cardBusy` is a card's one busy mark:
+ * `whileBusy(card, run)` runs `run` and answers what it answers, unless the card is busy, when it
+ * runs nothing and answers nothing. The mark is held until `run` has finished, including its
+ * page update and Undo, and released whether it returns or throws. Every action on a card that
+ * posts goes through it, so a card takes one action at a time.
  */
 export const CARD_FETCH = `const post = (url, body, extra) =>
   fetch(url, {
@@ -36,6 +40,16 @@ const failure = async (res) => {
   return data && typeof data.message === "string"
     ? data.message
     : "That did not work. Reload the page and try again.";
+};
+const cardBusy = new WeakSet();
+const whileBusy = async (card, run) => {
+  if (cardBusy.has(card)) return;
+  cardBusy.add(card);
+  try {
+    return await run();
+  } finally {
+    cardBusy.delete(card);
+  }
 };`;
 
 /**

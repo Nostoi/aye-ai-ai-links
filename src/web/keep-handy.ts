@@ -32,7 +32,8 @@ export function handyControl(link: Link, view: HandyView | null | undefined): st
  * `/tools/not-handy`; every row and control on the card then shows the new state, so the two agree,
  * and focus moves to the control's visible button, or to the ⋯ when the menu was used. Each offers
  * Undo, which sends back the rows the action answered to `/tools/undo`. A refusal is shown in
- * `#error`. A block; needs `CARD_FETCH` and `showUndo`.
+ * `#error`. A card takes no other action while one is out (`whileBusy`). A block; needs
+ * `CARD_FETCH` and `showUndo`.
  */
 export const keepHandyScript = (root: string, error: string) => `{
 const keepRoot = document.getElementById(${JSON.stringify(root)});
@@ -46,7 +47,6 @@ const showKept = (card, kept, menu) => {
   if (menu || !control) card.querySelector(".card-menu summary").focus();
   else (kept ? on.querySelector("button") : control.querySelector("button[data-act=keep]")).focus();
 };
-const keepBusy = new WeakSet();
 if (keepRoot) {
   keepRoot.addEventListener("click", async (event) => {
     const button = event.target.closest(
@@ -54,26 +54,25 @@ if (keepRoot) {
     );
     if (!button) return;
     const card = button.closest("[data-id]");
-    if (keepBusy.has(card)) return;
-    const id = card.dataset.id;
     const menu = button.closest("details");
     if (menu) menu.open = false;
-    const keep = button.dataset.act === "keep";
-    keepError.textContent = "";
-    keepBusy.add(card);
-    const res = await post(keep ? "/tools/keep" : "/tools/not-handy", { id });
-    keepBusy.delete(card);
-    const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (!moved || !moved.tool) {
-      (menu ? menu.querySelector("summary") : button).focus();
-      keepError.textContent = await failure(res);
-      return;
-    }
-    showKept(card, keep, menu);
-    showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", async () => {
-      const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-      if (back && back.status === 204) showKept(card, !keep, menu);
-      else keepError.textContent = await failure(back);
+    await whileBusy(card, async () => {
+      const id = card.dataset.id;
+      const keep = button.dataset.act === "keep";
+      keepError.textContent = "";
+      const res = await post(keep ? "/tools/keep" : "/tools/not-handy", { id });
+      const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (!moved || !moved.tool) {
+        (menu ? menu.querySelector("summary") : button).focus();
+        keepError.textContent = await failure(res);
+        return;
+      }
+      showKept(card, keep, menu);
+      showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", async () => {
+        const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
+        if (back && back.status === 204) showKept(card, !keep, menu);
+        else keepError.textContent = await failure(back);
+      });
     });
   });
 }

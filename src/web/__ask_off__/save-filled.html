@@ -413,6 +413,16 @@ const failure = async (res) => {
     ? data.message
     : "That did not work. Reload the page and try again.";
 };
+const cardBusy = new WeakSet();
+const whileBusy = async (card, run) => {
+  if (cardBusy.has(card)) return;
+  cardBusy.add(card);
+  try {
+    return await run();
+  } finally {
+    cardBusy.delete(card);
+  }
+};
 {
 const form = document.getElementById("save-form");
 const urlField = document.getElementById("save-url");

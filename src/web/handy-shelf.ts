@@ -135,8 +135,10 @@ ${body}
 export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page.";
 
 /**
- * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure` and
- * `showUndo`).
+ * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure`,
+ * `cardBusy` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
+ * until the action, its shelf refresh and its Undo are done, and kept while the refresh was
+ * dropped for a newer one, whose swap replaces the tile.
  * - `refreshShelf(from)` reads home again and swaps in its `#handy-shelf`, so the server decides the
  *   order, the cut and the due marker after every action. Tiles that were shown stay shown.
  * - A page that is not home (a sign-in redirect) is not swapped in, and the owner is told to reload.
@@ -200,7 +202,7 @@ const offerUndo = (message, route, body, from) =>
 if (handy) {
   handy.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
-    if (!button || button.disabled) return;
+    if (!button) return;
     const act = button.dataset.act;
     if (act === "show-all") {
       const shelf = document.getElementById("handy-shelf");
@@ -214,11 +216,12 @@ if (handy) {
     const done = act === "done" || act === "archive";
     if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
+    if (cardBusy.has(tile)) return;
     const id = tile.dataset.id;
     const after = tile.nextElementSibling;
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
-    button.disabled = true;
+    cardBusy.add(tile);
     let dropped = false;
     try {
       if (done) {
@@ -252,7 +255,7 @@ if (handy) {
       dropped = await refreshShelf(from);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
-      if (!dropped) button.disabled = false;
+      if (!dropped) cardBusy.delete(tile);
     }
   });
 }

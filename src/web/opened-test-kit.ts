@@ -11,6 +11,8 @@ export type Answer = {
   body?: unknown;
   text?: string;
   wait?: Promise<unknown>;
+  bodyWait?: Promise<unknown>;
+  networkFails?: boolean;
   textFails?: boolean;
   redirected?: boolean;
 };
@@ -86,6 +88,7 @@ function start(
     };
     sent.push(request);
     const a = answer(request);
+    if (a.networkFails) throw new TypeError("network down");
     if (a.wait) await a.wait;
     return {
       status: a.status,
@@ -93,6 +96,7 @@ function start(
       type: a.type ?? "basic",
       redirected: a.redirected ?? false,
       json: async () => {
+        if (a.bodyWait) await a.bodyWait;
         if (a.body === undefined) throw new SyntaxError("no body");
         return a.body;
       },

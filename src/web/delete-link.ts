@@ -13,9 +13,9 @@ export const deleteLinkItem: MenuItem = { act: "delete-link", icon: TRASH, text:
  *   the function that puts the card back where it was and shows its month. I'm done with it
  *   (`doneLinkScript`) uses it too.
  * - `deleteCard(card)`, which the edit dialog's Delete also calls: it posts `/links/delete`, takes
- *   the card out and offers Undo, which posts `/links/restore` and puts the same card back. A card
- *   is busy until its delete is answered, so a second Delete sends nothing. A refusal, or an Undo
- *   that does not succeed, is shown in `#error`.
+ *   the card out and offers Undo, which posts `/links/restore` and puts the same card back. It
+ *   sends nothing while another action on the card is out (`whileBusy`). A refusal, or an Undo that
+ *   does not succeed, is shown in `#error`.
  *
  * For the page's one script after `CARD_FETCH` (it needs `post`, `failure` and `showUndo`); the
  * menu row's listener is a block.
@@ -47,17 +47,13 @@ export const deleteLinkScript = (
     if (month) month.hidden = false;
   };
 };
-const deleteCard = (() => {
-  const busy = new WeakSet();
-  return async (card) => {
-    if (busy.has(card)) return;
+const deleteCard = (card) =>
+  whileBusy(card, async () => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const deleteAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
     deleteAlert.textContent = "";
-    busy.add(card);
     const res = await post("/links/delete", { id });
-    busy.delete(card);
     if (!res || res.status !== 204) {
       deleteAlert.textContent = await failure(res);
       return;
@@ -68,8 +64,7 @@ const deleteCard = (() => {
       if (back && back.status === 204) putBack();
       else deleteAlert.textContent = await failure(back);
     });
-  };
-})();
+  });
 {
 const deleteRoot = document.getElementById(${JSON.stringify(root)});
 if (deleteRoot) {

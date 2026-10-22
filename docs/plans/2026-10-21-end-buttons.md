@@ -106,6 +106,31 @@ Today, once you finish reading a copy, the only way to act on the link is to go 
     
     Use existing colour tokens. Add none unless no token holds the fill.
 
+## Solution-choice challenge (Sol, REVISE): resolutions
+
+These override decisions 2–4 and 8 where they conflict.
+
+- **A. The row shows the state the server returned, not a remembered one.** A successful no-op (Bring it back on a link that's already active, or Keep on a link that's already kept) would otherwise leave the page wrong after Undo.
+  - The seam in `done-link.ts` passes the returned change: `takeOut(listRoot, card, false, change)`. Here `change` is the `StateChange` `{before, after}` the route returned. `delete-link.ts`'s `takeOut` ignores the 4th argument.
+  - The copy page's `takeOut` renders the row from `change.after`. Active shows the active group. Archived with `putAwayAt` shows "Put away". Archived without it shows "Stale".
+  - Its `putBack` (called after a 204 Undo, when storage equals `before`) renders from `change.before`.
+  - An opening calls `takeOut` with no change. Then it renders active (see C).
+- **B. Keep handy's Undo shows `previous`, not the opposite of the action.** This is base-branch bug #227. In `keepHandyScript`, after a 204 Undo, call `showKept(card, moved.previous?.status === "kept", menu)` instead of `!keep`. It fixes every page, and the PR body says `Closes #227`. Red test: the page shows Keep handy, the action answers 200 with `previous.status` set to `"kept"`, Undo answers 204, and the control then shows Not handy anymore.
+- **C. An opening after the page loaded.** A 204 from `/links/opened` doesn't say what state the link ended in.
+  - The page knows only its own state. If it shows Put away, core brings a put-away link back when it's opened (`recordOpening`), so the row turns active. That matches what the done views already do through the same leave marker.
+  - If another tab or an AI marked the link stale meanwhile, the row is wrong until reload. Every list page has that same staleness, and the next action reports the refusal (for example `ALREADY_DONE`) in the error line. This limit is accepted and recorded in the PR body. No new route or reload is added.
+  - The opening doesn't take the busy mark. It's a navigation, and core's rules make its order with a state action harmless.
+- **D. Undo takes the card's busy mark.** On the copy page the row stays visible after an action, unlike a hidden list card. So a late Undo answer could overwrite a newer action.
+  - In `doneLinkScript`, and in `keepHandyScript` for consistency, the Undo callback runs inside `whileBusy(card, …)`.
+  - Red test: Bring it back, then Undo with its answer held, then click It's stale. Nothing is sent until Undo answers, and the final row matches the last answer.
+  - On list pages the card is hidden while Undo runs, so their behaviour is unchanged.
+- **E. Errors are announced.** The row's error element is `<p class="error" id="copy-end-error" role="alert">`, as on other pages. "The Undo bar is the only live region" now means for successes only. Red test: after a 409, the error has `role=alert` and its text.
+- **F. Fill token.** Use an existing theme token whose light value is the mockup's `#EDEAE3`, with a dark counterpart. The account button's fill is `--surface` (white), so that isn't it. If no token fits, add one neutral token with light and dark values. Report which in the PR.
+- **Falsification tests added** (each compares the row with independently read storage where a real store is used):
+  - put away → bring back elsewhere → Bring it back (no-op) → Undo: the row is active;
+  - not kept → kept elsewhere → Keep → Undo: the row shows kept;
+  - a delayed Undo against a newer action (D).
+
 ## Red-first tests
 
 **`src/web/copy-end.test.ts`** (new). Use `copyPage(view, NOW, BACK, handy)`, `parseHTML` and `runPage`.

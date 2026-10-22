@@ -51,6 +51,8 @@
 - [ ] **Step 1: Write the failing tests.**
   - Contract: "keeps a summary's source through insert, get and update". Insert with `summary: "S", summarySource: "inferred"`, and `get` returns both. `update` with `{summary: "T", summarySource: "stated"}` returns both. `update` with `{summary: null, summarySource: null}` clears both.
   - Contract: "summaryOver skips the summary but writes the rest". The link holds `"Mine"/"stated"`. `update` with `{title: "T", summary: "AI", summarySource: "inferred", summaryOver: [null, "inferred"]}` gives title `"T"` and the summary still `"Mine"/"stated"`. The same holds through `updateWithReceipt`, and that receipt does not mark the summary changed.
+  - Contract: "summaryOver applies over no label and over no summary". The link holds `"Old"/null`, and the same guarded update gives `"AI"/"inferred"`. The same holds for a link with no summary at all. In SQL, `IN (NULL)` never matches. Build the guard like `updateIf`'s `whySource` expectation (`sqlite-store.ts`, `why_source IS NULL` for a null entry) and reuse that helper for `summaryOver`, `summarySource` and Task 5's `sources`.
+  - Contract: "updateIf matches an unlabelled summary". With expected `{summary: "Old", summarySource: [null]}`, a link holding `"Old"/null` gets `applied: true`.
   - Contract: "updateIf refuses when the summary or its source changed". With expected `{summary: "S", summarySource: ["inferred"]}`, a link now holding `"S"/"stated"` returns `applied: false` and is unchanged. The same holds for `"S2"/"inferred"`.
   - Migration test: an old row with `summary = 'S'` reads `summarySource: null` after `migrate`. Inserting `summary_source = 'server'` with a null summary throws a CHECK error.
 - [ ] **Step 2:** `npx vitest run src/core src/store`. The tests fail on the missing field or the column.
@@ -86,6 +88,7 @@
   - "a blank summary is no summary": `"  "` gives `null/null`.
   - Receipt contract: "Undo puts back the summary's source". Prior `"Srv"/"server"`, then the edit writes `"Mine"/"stated"`. After Undo the link holds `"Srv"/"server"`.
   - Receipt contract: "a source-only change is a summary change": `"S"/"inferred"` to `"S"/"stated"` records `summary_changed = 1`.
+  - Receipt contract: "Undo back to no summary". Prior `null/null`, then the edit writes `"Mine"/"stated"`. Undo gives `null/null` without a CHECK error. `restoreCovered` writes `summary` and `summary_source` in one `UPDATE`.
 - [ ] **Step 2:** `npx vitest run src/core src/store`. The tests fail on the precedence and the source.
 - [ ] **Step 3: Implement** as in Interfaces. `extendedPrior` (receipt extension) carries `summarySource` as it carries `summary`.
 - [ ] **Step 4:** Run the same command. The tests pass, and `npm run check` is green.
@@ -110,6 +113,7 @@
   - A plain string returns `"inferred"`.
   - `source: "server"` from a caller is rejected by the schema.
   - The frozen pre-31 fixture test still passes. If it rejects the new output field, stop and report instead of changing the fixture.
+  - Report whether any tool input schema already produced `anyOf` before this change. If none did, this union is the first, and a real ChatGPT save must be checked before PR 1 merges.
 - [ ] **Step 2:** `npx vitest run src/mcp`. The tests fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** Run the same command. The tests pass, and `npm run check` is green, including `readme.test.ts`.
@@ -118,7 +122,7 @@
 ### Task 4: export carries the label, plus ROADMAP
 
 **Files:**
-- Modify: `src/core/export-format.ts` (`linkSchema`, `manifestLink`, `toNewLink`), `ROADMAP.md` (a dated decision-log entry with the spec's owner decisions and the controller's calls; spec path linked)
+- Modify: `src/core/export-format.ts` (`linkSchema`, `manifestLink`, `toNewLink`), `ROADMAP.md` (a dated decision-log entry with the spec's owner decisions and the controller's calls, citing the #160 decisions comment and the spec path; it says it replaces the 2026-10-12 entry's "no source label" for summaries)
 - Test: `src/core/export-format.test.ts`
 
 **Interfaces:**

@@ -13,7 +13,7 @@ Two things stand in the way today:
 
 ## Goals
 
-- The server writes a short summary for every link, in one style, through the one AI connection (`src/ai/`).
+- The server writes a short summary for every link whose page it could read, in one style, through the one AI connection (`src/ai/`).
 - It replaces the summaries saving AIs wrote, the 27 existing ones included. A summary the owner gave is never replaced.
 - All links and space page rows show the summary where the owner wrote no why.
 

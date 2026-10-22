@@ -7,6 +7,7 @@ import {
   coveredOf,
   extendedPrior,
   holdsWritten,
+  sameTags,
 } from "./covered-fields.js";
 import type { IconBackfillStore, IconCandidate, PreviewLink } from "./icon-backfill-store.js";
 import {
@@ -757,17 +758,27 @@ export class FakeStore
     const own = this.ownerImages.get(key);
     const set = edit.picture !== undefined && edit.picture !== "page" ? edit.picture.set : null;
     const setSha = set ? sha256Hex(set.bytes) : null;
+    const prior = coveredOf(this.view(owner, link));
+    if (edit.tags && !sameTags(prior.tags, edit.tags.expected)) return "conflict";
     const titleChanged = edit.title !== undefined && edit.title !== link.title;
     const pictureChanged =
       edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
-    if (!titleChanged && !pictureChanged) return { editId: null };
+    const tags = edit.tags && !sameTags(prior.tags, edit.tags.set) ? edit.tags.set : null;
+    if (!titleChanged && !pictureChanged && !tags) return { editId: null };
     const editId = randomUUID();
-    const prior = coveredOf(link);
+    if (tags) {
+      link.tags = structuredClone(tags);
+      this.ensureTags(owner, link.tags);
+    }
     this.editRecords.set(key, {
       editId,
-      changed: { title: titleChanged, summary: false, why: false, tags: false },
+      changed: { title: titleChanged, summary: false, why: false, tags: tags !== null },
       prior,
-      written: { ...prior, title: titleChanged ? (edit.title ?? null) : prior.title },
+      written: {
+        ...prior,
+        title: titleChanged ? (edit.title ?? null) : prior.title,
+        tags: coveredOf(this.view(owner, link)).tags,
+      },
       pictureChanged,
       priorPicture: pictureChanged && own ? structuredClone(own) : null,
       writtenSha: pictureChanged ? setSha : null,

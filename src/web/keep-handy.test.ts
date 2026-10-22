@@ -217,6 +217,44 @@ describe("the Keep handy script", () => {
     await p.settle();
     expect(p.sent).toHaveLength(1);
   });
+
+  it("Undo of a Keep handy that changed nothing (#227) leaves the control showing it kept", async () => {
+    const p = load(false, (s) =>
+      s.url === "/tools/undo"
+        ? { status: 204 }
+        : { status: 200, body: { tool: MOVED.previous, previous: MOVED.previous } },
+    );
+    p.dispatch(p.$("button[data-act=keep]"), "click");
+    await p.settle();
+    expect(state(p)).toBe("kept");
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toMatchObject({ url: "/tools/undo" });
+    expect(state(p)).toBe("kept");
+  });
+
+  it("takes no other action on the card until an Undo has been answered, and shows the Undo's own answer", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = load(false, (s) =>
+      s.url === "/tools/undo"
+        ? { status: 204, wait: held }
+        : { status: 200, body: { tool: MOVED.previous, previous: null } },
+    );
+    p.dispatch(p.$("button[data-act=keep]"), "click");
+    await p.settle();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep", "/tools/undo"]);
+    release();
+    await p.settle();
+    expect(p.sent.map((s) => s.url)).toEqual(["/tools/keep", "/tools/undo"]);
+    expect(state(p)).toBe("not kept");
+  });
 });
 
 const KEPT_ROW = MOVED.previous;

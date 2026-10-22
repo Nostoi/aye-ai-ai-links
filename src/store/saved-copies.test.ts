@@ -16,7 +16,7 @@ import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCopyReader, createReadGate } from "../core/copy-reading.js";
-import { CPU_BUDGET_TIMEOUT_MS, cpuTimed } from "../core/cpu-time-test-kit.js";
+import { CPU_BUDGET_TIMEOUT_MS, cpuTimedAsync } from "../core/cpu-time-test-kit.js";
 import {
   copyLimits,
   finishedMarkdown,
@@ -612,9 +612,9 @@ describe("sweep", () => {
          SELECT 'o', i + 1000, j, 'u', 'ok', 'image/png', 1, 'x' FROM n, k`,
       );
       for (let i = 1001; i <= 4000; i++) mkdirSync(join(root, String(i)));
-      const { result, ms } = cpuTimed(() => copies.sweep(HOUR, new Date()));
+      const { result, ms } = await cpuTimedAsync(() => copies.sweep(HOUR, new Date()));
       expect(ms).toBeLessThan(1000);
-      expect((await result).folders).toBe(0);
+      expect(result.folders).toBe(0);
     },
     CPU_BUDGET_TIMEOUT_MS,
   );

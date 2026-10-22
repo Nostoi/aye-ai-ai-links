@@ -101,7 +101,7 @@ import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { backTarget } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
-import { shownTags } from "./edit-link.js";
+import { EDIT_MAX_TAG_TEXT, EDIT_MAX_TAGS, shownTags } from "./edit-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -244,10 +244,6 @@ const chatBody = createMiddleware<{
 
 /** The edit form's cap: the largest picture core keeps, plus the auth cap for the other fields. */
 const EDIT_BODY_LIMIT = MAX_IMAGE_BYTES + AUTH_BODY_LIMIT;
-
-/** The most tags a link's edit names, and the longest tag name or key it carries. */
-const EDIT_MAX_TAGS = 50;
-const EDIT_MAX_TAG_TEXT = 200;
 
 /** Where a list shows the card: the space it is within, and whether it is that space's own page (`lineSpace`). */
 type View = { within?: string; own?: boolean };

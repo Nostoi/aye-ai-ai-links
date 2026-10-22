@@ -460,9 +460,27 @@ describe("the edit dialog's look", () => {
       ".edit-remove",
       ".edit-foot button",
       ".edit-delete",
+      ".edit-tag",
+      ".edit-tag-remove",
+      ".edit-suggest-item",
     ]) {
       expect(rule(sel), sel).toContain("min-height:44px");
     }
+    expect(rule(".edit-tag-remove")).toContain("min-width:44px");
+    expect(rule(".edit-tag-input")).toContain("height:46px");
+  });
+
+  it("outlines the tag field with the field color like the title, and keeps the tag chips neutral", () => {
+    expect(rule(".edit-tag-input")).toBe("height:46px;padding:0 14px;border-radius:12px");
+    const tagRules = ["edit-tags", "edit-chips", "edit-tag", "edit-tag-guess", "edit-suggest"]
+      .map((c) => rule(`.${c}`))
+      .join(";");
+    expect(tagRules).not.toMatch(/--space|amber|#[0-9a-f]{3,6}/i);
+  });
+
+  it("on a phone the sheet scrolls and the tag field is as tall as the title field", () => {
+    expect(phone).toContain(".edit-link{overflow-y:auto;overscroll-behavior:contain}");
+    expect(phone).toContain(".edit-tag-input{height:48px}");
   });
 
   it("on a phone: a sheet from 96px with a grabber, Cancel and Save at the top, no close button or paste hint", () => {

@@ -25,7 +25,7 @@ type EditRow = ReceiptRow & {
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-/** The owner's title and picture edits (`owner_images`, `link_edits`) and their Undo. */
+/** The owner's title, picture and tag edits (`owner_images`, `link_edits`) and their Undo. */
 export class SqliteLinkEditStore implements LinkEditStore {
   constructor(private readonly db: Database) {}
 

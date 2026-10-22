@@ -93,4 +93,10 @@ export function editData(
   return data.map(([name, value]) => ` data-${name}="${escapeHtml(value)}"`).join("");
 }
 
-export { editDialog, editLinkScript, SHRINK_SIDE } from "./edit-dialog.js";
+export {
+  EDIT_MAX_TAG_TEXT,
+  EDIT_MAX_TAGS,
+  editDialog,
+  editLinkScript,
+  SHRINK_SIDE,
+} from "./edit-dialog.js";

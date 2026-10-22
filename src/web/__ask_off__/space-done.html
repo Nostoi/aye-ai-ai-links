@@ -476,6 +476,13 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <label for="edit-title">Title</label>
 <input id="edit-title" class="edit-title" name="title" autocomplete="off">
 <p class="edit-page-title" hidden><span>Page's title: “<span data-page-title></span>”</span><button type="button" class="edit-use" data-edit="use-title">Use it</button></p>
+<fieldset class="edit-tags">
+<legend>Tags</legend>
+<ul class="edit-chips"></ul>
+<label for="edit-tag-input">Add a tag</label>
+<input id="edit-tag-input" class="edit-tag-input" autocomplete="off" maxlength="200" enterkeyhint="done">
+<ul class="edit-suggest" hidden></ul>
+</fieldset>
 <fieldset class="edit-picture">
 <legend>Picture</legend>
 <div class="edit-picture-row">
@@ -592,6 +599,16 @@ const useTitle = dialog.querySelector("[data-edit=use-title]");
 const deleteButton = dialog.querySelector("[data-edit=delete]");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
+const tagList = dialog.querySelector(".edit-chips");
+const tagField = dialog.querySelector("#edit-tag-input");
+const suggestList = dialog.querySelector(".edit-suggest");
+// tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
+// "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
+// open are dropped.
+let tags = [];
+let openedTags = [];
+let catalog = [];
+let namesTurn = 0;
 let card = null;
 let opener = null;
 let openedTitle = "";
@@ -608,7 +625,98 @@ let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   titleField.toggleAttribute("readonly", saving);
-  for (const c of [chooseButton, removeButton, useTitle, deleteButton]) c.disabled = saving;
+  for (const c of [chooseButton, removeButton, useTitle, deleteButton, tagField]) c.disabled = saving;
+  for (const c of dialog.querySelectorAll(".edit-tag-remove, .edit-suggest-item")) c.disabled = saving;
+};
+const keyOf = (name) => name.trim().replace(/\s+/g, " ").toLowerCase();
+const clear = (list) => {
+  while (list.firstChild) list.removeChild(list.firstChild);
+};
+const listItem = (list, child) => {
+  const item = document.createElement("li");
+  item.append(child);
+  list.append(item);
+  return item;
+};
+const renderTags = () => {
+  clear(tagList);
+  for (const t of tags) {
+    const name = document.createElement("span");
+    name.textContent = t.name;
+    const item = listItem(tagList, name);
+    item.className = "edit-tag";
+    if (t.source === "inferred") {
+      const guess = document.createElement("span");
+      guess.className = "edit-tag-guess";
+      guess.textContent = " (a guess)";
+      item.append(guess);
+    }
+    const remove = document.createElement("button");
+    remove.setAttribute("type", "button");
+    remove.className = "edit-tag-remove";
+    remove.setAttribute("aria-label", "Remove " + t.name);
+    remove.setAttribute("data-key", t.key);
+    remove.innerHTML = "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg>";
+    remove.disabled = saving;
+    item.append(remove);
+  }
+};
+// Up to 6 catalog names containing the typed text and not on the link yet, those that start with it first.
+const showSuggestions = () => {
+  clear(suggestList);
+  const text = keyOf(tagField.value);
+  const have = new Set(tags.map((t) => t.key));
+  const hits = text === "" ? [] : catalog.filter((n) => keyOf(n).includes(text) && !have.has(keyOf(n)));
+  const first = hits.filter((n) => keyOf(n).startsWith(text));
+  const rest = hits.filter((n) => !keyOf(n).startsWith(text));
+  for (const name of [...first, ...rest].slice(0, 6)) {
+    const button = document.createElement("button");
+    button.setAttribute("type", "button");
+    button.className = "edit-suggest-item";
+    button.textContent = name;
+    button.disabled = saving;
+    listItem(suggestList, button);
+  }
+  suggestList.hidden = !suggestList.firstChild;
+};
+// Adds the typed name, unless its key is already there. A tag the card opened with comes back as
+// it was, so a guess stays a guess. False when there are too many tags.
+const addTag = (raw) => {
+  const name = raw.trim().replace(/\s+/g, " ");
+  const key = keyOf(name);
+  if (name === "" || tags.some((t) => t.key === key)) {
+    tagField.value = "";
+    return true;
+  }
+  if (tags.length >= 50) {
+    editError.textContent = "A link can have at most 50 tags here.";
+    return false;
+  }
+  const before = openedTags.find((t) => t.key === key);
+  const known = catalog.find((n) => keyOf(n) === key);
+  tags.push(before ? { ...before } : { key, name: known || name, source: "stated" });
+  tagField.value = "";
+  return true;
+};
+const loadNames = async () => {
+  const turn = ++namesTurn;
+  const res = await fetch("/tags/names", { redirect: "manual" }).catch(() => null);
+  const got = res && res.status === 200 ? await res.json().catch(() => null) : null;
+  if (turn !== namesTurn) return;
+  catalog = got && Array.isArray(got.names) ? got.names.filter((n) => typeof n === "string") : [];
+  showSuggestions();
+};
+const readTags = (d) => {
+  let held = [];
+  try {
+    held = JSON.parse(d.tags || "[]");
+  } catch {}
+  openedTags = Array.isArray(held) ? held : [];
+  tags = openedTags.map((t) => ({ ...t }));
+  tagField.value = "";
+  catalog = [];
+  renderTags();
+  showSuggestions();
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
@@ -714,6 +822,17 @@ const showCard = (target, answer) => {
   d.pageVersion = answer.picture.pageVersion === null ? "" : answer.picture.pageVersion;
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
+  d.tags = JSON.stringify(answer.tags);
+  // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
+  // which a Home card has none of.
+  for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
+  if (answer.space) target.classList.add("space-" + answer.space.color);
+  const slot = target.querySelector(".line-space");
+  if (slot) {
+    const spaceName = slot.querySelector("[data-space-name]");
+    if (spaceName) spaceName.textContent = answer.lineSpace ? answer.lineSpace.name : "";
+    slot.toggleAttribute("hidden", !answer.lineSpace);
+  }
   const label = answer.shown;
   const heading = target.querySelector("[data-card-title]");
   if (heading) (heading.querySelector("a") || heading).textContent = label;
@@ -766,6 +885,8 @@ const open = (from, menu) => {
   const d = card.dataset;
   titleField.value = d.title;
   openedTitle = titleField.value;
+  readTags(d);
+  loadNames();
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
   pageLine.hidden = page === "" || page === d.title.trim();
@@ -803,6 +924,38 @@ deleteButton.addEventListener("click", () => {
   dropPick();
   dialog.close();
   deleteCard(target);
+});
+tagList.addEventListener("click", (event) => {
+  const remove = event.target.closest(".edit-tag-remove");
+  if (!remove || remove.disabled) return;
+  tags = tags.filter((t) => t.key !== remove.getAttribute("data-key"));
+  renderTags();
+  showSuggestions();
+  tagField.focus();
+});
+suggestList.addEventListener("click", (event) => {
+  const item = event.target.closest(".edit-suggest-item");
+  if (!item || item.disabled) return;
+  editError.textContent = "";
+  addTag(item.textContent);
+  renderTags();
+  showSuggestions();
+  tagField.focus();
+});
+tagField.addEventListener("input", showSuggestions);
+// Enter adds the typed name; it does not send the form.
+tagField.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  if (saving || event.isComposing) return;
+  editError.textContent = "";
+  addTag(tagField.value);
+  renderTags();
+  showSuggestions();
+});
+// On a phone the keyboard covers the sheet's lower half: bring the field into view.
+tagField.addEventListener("focus", () => {
+  if (tagField.scrollIntoView) tagField.scrollIntoView({ block: "center" });
 });
 useTitle.addEventListener("click", () => {
   titleField.value = pageTitle.textContent;
@@ -869,6 +1022,20 @@ form.addEventListener("submit", async (event) => {
     body.append("title", titleField.value);
     changed = true;
   }
+  // Text left in the tag field is a tag too. The names go with the tags the dialog opened with, so
+  // the server writes them only while the link still holds those; and only when the keys' order differs.
+  editError.textContent = "";
+  if (!addTag(tagField.value)) return;
+  renderTags();
+  const keys = (list) => JSON.stringify(list.map((t) => t.key));
+  if (keys(tags) !== keys(openedTags)) {
+    body.append("tags", JSON.stringify(tags.map((t) => t.name)));
+    body.append("seen", JSON.stringify(openedTags.map((t) => ({ key: t.key, source: t.source }))));
+    changed = true;
+  }
+  const listView = editRoot ? editRoot.dataset : {};
+  if (listView.within) body.append("within", listView.within);
+  if (listView.own === "1") body.append("own", "1");
   if (picture) {
     if (picture.kind === "file") body.append("picture", picture.blob, "picture");
     else body.append("picture", "page");
@@ -900,7 +1067,12 @@ form.addEventListener("submit", async (event) => {
   if (current) finish();
   if (!answer.editId) return;
   const offer = () => target.isConnected && showUndo.offers() === offersAtSave && showUndo("Link updated", async () => {
-    const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
+    const back = await post("/links/edit/undo", {
+      id: target.dataset.id,
+      editId: answer.editId,
+      ...(listView.within && { within: listView.within }),
+      ...(listView.own === "1" && { own: "1" }),
+    });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
     if (undone) showCard(target, undone);
     else editAlert.textContent = await failure(back);

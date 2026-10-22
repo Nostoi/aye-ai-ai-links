@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import TurndownService from "turndown";
 import type { CopyDraft } from "../core/saved-copy.ts";
-import { imageRef, linkLabel, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
+import { imageRef, linkLabel, lostPicture, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
 import { addTableRules } from "./copy-tables.ts";
 
 const webUrl = (url: URL): boolean => url.protocol === "http:" || url.protocol === "https:";
@@ -46,8 +46,6 @@ function inlineLinkRule(td: TurndownService): LinkRule {
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 const escapeAlt = (alt: string): string => collapse(alt).replace(/[\\[\]]/g, "\\$&");
-/** A picture the copy has no file for: the reader shows its alt text as a "Picture not saved" note. */
-const lostPicture = (alt: string): string => `![${alt}]()`;
 
 /**
  * Turns Readability's article element into Markdown, working on the element in place.

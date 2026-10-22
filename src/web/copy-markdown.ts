@@ -255,11 +255,25 @@ function safeTokens(state: StateCore): void {
   }
 }
 
+// An aligned column would put a `style` attribute on its cells, and the page carries none.
+function plainCells(state: StateCore): void {
+  for (const t of state.tokens) {
+    if (t.type === "th_open" || t.type === "td_open") t.attrs = null;
+  }
+}
+
 const md = new MarkdownIt("commonmark", { html: false, linkify: false, typographer: false });
+md.enable("table");
+// A wide table scrolls sideways in its own box.
+md.renderer.rules.table_open = (tokens, i, options, _env, self) =>
+  `<div class="copy-table">${self.renderToken(tokens, i, options)}`;
+md.renderer.rules.table_close = (tokens, i, options, _env, self) =>
+  `${self.renderToken(tokens, i, options)}</div>\n`;
 // Turndown never writes a reference definition, and 15.0.2's `reference` rule is quadratic.
 md.disable("reference");
 md.validateLink = () => true;
 md.core.ruler.push("copy_safe", safeTokens);
+md.core.ruler.push("copy_plain_cells", plainCells);
 md.core.ruler.before("text_join", "copy_repair", repairBlockLinks);
 
 /** The copy's Markdown as safe HTML (R39): only http(s)/mailto links, only this copy's ledger-ok images. */

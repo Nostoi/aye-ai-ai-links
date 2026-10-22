@@ -485,6 +485,7 @@ const failure = async (res) => {
     : "That did not work. Reload the page and try again.";
 };
 const cardBusy = new WeakSet();
+const cardWaiting = new WeakMap();
 const whileBusy = async (card, run) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
@@ -492,7 +493,14 @@ const whileBusy = async (card, run) => {
     return await run();
   } finally {
     cardBusy.delete(card);
+    for (const wake of cardWaiting.get(card) || []) wake();
+    cardWaiting.delete(card);
   }
+};
+const whenFree = async (card, run) => {
+  while (cardBusy.has(card))
+    await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
+  return whileBusy(card, run);
 };
 {
 const form = document.getElementById("save-form");

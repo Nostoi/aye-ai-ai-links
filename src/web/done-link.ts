@@ -58,9 +58,10 @@ const STATE_ACTS = {
  * a `takeOut` that keeps the card on the page shows `change.after` itself) once the answer is the
  * `StateChange` as JSON. Its Undo posts `/home/undo-state` with that change, exactly as received,
  * and calls the put-back `takeOut` returned. It sends nothing while another action on the card, or
- * its Undo, is out (`whileBusy`). A refusal, or an Undo that does not succeed, is shown in `#error`.
+ * its Undo, is out (`whileBusy`); an Undo clicked meanwhile waits for it (`whenFree`). A refusal, or
+ * an Undo that does not succeed, is shown in `#error`.
  * For the page's one script after `CARD_FETCH` and `deleteLinkScript` (it needs `post`, `failure`,
- * `showUndo`, `whileBusy` and `takeOut`); the menu rows' listener is a block.
+ * `showUndo`, `whileBusy`, `whenFree` and `takeOut`); the menu rows' listener is a block.
  */
 export const doneLinkScript = (
   root: string,
@@ -80,7 +81,7 @@ const stateCard = (card, act) =>
       return;
     }
     const putBack = takeOut(listRoot, card, false, change);
-    showUndo(undo.text, () => whileBusy(card, async () => {
+    showUndo(undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);

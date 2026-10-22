@@ -533,6 +533,7 @@ const failure = async (res) => {
     : "That did not work. Reload the page and try again.";
 };
 const cardBusy = new WeakSet();
+const cardWaiting = new WeakMap();
 const whileBusy = async (card, run) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
@@ -540,7 +541,14 @@ const whileBusy = async (card, run) => {
     return await run();
   } finally {
     cardBusy.delete(card);
+    for (const wake of cardWaiting.get(card) || []) wake();
+    cardWaiting.delete(card);
   }
+};
+const whenFree = async (card, run) => {
+  while (cardBusy.has(card))
+    await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
+  return whileBusy(card, run);
 };
 {
 const keepRoot = document.getElementById("results");
@@ -576,7 +584,7 @@ if (keepRoot) {
       }
       showKept(card, keep, menu);
       showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
-        whileBusy(card, async () => {
+        whenFree(card, async () => {
           const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
           if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
           else keepError.textContent = await failure(back);
@@ -1057,7 +1065,7 @@ const stateCard = (card, act) =>
       return;
     }
     const putBack = takeOut(listRoot, card, false, change);
-    showUndo(undo.text, () => whileBusy(card, async () => {
+    showUndo(undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);

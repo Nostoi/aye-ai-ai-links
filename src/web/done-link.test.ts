@@ -305,4 +305,30 @@ ${doneLinkScript("list", "err")}
     expect(p.sent.map((s) => s.url)).toEqual(["/home/archive", "/home/undo-state"]);
     expect(p.$("#seen").textContent).toBe("put back");
   });
+
+  it("an Undo clicked while another action is out waits for it, then runs", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let archives = 0;
+    const p = stay((s) =>
+      s.url === "/home/archive" && ++archives === 2
+        ? { status: 200, body: CHANGE, wait: held }
+        : fine(s),
+    );
+    await click(p, "[data-act=archive]");
+    await click(p, "[data-act=archive]");
+    await click(p, "#undo-bar button");
+    expect(p.sent.map((s) => s.url)).toEqual(["/home/archive", "/home/archive"]);
+    release();
+    await p.settle();
+    expect(p.sent.map((s) => s.url)).toEqual([
+      "/home/archive",
+      "/home/archive",
+      "/home/undo-state",
+    ]);
+    expect(p.$("#seen").textContent).toBe("put back");
+    expect(p.$("#err").textContent).toBe("");
+  });
 });

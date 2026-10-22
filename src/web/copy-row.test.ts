@@ -55,7 +55,7 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
 const dom = (html: string) => parseHTML(html).document;
 /** A card's links to its saved copy, wherever they are on the card. */
 const rows = (html: string, id: string) =>
-  [...dom(html).querySelectorAll(`[data-id="${id}"] a[href$="/copy"]`)].map((a) => [
+  [...dom(html).querySelectorAll(`[data-id="${id}"] a[data-act=read-copy]`)].map((a) => [
     a.getAttribute("href"),
     a.getAttribute("data-act"),
     a.textContent,
@@ -64,7 +64,9 @@ const goneLinks = (html: string, id: string) =>
   [...dom(html).querySelectorAll(`[data-id="${id}"] .small-actions a`)].map((a) =>
     a.getAttribute("href"),
   );
-const ROW = (id: string) => [[`/links/${id}/copy`, "read-copy", "Saved copy"]];
+const ROW = (id: string, from: string) => [
+  [`/links/${id}/copy?from=${encodeURIComponent(from)}`, "read-copy", "Saved copy"],
+];
 const lineLink = (html: string, id: string) =>
   dom(html).querySelector(`[data-id="${id}"] .card-line a.saved-copy`);
 
@@ -125,35 +127,41 @@ describe("the page builders", () => {
       ...over,
     });
   const search = (over: object = {}) => searchPage({ query: "", links, now: NOW, ...over });
-  const builders: [string, (o?: object) => string][] = [
-    ["search", search],
-    ["all links", all],
-    ["a space", space],
+  const builders: [string, (o?: object) => string, string][] = [
+    ["search", search, "/search?q="],
+    ["all links", all, "/all"],
+    ["a space", space, "/spaces?tag=home"],
   ];
 
-  it.each(builders)("%s: only cards in `copies` link their copy, on the grey line", (_, build) => {
-    const html = build({ copies });
-    expect(rows(html, "1")).toEqual(ROW("1"));
-    expect(lineLink(html, "1")).not.toBeNull();
-    expect(rows(html, "2")).toEqual([]);
-    expect(rows(build(), "1")).toEqual([]);
-  });
+  it.each(builders)(
+    "%s: only cards in `copies` link their copy, on the grey line, remembering the page",
+    (_, build, from) => {
+      const html = build({ copies });
+      expect(rows(html, "1")).toEqual(ROW("1", from));
+      expect(lineLink(html, "1")).not.toBeNull();
+      expect(rows(html, "2")).toEqual([]);
+      expect(rows(build(), "1")).toEqual([]);
+    },
+  );
 
-  it.each(builders)("%s: a gone card with a copy links it once, on the grey line", (_, build) => {
-    const html = build({ copies, gone });
-    expect(rows(html, "1")).toEqual(ROW("1"));
-    expect(lineLink(html, "1")).not.toBeNull();
-    expect(goneLinks(html, "1")).toEqual([]);
-    expect(rows(html, "2")).toEqual([]);
-  });
+  it.each(builders)(
+    "%s: a gone card with a copy links it once, on the grey line",
+    (_, build, from) => {
+      const html = build({ copies, gone });
+      expect(rows(html, "1")).toEqual(ROW("1", from));
+      expect(lineLink(html, "1")).not.toBeNull();
+      expect(goneLinks(html, "1")).toEqual([]);
+      expect(rows(html, "2")).toEqual([]);
+    },
+  );
 
   it.each([
-    ["all links", all],
-    ["a space", space],
-  ])("%s done page: the grey line links the copy, and the menu can remove it", (_, build) => {
+    ["all links", all, "/all/done"],
+    ["a space", space, "/spaces/done?tag=home"],
+  ])("%s done page: the grey line links the copy, and the menu can remove it", (_, build, from) => {
     const html = build({ links: [link("1", { state: "archived" })], copies, gone, done: true });
     expect(dom(html).querySelector(".card-menu [data-act=remove-copy]")).not.toBeNull();
-    expect(rows(html, "1")).toEqual(ROW("1"));
+    expect(rows(html, "1")).toEqual(ROW("1", from));
     expect(lineLink(html, "1")).not.toBeNull();
   });
 });
@@ -212,7 +220,7 @@ describe("the pages' routes", () => {
     const without = await save("owner", "Quokka without");
     const spy = vi.spyOn(w.savedCopies, "copyInfo");
     const html = await get("/search?q=Quokka");
-    expect(rows(html, withCopy)).toEqual(ROW(withCopy));
+    expect(rows(html, withCopy)).toEqual(ROW(withCopy, "/search?q=Quokka"));
     expect(rows(html, without)).toEqual([]);
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -231,7 +239,7 @@ describe("the pages' routes", () => {
     const { w, save, get } = await world();
     const id = await save("owner", "Old with copy", { copy: true });
     const spy = vi.spyOn(w.savedCopies, "copyInfo");
-    expect(rows(await get("/all"), id)).toEqual(ROW(id));
+    expect(rows(await get("/all"), id)).toEqual(ROW(id, "/all"));
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -244,7 +252,7 @@ describe("the pages' routes", () => {
       ?.getAttribute("href");
     expect(older).toContain("before=");
     const html = await get(older as string);
-    expect(rows(html, oldest)).toEqual(ROW(oldest));
+    expect(rows(html, oldest)).toEqual(ROW(oldest, "/all"));
   });
 
   it("all links: a gone archived link links its copy once, and has the menu, on /all/done", async () => {
@@ -253,7 +261,7 @@ describe("the pages' routes", () => {
     await flag(id);
     await deps.store.update("owner", id, { state: "archived" });
     const html = await get("/all/done");
-    expect(rows(html, id)).toEqual(ROW(id));
+    expect(rows(html, id)).toEqual(ROW(id, "/all/done"));
     expect(dom(html).querySelector(`[data-id="${id}"] [data-gone]`)).not.toBeNull();
     expect(dom(html).querySelector(".card-menu")).not.toBeNull();
   });
@@ -265,8 +273,30 @@ describe("the pages' routes", () => {
       tags: [{ name: "Kitchen", source: "stated" }],
     });
     const spy = vi.spyOn(w.savedCopies, "copyInfo");
-    expect(rows(await get("/spaces?tag=Kitchen"), id)).toEqual(ROW(id));
+    expect(rows(await get("/spaces?tag=Kitchen"), id)).toEqual(ROW(id, "/spaces?tag=kitchen"));
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("search: the link remembers the search, its space and keep mode", async () => {
+    const { save, get } = await world();
+    const id = await save("owner", "Tagged quokka", {
+      copy: true,
+      tags: [{ name: "Kitchen", source: "stated" }],
+    });
+    const html = await get("/search?q=Quokka&tag=Kitchen&keep=1");
+    expect(rows(html, id)).toEqual(ROW(id, "/search?q=Quokka&tag=kitchen&keep=1"));
+  });
+
+  it("spaces: a ?before= page's rows remember the space too", async () => {
+    const { save, get } = await world();
+    const tags = [{ name: "Kitchen", source: "stated" as const }];
+    const oldest = await save("owner", "Oldest tagged", { copy: true, tags });
+    for (let i = 0; i < 24; i++) await save("owner", `Filler ${i}`, { tags });
+    const older = dom(await get("/spaces?tag=Kitchen"))
+      .getElementById("older")
+      ?.getAttribute("href");
+    expect(older).toContain("before=");
+    expect(rows(await get(older as string), oldest)).toEqual(ROW(oldest, "/spaces?tag=kitchen"));
   });
 
   it("home: the gone pick with a copy shows Read the saved copy", async () => {
@@ -274,7 +304,7 @@ describe("the pages' routes", () => {
     const id = await save("owner", "Old page", { copy: true });
     await flag(id);
     const reads = dom(await get("/")).querySelectorAll(`#worth-cards [data-id="${id}"] .gone-copy`);
-    expect([...reads].map((a) => a.getAttribute("href"))).toEqual([`/links/${id}/copy`]);
+    expect([...reads].map((a) => a.getAttribute("href"))).toEqual([`/links/${id}/copy?from=%2F`]);
   });
 
   it("home: reads copyInfo once, for the cards it shows, and links a pick's copy on its grey line", async () => {
@@ -284,6 +314,6 @@ describe("the pages' routes", () => {
     const html = await get("/");
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]?.[1]).toEqual([id]);
-    expect(lineLink(html, id)?.getAttribute("href")).toBe(`/links/${id}/copy`);
+    expect(lineLink(html, id)?.getAttribute("href")).toBe(`/links/${id}/copy?from=%2F`);
   });
 });

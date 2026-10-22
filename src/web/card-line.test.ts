@@ -76,6 +76,18 @@ describe("cardLine", () => {
     expect(a?.hasAttribute("data-open")).toBe(false);
   });
 
+  it("remembers the list page it is on, so the saved copy can say where Back goes", () => {
+    const href = (from?: string) =>
+      parseHTML(cardLine(link(), { copy: COPY, ...(from === undefined ? {} : { from }) }))
+        .document.querySelector(".card-line a")
+        ?.getAttribute("href");
+    expect(href("/spaces?tag=a b&order=opened")).toBe(
+      "/links/7/copy?from=%2Fspaces%3Ftag%3Da%20b%26order%3Dopened",
+    );
+    expect(href()).toBe("/links/7/copy");
+    expect(copyHref("7", "/all")).toBe("/links/7/copy?from=%2Fall");
+  });
+
   it("adds when it was saved after the site, capitalized only when it comes first", () => {
     expect(parts(cardLine(link(), { saved: "October 1", copy: COPY }))).toEqual([
       "ex.com",

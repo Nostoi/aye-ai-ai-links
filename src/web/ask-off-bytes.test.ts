@@ -99,7 +99,7 @@ const connections = (over: Partial<Parameters<typeof connectionsPage>[0]> = {}) 
     ...over,
   });
 const copyView = (copy: Parameters<typeof copyPage>[0]["copy"]) =>
-  copyPage({ link: link("3"), madeAt: NOW, copy }, NOW);
+  copyPage({ link: link("3"), madeAt: NOW, copy }, NOW, { label: "All links", href: "/all" });
 
 const pages: Record<string, () => string> = {
   "home-empty": () => homePage({ worth: worth([]), shelf: "", spaces: "" }),

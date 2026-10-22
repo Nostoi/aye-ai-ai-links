@@ -36,8 +36,9 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 - A card's title and its menu's "More for …" label come from `displayTitle`, through `linkTitle` or `editMenu`, never `link.title ?? link.url` (#197). A new card builder joins `display-title-cards.test.ts`.
 - The edit dialog shows a Save on a card through markers, not classes: the title is the element marked `data-card-title`, and the picture is `tile()`'s box, which carries `data-pic`. A card on a page with the dialog draws its picture with `tile()`.
 - A saved link opens in a new tab: `target="_blank" rel="noopener noreferrer"`. Render it with `openLink` or `linkTitle` (`open-link.ts`) inside a card carrying the link's `data-id`, and add `openedScript` for its list, so the opening is recorded (#124).
-- Exception: the saved-copy page runs no script, so its link to the page records no opening (ROADMAP 2026-10-18).
-- Markdown from a saved page renders only through `copy-markdown.ts`. The copy page is the one page with a full CSP (`COPY_HEADERS`); its style hash comes from `PAGE_STYLE`, so styles live in `theme.ts` and it carries no `style=` attribute.
+- The saved-copy page records the opening too: its Open on <site> link is an `openLink` in the frame, which carries the link's `data-id`, and the page runs `openedScript` for it (#223). A link inside the article to the same address is not recorded.
+- A link to a saved copy carries `?from=` (`copyHref`), the address of the list page it is on: `cardLine` and `linkRow` take it, and each list page and Home pass their own. The copy route rebuilds Back from it with `backTarget` (`copy-from.ts`), never echoing the raw value (#223).
+- Markdown from a saved page renders only through `copy-markdown.ts`. The copy page is the one page with a full CSP (`COPY_HEADERS`): its style hash comes from `PAGE_STYLE`, so styles live in `theme.ts` and it carries no `style=` attribute, and it runs only the scripts in `copyScripts` (the page's own from `pageScripts`, plus its opening script), by hash from those constants and never from the rendered page. A new script on that page joins `copyScripts`; `connect-src` stays `'self'`.
 - Page designs: #12 comment 6158134489.
 
 ## New routes

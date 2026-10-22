@@ -119,8 +119,6 @@ describe("the copy image route", () => {
   });
 });
 
-const NEUTRAL = "A reading copy kept by this app. The page itself may have changed since.";
-
 const sha = (text: string) => createHash("sha256").update(text).digest("base64");
 
 /** The directives of an answer's CSP, each as its list of values. */
@@ -169,11 +167,10 @@ describe("the copy page", () => {
     const html = res.bytes.toString("utf8");
     expect(res.status).toBe(200);
     expect(html).toContain("<h1>Quokka</h1>");
-    expect(html).toContain(
-      '<a href="https://a.example/copy" target="_blank" rel="noopener noreferrer">a.example</a>',
+    expect(parseHTML(html).document.querySelector("a[data-open]")?.getAttribute("href")).toBe(
+      "https://a.example/copy",
     );
-    expect(html).toMatch(/Saved copy from [A-Z][a-z]+ \d+/);
-    expect(html).toContain(NEUTRAL);
+    expect(html).toMatch(/Your copy from [A-Z][a-z]+ \d+ · the page may have changed/);
     expect(html).toContain(`src="/links/${id}/copy/images/1"`);
     expect(html).toContain("two");
     expect(html).not.toContain(`/links/${id}/copy/images/2`);
@@ -326,6 +323,75 @@ describe("the copy page's scripts and CSP", () => {
       const doc = parseHTML(res.bytes.toString("utf8")).document;
       expect(doc.querySelectorAll("[href^=javascript], [onerror], img[src=x]")).toHaveLength(0);
     }
+  });
+});
+
+describe("the copy page's Back line", () => {
+  /** A world whose owner has a Kitchen space and whose other user has a Secret one. */
+  async function tagged() {
+    const made = await world();
+    await addSecondUser(made.w);
+    const deps = createDeps(made.w.links, new FakeEmbedder(DIMS));
+    const tagIt = (owner: string, name: string) =>
+      saveLink(deps, owner, {
+        url: `https://t.example/${name}`,
+        savedBy: "seed",
+        tags: [{ name, source: "stated" }],
+      });
+    await tagIt("owner", "Kitchen");
+    await tagIt("owner-b", "Secret zzm8");
+    return made;
+  }
+  const backOf = (html: string) => {
+    const a = parseHTML(html).document.querySelector(".copy-nav a.back-link");
+    return [
+      a?.textContent?.replace(/\s+/g, " ").replace(/^←\s*/, "").trim(),
+      a?.getAttribute("href"),
+    ];
+  };
+  const get = async (
+    owner: Awaited<ReturnType<typeof world>>["owner"],
+    id: string,
+    from?: string,
+  ) => {
+    const query = from === undefined ? "" : `?from=${encodeURIComponent(from)}`;
+    return (await owner.send(`/links/${id}/copy${query}`)).bytes.toString("utf8");
+  };
+
+  it.each([
+    [undefined, "Back to All links", "/all"],
+    ["/", "Back to Home", "/"],
+    ["/all?order=opened&before=garbage", "Back to All links", "/all"],
+    ["/all/done", "Back to Out of your lists", "/all/done"],
+    ["/spaces?tag=kitchen", "Back to Kitchen", "/spaces?tag=kitchen"],
+    ["/spaces?tag=kitchen&order=banana", "Back to Kitchen", "/spaces?tag=kitchen"],
+    ["/spaces/done?tag=Kitchen", "Back to Kitchen", "/spaces/done?tag=kitchen"],
+    [
+      "/search?q=quokka&tag=kitchen&keep=1",
+      "Back to your search",
+      "/search?q=quokka&tag=kitchen&keep=1",
+    ],
+    ["/search?q=x&tag=zzm8", "Back to your search", "/search?q=x"],
+  ])("from %s: %s, to %s", async (from, label, href) => {
+    const { id, owner } = await tagged();
+    expect(backOf(await get(owner, id, from))).toEqual([label, href]);
+  });
+
+  it.each([
+    "//evil.example/zzm1",
+    "https://evil.example/zzm2",
+    "/\\evil.example/zzm3",
+    "javascript:zzm4(1)",
+    "/links/1/copy?zzm5=1",
+    "/unknown/zzm6",
+    "/spaces?tag=zzm7",
+    "/spaces?tag=secret%20zzm8",
+    "/spaces/done?tag=secret%20zzm8",
+  ])("falls back to All links for %s and leaves no trace of it in the page", async (from) => {
+    const { id, owner } = await tagged();
+    const html = await get(owner, id, from);
+    expect(backOf(html)).toEqual(["Back to All links", "/all"]);
+    for (const trace of ["zzm", "evil.example"]) expect(html).not.toContain(trace);
   });
 });
 

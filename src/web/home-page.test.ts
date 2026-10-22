@@ -204,7 +204,7 @@ describe("Worth a look today", () => {
     ]);
     const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
     const saved = d.querySelector(".worth-feature .card-line a.saved-copy");
-    expect(saved?.getAttribute("href")).toBe(copyHref(first?.link.id as string));
+    expect(saved?.getAttribute("href")).toBe(copyHref(first?.link.id as string, "/"));
     expect(saved?.getAttribute("data-act")).toBe("read-copy");
     expect(d.querySelector(".worth-row [data-act=read-copy]")).toBeNull();
     expect(dom(render([card([])])).querySelector("[data-act=read-copy]")).toBeNull();
@@ -1078,7 +1078,7 @@ describe("the Worth a look gone row (#128)", () => {
     const withCopy = dom(render([card([])], { gone: g, copies: new Map([[g.id, COPY]]) }));
     const reads = [...withCopy.querySelectorAll(".worth-gone [data-act=read-copy]")];
     expect(reads.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
-      ["Read the saved copy", copyHref(g.id)],
+      ["Read the saved copy", copyHref(g.id, "/")],
     ]);
     expect(reads[0]?.previousElementSibling?.hasAttribute("data-gone")).toBe(true);
     expect(menuRows(withCopy.querySelector(".worth-gone"))).toContain("remove-copy");

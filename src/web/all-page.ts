@@ -94,12 +94,14 @@ function row(
     handy,
     gone = new Map(),
     done,
+    order,
     pictures = new Map(),
     copies = new Map(),
   }: Input,
 ): string {
   const space = linkSpace(link, catalog);
   return linkRow(link, {
+    from: allHref(order, { done }),
     space,
     lineSpace: space,
     picture: images.get(link.id),

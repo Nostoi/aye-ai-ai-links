@@ -2,11 +2,21 @@ import { createHash } from "node:crypto";
 import type { CopyView } from "../core/copy-reading.js";
 import { isWebUrl } from "../core/url-key.js";
 import { copyHtml } from "./copy-markdown.js";
+import { displayTitle } from "./display-title.js";
 import { hostOf } from "./host.js";
-import { openedScript } from "./open-link.js";
+import { whyText } from "./link-rows.js";
+import { openedScript, openLink } from "./open-link.js";
 import { escapeHtml, PAGE_STYLE, page, pageScripts, savedOn, scriptText } from "./page.js";
 
-export const copyHref = (linkId: string) => `/links/${encodeURIComponent(linkId)}/copy`;
+/**
+ * A link's saved copy. `from` is the address of the list page the link is on, so the copy page can
+ * say where Back goes (`backTarget`); the route checks it, so any value is safe to send.
+ */
+export const copyHref = (linkId: string, from?: string) =>
+  `/links/${encodeURIComponent(linkId)}/copy${from === undefined ? "" : `?from=${encodeURIComponent(from)}`}`;
+
+/** Where the copy page's Back goes: `label` completes "Back to …". */
+export type Back = { label: string; href: string };
 
 /** The one element holding the page's frame, whose clicks on an `a[data-open]` it records. */
 const FRAME_ID = "copy-frame";
@@ -32,14 +42,19 @@ export const COPY_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store",
 };
 
-const NEUTRAL = "A reading copy kept by this app. The page itself may have changed since.";
-
-/** The saved copy of one link: its article, or why there is none to show. */
-export function copyPage(view: CopyView, now: Date): string {
+/**
+ * The saved copy of one link: its article, or why there is none to show, in the app's frame: the
+ * top bar, Back and Open on the site, the title, one grey line and the why when there is one.
+ */
+export function copyPage(view: CopyView, now: Date, back: Back): string {
   const { link, copy } = view;
-  const title = link.title ?? link.url;
-  const site = isWebUrl(link.url)
-    ? `<p class="small"><a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(hostOf(link.url) || link.url)}</a></p>\n`
+  const title = displayTitle(link);
+  const open = isWebUrl(link.url)
+    ? openLink(
+        link,
+        `Open on ${escapeHtml(hostOf(link.url) || link.url)} <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span>`,
+        "copy-open",
+      )
     : "";
   const body =
     copy === "missing"
@@ -53,11 +68,11 @@ export function copyPage(view: CopyView, now: Date): string {
           })}</article>`;
   return page(
     title,
-    `<main class="copy" id="${FRAME_ID}">
+    `<main class="copy" id="${FRAME_ID}" data-id="${escapeHtml(link.id)}">
+<div class="copy-nav"><a class="back-link" href="${escapeHtml(back.href)}"><span aria-hidden="true">←</span> Back to ${escapeHtml(back.label)}</a>${open}</div>
 <h1>${escapeHtml(title)}</h1>
-${site}<p class="small">Saved copy from ${savedOn(view.madeAt, now)}</p>
-<p class="small">${NEUTRAL}</p>
-${body}
+<p class="small copy-line">Your copy from ${savedOn(view.madeAt, now)} · the page may have changed</p>
+${link.why ? `<p class="copy-why">${whyText(link.why)}</p>\n` : ""}${body}
 </main>
 ${OPENED}`,
     { menu: true },

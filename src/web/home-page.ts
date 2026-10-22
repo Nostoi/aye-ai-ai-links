@@ -96,7 +96,7 @@ function featured(d: DigestLink, cards: WorthCards): string {
 <p class="reason"><span class="dot" aria-hidden="true"></span>${why.text}</p>
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>
-${cardLine(link, { copy, ...saved })}${open}<div class="feature-quiet">
+${cardLine(link, { copy, ...saved, from: "/" })}${open}<div class="feature-quiet">
 <button type="button" data-act="archive">${STALE_LABEL}</button>
 <button type="button" data-act="snooze">Not now</button>
 </div>
@@ -136,7 +136,7 @@ const pickRow = (link: Link, cards: WorthCards) =>
  */
 function goneRow(link: Link, cards: WorthCards): string {
   const read = cards.copies?.has(link.id)
-    ? `\n<a class="gone-copy" href="${copyHref(link.id)}" data-act="read-copy">Read the saved copy</a>`
+    ? `\n<a class="gone-copy" href="${escapeHtml(copyHref(link.id, "/"))}" data-act="read-copy">Read the saved copy</a>`
     : "";
   return row(
     link,

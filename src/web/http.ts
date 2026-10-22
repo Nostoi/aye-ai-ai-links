@@ -96,6 +96,7 @@ import { ALL_RESTART, allHref, allPage } from "./all-page.js";
 import type { Ask } from "./ask-panel.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
+import { backTarget } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
 import { handyShelf } from "./handy-shelf.js";
@@ -892,9 +893,12 @@ export function webApp({
     gate: deps.readGate,
   });
   app.get(COPY_ROUTE, session, async (c) => {
-    const view = await copies.view(c.get("caller").owner, c.req.param("id"));
+    const { owner } = c.get("caller");
+    const view = await copies.view(owner, c.req.param("id"));
     if (view === null) return c.html(copyNotFoundPage(), 404, COPY_HEADERS);
-    const html = copyPage(view, (deps.now ?? (() => new Date()))());
+    const from = c.req.query("from");
+    const back = backTarget(from, from === undefined ? [] : await deps.store.listTags(owner));
+    const html = copyPage(view, (deps.now ?? (() => new Date()))(), back);
     return c.html(html, view.copy === "unreadable" ? 503 : 200, COPY_HEADERS);
   });
   app.get(COPY_IMAGE_ROUTE, session, async (c) => {

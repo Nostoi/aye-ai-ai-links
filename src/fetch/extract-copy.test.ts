@@ -103,27 +103,27 @@ describe("articleMarkdown images", () => {
     expect(d.markdown).toContain(`![alt30](images/30-${NONCE})`);
     expect(d.markdown).toContain(`![again](images/01-${NONCE})`);
     expect(d.markdown).not.toContain("images/31-");
-    expect(d.markdown).toContain("pic alt31");
-    expect(d.markdown).toContain("pic alt32");
-    expect(d.markdown).not.toContain("![alt31]");
+    expect(d.markdown).toContain("pic ![alt31]()");
+    expect(d.markdown).toContain("pic ![alt32]()");
+    expect(d.markdown).not.toContain("![alt31](images");
   });
   it("resolves a protocol-relative source against the final URL", () => {
     const d = draft('<p>x <img src="//cdn.ex/x.png" alt="c"></p>');
     expect(d.imageUrls).toEqual(["https://cdn.ex/x.png"]);
   });
-  it("turns data:, blob: and source-less images into their alt text", () => {
+  it("marks data:, blob: and ftp: images as lost pictures with their alt text", () => {
     const d = draft(
-      '<p>a <img src="data:image/png;base64,AAAA" alt="D"> b <img src="blob:https://ex.com/1" alt="B"></p>',
+      '<p>a <img src="data:image/png;base64,AAAA" alt="D"> b <img src="blob:https://ex.com/1" alt="B"> c <img src="ftp://ex.com/f.png" alt="F"></p>',
     );
     expect(d.imageUrls).toEqual([]);
-    expect(d.markdown).toContain("a D b B");
+    expect(d.markdown).toContain("a ![D]() b ![B]() c ![F]()");
   });
-  it("turns a source-less image into its alt text (Readability drops these, so no article)", () => {
+  it("marks a source-less image as a lost picture (Readability drops these, so no article)", () => {
     const el = parsePage('<html><body><div><p>c <img alt="N [x]"></p></div></body></html>').body
       .firstElementChild as Element;
     const d = articleMarkdown(el, FINAL, NONCE);
     expect(d.imageUrls).toEqual([]);
-    expect(d.markdown).toBe("c N \\[x\\]");
+    expect(d.markdown).toBe("c ![N \\[x\\]]()");
   });
   it("numbers only images that survive the fenced-code rule", () => {
     const inPre = Array.from(
@@ -153,7 +153,7 @@ describe("articleMarkdown images", () => {
   });
   it("escapes the alt text of an image past the cap", () => {
     const d = draft(`${imgs(30)}<p>z <img src="https://ex.com/over.png" alt="*not* _em_"></p>`);
-    expect(d.markdown).toContain("z \\*not\\* \\_em\\_");
+    expect(d.markdown).toContain("z ![\\*not\\* \\_em\\_]()");
   });
   it("escapes brackets and backslashes in an alt and collapses whitespace", () => {
     const d = draft('<p>x <img src="https://ex.com/a.png" alt="A [x] \\ y\n  z"></p>');

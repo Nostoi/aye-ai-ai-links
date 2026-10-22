@@ -570,7 +570,7 @@ describe("writeExport", () => {
     );
     expect(finishedMd).toContain("![alt 1](images/01.png)");
     expect(utf8(files.get("copies/2/copy.md") as Uint8Array)).toBe(
-      copyWithFrontMatter(link2, MADE, "one ![two](images/02.png)"),
+      copyWithFrontMatter(link2, MADE, "![one]() ![two](images/02.png)"),
     );
   });
 
@@ -625,7 +625,7 @@ describe("writeExport", () => {
     const { files, manifest } = await built(h.deps, A);
 
     expect(utf8(files.get("copies/1/copy.md") as Uint8Array)).toBe(
-      copyWithFrontMatter(link1, MADE, "Look ![one](images/01.png) and two."),
+      copyWithFrontMatter(link1, MADE, "Look ![one](images/01.png) and ![two]()."),
     );
     expect(manifest.links[0]?.copy?.images).toEqual(["copies/1/images/01.png"]);
     expect(files.get("copies/1/images/01.png")).toEqual(IMG.bytes);

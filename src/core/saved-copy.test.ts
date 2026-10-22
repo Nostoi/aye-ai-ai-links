@@ -5,13 +5,21 @@ const N = "0123456789abcdef0123456789abcdef";
 const M = "fedcba9876543210fedcba9876543210";
 
 describe("finishedMarkdown", () => {
-  it("rewrites stored images to their file and the rest to their alt text", () => {
+  it("rewrites stored images to their file and the rest to a lost picture with its alt text", () => {
     const md = `x ![a](${imageRef(1, N)}) y ![b\\]c](${imageRef(2, N)}) ![d](${imageRef(3, N)})`;
     const out = finishedMarkdown(md, N, [
       { n: 1, ext: "jpg" },
       { n: 2, ext: null },
     ]);
-    expect(out).toBe("x ![a](images/01.jpg) y b\\]c d");
+    expect(out).toBe("x ![a](images/01.jpg) y ![b\\]c]() ![d]()");
+  });
+
+  it("never grows a copy whose pictures are all lost, long alt text included", () => {
+    const nums = Array.from({ length: 30 }, (_, n) => n + 1);
+    const md = nums.map((n) => `![${"long alt ".repeat(n)}](${imageRef(n, N)})`).join("\n");
+    const out = finishedMarkdown(md, N, []);
+    expect(out).toBe(nums.map((n) => `![${"long alt ".repeat(n)}]()`).join("\n"));
+    expect(Buffer.byteLength(out)).toBeLessThan(Buffer.byteLength(md));
   });
 
   it.each([

@@ -172,7 +172,8 @@ describe("the copy page", () => {
     );
     expect(html).toMatch(/Your copy from [A-Z][a-z]+ \d+ · the page may have changed/);
     expect(html).toContain(`src="/links/${id}/copy/images/1"`);
-    expect(html).toContain("two");
+    expect(parseHTML(html).document.querySelectorAll(".copy-band img")).toHaveLength(1);
+    expect(html).toContain("Picture not saved: two");
     expect(html).not.toContain(`/links/${id}/copy/images/2`);
     expect(html).not.toMatch(/[0-9a-f]{32}/);
     const doc = parseHTML(html).document;
@@ -198,7 +199,7 @@ describe("the copy page", () => {
     expect(html).toContain(`src="/links/${id}/copy/images/1"`);
     expect(html).not.toContain("images/2");
     expect(html).not.toContain("images/01.png");
-    expect(html).toContain("two");
+    expect(html).toContain("Picture not saved: two");
   });
 
   it("shows a link saved around blocks (#220) as the card, then one link", async () => {
@@ -211,7 +212,7 @@ describe("the copy page", () => {
     const res = await owner.send(`/links/${id}/copy`);
     const html = res.bytes.toString("utf8");
     expect(res.status).toBe(200);
-    expect(html).toContain("<h3>Skill</h3>");
+    expect(html).toContain("<h4>Skill</h4>");
     expect(html.match(new RegExp(`<a href="${card}"`, "g"))).toHaveLength(1);
     expect(html).not.toContain("](");
     expect(html).not.toContain("<p>[</p>");

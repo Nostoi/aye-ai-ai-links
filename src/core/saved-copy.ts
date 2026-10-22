@@ -173,9 +173,12 @@ export const linkLabel = (href: string): string =>
 export const imageRef = (n: number, nonce: string): string =>
   `images/${String(n).padStart(2, "0")}-${nonce}`;
 
+/** A picture the copy has no file for: the reader shows its alt text as a "Picture not saved" note. The alt is already escaped. */
+export const lostPicture = (alt: string): string => `![${alt}]()`;
+
 /**
  * Rewrites each image reference holding this copy's nonce: a stored image becomes
- * `images/NN.ext`, any other becomes its alt text. Nothing else changes, and the result is never
+ * `images/NN.ext`, any other becomes a lost picture, `![alt]()`. Nothing else changes, and the result is never
  * longer than the input. The alt must escape `\`, `[` and `]`, as the copy rule will write it.
  */
 export function finishedMarkdown(markdown: string, nonce: string, images: FinishImage[]): string {
@@ -184,6 +187,6 @@ export function finishedMarkdown(markdown: string, nonce: string, images: Finish
   const ref = new RegExp(`!\\[((?:\\\\.|[^\\[\\]\\\\])*)\\]\\(images/([0-9]{2})-${nonce}\\)`, "g");
   return markdown.replace(ref, (_all, alt: string, nn: string) => {
     const e = ext.get(Number(nn));
-    return e ? `![${alt}](images/${nn}.${e})` : alt;
+    return e ? `![${alt}](images/${nn}.${e})` : lostPicture(alt);
   });
 }

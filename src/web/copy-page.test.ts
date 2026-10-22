@@ -30,13 +30,13 @@ const link = (over: Partial<Link> = {}): Link => ({
   ...over,
 });
 
-const render = (over: Partial<Link> = {}, back = BACK) =>
+const render = (over: Partial<Link> = {}, back = BACK, markdown = "A paragraph.") =>
   copyPage(
     {
       link: link(over),
       madeAt: MADE,
       copy: {
-        markdown: "A paragraph.",
+        markdown,
         madeAt: MADE,
         finished: true,
         nonce: null,
@@ -75,6 +75,13 @@ describe("the copy page's frame", () => {
     expect(text(render({ title: "https://a.example/the-page" }), "h1")).not.toBe(
       "https://a.example/the-page",
     );
+  });
+
+  it("keeps the title the page's only h1, with the article's own headings below it", () => {
+    const d = dom(render({}, BACK, "# Hello\n\n## Part\n\nA paragraph."));
+    expect([...d.querySelectorAll("h1")].map((h) => h.textContent)).toEqual(["Quokka"]);
+    expect(d.querySelector("article h2")?.textContent).toBe("Hello");
+    expect(d.querySelector("article h3")?.textContent).toBe("Part");
   });
 
   it("shows one grey line, dated by the copy", () => {

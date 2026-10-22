@@ -93,7 +93,13 @@ describe("copyHtml safety", () => {
 
   it("removes a link's pair but keeps an image inside a kept link", () => {
     const html = copyHtml(`[![one](images/01-${NONCE})](https://e.example)`, refs());
-    expect(parse(html).querySelector("a img")?.getAttribute("src")).toBe("/links/7/copy/images/1");
+    expect(parse(html).querySelector(".copy-band img")?.getAttribute("src")).toBe(
+      "/links/7/copy/images/1",
+    );
+    expect(parse(html).querySelector(".copy-pic-link a")?.getAttribute("href")).toBe(
+      "https://e.example",
+    );
+    expect(parse(html).querySelector("a img")).toBeNull();
   });
 });
 
@@ -106,13 +112,13 @@ describe("copyHtml images (F5)", () => {
   it("shows an image missing from the ledger as its alt text", () => {
     const html = copyHtml(`![two](images/02-${NONCE})`, refs());
     expect(all(html).filter((e) => e.tagName === "IMG")).toHaveLength(0);
-    expect(text(html)).toContain("two");
+    expect(text(html)).toContain("Picture not saved: two");
   });
 
   it("shows another copy's nonce as alt text, without printing the nonce", () => {
     const html = copyHtml(`![three](images/01-${OTHER})`, refs());
     expect(all(html).filter((e) => e.tagName === "IMG")).toHaveLength(0);
-    expect(text(html)).toContain("three");
+    expect(text(html)).toContain("Picture not saved: three");
     expect(html).not.toMatch(/[0-9a-f]{32}/);
   });
 
@@ -120,7 +126,7 @@ describe("copyHtml images (F5)", () => {
     for (const nonce of [null, "n1"]) {
       const html = copyHtml(`![four](images/01-${nonce})`, refs({ nonce }));
       expect(all(html).filter((e) => e.tagName === "IMG")).toHaveLength(0);
-      expect(text(html)).toContain("four");
+      expect(text(html)).toContain("Picture not saved: four");
     }
   });
 
@@ -132,7 +138,7 @@ describe("copyHtml images (F5)", () => {
   it("shows a finished reference with the wrong extension as alt text", () => {
     const html = copyHtml("![a](images/01.jpg)", refs());
     expect(all(html).filter((e) => e.tagName === "IMG")).toHaveLength(0);
-    expect(text(html)).toContain("a");
+    expect(text(html)).toContain("Picture not saved: a");
   });
 
   it("shows a local image path used as a link as its label", () => {
@@ -144,7 +150,7 @@ describe("copyHtml images (F5)", () => {
   it("escapes the alt text of a dropped image", () => {
     const html = copyHtml("![<b>x</b> *y*](https://e.example/a.png)", refs());
     expect(all(html).filter((e) => e.tagName === "B")).toHaveLength(0);
-    expect(text(html)).toContain("<b>x</b> y");
+    expect(text(html)).toContain("Picture not saved: <b>x</b> y");
   });
 });
 
@@ -244,7 +250,7 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
 
   it("repairs a card inside a blockquote and inside a list item, keeping the container", () => {
     const quote = copyHtml(`> [\n>\n> ### T\n>\n> ](${A})\n\nout`, refs());
-    expect(parse(quote).querySelector("blockquote h3")?.textContent).toBe("T");
+    expect(parse(quote).querySelector("blockquote h4")?.textContent).toBe("T");
     expect(hrefs(quote)).toEqual([A]);
     noStray(quote);
     const list = copyHtml(`- [\n\n  item\n\n  ](${A})\n- plain`, refs());
@@ -316,7 +322,7 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
       all(html)
         .filter((e) => e.tagName === "P")
         .map((p) => p.textContent),
-    ).toEqual(["Title", "Read more", "e.example/a"]);
+    ).toEqual(["Title", "Read more", "e.example/a↗ (opens in a new tab)"]);
     noStray(html);
     const quote = copyHtml(`> [\n>\n> Title\n>\n> Read more](${A})`, refs());
     expect(parse(quote).querySelector("blockquote a")?.getAttribute("href")).toBe(A);
@@ -412,4 +418,216 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
     },
     10_000,
   );
+});
+
+describe("copyHtml reading look (#223)", () => {
+  const SAVED = `![one](images/01-${NONCE})`;
+  const LOST = "![two]()";
+  const sel = (html: string, css: string) => [...parse(html).querySelectorAll(css)];
+  const norm = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
+  const P = "https://e.example/p";
+
+  it("shifts every heading down one level, so the page title stays the only h1", () => {
+    const html = copyHtml("# A\n\n## B\n\n###### F\n\nS\n=", refs());
+    expect(sel(html, "h1")).toHaveLength(0);
+    expect(sel(html, "h2, h3, h4, h5, h6").map((h) => `${h.tagName} ${h.textContent}`)).toEqual([
+      "H2 A",
+      "H3 B",
+      "H6 F",
+      "H2 S",
+    ]);
+  });
+
+  it("puts a saved picture on a band, not in a paragraph", () => {
+    const html = copyHtml(SAVED, refs());
+    expect(sel(html, "div.copy-band > img")[0]?.getAttribute("src")).toBe("/links/7/copy/images/1");
+    expect(sel(html, "p > img")).toHaveLength(0);
+    expect(sel(html, "p")).toHaveLength(0);
+  });
+
+  it("puts a linked picture on a band, with the address on a line under it", () => {
+    const html = copyHtml(`[${SAVED}](${P})`, refs());
+    expect(sel(html, "a img")).toHaveLength(0);
+    const band = sel(html, "div.copy-band")[0];
+    expect(band?.querySelector("img")).not.toBeNull();
+    const line = band?.nextElementSibling;
+    expect(line?.tagName).toBe("P");
+    expect(line?.className).toBe("copy-pic-link");
+    const a = line?.querySelector("a");
+    expect(a?.getAttribute("href")).toBe(P);
+    expect(a?.getAttribute("target")).toBe("_blank");
+    expect(a?.getAttribute("rel")).toBe("noopener noreferrer nofollow");
+    expect(norm(line?.textContent)).toBe("Picture links to e.example/p ↗ (opens in a new tab)");
+  });
+
+  it("gives a picture in a refused link a band with no link and no caption", () => {
+    const html = copyHtml(`[${SAVED}](javascript:alert(1))`, refs());
+    expect(sel(html, "div.copy-band img")).toHaveLength(1);
+    expect(sel(html, "a")).toHaveLength(0);
+    expect(sel(html, ".copy-pic-link")).toHaveLength(0);
+    expect(html).not.toContain("javascript:");
+  });
+
+  it("says a lost picture was not saved, whether its source is empty or missing from the ledger", () => {
+    for (const md of [LOST, `![two](images/02-${NONCE})`]) {
+      const html = copyHtml(md, refs());
+      expect(sel(html, "img")).toHaveLength(0);
+      expect(norm(sel(html, ".copy-band.copy-band-note > p.copy-pic-note")[0]?.textContent)).toBe(
+        "Picture not saved: two",
+      );
+    }
+  });
+
+  it("shows nothing for a lost picture with no alt", () => {
+    const html = copyHtml("![]()", refs());
+    expect(sel(html, ".copy-band")).toHaveLength(0);
+    expect(sel(html, "p")).toHaveLength(0);
+  });
+
+  it("shows a lost linked picture as the note, then the link line; with no alt, only the line", () => {
+    const html = copyHtml(`[${LOST}](${P})`, refs());
+    const note = sel(html, ".copy-band-note")[0];
+    expect(note?.nextElementSibling?.className).toBe("copy-pic-link");
+    expect(sel(html, ".copy-pic-link a")[0]?.getAttribute("href")).toBe(P);
+    const bare = copyHtml(`[![](images/02-${NONCE})](${P})`, refs());
+    expect(sel(bare, ".copy-band")).toHaveLength(0);
+    expect(sel(bare, ".copy-pic-link a")).toHaveLength(1);
+  });
+
+  it("shows hostile alt text as text on the note", () => {
+    const html = copyHtml("![<script>x</script> *b*]()", refs());
+    expect(sel(html, "script, b, em")).toHaveLength(0);
+    expect(sel(html, ".copy-pic-note")[0]?.textContent).toBe(
+      "Picture not saved: <script>x</script> b",
+    );
+  });
+
+  it("gives each picture in one paragraph its own band, in order, however they are separated", () => {
+    for (const gap of [" ", "\n", "  \n"]) {
+      const html = copyHtml(`${SAVED}${gap}${LOST}${gap}[${SAVED}](${P})`, refs());
+      expect(
+        [...parse(html).body.children].map((e) =>
+          e.tagName === "P" ? e.className : e.querySelector("img") ? "img" : "note",
+        ),
+      ).toEqual(["img", "note", "img", "copy-pic-link"]);
+    }
+  });
+
+  it("keeps a picture inside text, or in a link with text, or in a cell, inline", () => {
+    const inText = copyHtml(`before ${SAVED} after`, refs());
+    expect(sel(inText, "p > img")).toHaveLength(1);
+    expect(sel(inText, ".copy-band")).toHaveLength(0);
+    const inLink = copyHtml(`[${SAVED} words](${P})`, refs());
+    expect(sel(inLink, "p > a > img")).toHaveLength(1);
+    expect(sel(inLink, ".copy-band")).toHaveLength(0);
+    const inCell = copyHtml(`| a |\n| - |\n| ${SAVED} |`, refs());
+    expect(sel(inCell, "td > img")).toHaveLength(1);
+    expect(sel(inCell, ".copy-band")).toHaveLength(0);
+    const lostInText = copyHtml(`before ${LOST} after`, refs());
+    expect(norm(sel(lostInText, "p")[0]?.textContent)).toBe("before two after");
+    expect(lostInText).not.toContain("Picture not saved");
+  });
+
+  it("puts a band inside a list item or a quote", () => {
+    expect(sel(copyHtml(`- ${SAVED}\n- b`, refs()), "li .copy-band img")).toHaveLength(1);
+    expect(sel(copyHtml(`> ${SAVED}`, refs()), "blockquote .copy-band img")).toHaveLength(1);
+    expect(sel(copyHtml(`- ${LOST}\n\n  x`, refs()), "li .copy-band-note")).toHaveLength(1);
+  });
+
+  it("styles the #220 closer as the link line: the new writer's shape, and a repaired old card", () => {
+    const label = "e.example/p";
+    const only = copyHtml(`[${label}](${P})`, refs());
+    const p = sel(only, "p.copy-link-line")[0];
+    expect(p?.querySelector("a")?.getAttribute("href")).toBe(P);
+    expect(norm(p?.textContent)).toBe(`${label}↗ (opens in a new tab)`);
+    const repaired = copyHtml(`[\n\n### T\n\n](${P})`, refs());
+    expect(sel(repaired, "p.copy-link-line")).toHaveLength(1);
+    expect(norm(sel(repaired, "p.copy-link-line")[0]?.textContent)).toBe(
+      `${label}↗ (opens in a new tab)`,
+    );
+  });
+
+  it("still lines a closer whose address is not ASCII, written new or repaired from an old card", () => {
+    const html = copyHtml("[\n\nT\n\n](https://e.example/é)", refs());
+    const p = sel(html, "p.copy-link-line")[0];
+    expect(p?.querySelector("a")?.getAttribute("href")).toBe("https://e.example/%C3%A9");
+    expect(norm(p?.textContent)).toBe("e.example/é↗ (opens in a new tab)");
+    const written = copyHtml("[e.example/%C3%A9](https://e.example/%C3%A9)", refs());
+    expect(sel(written, "p.copy-link-line")).toHaveLength(1);
+  });
+
+  it("leaves an author's own link alone in its paragraph unlined", () => {
+    const own = copyHtml(
+      "Intro.\n\n[Download the full report](https://e.example/report.pdf)\n\nMore.",
+      refs(),
+    );
+    expect(sel(own, ".copy-link-line")).toHaveLength(0);
+    expect(own).not.toContain("↗");
+    expect(sel(own, "a")).toHaveLength(1);
+  });
+
+  it("leaves a loose list of links unlined", () => {
+    const loose = copyHtml(`- [One](${P})\n\n- [Two](${P})`, refs());
+    expect(sel(loose, ".copy-link-line")).toHaveLength(0);
+    expect(loose).not.toContain("↗");
+  });
+
+  it("leaves a link holding a lost picture and words unlined", () => {
+    const lost = copyHtml("[![lost]() read more](https://e.example/p)", refs());
+    expect(sel(lost, ".copy-link-line")).toHaveLength(0);
+    expect(lost).not.toContain("↗");
+  });
+
+  it("styles no link in a sentence, or with markup inside, as the link line", () => {
+    const inSentence = copyHtml(`see [e.example/p](${P}) now`, refs());
+    expect(sel(inSentence, ".copy-link-line")).toHaveLength(0);
+    const withBold = copyHtml(`[**e.example**/p](${P})`, refs());
+    expect(sel(withBold, ".copy-link-line")).toHaveLength(0);
+  });
+
+  it("renders only the elements the page allows, whatever the stress input", () => {
+    const stress = [
+      "# H",
+      "setext\n===",
+      SAVED,
+      `[${SAVED}](${P})`,
+      `[${LOST}](javascript:alert(1))`,
+      `[${SAVED}](data:text/html,x)`,
+      `${SAVED}  \n${LOST}`,
+      `- ${SAVED}\n- [l](${P})`,
+      `> ${LOST}\n>\n> [${SAVED}](${P})`,
+      "| a |\n| - |\n| ![x](https://e.example/a.png) |",
+      "```\ncode\n```",
+      "<script>x</script> <img src=x onerror=y>",
+      "![<b>x</b>]()",
+      `[\n\n![](images/01.png)\n\n### T\n\n](${P})`,
+    ].join("\n\n");
+    const html = copyHtml(stress, refs());
+    const allowed = new Set(
+      "p h2 h3 h4 h5 h6 a img div span ul ol li blockquote pre code em strong hr br table thead tbody tr th td".split(
+        " ",
+      ),
+    );
+    for (const e of parse(html).body.querySelectorAll("*")) {
+      expect(allowed.has(e.tagName.toLowerCase())).toBe(true);
+      expect(
+        [...e.attributes].filter((a) => a.name.startsWith("on") || a.name === "style"),
+      ).toEqual([]);
+    }
+    for (const href of attrs(html, "href")) expect(href).toMatch(/^(https?:|mailto:)/);
+    for (const src of attrs(html, "src")) expect(src).toMatch(/^\/links\/7\/copy\/images\//);
+    expect(sel(html, "h1, script")).toHaveLength(0);
+  });
+
+  it("renders about 2 MiB of picture paragraphs within the budget", () => {
+    const md = `${SAVED}\n\n${LOST}\n\n[${SAVED}](${P})\n\n`.repeat(20_000);
+    const start = performance.now();
+    copyHtml(md, refs());
+    expect(performance.now() - start).toBeLessThan(10_000);
+  }, 30_000);
+
+  it("renders one paragraph of 100,000 pictures", () => {
+    const html = copyHtml(`${LOST}\n`.repeat(100_000), refs());
+    expect(html.split('class="copy-pic-note"').length - 1).toBe(100_000);
+  }, 30_000);
 });

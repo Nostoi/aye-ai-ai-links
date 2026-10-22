@@ -321,7 +321,7 @@ export function describeSavedCopyStoreContract(
         expect(await h.copies.finishCopy(B, id, finish, at(9))).toBe(false);
         expect(await h.copies.finishCopy(A, id, finish, at(9))).toBe(true);
         const copy = (await h.copies.readCopy(A, id)) as { markdown: string; finished: boolean };
-        expect(copy.markdown).toBe("![a](images/01.png) and b and ![a](images/01.png)");
+        expect(copy.markdown).toBe("![a](images/01.png) and ![b]() and ![a](images/01.png)");
         expect(copy.finished).toBe(true);
         expect(await h.copies.usedBytes()).toBe(bytes(copy.markdown) + 7);
         expect(await h.copies.unfinishedCopies(null, 50)).toEqual([]);

@@ -706,7 +706,7 @@ describe("copy pass images", () => {
     const copy = await t.copies.readCopy(OWNER, id);
     expect(copy).toMatchObject({
       finished: true,
-      markdown: "![a1](images/01.png)\n![a2](images/02.jpg)\na3",
+      markdown: "![a1](images/01.png)\n![a2](images/02.jpg)\n![a3]()",
     });
     expect([...(copy as { images: Map<number, unknown> }).images.keys()]).toEqual([1, 2]);
     expect(await pendingImages(t)).toEqual([]);

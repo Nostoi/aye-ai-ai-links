@@ -123,7 +123,7 @@ export async function writeExport(
   /**
    * The link's `ok` copy, taken at one point in time; `ledgerMadeAt` dates any other outcome (R8).
    * An image that cannot be read is left out and the text kept: a finished copy.md is written
-   * unchanged, and an unfinished one gets the image's alt text (spec, "copy.md with front matter").
+   * unchanged, and an unfinished one gets a lost picture, `![alt]()`, for it (spec, "copy.md with front matter").
    * The first unreadable image ends the copy's image reads; a gone one does not.
    */
   async function copy(link: Link, n: number, ledgerMadeAt: Date): Promise<ManifestCopy> {

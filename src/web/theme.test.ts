@@ -873,6 +873,76 @@ describe("the quiet list and the Pictures view (#194)", () => {
   });
 });
 
+describe("the saved copy's reading look", () => {
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\})${selector.replace(/[.[\]*>+]/g, "\\$&")}\\{([^}]*)\\}`, "m").exec(
+      themeCss,
+    )?.[1] ?? "";
+  const phone =
+    /^@media \(max-width:600px\)\{(\.copy-article\{[^\n]*)\}$/m.exec(themeCss)?.[1] ?? "";
+
+  it("sets the article on a white sheet in the reading type", () => {
+    const sheet = rule(".copy-article");
+    for (const part of [
+      "margin-top:28px",
+      "padding:44px 48px 48px",
+      "background:var(--surface)",
+      "border-radius:20px",
+      "box-shadow:0 4px 18px #0000000f",
+      "font-size:18px",
+      "line-height:1.7",
+    ]) {
+      expect(sheet).toContain(part);
+    }
+    expect(themeCss).not.toContain(".copy-article>*{max-width:68ch}");
+    expect(rule(".copy-article p,.copy-article li")).toBe("max-width:none");
+  });
+
+  it("runs a band across the sheet on the page color, and keeps its picture whole", () => {
+    expect(rule(".copy-band")).toContain("background:var(--bg)");
+    expect(rule(".copy-article>.copy-band")).toBe("margin-left:-48px;margin-right:-48px");
+    const img = rule(".copy-band img");
+    expect(img).toContain("max-height:60vh");
+    expect(img).toContain("max-height:60svh");
+    expect(img).toContain("display:block");
+    expect(img).not.toContain("object-fit");
+  });
+
+  it("keeps a picture in a sentence in the sentence, and no taller than a band's", () => {
+    const img = rule(".copy-article img");
+    expect(img).toContain("display:inline");
+    expect(img).toContain("max-width:100%");
+    expect(img).toContain("max-height:60vh");
+  });
+
+  it("makes the picture caption and the link line 44px tall and grey", () => {
+    const link = rule(".copy-pic-link a,.copy-link-line a");
+    expect(link).toContain("min-height:44px");
+    expect(link).toContain("color:var(--soft)");
+    expect(rule(".copy-pic-note")).toContain("color:var(--soft)");
+  });
+
+  it("fills code with the page color and rules a quote with a line", () => {
+    expect(rule(".copy-article pre")).toContain("background:var(--bg)");
+    expect(rule(".copy-article code")).toContain("background:var(--bg)");
+    expect(rule(".copy-article pre code")).toContain("background:none");
+    expect(rule(".copy-article blockquote")).toContain("border-left:3px solid var(--line)");
+  });
+
+  it("tightens the sheet and its bands on a phone, after the other phone lines", () => {
+    for (const part of [
+      ".copy-article{padding:24px 20px",
+      ".copy-article>.copy-band{margin-left:-20px;margin-right:-20px}",
+      ".copy-band-note{padding:18px 20px}",
+    ]) {
+      expect(phone).toContain(part);
+    }
+    expect(themeCss.indexOf(phone)).toBeGreaterThan(
+      themeCss.indexOf(".tidy-title{font-size:20px}"),
+    );
+  });
+});
+
 describe("the end of the saved copy", () => {
   const block = themeCss.slice(themeCss.indexOf(".copy-end{"));
   const rule = (selector: string) =>

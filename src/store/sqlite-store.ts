@@ -7,7 +7,14 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "../core/snapshot-store.js";
-import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "../core/store.js";
+import type {
+  LinkExpectation,
+  LinkRemover,
+  LinkStore,
+  SummaryCandidate,
+  SummaryCandidates,
+  SurfacedClaim,
+} from "../core/store.js";
 import {
   sameTool,
   type ToolRecord,
@@ -76,7 +83,9 @@ type SnapshotRow = {
   image_url: string | null;
 };
 
-export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolStore {
+export class SqliteStore
+  implements LinkStore, LinkRemover, SnapshotStore, SummaryCandidates, ToolStore
+{
   constructor(private readonly db: Database) {}
 
   /** Idempotent. Owners are created here, outside LinkStore. */
@@ -408,6 +417,25 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       )
       .get(n, owner) as { text: string | null } | undefined;
     return row?.text ?? null;
+  }
+
+  async summaryCandidates(
+    afterId: string | null,
+    limit: number,
+    sources: (SummarySource | null)[],
+  ): Promise<SummaryCandidate[]> {
+    const after = afterId === null ? 0 : parseId(afterId);
+    if (after === null) return [];
+    const guard = sourceIn("l.summary_source", sources);
+    const rows = this.db
+      .prepare(
+        `SELECT l.owner_id, l.id FROM links l
+         JOIN snapshots s ON s.owner_id = l.owner_id AND s.link_id = l.id
+         WHERE l.deleted_at IS NULL AND s.fetch_status = 'ok' AND s.text IS NOT NULL AND s.text <> ''
+           AND ${guard.sql} AND l.id > ? ORDER BY l.id LIMIT ?`,
+      )
+      .all(...guard.values, after, limit) as { owner_id: string; id: number }[];
+    return rows.map((r) => ({ owner: r.owner_id, id: String(r.id) }));
   }
 
   async getTool(owner: OwnerId, linkId: string) {

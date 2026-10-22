@@ -10,6 +10,7 @@ import {
   TEXT_CHARS,
 } from "./snapshot-text.js";
 import type { LinkStore } from "./store.js";
+import { REPLACEABLE_SUMMARY_SOURCES } from "./summary-rule.js";
 import { isTagKind, normalizeTags } from "./tags.js";
 import {
   type Labelled,
@@ -20,6 +21,7 @@ import {
   SOURCES,
   type Source,
   STATES,
+  type SummarySource,
   type TagKind,
 } from "./types.js";
 import { urlKey } from "./url-key.js";
@@ -46,13 +48,20 @@ type TagInput = { name: string; source: Source; kind?: TagKind }[];
 export type SaveLinkInput = {
   url: string;
   title?: string | null;
-  summary?: string | null;
+  summary?: SummaryInput | null;
   why?: Labelled | null;
   tags?: TagInput;
   savedBy: string;
 };
 
-export type UpdateLinkInput = Omit<LinkPatch, "tags" | "lastOpenedAt"> & {
+/** Plain text is an AI's own wording (inferred); `{text, source}` says who really wrote it. */
+type SummaryInput = string | Labelled;
+
+export type UpdateLinkInput = Omit<
+  LinkPatch,
+  "tags" | "lastOpenedAt" | "summary" | "summarySource" | "summaryOver"
+> & {
+  summary?: SummaryInput | null;
   tags?: TagInput;
   opened?: true;
 };
@@ -84,6 +93,26 @@ function checkSources(why: Labelled | null | undefined, tags: TagInput | undefin
 function cleanWhy(why: Labelled | null | undefined): Labelled | null {
   const text = why?.text.trim();
   return why && text ? { text, source: why.source } : null;
+}
+
+/**
+ * The summary and its source as stored: trimmed, plain text is inferred, and blank or null is no
+ * summary with no source. `aiOwn`: the words are an AI's own, blank ones included. Undefined means the input leaves the summary out.
+ */
+function cleanSummary(
+  input: SummaryInput | null | undefined,
+): { summary: string | null; summarySource: SummarySource | null; aiOwn: boolean } | undefined {
+  if (input === undefined) return undefined;
+  const given = typeof input === "string" ? { text: input, source: "inferred" as const } : input;
+  if (given && !isSource(given.source)) {
+    throw invalid(
+      `The summary source "${given.source}" is not valid. Use stated, asked or inferred.`,
+    );
+  }
+  const text = given?.text.trim();
+  const aiOwn = given?.source === "inferred";
+  if (!given || !text) return { summary: null, summarySource: null, aiOwn };
+  return { summary: text, summarySource: given.source, aiOwn };
 }
 
 /** The longest title kept, in characters (code points). */
@@ -150,11 +179,13 @@ export async function saveLink(
   const tags = normalizeTags(input.tags ?? []);
   const title = normalizeTitle(input.title ?? null);
   const why = cleanWhy(input.why);
+  const summary = cleanSummary(input.summary);
   const result = await store.insertIfAbsent(owner, {
     url: input.url.trim(),
     urlKey: key,
     title,
-    summary: input.summary ?? null,
+    summary: summary?.summary ?? null,
+    summarySource: summary?.summarySource ?? null,
     why,
     tags,
     savedAt: now(),
@@ -274,7 +305,13 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   checkSources(why, tags);
   const patch: LinkPatch = {};
   if (title !== undefined) patch.title = normalizeTitle(title);
-  if (summary !== undefined) patch.summary = summary;
+  const cleaned = cleanSummary(summary);
+  if (cleaned) {
+    patch.summary = cleaned.summary;
+    patch.summarySource = cleaned.summarySource;
+    // An AI's own summary, or its blank one, touches only a gap or another AI's; the store decides that atomically.
+    if (cleaned.aiOwn) patch.summaryOver = REPLACEABLE_SUMMARY_SOURCES;
+  }
   if (state !== undefined) {
     patch.state = state;
     patch.putAwayAt = null;

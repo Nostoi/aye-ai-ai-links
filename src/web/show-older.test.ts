@@ -10,6 +10,7 @@ const link = (id: string): Link => ({
   urlKey: `ex.com/${id}`,
   title: `Link ${id}`,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: NOW,

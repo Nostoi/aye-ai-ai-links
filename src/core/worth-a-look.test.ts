@@ -81,6 +81,7 @@ async function link(owner = A, over: Partial<NewLink> = {}): Promise<Link> {
       urlKey: url,
       title: `Link ${n}`,
       summary: null,
+      summarySource: null,
       why: null,
       tags: [],
       savedAt: at(-(n + 1) * DAY),

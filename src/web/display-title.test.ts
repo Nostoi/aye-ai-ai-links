@@ -8,6 +8,7 @@ const link = (url: string, title: string | null = null, page?: string | null): L
   urlKey: url,
   title,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: new Date("2026-03-12T10:00:00Z"),

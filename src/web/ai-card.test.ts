@@ -9,6 +9,7 @@ const link = (over: Partial<Link> = {}): Link => ({
   urlKey: "site.example/page",
   title: "A page",
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: new Date("2026-10-01T00:00:00Z"),

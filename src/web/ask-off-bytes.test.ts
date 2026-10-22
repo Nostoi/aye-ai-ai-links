@@ -39,6 +39,7 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   urlKey: `example.com/${id}`,
   title: `Title ${id}`,
   summary: "A summary",
+  summarySource: null,
   why: { text: "to compare", source: "stated" },
   tags: [
     {

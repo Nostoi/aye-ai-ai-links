@@ -177,6 +177,7 @@ describe("search over snapshot text", () => {
       urlKey: "ex.com/1",
       title: "Guide",
       summary: null,
+      summarySource: null,
       why: null,
       tags: [],
       savedAt: at(0),

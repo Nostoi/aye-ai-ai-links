@@ -22,6 +22,7 @@ const link = (tags: LinkTag[]): Link => ({
   urlKey: "ex.com/1",
   title: "Link 1",
   summary: null,
+  summarySource: null,
   why: null,
   tags,
   savedAt: NOW,

@@ -103,6 +103,11 @@ const timestamp = z
 
 const source = z.enum(SOURCES);
 const why = z.object({ text: z.string(), source });
+const summary = z
+  .union([z.string(), z.object({ text: z.string(), source })])
+  .describe(
+    'Plain text is your own wording of the page. Send {text, source} with "stated" or "asked" only when the owner gave the words or asked for the change.',
+  );
 const tags = z.array(
   z.object({
     name: z.string(),
@@ -125,7 +130,7 @@ const handy = z
 const saveLinkInput = z.object({
   url: z.string(),
   title: z.string().optional(),
-  summary: z.string().optional(),
+  summary: summary.optional(),
   why: why.optional(),
   tags: tags.optional(),
   handy: handy.optional(),
@@ -133,7 +138,7 @@ const saveLinkInput = z.object({
 const updateLinkInput = z.object({
   id: z.string(),
   title: z.string().nullable().optional(),
-  summary: z.string().nullable().optional(),
+  summary: summary.nullable().optional(),
   why: why.nullable().optional(),
   tags: tags.optional(),
   handy: handy.optional(),

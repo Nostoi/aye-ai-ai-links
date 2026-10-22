@@ -13,6 +13,7 @@ import {
   type ProfileNote,
   SOURCES,
   STATES,
+  SUMMARY_SOURCES,
   TAG_KINDS,
   type Tag,
   TOOL_STATUSES,
@@ -20,7 +21,7 @@ import {
 import { urlKey } from "./url-key.js";
 
 export const EXPORT_FORMAT = "aye-links-export";
-export const EXPORT_VERSION = 2;
+export const EXPORT_VERSION = 3;
 
 /** Exactly what `toISOString` writes for a finite date, extended years (`+010000-...`) included: the store keeps any instant. */
 const isStoredDate = (s: string) => {
@@ -72,6 +73,8 @@ const linkSchema = z.strictObject({
   url: z.string().refine(isSavedUrl, "only http and https"),
   title: z.string().nullable(),
   summary: z.string().nullable(),
+  /** Version 3 and later: who wrote the summary, present there and absent before (the manifest's check enforces which). */
+  summarySource: z.enum(SUMMARY_SOURCES).nullable().optional(),
   why: z.strictObject({ text: z.string(), source }).nullable(),
   tags: z.array(z.strictObject({ key: z.string(), name: z.string(), source })),
   state: z.enum(STATES),
@@ -124,11 +127,11 @@ const linkSchema = z.strictObject({
   copy: copySchema.nullable(),
 });
 
-/** Versions 1 and 2 of `links.json` (docs/specs/2026-10-18-export-design.md). #131 parses with it; a new key is a new version. */
+/** Versions 1 to 3 of `links.json` (docs/specs/2026-10-18-export-design.md). #131 parses with it; a new key is a new version. */
 export const manifestSchema = z
   .strictObject({
     format: z.literal(EXPORT_FORMAT),
-    version: z.union([z.literal(1), z.literal(EXPORT_VERSION)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(EXPORT_VERSION)]),
     exportedAt: date,
     includesFiles: z.boolean(),
     links: z.array(linkSchema),
@@ -157,8 +160,20 @@ export const manifestSchema = z
           ctx.addIssue({
             code: "custom",
             path: ["links", i, key],
-            message: "present exactly when the version is 2",
+            message: "present exactly when the version is 2 or later",
           });
+      if ((l.summarySource !== undefined) !== m.version >= 3)
+        ctx.addIssue({
+          code: "custom",
+          path: ["links", i, "summarySource"],
+          message: "present exactly when the version is 3 or later",
+        });
+      if (l.summarySource && l.summary === null)
+        ctx.addIssue({
+          code: "custom",
+          path: ["links", i, "summarySource"],
+          message: "a summary source needs a summary",
+        });
       if (m.includesFiles !== (l.picture !== undefined))
         ctx.addIssue({
           code: "custom",
@@ -231,6 +246,7 @@ function manifestLink(link: Link, r: ManifestReads): ManifestLink {
     url: link.url,
     title: link.title,
     summary: link.summary,
+    summarySource: link.summarySource,
     why: link.why && { text: link.why.text, source: link.why.source },
     tags: link.tags.map(({ key, name, source }) => ({ key, name, source })),
     state: link.state,
@@ -316,6 +332,7 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
     urlKey: urlKey(entry.url),
     title: entry.title,
     summary: entry.summary,
+    summarySource: entry.summarySource ?? null,
     why: entry.why && { text: entry.why.text, source: entry.why.source },
     tags: entry.tags.map((t) => ({
       key: t.key,

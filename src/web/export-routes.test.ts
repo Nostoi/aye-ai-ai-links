@@ -43,6 +43,7 @@ async function seedOwner(
       urlKey: urlKey(url),
       title: `${mark} "title"\n${n}  🦘`,
       summary: `${mark} summary`,
+      summarySource: null,
       why: { text: `${mark} why`, source: "inferred" },
       tags: [
         {

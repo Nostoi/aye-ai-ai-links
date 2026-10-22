@@ -748,6 +748,7 @@ describe("Home's Worth a look cards (#195)", () => {
         urlKey: "example.com/a",
         title: "Batteries",
         summary: null,
+        summarySource: null,
         why: null,
         tags: [],
         savedAt: new Date(0),

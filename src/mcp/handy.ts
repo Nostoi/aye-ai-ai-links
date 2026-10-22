@@ -30,6 +30,7 @@ function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> {
     urlKey: l.urlKey,
     title: l.title,
     summary: l.summary,
+    summarySource: l.summarySource,
     why: l.why,
     tags: l.tags,
     savedAt: l.savedAt,

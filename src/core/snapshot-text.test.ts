@@ -36,6 +36,7 @@ describe("readSnapshotText", () => {
     urlKey: "ex.com/a",
     title: null,
     summary: null,
+    summarySource: null,
     why: null,
     tags: [],
     savedAt: new Date(0),

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import { type Changed, type Covered, extendedPrior, holdsWritten } from "../core/covered-fields.js";
-import type { LinkTag, OwnerId, Source } from "../core/types.js";
+import type { LinkTag, OwnerId, Source, SummarySource } from "../core/types.js";
 
 /** A link's tags joined to the catalog; `WHERE` and `ORDER BY` are the caller's. */
 export const TAG_SELECT = `SELECT lt.link_id AS linkId, t.key AS key, t.name AS name, lt.source AS source,
@@ -19,6 +19,8 @@ export type ReceiptRow = {
   written_title: string | null;
   prior_summary: string | null;
   written_summary: string | null;
+  prior_summary_source: SummarySource | null;
+  written_summary_source: SummarySource | null;
   prior_why_text: string | null;
   prior_why_source: Source | null;
   written_why_text: string | null;
@@ -34,13 +36,14 @@ const why = (text: string | null, source: Source | null) =>
 export function readCovered(db: Database, owner: OwnerId, linkId: number): Covered | null {
   const row = db
     .prepare(
-      `SELECT title, summary, why_text, why_source FROM links
+      `SELECT title, summary, summary_source, why_text, why_source FROM links
        WHERE owner_id = ? AND id = ? AND deleted_at IS NULL`,
     )
     .get(owner, linkId) as
     | {
         title: string | null;
         summary: string | null;
+        summary_source: SummarySource | null;
         why_text: string | null;
         why_source: Source | null;
       }
@@ -52,6 +55,7 @@ export function readCovered(db: Database, owner: OwnerId, linkId: number): Cover
   return {
     title: row.title,
     summary: row.summary,
+    summarySource: row.summary_source,
     why: why(row.why_text, row.why_source),
     tags: tags.map(({ key, name, source, kind, kindSource }) => ({
       key,
@@ -101,6 +105,7 @@ const NO_PICTURE: PictureColumns = {
 const priorOf = (row: ReceiptRow): Covered => ({
   title: row.prior_title,
   summary: row.prior_summary,
+  summarySource: row.prior_summary_source,
   why: why(row.prior_why_text, row.prior_why_source),
   tags: JSON.parse(row.prior_tags ?? "[]") as LinkTag[],
 });
@@ -133,10 +138,10 @@ export function writeReceipt(
   db.prepare(
     `INSERT OR REPLACE INTO link_edits (owner_id, link_id, edit_id, title_changed, picture_changed,
        prior_content_type, prior_bytes, prior_sha256, prior_set_at, written_sha256,
-       prior_title, written_title, summary_changed, prior_summary, written_summary, why_changed,
-       prior_why_text, prior_why_source, written_why_text, written_why_source, tags_changed,
-       prior_tags, written_tags, at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       prior_title, written_title, summary_changed, prior_summary, written_summary,
+       prior_summary_source, written_summary_source, why_changed, prior_why_text, prior_why_source,
+       written_why_text, written_why_source, tags_changed, prior_tags, written_tags, at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     owner,
     linkId,
@@ -153,6 +158,8 @@ export function writeReceipt(
     total.changed.summary ? 1 : 0,
     total.changed.summary ? total.prior.summary : null,
     total.changed.summary ? after.summary : null,
+    total.changed.summary ? total.prior.summarySource : null,
+    total.changed.summary ? after.summarySource : null,
     total.changed.why ? 1 : 0,
     total.changed.why ? (total.prior.why?.text ?? null) : null,
     total.changed.why ? (total.prior.why?.source ?? null) : null,
@@ -180,6 +187,7 @@ export function receiptHolds(row: ReceiptRow, current: Covered): boolean {
     {
       title: row.written_title,
       summary: row.written_summary,
+      summarySource: row.written_summary_source,
       why: why(row.written_why_text, row.written_why_source),
       tags: JSON.parse(row.written_tags ?? "[]") as LinkTag[],
     },
@@ -194,11 +202,9 @@ export function receiptHolds(row: ReceiptRow, current: Covered): boolean {
 export function restoreCovered(db: Database, owner: OwnerId, linkId: number, row: ReceiptRow) {
   const changed = flagged(row);
   if (changed.summary) {
-    db.prepare("UPDATE links SET summary = ? WHERE owner_id = ? AND id = ?").run(
-      row.prior_summary,
-      owner,
-      linkId,
-    );
+    db.prepare(
+      "UPDATE links SET summary = ?, summary_source = ? WHERE owner_id = ? AND id = ?",
+    ).run(row.prior_summary, row.prior_summary_source, owner, linkId);
   }
   if (changed.why) {
     db.prepare("UPDATE links SET why_text = ?, why_source = ? WHERE owner_id = ? AND id = ?").run(

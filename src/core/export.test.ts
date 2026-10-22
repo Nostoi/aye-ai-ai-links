@@ -143,13 +143,13 @@ const copyFiles = (files: Map<string, Uint8Array>, n: number) =>
   [...files.keys()].filter((k) => k.startsWith(`copies/${n}/`));
 
 describe("writeExport", () => {
-  it("writes a version-2 links.json that keeps a put-away and a Tidy-kept link as they are", async () => {
+  it("writes a version-3 links.json that keeps a put-away and a Tidy-kept link as they are", async () => {
     const h = setup();
     await h.save(A, 1, { state: "archived", putAwayAt: at(300) });
     await h.save(A, 2, { tidyKeptAt: at(400) });
     await h.save(A, 3);
     const { manifest } = await built(h.deps, A);
-    expect(manifest.version).toBe(2);
+    expect(manifest.version).toBe(3);
     expect(manifest.links.map((l) => [l.putAwayAt, l.tidyKeptAt])).toEqual([
       [at(300).toISOString(), null],
       [null, at(400).toISOString()],

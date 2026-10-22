@@ -58,6 +58,7 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   snapshot: SNAPSHOT,
   ...over,
 });
+const KITCHEN_TAGS = '[{"key":"kitchen","name":"Kitchen","source":"stated"}]';
 const OWN = "own0000000000000";
 const PAGE = "page000000000000";
 
@@ -121,7 +122,7 @@ describe("the card menu and the card data", () => {
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
-      "BUTTON edit Edit title and picture…",
+      "BUTTON edit Edit link…",
       "—",
       "BUTTON delete-link Delete link",
     ]);
@@ -132,7 +133,7 @@ describe("the card menu and the card data", () => {
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
-      "BUTTON edit Edit title and picture…",
+      "BUTTON edit Edit link…",
       "BUTTON remove-copy Remove saved copy",
       "—",
       "BUTTON delete-link Delete link",
@@ -162,7 +163,7 @@ describe("the card menu and the card data", () => {
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
-      "BUTTON edit Edit title and picture…",
+      "BUTTON edit Edit link…",
       "BUTTON remove-copy Remove saved copy",
       "—",
       "BUTTON delete-link Delete link",
@@ -179,7 +180,7 @@ describe("the card menu and the card data", () => {
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
-      "BUTTON edit Edit title and picture…",
+      "BUTTON edit Edit link…",
       "—",
       "BUTTON delete-link Delete link",
     ]);
@@ -191,7 +192,7 @@ describe("the card menu and the card data", () => {
         editMenu(link("7", { state: "archived" }), { copy: { madeAt: new Date(0) }, handy: KEPT }),
       ),
     ).toEqual([
-      "BUTTON edit Edit title and picture…",
+      "BUTTON edit Edit link…",
       "BUTTON bring-back Bring it back",
       "BUTTON remove-copy Remove saved copy",
       "—",
@@ -202,7 +203,7 @@ describe("the card menu and the card data", () => {
   it("gives an archived card on Home (the came-back lead) the same menu, with Bring it back", () => {
     const put = link("7", { state: "archived", putAwayAt: new Date(0) });
     expect(labels(editMenu(put, { onCard: true }))).toEqual([
-      "BUTTON edit Edit title and picture…",
+      "BUTTON edit Edit link…",
       "BUTTON bring-back Bring it back",
       "—",
       "BUTTON delete-link Delete link",
@@ -210,13 +211,13 @@ describe("the card menu and the card data", () => {
   });
 
   it.each(["search", "all", "space"] as const)(
-    "gives every card on %s the menu with Edit title and picture…, and what the dialog needs",
+    "gives every card on %s the menu with Edit link…, and what the dialog needs",
     (name) => {
       const [first, second] = cards(
         pages({ links: [link("1"), link("2", { title: null, snapshot: null })] })[name],
       );
       const item = first?.querySelector("details.card-menu .card-menu-list button[data-act=edit]");
-      expect(item?.textContent).toBe("Edit title and picture…");
+      expect(item?.textContent).toBe("Edit link…");
       expect(item?.querySelector("svg")).not.toBeNull();
       expect(first?.querySelector("details.card-menu summary .visually-hidden")?.textContent).toBe(
         "More for Link 1",
@@ -231,6 +232,7 @@ describe("the card menu and the card data", () => {
         "data-page-version": PAGE,
         "data-page-fit": "cover",
         "data-initials": "L1",
+        "data-tags": KITCHEN_TAGS,
       });
       expect(data(second)).toEqual({
         "data-id": "2",
@@ -242,9 +244,31 @@ describe("the card menu and the card data", () => {
         "data-page-version": "",
         "data-page-fit": "",
         "data-initials": "EC",
+        "data-tags": KITCHEN_TAGS,
       });
     },
   );
+
+  it("carries the link's tags in order with their sources, a hostile name kept as text", () => {
+    const tag = (name: string, source: "stated" | "inferred") => ({
+      key: name.toLowerCase(),
+      name,
+      source,
+      kind: "topic" as const,
+      kindSource: "inferred" as const,
+    });
+    const attr = (tags: ReturnType<typeof tag>[]) => {
+      const html = `<li${editData(link("1", { tags }), undefined, undefined)}></li>`;
+      expect(html).not.toContain("<img");
+      const value = parseHTML(html).document.querySelector("li")?.getAttribute("data-tags");
+      return JSON.parse(value ?? "");
+    };
+    expect(attr([tag(HOSTILE, "inferred"), tag('Say "hi" & bye', "stated")])).toEqual([
+      { key: HOSTILE.toLowerCase(), name: HOSTILE, source: "inferred" },
+      { key: 'say "hi" & bye', name: 'Say "hi" & bye', source: "stated" },
+    ]);
+    expect(attr([])).toEqual([]);
+  });
 
   it("puts the menu in a search card's body, and straight on the picture of All links and space cards", () => {
     const html = pages({ links: [link("1")] });

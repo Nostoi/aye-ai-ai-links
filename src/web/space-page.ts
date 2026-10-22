@@ -173,7 +173,7 @@ export function spacePage(input: Input): string {
   const list =
     links.length === 0
       ? `<p>${emptyText({ order, later })}</p>`
-      : `<div id="space-links">\n${monthSections(links, { order, now }, (l) => row(l, input))}\n</div>`;
+      : `<div id="space-links" data-within="${escapeHtml(tag.key)}" data-own="1">\n${monthSections(links, { order, now }, (l) => row(l, input))}\n</div>`;
   const more = older
     ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, order, before: older }))}">${order === "newest" ? "Show older links" : "Show more links"}</a></p>\n`
     : "";

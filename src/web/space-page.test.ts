@@ -652,6 +652,32 @@ describe("Show older links", () => {
   });
 });
 
+describe("the list roots the edit dialog reads the space from", () => {
+  const root = (html: string, id: string) => dom(html).getElementById(id);
+  it("marks a space page's list with its tag key and as its own, done or not", () => {
+    for (const done of [false, true]) {
+      const html = space({ links: [link("1")], done });
+      const list = root(html, "space-links");
+      expect(list?.getAttribute("data-within"), `done ${done}`).toBe(HOME.key);
+      expect(list?.getAttribute("data-own"), `done ${done}`).toBe("1");
+    }
+  });
+
+  it("marks a search within a space with its key, not as the space's own, and an open search with neither", () => {
+    const scoped = searchPage({
+      query: "q",
+      links: [link("1")],
+      now: NOW,
+      catalog: [HOME],
+      space: HOME,
+    });
+    expect(root(scoped, "results")?.getAttribute("data-within")).toBe(HOME.key);
+    expect(root(scoped, "results")?.hasAttribute("data-own")).toBe(false);
+    const open = searchPage({ query: "q", links: [link("1")], now: NOW, catalog: [HOME] });
+    expect(root(open, "results")?.hasAttribute("data-within")).toBe(false);
+  });
+});
+
 describe("the search page's space line", () => {
   it("names the link's space in its color, and tints a tile with no image", () => {
     const html = searchPage({

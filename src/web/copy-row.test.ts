@@ -80,7 +80,7 @@ describe("the card menu", () => {
       "It's stale",
       "Put it away",
       "Keep handy",
-      "Edit title and picture…",
+      "Edit link…",
       "Remove saved copy",
       "Delete link",
     ]);

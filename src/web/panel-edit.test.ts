@@ -160,6 +160,42 @@ describe("the AI-on All page's edit dialog", () => {
     expect(page.$("#undo-bar span").textContent).toBe("Link updated");
   });
 
+  it("saves tags from the page's dialog: the card takes the answer's tags, space color and grey-line space", async () => {
+    const html = allPage({
+      ...list,
+      links: ONE,
+      done: false,
+      pictures: new Map([["1", { own: false, pageVersion: null, pageFit: null }]]),
+    });
+    const body = {
+      title: "Link 1",
+      shown: "Link 1",
+      url: "https://ex.com/1",
+      initials: "L1",
+      version: null,
+      fit: null,
+      picture: { own: false, pageVersion: null, pageFit: null },
+      tags: [{ key: "kitchen", name: "Kitchen", source: "stated" }],
+      space: { color: "clay" },
+      lineSpace: { name: "Kitchen" },
+      editId: "e1",
+    };
+    const page = runAskPage(html, (sent) =>
+      sent.url === "/links/edit" ? { status: 200, body } : { status: 204 },
+    );
+    stubDialog(page);
+    page.dispatch(page.$('[data-id="1"] button[data-act=edit]'), "click");
+    const field = page.$("#edit-tag-input") as HTMLInputElement;
+    field.value = "Kitchen";
+    page.dispatch(page.$("#edit-link form"), "submit");
+    await page.settle();
+    const card = page.$('[data-id="1"]');
+    expect(JSON.parse(card.dataset.tags ?? "")).toEqual(body.tags);
+    expect(card.className).toContain("space-clay");
+    expect(page.$('[data-id="1"] [data-space-name]').textContent).toBe("Kitchen");
+    expect(page.$('[data-id="1"] .line-space').hasAttribute("hidden")).toBe(false);
+  });
+
   it("shows Delete link, which calls /links/delete", async () => {
     const { page } = opened();
     openFromCard(page);

@@ -117,8 +117,10 @@ const submit = async (p: Page) => {
   await p.settle();
 };
 const posts = (p: Page) => p.sent.filter((s) => s.url === "/links/edit");
-const fields = (post: Post | undefined) =>
-  Object.fromEntries([...(post?.body as FormData).entries()].map(([k, v]) => [k, String(v)]));
+const fields = (post: Post | undefined) => {
+  if (!post) throw new Error("no request was sent");
+  return Object.fromEntries([...(post.body as FormData).entries()].map(([k, v]) => [k, String(v)]));
+};
 
 describe("the edit dialog's tags", () => {
   it("shows one chip per tag in order, a guess marked, each with a Remove button", async () => {

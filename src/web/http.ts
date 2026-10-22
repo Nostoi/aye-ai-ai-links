@@ -33,6 +33,7 @@ import { editLink, undoEdit } from "../core/link-edit.js";
 import type { LinkEditStore } from "../core/link-edit-store.js";
 import { checkedOrder, linkPage } from "../core/link-pages.js";
 import { deleteLink, restoreLink } from "../core/link-removal.js";
+import { lineSpace, linkSpace } from "../core/link-space.js";
 import { getLink, recordOpening } from "../core/links.js";
 import {
   addOwnerNote,
@@ -100,6 +101,7 @@ import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { backTarget } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
+import { shownTags } from "./edit-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -243,8 +245,59 @@ const chatBody = createMiddleware<{
 /** The edit form's cap: the largest picture core keeps, plus the auth cap for the other fields. */
 const EDIT_BODY_LIMIT = MAX_IMAGE_BYTES + AUTH_BODY_LIMIT;
 
+/** The most tags a link's edit names, and the longest tag name or key it carries. */
+const EDIT_MAX_TAGS = 50;
+const EDIT_MAX_TAG_TEXT = 200;
+
+/** Where a list shows the card: the space it is within, and whether it is that space's own page (`lineSpace`). */
+type View = { within?: string; own?: boolean };
+
 /** The edit form as the door read it: only the fields the page sent. */
-type EditForm = { id: string; title?: string; picture?: Uint8Array | "page" };
+type EditForm = View & {
+  id: string;
+  title?: string;
+  picture?: Uint8Array | "page";
+  tags?: { names: string[]; seen: { key: string; source: string }[] };
+};
+
+const fitsTagText = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= EDIT_MAX_TAG_TEXT;
+
+/**
+ * The `tags` and `seen` form fields, JSON, which are sent together or not at all: `undefined` when
+ * neither was sent, `null` when they are not that shape (an array of at most 50 texts, and an
+ * array of at most 50 `{ key, source }` texts, each at most 200 characters). Shapes only: that a
+ * source is one is core's rule.
+ */
+function takeTags(tags: unknown, seen: unknown): EditForm["tags"] | null | undefined {
+  if (tags === null && seen === null) return undefined;
+  if (typeof tags !== "string" || typeof seen !== "string") return null;
+  let names: unknown;
+  let marks: unknown;
+  try {
+    names = JSON.parse(tags);
+    marks = JSON.parse(seen);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(names) || names.length > EDIT_MAX_TAGS || !names.every(fitsTagText)) {
+    return null;
+  }
+  const fits = (m: unknown): m is { key: string; source: string } =>
+    typeof m === "object" &&
+    m !== null &&
+    fitsTagText((m as { key?: unknown }).key) &&
+    fitsTagText((m as { source?: unknown }).source);
+  if (!Array.isArray(marks) || marks.length > EDIT_MAX_TAGS || !marks.every(fits)) return null;
+  return { names, seen: marks.map(({ key, source }) => ({ key, source })) };
+}
+
+/** An optional JSON member: absent, or passing `check`. */
+const optional =
+  <T>(check: Check<T>): Check<T | undefined> =>
+  (value): value is T | undefined =>
+    value === undefined || check(value);
+const isOne: Check<"1"> = (value) => value === "1";
 
 /**
  * Takes the edit form, a `multipart/form-data` body under `EDIT_BODY_LIMIT`, and sets `edit`
@@ -260,7 +313,10 @@ const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, n
     return c.json({ code: "PAYLOAD_TOO_LARGE", message: "Request body too large." }, 413);
   }
   const bad = () =>
-    c.json({ code: "BAD_REQUEST", message: "Send a form with id, and title or picture." }, 400);
+    c.json(
+      { code: "BAD_REQUEST", message: "Send a form with id, and title, picture or tags." },
+      400,
+    );
   const type = c.req.header("content-type") ?? "";
   if (!/^multipart\/form-data/i.test(type)) return bad();
   let form: FormData;
@@ -273,10 +329,20 @@ const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, n
   const id = form.get("id");
   const title = form.get("title");
   const picture = form.get("picture");
+  const within = form.get("within");
+  const own = form.get("own");
   if (!isLinkId(id) || (title !== null && typeof title !== "string")) return bad();
   if (picture !== null && picture !== "page" && !(picture instanceof Blob)) return bad();
+  if ((within !== null && typeof within !== "string") || (own !== null && own !== "1")) {
+    return bad();
+  }
+  const tags = takeTags(form.get("tags"), form.get("seen"));
+  if (tags === null) return bad();
   const edit: EditForm = { id };
   if (title !== null) edit.title = title;
+  if (tags) edit.tags = tags;
+  if (within !== null) edit.within = within;
+  if (own !== null) edit.own = true;
   if (picture instanceof Blob) edit.picture = new Uint8Array(await picture.arrayBuffer());
   else if (picture === "page") edit.picture = "page";
   c.set("edit", edit);
@@ -614,11 +680,21 @@ export function webApp({
   const askOn = (c: Context<SessionEnv>, place: string): Ask | undefined =>
     ai ? { ai: ai.model.name, place, owner: c.get("caller").owner } : undefined;
 
-  /** What a card shows after an edit or its Undo, read after the write. */
-  const cardState = async (owner: OwnerId, id: string) => {
+  /**
+   * What a card shows after an edit or its Undo, read after the write: its title and picture, its
+   * tags, and its space (the color of the card, and the name its grey line shows) as the list the
+   * card is on reads it (`view`).
+   */
+  const cardState = async (owner: OwnerId, id: string, view: View) => {
     const link = await getLink(deps, owner, id);
     const shown = (await deps.images.imageVersions(owner, [id])).get(id);
     const info = (await deps.images.pictureInfo(owner, [id])).get(id);
+    const space = linkSpace(
+      link,
+      await deps.store.listTags(owner),
+      view.within === undefined ? {} : { within: view.within },
+    );
+    const line = lineSpace(space, view);
     return {
       title: link.title,
       shown: displayTitle(link),
@@ -631,6 +707,9 @@ export function webApp({
         pageVersion: info?.pageVersion ?? null,
         pageFit: info?.pageFit ?? null,
       },
+      tags: shownTags(link.tags),
+      space: space && { color: space.color },
+      lineSpace: line && { name: line.name },
     };
   };
 
@@ -1034,29 +1113,43 @@ export function webApp({
     }),
   );
 
-  // The owner's edit of a link's title and picture (#145). It answers the card's new state and
-  // the edit's id for its Undo (null when nothing changed).
+  // The owner's edit of a link's title, picture and tags (#145, #239). It answers the card's new
+  // state and the edit's id for its Undo (null when nothing changed). A change of tags that the
+  // link's tags have moved on from since the dialog opened is a 409, with nothing written.
   app.post("/links/edit", session, editForm, (c) =>
     homeAction(c, async () => {
       const { owner } = c.get("caller");
-      const { id, title, picture } = c.get("edit");
+      const { id, title, picture, tags, within, own } = c.get("edit");
       const editId = await editLink(deps, owner, id, {
         ...(title !== undefined && { title }),
         ...(picture !== undefined && { picture }),
+        ...(tags !== undefined && { tags }),
       });
-      return c.json({ ...(await cardState(owner, id)), editId }, 200, NO_STORE);
+      const view: View = { ...(within !== undefined && { within }), ...(own && { own }) };
+      return c.json({ ...(await cardState(owner, id, view)), editId }, 200, NO_STORE);
     }),
   );
 
   // Its Undo: core puts the edit back only while nothing changed since; otherwise a 409.
-  app.post("/links/edit/undo", jsonBody({ ...linkId, editId: isString }), session, (c) =>
-    homeAction(c, async () => {
-      const { owner } = c.get("caller");
-      const { id, editId } = c.get("body");
-      await undoEdit(deps, owner, id, editId);
-      return c.json(await cardState(owner, id), 200, NO_STORE);
-    }),
+  app.post(
+    "/links/edit/undo",
+    jsonBody({ ...linkId, editId: isString, within: optional(isString), own: optional(isOne) }),
+    session,
+    (c) =>
+      homeAction(c, async () => {
+        const { owner } = c.get("caller");
+        const { id, editId, within, own } = c.get("body");
+        await undoEdit(deps, owner, id, editId);
+        const view: View = { ...(within !== undefined && { within }), ...(own && { own: true }) };
+        return c.json(await cardState(owner, id, view), 200, NO_STORE);
+      }),
   );
+
+  // The names of the owner's tags, for the edit dialog's suggestions.
+  app.get("/tags/names", session, async (c) => {
+    const tags = await deps.store.listTags(c.get("caller").owner);
+    return c.json({ names: tags.map((t) => t.name) }, 200, NO_STORE);
+  });
 
   // Keep in Tidy up: the link stays in the lists and out of the next sessions for a while.
   app.post("/tidy/keep", jsonBody(linkId), session, (c) =>

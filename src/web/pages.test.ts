@@ -404,7 +404,9 @@ describe("Remove saved copy on the search page", () => {
 
 /** The parts of the first card's grey line. */
 const lineParts = (html: string) =>
-  [...parseHTML(html).document.querySelectorAll(".card-line > :not([hidden])")].map((e) => e.textContent);
+  [...parseHTML(html).document.querySelectorAll(".card-line > :not([hidden])")].map(
+    (e) => e.textContent,
+  );
 
 describe("the search page's cards", () => {
   it("shows the title as a link that opens in a new tab, the host and the date, and the summary", () => {

@@ -1,87 +1,29 @@
-import { createHash } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { describe, expect, it, vi } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
-import {
-  type Agent,
-  addSecondUser,
-  allRows,
-  oauthWorld,
-  type World,
-} from "../auth/oauth-test-kit.js";
+import { addSecondUser, allRows } from "../auth/oauth-test-kit.js";
 import { png, svg } from "../core/image-test-kit.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { deleteLink } from "../core/link-removal.js";
-import { saveLink, updateLink, updateLinkWithReceipt } from "../core/links.js";
-import { createDeps } from "../deps.js";
-import { FakeEmbedder } from "../search/embedder.js";
-import { DIMS } from "../search/model.js";
+import { updateLink, updateLinkWithReceipt } from "../core/links.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
+import {
+  A,
+  type Answer,
+  edit,
+  edited,
+  file,
+  form,
+  linkDeps,
+  MINE,
+  ownedRows,
+  PAGE,
+  URL,
+  undo,
+  v,
+} from "./edit-routes-kit.js";
 
-const A = "owner";
-const URL = "https://a.example/quokkas";
-const PAGE = png(64, 48, Buffer.from("the page's own picture"));
-const MINE = png(80, 60, Buffer.from("the owner's screenshot"));
 const BAD = "That picture can't be used. Try a PNG, JPEG, GIF or WebP under 2 MB.";
-const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS));
-const v = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-
-/** A's titled link whose page title and picture were fetched, and A signed in. */
-async function edited() {
-  const world = await oauthWorld();
-  const { link } = await saveLink(linkDeps(world), A, {
-    url: URL,
-    savedBy: "seed",
-    title: "Quokka habitat",
-  });
-  world.links
-    .prepare(
-      `UPDATE snapshots SET fetch_status = 'ok', next_fetch_at = NULL, title = 'Quokkas: a field guide',
-           image_url = 'https://a.example/q.png', image_status = 'pending' WHERE link_id = ?`,
-    )
-    .run(Number(link.id));
-  const page = { contentType: "image/png" as const, bytes: PAGE };
-  await new SqliteImageStore(world.links).writeImage(
-    A,
-    link.id,
-    "https://a.example/q.png",
-    "preview",
-    page,
-    new Date(),
-  );
-  const browser = world.agent();
-  await browser.signIn();
-  return { world, browser, id: link.id };
-}
-
-const form = (fields: Record<string, string | Blob>) => {
-  const f = new FormData();
-  for (const [name, value] of Object.entries(fields)) f.append(name, value);
-  return f;
-};
-const file = (bytes: Buffer, type = "image/png") => new Blob([new Uint8Array(bytes)], { type });
-const edit = (browser: Agent, fields: Record<string, string | Blob>, extra = {}) =>
-  browser.send("/links/edit", { method: "POST", multipart: form(fields), ...extra });
-const undo = (browser: Agent, json: unknown) =>
-  browser.send("/links/edit/undo", { method: "POST", json });
-/** A's links, pictures and edit records: what B's request must leave alone. */
-const ownedRows = (world: World, owner: string) =>
-  Object.fromEntries(
-    ["links", "owner_images", "link_edits", "link_images", "link_tags", "tags"].map((t) => [
-      t,
-      world.links.prepare(`SELECT * FROM ${t} WHERE owner_id = ? ORDER BY rowid`).all(owner),
-    ]),
-  );
-type Answer = {
-  title: string | null;
-  shown: string;
-  url: string;
-  initials: string;
-  version: string | null;
-  fit: "cover" | "contain" | null;
-  picture: { own: boolean; pageVersion: string | null; pageFit: "cover" | "contain" | null };
-  editId?: string | null;
-};
 
 describe("POST /links/edit", () => {
   it("sets the owner's picture: 200, uncached, with the card's new state and an edit id; the fetched one stays", async () => {
@@ -97,6 +39,9 @@ describe("POST /links/edit", () => {
       version: v(MINE),
       fit: "cover",
       picture: { own: true, pageVersion: v(PAGE), pageFit: "cover" },
+      tags: [],
+      space: null,
+      lineSpace: null,
       editId: expect.any(String),
     });
     // The type stored is the one the header names, not the part's.
@@ -200,6 +145,9 @@ describe("POST /links/edit/undo", () => {
       version: v(PAGE),
       fit: "cover",
       picture: { own: false, pageVersion: v(PAGE), pageFit: "cover" },
+      tags: [],
+      space: null,
+      lineSpace: null,
     });
     const before = allRows(world);
     const again = await undo(browser, { id, editId: done.editId });

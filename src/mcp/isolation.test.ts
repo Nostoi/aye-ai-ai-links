@@ -570,6 +570,7 @@ describe("owner isolation coverage", () => {
     "GET /oauth-error": { noOwnerData: "fixed text chosen by the error code" },
     "GET /save": { noOwnerData: "the save form, filled only from its own query" },
     "GET /tags": { request: "/tags", marker: () => A_TAG_NAME },
+    "GET /tags/names": { request: "/tags/names", marker: () => A_TAG_NAME },
     "GET /ai/card/:id{[0-9]+}": { request: "/ai/card/:id", marker: () => "Quokka habitat notes" },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
     "GET /links/:id{[0-9]+}/copy": { request: "/links/:id/copy", marker: () => A_COPY_TEXT },
@@ -771,7 +772,8 @@ describe("owner isolation coverage", () => {
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
     "POST /tidy/keep": "the two-owner test of POST /tidy/keep in web/tidy-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
-    "POST /links/edit": "the two-owner test of POST /links/edit in web/edit-routes.test.ts",
+    "POST /links/edit":
+      "the two-owner tests of POST /links/edit in web/edit-routes.test.ts and, for tags, web/edit-tags-routes.test.ts",
     "POST /links/edit/undo":
       "the two-owner test of POST /links/edit/undo in web/edit-routes.test.ts",
     "POST /tools/keep": "the two-owner test of POST /tools/keep in web/tools-routes.test.ts",

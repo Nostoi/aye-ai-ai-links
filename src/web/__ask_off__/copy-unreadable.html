@@ -360,6 +360,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .space-rose{--space:var(--rose)}
 .copy{max-width:720px}
 .copy h1,.copy p{overflow-wrap:anywhere}
+.copy-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 16px}
+.copy-open{display:inline-flex;align-items:center;min-height:44px;gap:4px;font-size:15.5px}
+.copy-line{margin:0}
+.copy-why{margin:12px 0 0;font-size:15px;color:var(--ink)}
 .copy-article{margin-top:24px;font-size:17px;line-height:1.65;overflow-wrap:anywhere}
 .copy-article>*{max-width:68ch}
 .copy-article h1,.copy-article h2,.copy-article h3,.copy-article h4{margin:28px 0 12px}
@@ -425,16 +429,65 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </style>
 </head>
 <body>
-<header class="column site"><a class="brand" href="/"><svg role="img" aria-label="Aye-AI-AI Links" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 36"><rect x="3.5" y="5.5" width="33" height="25" rx="12.5" fill="#fff" stroke="#2F8F83" stroke-width="5"/><rect x="27.5" y="5.5" width="33" height="25" rx="12.5" fill="#fff" stroke="#2F8F83" stroke-width="5"/><circle cx="19" cy="15.5" r="5" fill="#26262B"/><circle cx="47" cy="15.5" r="5" fill="#26262B"/></svg><span>Aye-AI-AI Links</span></a></header>
+<header class="column site"><a class="brand" href="/"><svg role="img" aria-label="Aye-AI-AI Links" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 36"><rect x="3.5" y="5.5" width="33" height="25" rx="12.5" fill="#fff" stroke="#2F8F83" stroke-width="5"/><rect x="27.5" y="5.5" width="33" height="25" rx="12.5" fill="#fff" stroke="#2F8F83" stroke-width="5"/><circle cx="19" cy="15.5" r="5" fill="#26262B"/><circle cx="47" cy="15.5" r="5" fill="#26262B"/></svg><span>Aye-AI-AI Links</span></a><nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true"><span class="icon-wide"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/></svg></span><span class="icon-phone"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span></span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav></header>
 <div class="column">
-<main class="copy">
+<main class="copy" id="copy-frame" data-id="3">
+<div class="copy-nav"><a class="back-link" href="/all"><span aria-hidden="true">←</span> Back to All links</a><a class="copy-open" href="https://example.com/3" target="_blank" rel="noopener noreferrer" data-open>Open on example.com <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></div>
 <h1>Title 3</h1>
-<p class="small"><a href="https://example.com/3" target="_blank" rel="noopener noreferrer">example.com</a></p>
-<p class="small">Saved copy from October 14</p>
-<p class="small">A reading copy kept by this app. The page itself may have changed since.</p>
+<p class="small copy-line">Your copy from October 14 · the page may have changed</p>
+<p class="copy-why">"to compare"</p>
 <p>The saved copy couldn't be read just now.</p>
 </main>
+<script>
+{
+const openRoot = document.getElementById("copy-frame");
+const recordOpen = (event) => {
+  const link = event.target.closest("a[data-open]");
+  if (!link || (event.type === "auxclick" && event.button !== 1)) return;
+  const card = link.closest("[data-id]");
+  fetch("/links/opened", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: card.dataset.id }),
+    redirect: "manual",
+    keepalive: true,
+  }).catch(() => {});
+};
+if (openRoot) {
+  openRoot.addEventListener("click", recordOpen);
+  openRoot.addEventListener("auxclick", recordOpen);
+}
+}
+</script>
 </div>
-
+<script>
+document.getElementById("sign-out").addEventListener("click", async () => {
+  await fetch("/api/auth/sign-out", { method: "POST" });
+  location.href = "/login";
+});
+{
+  const bar = document.querySelector("nav.menu");
+  const opened = () => document.querySelectorAll("details.account-menu[open], details.card-menu[open]");
+  const area = (menu) => (menu.classList.contains("account-menu") ? bar : menu);
+  const close = (menu) => menu.removeAttribute("open");
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    for (const menu of opened()) {
+      if (!area(menu).contains(event.target)) continue;
+      close(menu);
+      menu.querySelector("summary").focus();
+    }
+  });
+  document.addEventListener("focusout", (event) => {
+    if (!event.relatedTarget) return;
+    for (const menu of opened()) {
+      if (area(menu).contains(event.target) && !area(menu).contains(event.relatedTarget)) close(menu);
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    for (const menu of opened()) if (!menu.contains(event.target)) close(menu);
+  });
+}
+</script>
 </body>
 </html>

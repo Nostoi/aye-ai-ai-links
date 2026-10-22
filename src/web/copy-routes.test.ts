@@ -11,6 +11,8 @@ import { copyLimits, finishedMarkdown, imageRef } from "../core/saved-copy.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { copyScripts } from "./copy-page.js";
+import { pageScripts } from "./page.js";
 
 const COPY_IMAGE = png(90, 70, Buffer.from("A's saved copy picture"));
 const NONCE = "0123456789abcdef0123456789abcdef";
@@ -117,16 +119,42 @@ describe("the copy image route", () => {
   });
 });
 
-const CSP =
-  "default-src 'none'; img-src 'self' data:; style-src 'sha256-HASH'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-const NEUTRAL = "A reading copy kept by this app. The page itself may have changed since.";
+const sha = (text: string) => createHash("sha256").update(text).digest("base64");
 
-/** The CSP the answer must carry: the hash is that of the answer's own `<style>`. */
-function expectCopyHeaders(res: { headers: Headers; bytes: Buffer }) {
+/** The directives of an answer's CSP, each as its list of values. */
+const directives = (res: { headers: Headers }) =>
+  new Map(
+    (res.headers.get("content-security-policy") ?? "")
+      .split("; ")
+      .map((d) => d.split(" ") as [string, ...string[]])
+      .map(([name, ...values]) => [name, values.sort()] as const),
+  );
+
+/** The content of each `<script>` the answer's HTML holds. */
+const scriptsOf = (res: { bytes: Buffer }) =>
+  [...parseHTML(res.bytes.toString("utf8")).document.querySelectorAll("script")].map(
+    (s) => s.textContent ?? "",
+  );
+
+/**
+ * The CSP the answer must carry: today's directives, the style hash of the answer's own `<style>`,
+ * `connect-src 'self'`, and a `script-src` of the hashes of `scripts` and no others.
+ */
+function expectCopyHeaders(res: { headers: Headers; bytes: Buffer }, scripts: string[]) {
   const doc = parseHTML(res.bytes.toString("utf8")).document;
   const style = doc.querySelector("style")?.textContent ?? "";
-  const hash = createHash("sha256").update(style).digest("base64");
-  expect(res.headers.get("content-security-policy")).toBe(CSP.replace("HASH", hash));
+  expect(directives(res)).toEqual(
+    new Map([
+      ["default-src", ["'none'"]],
+      ["img-src", ["'self'", "data:"]],
+      ["style-src", [`'sha256-${sha(style)}'`]],
+      ["script-src", [...new Set(scripts.map((s) => `'sha256-${sha(s)}'`))].sort()],
+      ["connect-src", ["'self'"]],
+      ["base-uri", ["'none'"]],
+      ["form-action", ["'none'"]],
+      ["frame-ancestors", ["'none'"]],
+    ]),
+  );
   expect(res.headers.get("referrer-policy")).toBe("no-referrer");
   expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   expect(res.headers.get("cache-control")).toBe("no-store");
@@ -139,21 +167,18 @@ describe("the copy page", () => {
     const html = res.bytes.toString("utf8");
     expect(res.status).toBe(200);
     expect(html).toContain("<h1>Quokka</h1>");
-    expect(html).toContain(
-      '<a href="https://a.example/copy" target="_blank" rel="noopener noreferrer">a.example</a>',
+    expect(parseHTML(html).document.querySelector("a[data-open]")?.getAttribute("href")).toBe(
+      "https://a.example/copy",
     );
-    expect(html).not.toContain("data-open");
-    expect(html).toMatch(/Saved copy from [A-Z][a-z]+ \d+/);
-    expect(html).toContain(NEUTRAL);
+    expect(html).toMatch(/Your copy from [A-Z][a-z]+ \d+ · the page may have changed/);
     expect(html).toContain(`src="/links/${id}/copy/images/1"`);
     expect(html).toContain("two");
     expect(html).not.toContain(`/links/${id}/copy/images/2`);
     expect(html).not.toMatch(/[0-9a-f]{32}/);
     const doc = parseHTML(html).document;
-    expect(doc.querySelectorAll("script").length).toBe(0);
     expect(doc.querySelectorAll("[style]").length).toBe(0);
     expect(doc.querySelector("main.copy article.copy-article")).not.toBeNull();
-    expectCopyHeaders(res);
+    expectCopyHeaders(res, scriptsOf(res));
   });
 
   it("shows a finished copy's picture, and alt text for the one that was not stored", async () => {
@@ -208,7 +233,7 @@ describe("the copy page", () => {
       expect(res.status).toBe(404);
       expect(res.bytes.equals(first?.bytes ?? Buffer.alloc(0))).toBe(true);
       expect(res.bytes.toString("utf8")).not.toContain("Quokka");
-      expectCopyHeaders(res);
+      expectCopyHeaders(res, copyScripts);
     }
   });
 
@@ -219,7 +244,7 @@ describe("the copy page", () => {
     expect(res.status).toBe(200);
     expect(res.bytes.toString("utf8")).toContain("This saved copy's files are missing.");
     expect(parseHTML(res.bytes.toString("utf8")).document.querySelector("article")).toBeNull();
-    expectCopyHeaders(res);
+    expectCopyHeaders(res, scriptsOf(res));
   });
 
   it("answers 503 when the copy cannot be read", async () => {
@@ -230,7 +255,7 @@ describe("the copy page", () => {
     expect(res.status).toBe(503);
     expect(res.bytes.toString("utf8")).toContain("couldn't be read just now");
     expect(parseHTML(res.bytes.toString("utf8")).document.querySelector("article")).toBeNull();
-    expectCopyHeaders(res);
+    expectCopyHeaders(res, scriptsOf(res));
   });
 
   it.skipIf(process.getuid?.() === 0)("still reads a copy while saving is paused", async () => {
@@ -262,6 +287,111 @@ describe("the copy page", () => {
     const res = await owner.send(`/links/${id}/copy`, { headers: { host: "evil.example" } });
     expect(res.status).toBe(403);
     expect(res.bytes.toString("utf8")).not.toContain("Quokka");
+  });
+});
+
+describe("the copy page's scripts and CSP", () => {
+  it("lists exactly the hash of each script on the page in script-src, on every answer", async () => {
+    const { w, id, owner } = await world();
+    const ok = await owner.send(`/links/${id}/copy`);
+    const rendered = scriptsOf(ok);
+    expect(rendered.length).toBeGreaterThan(0);
+    expectCopyHeaders(ok, rendered);
+    const csp = ok.headers.get("content-security-policy");
+    const missing = await owner.send("/links/99999/copy");
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("content-security-policy")).toBe(csp);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(w.savedCopies, "readCopy").mockRejectedValue(new Error("EIO"));
+    const unreadable = await owner.send(`/links/${id}/copy`);
+    expect(unreadable.status).toBe(503);
+    expect(unreadable.headers.get("content-security-policy")).toBe(csp);
+  });
+
+  it("runs only the app's own scripts: the page's menu script and the copy page's own", async () => {
+    const { w, id, owner, save } = await world();
+    const hostile = await save("owner", "https://a.example/hostile");
+    const markdown =
+      "<script>alert(1)</script>\n\n[click](javascript:alert(2))\n\n<img src=x onerror=alert(3)>";
+    const draft = { markdown, imageUrls: [], nonce: NONCE };
+    expect(await w.savedCopies.saveCopy("owner", hostile, draft, LIMITS, new Date())).toBe("saved");
+    expect(copyScripts).toEqual(expect.arrayContaining(pageScripts({ menu: true })));
+    for (const which of [id, hostile]) {
+      const res = await owner.send(`/links/${which}/copy`);
+      expect(res.status).toBe(200);
+      expect([...scriptsOf(res)].sort()).toEqual([...copyScripts].sort());
+      const doc = parseHTML(res.bytes.toString("utf8")).document;
+      expect(doc.querySelectorAll("[href^=javascript], [onerror], img[src=x]")).toHaveLength(0);
+    }
+  });
+});
+
+describe("the copy page's Back line", () => {
+  /** A world whose owner has a Kitchen space and whose other user has a Secret one. */
+  async function tagged() {
+    const made = await world();
+    await addSecondUser(made.w);
+    const deps = createDeps(made.w.links, new FakeEmbedder(DIMS));
+    const tagIt = (owner: string, name: string) =>
+      saveLink(deps, owner, {
+        url: `https://t.example/${name}`,
+        savedBy: "seed",
+        tags: [{ name, source: "stated" }],
+      });
+    await tagIt("owner", "Kitchen");
+    await tagIt("owner-b", "Secret zzm8");
+    return made;
+  }
+  const backOf = (html: string) => {
+    const a = parseHTML(html).document.querySelector(".copy-nav a.back-link");
+    return [
+      a?.textContent?.replace(/\s+/g, " ").replace(/^←\s*/, "").trim(),
+      a?.getAttribute("href"),
+    ];
+  };
+  const get = async (
+    owner: Awaited<ReturnType<typeof world>>["owner"],
+    id: string,
+    from?: string,
+  ) => {
+    const query = from === undefined ? "" : `?from=${encodeURIComponent(from)}`;
+    return (await owner.send(`/links/${id}/copy${query}`)).bytes.toString("utf8");
+  };
+
+  it.each([
+    [undefined, "Back to All links", "/all"],
+    ["/", "Back to Home", "/"],
+    ["/all?order=opened&before=garbage", "Back to All links", "/all"],
+    ["/all/done", "Back to Out of your lists", "/all/done"],
+    ["/spaces?tag=kitchen", "Back to Kitchen", "/spaces?tag=kitchen"],
+    ["/spaces?tag=kitchen&order=banana", "Back to Kitchen", "/spaces?tag=kitchen"],
+    ["/spaces/done?tag=Kitchen", "Back to Kitchen", "/spaces/done?tag=kitchen"],
+    [
+      "/search?q=quokka&tag=kitchen&keep=1",
+      "Back to your search",
+      "/search?q=quokka&tag=kitchen&keep=1",
+    ],
+    ["/search?q=x&tag=zzm8", "Back to your search", "/search?q=x"],
+  ])("from %s: %s, to %s", async (from, label, href) => {
+    const { id, owner } = await tagged();
+    expect(backOf(await get(owner, id, from))).toEqual([label, href]);
+  });
+
+  it.each([
+    "//evil.example/zzm1",
+    "https://evil.example/zzm2",
+    "/\\evil.example/zzm3",
+    "javascript:zzm4(1)",
+    "/links/1/copy?zzm5=1",
+    "/unknown/zzm6",
+    "/spaces?tag=zzm7",
+    "/spaces?tag=secret%20zzm8",
+    "/spaces/done?tag=secret%20zzm8",
+  ])("falls back to All links for %s and leaves no trace of it in the page", async (from) => {
+    const { id, owner } = await tagged();
+    const html = await get(owner, id, from);
+    expect(backOf(html)).toEqual(["Back to All links", "/all"]);
+    for (const trace of ["zzm", "evil.example"]) expect(html).not.toContain(trace);
   });
 });
 

@@ -97,12 +97,14 @@ function row(
     handy,
     gone = new Map(),
     done,
+    order,
     pictures = new Map(),
     copies = new Map(),
   }: Input,
 ): string {
   const space = linkSpace(link, catalog, { within: tag.key });
   return linkRow(link, {
+    from: spaceHref(tag.key, { done, ...(order === undefined ? {} : { order }) }),
     space,
     // The page's own space goes without saying; another one, on an unpinned tag's page, is named.
     lineSpace: space?.key === tag.key ? null : space,

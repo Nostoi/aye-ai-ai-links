@@ -43,7 +43,7 @@ const menuHtml = (withAsk: boolean) =>
  * panel is outside every menu, so its Escape is not a menu's. Each menu carries `name="menu"`, so
  * the browser keeps one open at a time.
  */
-const MENU_SCRIPT = `<script>
+const MENU_JS = `
 document.getElementById("sign-out").addEventListener("click", async () => {
   await fetch("/api/auth/sign-out", { method: "POST" });
   location.href = "/login";
@@ -71,7 +71,7 @@ document.getElementById("sign-out").addEventListener("click", async () => {
     for (const menu of opened()) if (!menu.contains(event.target)) close(menu);
   });
 }
-</script>`;
+`;
 
 /** Idle and maximum times the Undo bar stays up; the maximum is below `UNDO_WINDOW_MS` and `NOTE_UNDO_WINDOW_MS`. */
 export const UNDO_BAR_MS = 10_000;
@@ -88,7 +88,7 @@ const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden>
  * own. When the bar closes with focus on it, focus goes back to what had it before,
  * if that is still on the page.
  */
-const UNDO_SCRIPT = `<script>
+const UNDO_JS = `
 const showUndo = (() => {
   const bar = document.getElementById("undo-bar");
   const text = bar.querySelector("span");
@@ -180,7 +180,42 @@ const showUndo = (() => {
   show.offers = () => offers;
   return show;
 })();
-</script>`;
+`;
+
+type ScriptOptions = {
+  menu?: boolean;
+  undo?: boolean;
+  ask?: Ask | undefined;
+  edits?: { root: string; error: string };
+};
+
+const scriptTag = (js: string) => `<script>${js}</script>`;
+
+/** The text between the tags of a script a builder returns whole, as `openedScript` does. */
+export const scriptText = (tag: string) => tag.replace(/^<script>([\s\S]*)<\/script>$/, "$1");
+
+/** What `page()` writes as script for these options, each as the text between its tags. */
+const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
+  undo: undo || ask ? UNDO_JS : null,
+  menu: menu ? MENU_JS : null,
+  ask: ask
+    ? [
+        scriptText(ASK_SCRIPT),
+        scriptText(openedScript("ask-messages", "/links/opened")),
+        `{\n${CARD_FETCH}\n${editLinkScript(edits?.root ?? null, edits?.error ?? null, { panel: true })}\n}`,
+      ]
+    : null,
+});
+
+/**
+ * The inline scripts `page()` writes for these options, in its order, each as the text between its
+ * tags. `page()` renders from `scriptsFor`, the one place that decides them, and the copy page's
+ * CSP hashes this list, so the two cannot drift. None reads request data.
+ */
+export const pageScripts = (options: ScriptOptions): string[] => {
+  const { undo, menu, ask } = scriptsFor(options);
+  return [undo, menu, ...(ask ?? [])].filter((js): js is string => js !== null);
+};
 
 /**
  * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
@@ -194,20 +229,11 @@ const showUndo = (() => {
 export const page = (
   title: string,
   body: string,
-  {
-    home = false,
-    menu = false,
-    undo = false,
-    ask,
-    edits,
-  }: {
-    home?: boolean;
-    menu?: boolean;
-    undo?: boolean;
-    ask?: Ask | undefined;
-    edits?: { root: string; error: string };
-  } = {},
-) => `<!doctype html>
+  { home = false, ...options }: { home?: boolean } & ScriptOptions = {},
+) => {
+  const { menu, ask } = options;
+  const scripts = scriptsFor(options);
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -221,7 +247,8 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${undo || ask ? `${UNDO_BAR}\n${UNDO_SCRIPT}\n` : ""}${menu ? MENU_SCRIPT : ""}${ask ? `\n${ASK_SCRIPT}\n${openedScript("ask-messages", "/links/opened")}\n<script>{\n${CARD_FETCH}\n${editLinkScript(edits?.root ?? null, edits?.error ?? null, { panel: true })}\n}</script>` : ""}
+${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
 </body>
 </html>
 `;
+};

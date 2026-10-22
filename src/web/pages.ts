@@ -163,13 +163,14 @@ function resultItem(
   info: PictureInfo | undefined,
   copy: CopyInfo | undefined,
   keep: boolean,
+  from: string,
 ): string {
   return `<li class="result${spaceClass(space)}${outOfListsMarker(link) === STALE_MARKER ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}
 <h2 data-card-title>${linkTitle(link)}</h2>
-${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now) })}${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
+${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from })}${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
 ${goneLine(link, gone)}${keep ? handyControl(link, view) : ""}</div>
 </li>`;
 }
@@ -245,7 +246,7 @@ ${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}${space ? `<input 
 <h1>${query.trim() !== "" ? "Best matches first" : keep ? "Find the link to keep handy" : "Your newest links"}${space ? ` in <span class="in-space${tagSpaceClass(space)}"><span class="dot" aria-hidden="true"></span>${escapeHtml(space.name)}</span>` : ""}</h1>
 ${keep ? `<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>\n` : ""}
 <p id="results-error" role="alert"></p>
-${links.length === 0 ? `<p>${searchEmpty(query, keep, space)}</p>${space ? `\n<p><a class="search-all" href="${searchHref(query, { keep })}">Search all your links</a></p>` : ""}` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog, space ? { within: space.key } : {}), handy.get(l.id), gone.get(l.id), pictures.get(l.id), copies.get(l.id), keep)).join("\n")}\n</ol>`}
+${links.length === 0 ? `<p>${searchEmpty(query, keep, space)}</p>${space ? `\n<p><a class="search-all" href="${searchHref(query, { keep })}">Search all your links</a></p>` : ""}` : `<ol class="results" id="results">\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog, space ? { within: space.key } : {}), handy.get(l.id), gone.get(l.id), pictures.get(l.id), copies.get(l.id), keep, searchHref(query, { ...(space ? { tag: space.key } : {}), keep }))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
 <p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="${searchHref("", { ...(space ? { tag: space.key } : {}), keep })}">your newest links</a>${space ? ` in ${escapeHtml(space.name)}${links.length === 0 ? "" : `, or <a class="search-all" href="${searchHref(query, { keep })}">search all your links</a>`}` : ""}.</p>

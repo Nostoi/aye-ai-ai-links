@@ -51,6 +51,7 @@ export function linkRow(
     gone,
     faded = false,
     ask = false,
+    from,
   }: {
     space: Space | null;
     lineSpace: Space | null;
@@ -61,6 +62,8 @@ export function linkRow(
     gone?: GoneView | null | undefined;
     faded?: boolean;
     ask?: boolean;
+    /** The address of the page showing the row, so its saved copy's Back returns to it. */
+    from?: string | undefined;
   },
 ): string {
   const why = link.why
@@ -72,7 +75,7 @@ export function linkRow(
 ${tile(link, picture, "row-pic")}
 <div class="row-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link) })}${goneLine(link, gone)}</div>
+${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from })}${goneLine(link, gone)}</div>
 ${editMenu(link, { copy, handy })}
 </li>`;
 }

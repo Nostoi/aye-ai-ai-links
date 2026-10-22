@@ -20,11 +20,14 @@ export function cardLine(
     copy,
     saved,
     marker,
+    from,
   }: {
     space?: Space | null;
     copy?: CopyInfo | undefined;
     saved?: string;
     marker?: string | null | undefined;
+    /** The address of the list page this line is on, so the saved copy's Back returns to it. */
+    from?: string | undefined;
   } = {},
 ): string {
   const host = hostOf(link.url);
@@ -35,7 +38,7 @@ export function cardLine(
     host ? `<span>${escapeHtml(host)}</span>` : "",
     saved ? `<span>${space || host ? "saved" : "Saved"} ${escapeHtml(saved)}</span>` : "",
     copy
-      ? `<a class="saved-copy" href="${copyHref(link.id)}" data-act="read-copy">Saved copy</a>`
+      ? `<a class="saved-copy" href="${escapeHtml(copyHref(link.id, from))}" data-act="read-copy">Saved copy</a>`
       : "",
     marker ? `<span>${escapeHtml(marker)}</span>` : "",
   ].filter(Boolean);

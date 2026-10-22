@@ -401,6 +401,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 ${spaceClasses}
 .copy{max-width:720px}
 .copy h1,.copy p{overflow-wrap:anywhere}
+.copy-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 16px}
+.copy-open{display:inline-flex;align-items:center;min-height:44px;gap:4px;font-size:15.5px}
+.copy-line{margin:0}
+.copy-why{margin:12px 0 0;font-size:15px;color:var(--ink)}
 .copy-article{margin-top:24px;font-size:17px;line-height:1.65;overflow-wrap:anywhere}
 .copy-article>*{max-width:68ch}
 .copy-article h1,.copy-article h2,.copy-article h3,.copy-article h4{margin:28px 0 12px}

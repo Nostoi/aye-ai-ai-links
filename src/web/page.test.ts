@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { UNDO_WINDOW_MS } from "../auth/agent-keys.js";
 import { NOTE_UNDO_WINDOW_MS } from "../core/profile.js";
-import { page, UNDO_BAR_MAX_MS, UNDO_BAR_MS } from "./page.js";
+import { page, pageScripts, UNDO_BAR_MAX_MS, UNDO_BAR_MS } from "./page.js";
 
 /**
  * A page with the Undo bar in linkedom, its script run with recorded timers. linkedom has no
@@ -219,5 +219,30 @@ describe("the Undo bar", () => {
     p.fire(p.undoButton, "click");
     await p.settle();
     expect(p.focused()).toBe(p.$("#pin2"));
+  });
+});
+
+describe("pageScripts", () => {
+  const ask = { ai: "A", place: "P", owner: "o" };
+  const combos = [
+    {},
+    { menu: true },
+    { undo: true },
+    { menu: true, undo: true },
+    { ask },
+    { menu: true, ask, edits: { root: "r", error: "e" } },
+    { menu: true, undo: true, ask },
+  ];
+
+  it.each(combos)("lists exactly the scripts page() writes for %j, in order", (options) => {
+    const written = [...page("t", "<p>b</p>", options).matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    expect(pageScripts(options)).toEqual(written.map((m) => m[1]));
+  });
+
+  it("has no script for a bare page, one for the menu, and the Ask scripts only with ask", () => {
+    expect(pageScripts({})).toEqual([]);
+    expect(pageScripts({ menu: true })).toHaveLength(1);
+    expect(pageScripts({ undo: true })).toHaveLength(1);
+    expect(pageScripts({ menu: true, ask })).toHaveLength(5);
   });
 });

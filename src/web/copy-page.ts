@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import type { CopyView } from "../core/copy-reading.js";
+import type { HandyView } from "../core/tools.js";
 import { isWebUrl } from "../core/url-key.js";
+import { backLink, COPY_END_SCRIPT, copyEnd } from "./copy-end.js";
 import { copyHtml } from "./copy-markdown.js";
 import { displayTitle } from "./display-title.js";
+import { PUT_AWAY_MARKER } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { whyText } from "./link-rows.js";
 import { openedScript, openLink } from "./open-link.js";
@@ -20,14 +23,19 @@ export type Back = { label: string; href: string };
 
 /** The one element holding the page's frame, whose clicks on an `a[data-open]` it records. */
 const FRAME_ID = "copy-frame";
-const OPENED = openedScript(FRAME_ID, "/links/opened");
+const OPENED = openedScript(FRAME_ID, "/links/opened", PUT_AWAY_MARKER);
+const END = `<script>${COPY_END_SCRIPT}</script>`;
+
+/** The page's own scripts: its menu, and the Undo bar the end row offers. */
+const COPY_PAGE_OPTIONS = { menu: true, undo: true };
 
 /**
- * Every script of the copy page: the page's own for its menu, and the one recording an opening.
+ * Every script of the copy page: the page's own for its menu and Undo bar, the one recording an
+ * opening, and the end row's.
  * The CSP lists these and no other, hashed from here and never from the page they render into,
  * so a script that reached the page through the article would still be refused.
  */
-export const copyScripts = [...pageScripts({ menu: true }), scriptText(OPENED)];
+export const copyScripts = [...pageScripts(COPY_PAGE_OPTIONS), scriptText(OPENED), scriptText(END)];
 
 const hash = (text: string) => `'sha256-${createHash("sha256").update(text).digest("base64")}'`;
 
@@ -46,7 +54,12 @@ export const COPY_HEADERS: Record<string, string> = {
  * The saved copy of one link: its article, or why there is none to show, in the app's frame: the
  * top bar, Back and Open on the site, the title, one grey line and the why when there is one.
  */
-export function copyPage(view: CopyView, now: Date, back: Back): string {
+export function copyPage(
+  view: CopyView,
+  now: Date,
+  back: Back,
+  handy: HandyView | null = null,
+): string {
   const { link, copy } = view;
   const title = displayTitle(link);
   const open = isWebUrl(link.url)
@@ -69,13 +82,15 @@ export function copyPage(view: CopyView, now: Date, back: Back): string {
   return page(
     title,
     `<main class="copy" id="${FRAME_ID}" data-id="${escapeHtml(link.id)}">
-<div class="copy-nav"><a class="back-link" href="${escapeHtml(back.href)}"><span aria-hidden="true">←</span> Back to ${escapeHtml(back.label)}</a>${open}</div>
+<div class="copy-nav">${backLink(back)}${open}</div>
 <h1>${escapeHtml(title)}</h1>
 <p class="small copy-line">Your copy from ${savedOn(view.madeAt, now)} · the page may have changed</p>
 ${link.why ? `<p class="copy-why">${whyText(link.why)}</p>\n` : ""}${body}
+${copyEnd(link, handy, back)}
 </main>
-${OPENED}`,
-    { menu: true },
+${OPENED}
+${END}`,
+    COPY_PAGE_OPTIONS,
   );
 }
 

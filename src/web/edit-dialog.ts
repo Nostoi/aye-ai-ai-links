@@ -2,8 +2,7 @@ import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 
 const CLOSE = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 const REMOVE_TAG = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
-/** The most tags an edit holds and the longest tag name or key it carries: the dialog's limits and the door's caps. */
-export const EDIT_MAX_TAGS = 50;
+/** The longest tag name or key an edit carries: the dialog's limit and the door's cap. */
 export const EDIT_MAX_TAG_TEXT = 200;
 const SUGGESTIONS_MAX = 6;
 const PICTURE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8.5 8.5"/></svg>`;
@@ -188,23 +187,18 @@ const showSuggestions = () => {
   suggestList.hidden = !suggestList.firstChild;
 };
 // Adds the typed name, unless its key is already there. A tag the card opened with comes back as
-// it was, so a guess stays a guess. False when there are too many tags.
+// it was, so a guess stays a guess.
 const addTag = (raw) => {
   const name = raw.trim().replace(/\\s+/g, " ");
   const key = keyOf(name);
   if (name === "" || tags.some((t) => t.key === key)) {
     tagField.value = "";
-    return true;
-  }
-  if (tags.length >= ${EDIT_MAX_TAGS}) {
-    editError.textContent = ${JSON.stringify(`A link can have at most ${EDIT_MAX_TAGS} tags here.`)};
-    return false;
+    return;
   }
   const before = openedTags.find((t) => t.key === key);
   const known = catalog.find((n) => keyOf(n) === key);
   tags.push(before ? { ...before } : { key, name: known || name, source: "stated" });
   tagField.value = "";
-  return true;
 };
 const loadNames = async () => {
   const turn = ++namesTurn;
@@ -533,7 +527,7 @@ form.addEventListener("submit", async (event) => {
   // Text left in the tag field is a tag too. The names go with the tags the dialog opened with, so
   // the server writes them only while the link still holds those; and only when the keys' order differs.
   editError.textContent = "";
-  if (!addTag(tagField.value)) return;
+  addTag(tagField.value);
   renderTags();
   const keys = (list) => JSON.stringify(list.map((t) => t.key));
   if (keys(tags) !== keys(openedTags)) {

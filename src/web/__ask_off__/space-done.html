@@ -692,23 +692,18 @@ const showSuggestions = () => {
   suggestList.hidden = !suggestList.firstChild;
 };
 // Adds the typed name, unless its key is already there. A tag the card opened with comes back as
-// it was, so a guess stays a guess. False when there are too many tags.
+// it was, so a guess stays a guess.
 const addTag = (raw) => {
   const name = raw.trim().replace(/\s+/g, " ");
   const key = keyOf(name);
   if (name === "" || tags.some((t) => t.key === key)) {
     tagField.value = "";
-    return true;
-  }
-  if (tags.length >= 50) {
-    editError.textContent = "A link can have at most 50 tags here.";
-    return false;
+    return;
   }
   const before = openedTags.find((t) => t.key === key);
   const known = catalog.find((n) => keyOf(n) === key);
   tags.push(before ? { ...before } : { key, name: known || name, source: "stated" });
   tagField.value = "";
-  return true;
 };
 const loadNames = async () => {
   const turn = ++namesTurn;
@@ -1037,7 +1032,7 @@ form.addEventListener("submit", async (event) => {
   // Text left in the tag field is a tag too. The names go with the tags the dialog opened with, so
   // the server writes them only while the link still holds those; and only when the keys' order differs.
   editError.textContent = "";
-  if (!addTag(tagField.value)) return;
+  addTag(tagField.value);
   renderTags();
   const keys = (list) => JSON.stringify(list.map((t) => t.key));
   if (keys(tags) !== keys(openedTags)) {

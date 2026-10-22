@@ -201,6 +201,27 @@ describe("the edit dialog's tags", () => {
     expect(chips(p)).toHaveLength(2);
   });
 
+  const many = Array.from({ length: 52 }, (_, i) => tag(`Tag ${i}`));
+
+  it("adds a tag on Enter to a link that already holds more than 50", async () => {
+    const p = await open(many);
+    type(p, "One more");
+    press(p, "Enter");
+    expect(chips(p)).toHaveLength(53);
+    expect(p.$("#edit-error").textContent).toBe("");
+  });
+
+  it("saves a new title and the text left in the tag field of a link that already holds more than 50", async () => {
+    const q = await open(many);
+    (q.$("#edit-title") as HTMLInputElement).value = "Renamed";
+    type(q, "Left over");
+    await submit(q);
+    const sent = fields(posts(q)[0]);
+    expect(sent.title).toBe("Renamed");
+    expect(JSON.parse(sent.tags ?? "")).toHaveLength(53);
+    expect(JSON.parse(sent.tags ?? "").at(-1)).toBe("Left over");
+  });
+
   it("does not add a name whose key is already on the link", async () => {
     const p = await open([tag("Kitchen")]);
     type(p, "  kitchen ");

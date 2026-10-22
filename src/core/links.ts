@@ -97,11 +97,11 @@ function cleanWhy(why: Labelled | null | undefined): Labelled | null {
 
 /**
  * The summary and its source as stored: trimmed, plain text is inferred, and blank or null is no
- * summary with no source. Undefined means the input leaves the summary out.
+ * summary with no source. `aiOwn`: the words are an AI's own, blank ones included. Undefined means the input leaves the summary out.
  */
 function cleanSummary(
   input: SummaryInput | null | undefined,
-): { summary: string | null; summarySource: SummarySource | null } | undefined {
+): { summary: string | null; summarySource: SummarySource | null; aiOwn: boolean } | undefined {
   if (input === undefined) return undefined;
   const given = typeof input === "string" ? { text: input, source: "inferred" as const } : input;
   if (given && !isSource(given.source)) {
@@ -110,8 +110,9 @@ function cleanSummary(
     );
   }
   const text = given?.text.trim();
-  if (!given || !text) return { summary: null, summarySource: null };
-  return { summary: text, summarySource: given.source };
+  const aiOwn = given?.source === "inferred";
+  if (!given || !text) return { summary: null, summarySource: null, aiOwn };
+  return { summary: text, summarySource: given.source, aiOwn };
 }
 
 /** The longest title kept, in characters (code points). */
@@ -308,8 +309,8 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   if (cleaned) {
     patch.summary = cleaned.summary;
     patch.summarySource = cleaned.summarySource;
-    // An AI's own summary fills a gap; the store skips it, atomically, over the server's or the owner's.
-    if (cleaned.summarySource === "inferred") patch.summaryOver = REPLACEABLE_SUMMARY_SOURCES;
+    // An AI's own summary, or its blank one, touches only a gap or another AI's; the store decides that atomically.
+    if (cleaned.aiOwn) patch.summaryOver = REPLACEABLE_SUMMARY_SOURCES;
   }
   if (state !== undefined) {
     patch.state = state;

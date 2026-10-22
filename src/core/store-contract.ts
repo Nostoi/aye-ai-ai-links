@@ -1656,11 +1656,35 @@ export function describeStoreContract(
         expect(await pair(id)).toEqual(["Mine", "stated"]);
       });
 
-      it("clearing a summary clears its source, and so does a blank one", async () => {
-        for (const cleared of [null, "  ", { text: " ", source: "stated" as const }]) {
+      it("null and a blank owner summary clear text and source, over anything", async () => {
+        for (const cleared of [
+          null,
+          { text: " ", source: "stated" as const },
+          { text: "", source: "asked" as const },
+        ]) {
           const id = await held("Mine", "stated");
           await updateLink(deps(), A, id, { summary: cleared });
           expect(await pair(id), JSON.stringify(cleared)).toEqual([null, null]);
+        }
+      });
+
+      it("a blank summary from an AI clears only another AI's", async () => {
+        for (const blank of ["", "  ", { text: " ", source: "inferred" as const }]) {
+          for (const [text, source] of [
+            ["Mine", "stated"],
+            ["Asked", "asked"],
+            ["Srv", "server"],
+          ] as const) {
+            const id = await held(text, source);
+            await updateLink(deps(), A, id, { summary: blank });
+            expect(await pair(id), `${JSON.stringify(blank)} over ${source}`).toEqual([
+              text,
+              source,
+            ]);
+          }
+          const id = await held("AI", "inferred");
+          await updateLink(deps(), A, id, { summary: blank });
+          expect(await pair(id), JSON.stringify(blank)).toEqual([null, null]);
         }
       });
 

@@ -22,6 +22,10 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-21:** Saved copies keep tables (#223, step 2; plan: `docs/plans/2026-10-21-tables.md`). Owner ruling on #223: add table support, and only copies made from now on get tables. This **ends** the 2026-10-18 line "Markdown renders without tables": `copyHtml` turns on markdown-it's `table` rule, inside a `div.copy-table` that scrolls sideways, and drops the `style` attribute an aligned column would add, so the page still carries none.
+  - **Own Turndown rules, no GFM plugin** (`src/fetch/copy-tables.ts`). Both plugins read `table.rows`, which linkedom doesn't have, so they wrote a two-by-two table as `NameAgeAnn3` or as nothing. Joplin's fallback for a cell holding blocks writes raw HTML, which the copy page shows as literal tags; Truto doubles the backslash in `\|`, which ends the cell early.
+  - **A table is a grid only when nothing is lost:** no table inside it, at least two rows and two columns, every `rowspan` 1, a padded grid of at most twice its real cells, and no heading, list, `pre`, quote, rule or definition list in a cell. Any other table keeps its text, block by block, as before.
+  - **Accepted:** an old copy with a line such as `| a | b |` followed by `| --- | --- |` in its text now renders as a table. Copies are write-once, so old copies are not refreshed.
 - **2026-10-21:** Tidy up shipped (#198, PR 3 of 3; design: `docs/specs/2026-10-21-tidy-up-design.md`). #198 is done. Home offers it from a quiet line at the bottom when at least five links are old, and a session is five of them, one at a time.
   - **Deviations from the spec (Part 3):** the finish screen has no "Five more", and Home's start line returns whenever five more links qualify. Links whose page seems gone are left out of Tidy up. The saved and opened line reads "You haven't opened it from here", because only the latest opening is stored.
   - **Keep waits 180 days** before a link can come up again (`tidyKeptAt`, in the export since version 2).

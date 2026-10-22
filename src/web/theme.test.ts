@@ -922,6 +922,12 @@ describe("the saved copy's reading look", () => {
     expect(rule(".copy-pic-note")).toContain("color:var(--soft)");
   });
 
+  it("sets Open on the site in the soft colour at 15px, as the mockup does", () => {
+    const open = rule(".copy-open");
+    expect(open).toContain("color:var(--soft)");
+    expect(open).toContain("font-size:15px");
+  });
+
   it("fills code with the page color and rules a quote with a line", () => {
     expect(rule(".copy-article pre")).toContain("background:var(--bg)");
     expect(rule(".copy-article code")).toContain("background:var(--bg)");

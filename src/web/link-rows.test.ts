@@ -90,6 +90,9 @@ describe("a link row", () => {
     expect(withWhy.querySelector(".row-about")).toBeNull();
     expect(withWhy.querySelector(".row-why")?.textContent).toBe('"w"');
     expect(row(link()).querySelector(".row-about")).toBeNull();
+    const guess = row(link({ summary: "A summary", why: { text: "w", source: "inferred" } }));
+    expect(guess.querySelector(".row-about")).toBeNull();
+    expect(guess.querySelector(".row-why")?.textContent).toBe("Why (a guess): w");
   });
 
   it("puts the summary before Tell me why, which stays, on a row that asks", () => {

@@ -29,7 +29,7 @@ Two things stand in the way today:
 
 - A server summary replaces something the owner gave.
 - Rows get busier: a row with a why grows a summary line.
-- The app needs an AI to work. With no `AYE_AI_` settings, everything behaves as today, apart from the new label being stored.
+- The app needs an AI to work. With no `AYE_AI_` settings, everything behaves as today, apart from the new label being stored. Rows still show a summary an AI sent, since decision 1 doesn't depend on the server's AI.
 
 ## Owner decisions (2026-10-22)
 

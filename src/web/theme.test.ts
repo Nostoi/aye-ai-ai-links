@@ -31,6 +31,11 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
+  it("keeps the summary's ink strictly between the why's and the grey line's", () => {
+    const against = (name: "ink" | "about" | "soft") => contrast(t[name], t.surface);
+    expect(against("ink")).toBeGreaterThan(against("about"));
+    expect(against("about")).toBeGreaterThan(against("soft"));
+  });
   it.each([
     ["field", "bg"],
     ["field", "surface"],

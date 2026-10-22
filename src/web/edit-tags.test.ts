@@ -296,6 +296,22 @@ describe("Save with tags", () => {
     expect(JSON.parse(fields(posts(p)[0]).tags ?? "")).toEqual(["Guess", "Kitchen"]);
   });
 
+  it("after a 409 the card still holds the tags it opened with, so the dialog sends the same seen again: only a reload recovers", async () => {
+    const conflict = { code: "conflict", message: "This link's tags changed." };
+    const p = await open([tag("Kitchen")], { reply: () => ({ status: 409, body: conflict }) });
+    type(p, "One");
+    await submit(p);
+    expect(p.$("#edit-error").textContent).toBe(conflict.message);
+    p.dispatch(p.$("#edit-link"), "close");
+    p.dispatch(p.$('[data-id="1"] button[data-act=edit]'), "click");
+    await p.settle();
+    type(p, "Two");
+    await submit(p);
+    const [first, second] = posts(p).map((post) => fields(post).seen);
+    expect(second).toBe(first);
+    expect(JSON.parse(second ?? "")).toEqual([{ key: "kitchen", source: "stated" }]);
+  });
+
   it("sends only the title when the tags are as they were", async () => {
     const p = await open([tag("Kitchen")]);
     (p.$("#edit-title") as HTMLInputElement).value = "Renamed";

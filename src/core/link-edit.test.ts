@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeStore } from "./fake-store.js";
 import { jpeg, png, svg } from "./image-test-kit.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./image-type.js";
-import { BAD_PICTURE, editLink, TAGS_CONFLICT, UNDO_CONFLICT, undoEdit } from "./link-edit.js";
+import { BAD_PICTURE, editLink, UNDO_CONFLICT, undoEdit } from "./link-edit.js";
 import { updateLink } from "./links.js";
 import { newLink } from "./snapshot-store-contract.js";
 import { normalizeTags } from "./tags.js";
@@ -151,7 +151,10 @@ describe("editLink with tags", () => {
     await updateLink(deps, "a", id, { tags: [{ name: "agent", source: "inferred" }] });
     await expect(
       editLink(deps, "a", id, { title: "Changed", tags: { names: ["Guess", "z"], seen } }),
-    ).rejects.toMatchObject({ code: "conflict", message: TAGS_CONFLICT });
+    ).rejects.toMatchObject({
+      code: "conflict",
+      message: "This link's tags changed since you opened it. Reload the page and edit again.",
+    });
     expect((await store.get("a", id))?.title).toBe("Quokka habitat");
     expect(await keysOf(store, id)).toEqual([["agent", "inferred"]]);
   });

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { addSecondUser, allRows, type World } from "../auth/oauth-test-kit.js";
-import { TAGS_CONFLICT } from "../core/link-edit.js";
 import { updateLink } from "../core/links.js";
 import {
   type Answer,
@@ -127,7 +126,10 @@ describe("tags in POST /links/edit and its Undo", () => {
       ...tagFields(["Quokkas"]),
     });
     expect(res.status).toBe(409);
-    expect(res.body).toEqual({ code: "conflict", message: TAGS_CONFLICT });
+    expect(res.body).toEqual({
+      code: "conflict",
+      message: "This link's tags changed since you opened it. Reload the page and edit again.",
+    });
     expect(allRows(world)).toEqual(before);
   });
 

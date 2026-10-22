@@ -21,7 +21,7 @@ export type EditInput = {
 export const BAD_PICTURE = "That picture can't be used. Try a PNG, JPEG, GIF or WebP under 2 MB.";
 export const UNDO_CONFLICT = "This link changed since, so nothing was undone.";
 export const TAGS_CONFLICT =
-  "This link's tags changed since you opened it. Close and open Edit again.";
+  "This link's tags changed since you opened it. Reload the page and edit again.";
 
 /**
  * The owner's edit of a link's title, picture and tags. The title goes through the one title

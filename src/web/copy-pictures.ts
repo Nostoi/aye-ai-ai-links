@@ -125,7 +125,27 @@ export function bandPictures(state: StateCore): void {
   state.tokens = out;
 }
 
-/** A paragraph that is only one kept link, and plain text inside it, becomes the grey link line. */
+const decoded = (href: string): string => {
+  try {
+    return decodeURI(href);
+  } catch {
+    return href;
+  }
+};
+
+/**
+ * Whether a link's words are its own address, the label the #220 closer is written with. The writer
+ * builds it from the kept address; repairing an old card builds it from the address as written,
+ * which the kept `href` has normalised and percent-encoded, so the decoded form is tried too.
+ */
+function isAddressLabel(open: Token, words: Token[]): boolean {
+  if (words.some((t) => t.type !== "text" || t.meta)) return false;
+  const href = String(open.attrGet("href") ?? "");
+  const shown = words.map((t) => t.content).join("");
+  return shown === linkLabel(href) || shown === linkLabel(decoded(href));
+}
+
+/** A paragraph that is only one kept link whose words are its address (the #220 closer) becomes the grey link line. */
 export function lineLinks(state: StateCore): void {
   const { tokens } = state;
   for (let i = 0; i + 2 < tokens.length; i++) {
@@ -138,7 +158,7 @@ export function lineLinks(state: StateCore): void {
       kids.length < 3 ||
       kids[0]?.type !== "link_open" ||
       kids[last]?.type !== "link_close" ||
-      !kids.slice(1, last).every((t) => t.type === "text")
+      !isAddressLabel(kids[0], kids.slice(1, last))
     ) {
       continue;
     }

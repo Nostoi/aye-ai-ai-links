@@ -119,10 +119,10 @@ All five objections are accepted. They're folded in here, and they override the 
 
 - **A. `hardbreak` between pictures.** A `<br>` between pictures is written as a Markdown hard break. The band rule therefore also accepts `hardbreak` between pictures, alongside softbreaks and whitespace. Tests cover saved, lost and linked pictures separated by a hard break.
 - **B. The #220 link line is this PR's.** The block-links plan promised that #223 styles a paragraph that is only a link as the grey link line, and nothing styles it yet. Here's the rule:
-  - A `paragraph_open, inline, paragraph_close` whose inline children are exactly one kept `link_open, text…, link_close`, with no other content, gets `class="copy-link-line"`.
+  - A `paragraph_open, inline, paragraph_close` whose inline children are exactly one kept `link_open, text…, link_close`, with no other content, and whose text tokens (none a lost-picture marker) joined equal `linkLabel` of the link's address (as kept, or decoded for an old card), gets `class="copy-link-line"`.
   - The rule appends `<span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span>` inside the link.
   - The CSS: `.copy-link-line a{display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:15px;color:var(--soft)}`, with `overflow-wrap:anywhere`.
-  - Tests: the #220 card renders the line with the class, and a link inside a sentence doesn't get it.
+  - Tests: the #220 card renders the line with the class, and neither a link inside a sentence nor an author's own link alone in its paragraph gets it.
 - **C. Lost pictures from refused sources are marked too.** In new copies, `copyImage` writes `![<escaped alt>]()` for a picture with no `src`, or with a `data:`, `blob:` or other non-http(s) address. It does the same for the 31st picture and later. An empty alt gives `![]()`, which renders nothing. Tests cover `data:`, `blob:`, a missing `src` and the past-30 case.
 - **D. Inline pictures are explicitly inline.**
   - A picture that isn't in a band gets `.copy-article img{display:inline;vertical-align:middle;margin:0;max-width:100%;height:auto;max-height:60vh;max-height:60svh}`.

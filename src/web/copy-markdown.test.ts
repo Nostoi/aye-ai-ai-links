@@ -534,15 +534,54 @@ describe("copyHtml reading look (#223)", () => {
     expect(sel(copyHtml(`- ${LOST}\n\n  x`, refs()), "li .copy-band-note")).toHaveLength(1);
   });
 
-  it("styles a paragraph that is only a link as the link line, and no link in a sentence", () => {
-    const only = copyHtml(`[Read more](${P})`, refs());
+  it("styles the #220 closer as the link line: the new writer's shape, and a repaired old card", () => {
+    const label = "e.example/p";
+    const only = copyHtml(`[${label}](${P})`, refs());
     const p = sel(only, "p.copy-link-line")[0];
     expect(p?.querySelector("a")?.getAttribute("href")).toBe(P);
-    expect(norm(p?.textContent)).toBe("Read more↗ (opens in a new tab)");
-    const inSentence = copyHtml(`see [Read more](${P}) now`, refs());
+    expect(norm(p?.textContent)).toBe(`${label}↗ (opens in a new tab)`);
+    const repaired = copyHtml(`[\n\n### T\n\n](${P})`, refs());
+    expect(sel(repaired, "p.copy-link-line")).toHaveLength(1);
+    expect(norm(sel(repaired, "p.copy-link-line")[0]?.textContent)).toBe(
+      `${label}↗ (opens in a new tab)`,
+    );
+  });
+
+  it("still lines a closer whose address is not ASCII, written new or repaired from an old card", () => {
+    const html = copyHtml("[\n\nT\n\n](https://e.example/é)", refs());
+    const p = sel(html, "p.copy-link-line")[0];
+    expect(p?.querySelector("a")?.getAttribute("href")).toBe("https://e.example/%C3%A9");
+    expect(norm(p?.textContent)).toBe("e.example/é↗ (opens in a new tab)");
+    const written = copyHtml("[e.example/%C3%A9](https://e.example/%C3%A9)", refs());
+    expect(sel(written, "p.copy-link-line")).toHaveLength(1);
+  });
+
+  it("leaves an author's own link alone in its paragraph unlined", () => {
+    const own = copyHtml(
+      "Intro.\n\n[Download the full report](https://e.example/report.pdf)\n\nMore.",
+      refs(),
+    );
+    expect(sel(own, ".copy-link-line")).toHaveLength(0);
+    expect(own).not.toContain("↗");
+    expect(sel(own, "a")).toHaveLength(1);
+  });
+
+  it("leaves a loose list of links unlined", () => {
+    const loose = copyHtml(`- [One](${P})\n\n- [Two](${P})`, refs());
+    expect(sel(loose, ".copy-link-line")).toHaveLength(0);
+    expect(loose).not.toContain("↗");
+  });
+
+  it("leaves a link holding a lost picture and words unlined", () => {
+    const lost = copyHtml("[![lost]() read more](https://e.example/p)", refs());
+    expect(sel(lost, ".copy-link-line")).toHaveLength(0);
+    expect(lost).not.toContain("↗");
+  });
+
+  it("styles no link in a sentence, or with markup inside, as the link line", () => {
+    const inSentence = copyHtml(`see [e.example/p](${P}) now`, refs());
     expect(sel(inSentence, ".copy-link-line")).toHaveLength(0);
-    expect(norm(sel(inSentence, "p")[0]?.textContent)).toBe("see Read more now");
-    const withBold = copyHtml(`[**Read** more](${P})`, refs());
+    const withBold = copyHtml(`[**e.example**/p](${P})`, refs());
     expect(sel(withBold, ".copy-link-line")).toHaveLength(0);
   });
 

@@ -113,6 +113,25 @@ Today the article runs straight on the page background, in the page's own type s
    - Phone: a new line `@media (max-width:600px){.copy-article{padding:24px 20px;font-size:17.5px;line-height:1.65}.copy-article h2{font-size:22px}.copy-article>.copy-band{margin-left:-20px;margin-right:-20px}.copy-band-note{padding:18px 20px}}`. It goes *after* the existing phone lines, so the first-match regexes still find the main block.
    - Exact values may be tuned in the browser check against the boards.
 
+## Solution-choice challenge (Sol, REVISE): resolutions
+
+All five objections are accepted. They're folded in here, and they override the decisions above where the two conflict.
+
+- **A. `hardbreak` between pictures.** A `<br>` between pictures is written as a Markdown hard break. The band rule therefore also accepts `hardbreak` between pictures, alongside softbreaks and whitespace. Tests cover saved, lost and linked pictures separated by a hard break.
+- **B. The #220 link line is this PR's.** The block-links plan promised that #223 styles a paragraph that is only a link as the grey link line, and nothing styles it yet. Here's the rule:
+  - A `paragraph_open, inline, paragraph_close` whose inline children are exactly one kept `link_open, text…, link_close`, with no other content, gets `class="copy-link-line"`.
+  - The rule appends `<span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span>` inside the link.
+  - The CSS: `.copy-link-line a{display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:15px;color:var(--soft)}`, with `overflow-wrap:anywhere`.
+  - Tests: the #220 card renders the line with the class, and a link inside a sentence doesn't get it.
+- **C. Lost pictures from refused sources are marked too.** In new copies, `copyImage` writes `![<escaped alt>]()` for a picture with no `src`, or with a `data:`, `blob:` or other non-http(s) address. It does the same for the 31st picture and later. An empty alt gives `![]()`, which renders nothing. Tests cover `data:`, `blob:`, a missing `src` and the past-30 case.
+- **D. Inline pictures are explicitly inline.**
+  - A picture that isn't in a band gets `.copy-article img{display:inline;vertical-align:middle;margin:0;max-width:100%;height:auto;max-height:60vh;max-height:60svh}`.
+  - A picture in a band gets `.copy-band img{display:block;margin:0 auto;…}`, which is more specific, so it overrides the inline rule.
+  - The browser check confirms a picture mid-sentence stays in the sentence.
+- **E. The boundary is "copies already finished stay as they are".** A copy still being finished when this deploys, or an old unfinished copy that gets exported, is finished with the new marker. That's truthful and does no harm. The ROADMAP entry states the boundary in exactly these words. No creation-time check is added.
+- **Pending pictures:** a picture still being fetched shows "Picture not saved" until the copy finishes (decision 7). A stored picture whose file has gone missing is out of scope.
+- **Mockup spacing:** the browser check owns the remaining values, such as heading line heights, paragraph spacing and the phone band spacing, and tunes them against the boards.
+
 ## Red-first tests
 
 **`src/web/copy-markdown.test.ts`**

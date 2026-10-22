@@ -883,7 +883,7 @@ describe("the saved copy's reading look", () => {
   it("sets the article on a white sheet in the reading type", () => {
     const sheet = rule(".copy-article");
     for (const part of [
-      "margin-top:0",
+      "margin-top:28px",
       "padding:44px 48px 48px",
       "background:var(--surface)",
       "border-radius:20px",

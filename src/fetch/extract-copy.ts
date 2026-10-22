@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import TurndownService from "turndown";
 import type { CopyDraft } from "../core/saved-copy.ts";
 import { imageRef, linkLabel, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
+import { addTableRules } from "./copy-tables.ts";
 
 const webUrl = (url: URL): boolean => url.protocol === "http:" || url.protocol === "https:";
 
@@ -91,6 +92,7 @@ export function articleMarkdown(article: Element, base: string, nonce: string): 
       return `![${escapeAlt(alt)}](images/x${k}-${nonce})`;
     },
   });
+  addTableRules(td);
   const draft = td.turndown(article as HTMLElement);
 
   const imageUrls: string[] = [];
@@ -101,7 +103,8 @@ export function articleMarkdown(article: Element, base: string, nonce: string): 
     if (!image) return alt;
     let n = given.get(Number(k));
     if (n === undefined) {
-      if (imageUrls.length >= MAX_COPY_IMAGES) return image.text;
+      // `\|` shows as `|`, and keeps a picture that lands in a table cell inside it.
+      if (imageUrls.length >= MAX_COPY_IMAGES) return image.text.replace(/\|/g, "\\|");
       imageUrls.push(image.url);
       n = imageUrls.length;
       given.set(Number(k), n);

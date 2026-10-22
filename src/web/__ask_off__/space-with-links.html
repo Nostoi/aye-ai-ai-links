@@ -352,6 +352,18 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .edit-delete{min-height:44px;padding:0;border:0;background:none;color:var(--soft)}
 .edit-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .edit-foot button{min-height:44px}
+.edit-tags{min-width:0;margin:16px 0 0;padding:0;border:0}
+.edit-tags legend{padding:0;margin:0 0 8px;font-size:14px;font-weight:600}
+.edit-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px;padding:0;list-style:none}
+.edit-chips:empty{display:none}
+.edit-tag{display:inline-flex;align-items:center;min-height:44px;padding:0 0 0 14px;border:1.5px solid var(--line);border-radius:999px;background:var(--surface);overflow-wrap:anywhere}
+.edit-tag-guess{margin-left:4px;font-size:13px;color:var(--soft)}
+.edit-tag-remove{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin:0;padding:0;border:0;border-radius:999px;background:none;color:var(--soft)}
+.edit-tag-remove svg{fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.edit-tag-input{height:46px;padding:0 14px;border-radius:12px}
+.edit-suggest{margin:6px 0 0;padding:0;list-style:none}
+.edit-suggest-item{display:block;width:100%;min-height:44px;padding:0 14px;border:0;border-radius:12px;background:none;text-align:left}
+.edit-suggest-item:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .space-teal{--space:var(--teal)}
 .space-clay{--space:var(--clay)}
 .space-violet{--space:var(--violet)}
@@ -436,7 +448,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .tidy-choices button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 .tidy-done{max-width:580px;margin:48px auto}
 .tidy-done h2{font-size:26px;margin:0 0 10px}
-@media (max-width:600px){.tile{--icon:56px}.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}.result>.tile{border-radius:18px 18px 0 0}.handy-row{grid-template-columns:1fr;gap:8px}.handy-tile{grid-template-columns:44px minmax(0,1fr) 44px;column-gap:12px;padding:10px 4px 10px 12px}.handy-image{width:44px;height:44px;border-radius:10px;--icon:32px;--initials:17px}.home-spaces{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.home-space{display:flex;align-items:center;min-height:56px;padding:0 14px}.home-space-recent{display:none}.worth-feature{grid-template-columns:minmax(0,1fr) 64px;grid-template-areas:"reason pic" "title pic" "why why" "line line" "open menu" "quiet quiet";column-gap:12px;padding:16px}.worth-feature h3{font-size:20px}.feature-pic{width:64px;height:64px;border-radius:12px;--icon:44px;--initials:24px}.worth-feature>.card-menu{align-self:center;margin:0 -8px 0 0}.feature-open a.button{width:100%;justify-content:center}.feature-quiet{justify-content:space-around}.worth-row{grid-template-columns:minmax(0,1fr) 44px;padding-left:16px}.worth-row>.also-pic{display:none}.edit-link{inset:96px 0 0;width:100%;max-width:100%;max-height:none;height:auto;margin:0;padding:0 16px 24px;border-radius:22px 22px 0 0}.edit-grabber{display:block;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}.edit-head{display:grid;grid-template-columns:1fr auto 1fr;margin:0 0 8px}.edit-head h2{font-size:17px;text-align:center}.edit-top{display:inline-flex;align-items:center;justify-self:start;min-height:44px;padding:0;border:0;background:none}.edit-top-save{justify-self:end;font-weight:700}.edit-close,.edit-hint,.edit-foot{display:none}.edit-hint-phone{display:block;margin:0;font-size:13px;color:var(--soft);text-align:center}.edit-title{height:48px}.edit-picture-row{flex-direction:column;align-items:stretch}.edit-preview{width:100%;height:196px}.edit-choose{min-height:48px;width:100%}.link-row{gap:12px;padding:12px 52px 12px 12px}.row-pic{flex-basis:40px;width:40px;height:40px}.row-why{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.link-row .card-menu{right:4px}.page-main .orders{display:none}.order-select{display:block}.page-actions{display:grid;grid-template-columns:1fr auto;gap:4px 12px;width:100%}.page-actions .search-instead{grid-column:1/-1;justify-content:center;min-height:48px}}
+@media (max-width:600px){.tile{--icon:56px}.column{padding-left:16px;padding-right:16px}.card{padding:24px 20px}h1{font-size:26px}.tile{flex-basis:100%;min-height:72px}img.tile{width:100%;contain:none;max-height:200px}.result>.tile{border-radius:18px 18px 0 0}.handy-row{grid-template-columns:1fr;gap:8px}.handy-tile{grid-template-columns:44px minmax(0,1fr) 44px;column-gap:12px;padding:10px 4px 10px 12px}.handy-image{width:44px;height:44px;border-radius:10px;--icon:32px;--initials:17px}.home-spaces{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.home-space{display:flex;align-items:center;min-height:56px;padding:0 14px}.home-space-recent{display:none}.worth-feature{grid-template-columns:minmax(0,1fr) 64px;grid-template-areas:"reason pic" "title pic" "why why" "line line" "open menu" "quiet quiet";column-gap:12px;padding:16px}.worth-feature h3{font-size:20px}.feature-pic{width:64px;height:64px;border-radius:12px;--icon:44px;--initials:24px}.worth-feature>.card-menu{align-self:center;margin:0 -8px 0 0}.feature-open a.button{width:100%;justify-content:center}.feature-quiet{justify-content:space-around}.worth-row{grid-template-columns:minmax(0,1fr) 44px;padding-left:16px}.worth-row>.also-pic{display:none}.edit-link{inset:96px 0 0;width:100%;max-width:100%;max-height:none;height:auto;margin:0;padding:0 16px 24px;border-radius:22px 22px 0 0}.edit-grabber{display:block;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}.edit-head{display:grid;grid-template-columns:1fr auto 1fr;margin:0 0 8px}.edit-head h2{font-size:17px;text-align:center}.edit-top{display:inline-flex;align-items:center;justify-self:start;min-height:44px;padding:0;border:0;background:none}.edit-top-save{justify-self:end;font-weight:700}.edit-close,.edit-hint,.edit-foot{display:none}.edit-hint-phone{display:block;margin:0;font-size:13px;color:var(--soft);text-align:center}.edit-title{height:48px}.edit-picture-row{flex-direction:column;align-items:stretch}.edit-preview{width:100%;height:196px}.edit-choose{min-height:48px;width:100%}.edit-link{overflow-y:auto;overscroll-behavior:contain}.edit-tag-input{height:48px}.link-row{gap:12px;padding:12px 52px 12px 12px}.row-pic{flex-basis:40px;width:40px;height:40px}.row-why{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.link-row .card-menu{right:4px}.page-main .orders{display:none}.order-select{display:block}.page-actions{display:grid;grid-template-columns:1fr auto;gap:4px 12px;width:100%}.page-actions .search-instead{grid-column:1/-1;justify-content:center;min-height:48px}}
 @media (max-width:600px){.menu-page{display:none}.account-list .menu-phone-only{display:flex}.label-wide,.icon-wide{display:none}.label-phone{display:inline}.icon-phone{display:inline-flex}}
 @media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}.tidy-choices .key{display:none}.tidy-choices button{padding-right:20px}}
 @media (max-width:600px){.copy-article{padding:24px 20px;font-size:17.5px;line-height:1.65}.copy-article h2{font-size:22px}.copy-article>.copy-band{margin-left:-20px;margin-right:-20px}.copy-band-note{padding:18px 20px}}
@@ -480,23 +492,23 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </div>
 </div>
 <p id="space-error" role="alert"></p>
-<div id="space-links">
+<div id="space-links" data-within="kitchen" data-own="1">
 <section class="month" data-month="2026-03">
 <h2>March</h2>
 <ul class="link-rows">
-<li class="link-row space-clay" data-id="1" data-title="Title 1" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T1">
+<li class="link-row space-clay" data-id="1" data-title="Title 1" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T1" data-tags="[{&quot;key&quot;:&quot;kitchen&quot;,&quot;name&quot;:&quot;Kitchen&quot;,&quot;source&quot;:&quot;stated&quot;}]">
 <div class="row-pic initials-box" data-pic aria-hidden="true"><span class="pic-initials">T1</span></div>
 <div class="row-body">
 <h3 data-card-title><a href="https://example.com/1" target="_blank" rel="noopener noreferrer" data-open>Title 1</a></h3>
 <p class="row-why">"to compare"</p>
-<p class="card-line"><span>example.com</span></p>
+<p class="card-line"><span class="line-space" hidden><span class="dot" aria-hidden="true"></span><span data-space-name></span></span><span>example.com</span></p>
 </div>
 <details class="card-menu" name="menu">
 <summary><span class="card-menu-dot" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></span><span class="visually-hidden">More for Title 1</span></summary>
-<div class="card-menu-list"><button type="button" data-act="archive"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>It&#39;s stale</button><button type="button" data-act="put-away"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 13l2.5-6.5h11L20 13"/><path d="M4 13v5.5h16V13h-4.5a3.5 3.5 0 0 1-7 0z"/></svg>Put it away</button><button type="button" data-act="keep"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>Keep handy</button><button type="button" data-act="not-handy" hidden><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>Not handy anymore</button><hr><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit title and picture…</button><hr><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
+<div class="card-menu-list"><button type="button" data-act="archive"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>It&#39;s stale</button><button type="button" data-act="put-away"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 13l2.5-6.5h11L20 13"/><path d="M4 13v5.5h16V13h-4.5a3.5 3.5 0 0 1-7 0z"/></svg>Put it away</button><button type="button" data-act="keep"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>Keep handy</button><button type="button" data-act="not-handy" hidden><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>Not handy anymore</button><hr><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit link…</button><hr><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
 </details>
 </li>
-<li class="link-row space-clay" data-id="2" data-title="Title 2" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T2">
+<li class="link-row space-clay" data-id="2" data-title="Title 2" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T2" data-tags="[{&quot;key&quot;:&quot;kitchen&quot;,&quot;name&quot;:&quot;Kitchen&quot;,&quot;source&quot;:&quot;stated&quot;}]">
 <div class="row-pic initials-box" data-pic aria-hidden="true"><span class="pic-initials">T2</span></div>
 <div class="row-body">
 <h3 data-card-title><a href="https://example.com/2" target="_blank" rel="noopener noreferrer" data-open>Title 2</a></h3>
@@ -510,11 +522,11 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <button class="primary" type="submit">Save</button>
 </form>
 </div>
-<p class="card-line"><span>example.com</span></p>
+<p class="card-line"><span class="line-space" hidden><span class="dot" aria-hidden="true"></span><span data-space-name></span></span><span>example.com</span></p>
 </div>
 <details class="card-menu" name="menu">
 <summary><span class="card-menu-dot" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></span><span class="visually-hidden">More for Title 2</span></summary>
-<div class="card-menu-list"><button type="button" data-act="archive"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>It&#39;s stale</button><button type="button" data-act="put-away"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 13l2.5-6.5h11L20 13"/><path d="M4 13v5.5h16V13h-4.5a3.5 3.5 0 0 1-7 0z"/></svg>Put it away</button><button type="button" data-act="keep"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>Keep handy</button><button type="button" data-act="not-handy" hidden><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>Not handy anymore</button><hr><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit title and picture…</button><hr><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
+<div class="card-menu-list"><button type="button" data-act="archive"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>It&#39;s stale</button><button type="button" data-act="put-away"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 13l2.5-6.5h11L20 13"/><path d="M4 13v5.5h16V13h-4.5a3.5 3.5 0 0 1-7 0z"/></svg>Put it away</button><button type="button" data-act="keep"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>Keep handy</button><button type="button" data-act="not-handy" hidden><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>Not handy anymore</button><hr><button type="button" data-act="edit"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit link…</button><hr><button type="button" data-act="delete-link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>Delete link</button></div>
 </details>
 </li>
 </ul>
@@ -535,6 +547,13 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <label for="edit-title">Title</label>
 <input id="edit-title" class="edit-title" name="title" autocomplete="off">
 <p class="edit-page-title" hidden><span>Page's title: “<span data-page-title></span>”</span><button type="button" class="edit-use" data-edit="use-title">Use it</button></p>
+<fieldset class="edit-tags">
+<legend>Tags</legend>
+<ul class="edit-chips"></ul>
+<label for="edit-tag-input">Add a tag</label>
+<input id="edit-tag-input" class="edit-tag-input" autocomplete="off" maxlength="200" enterkeyhint="done">
+<ul class="edit-suggest" hidden></ul>
+</fieldset>
 <fieldset class="edit-picture">
 <legend>Picture</legend>
 <div class="edit-picture-row">
@@ -780,6 +799,16 @@ const useTitle = dialog.querySelector("[data-edit=use-title]");
 const deleteButton = dialog.querySelector("[data-edit=delete]");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
+const tagList = dialog.querySelector(".edit-chips");
+const tagField = dialog.querySelector("#edit-tag-input");
+const suggestList = dialog.querySelector(".edit-suggest");
+// tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
+// "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
+// open are dropped.
+let tags = [];
+let openedTags = [];
+let catalog = [];
+let namesTurn = 0;
 let card = null;
 let opener = null;
 let openedTitle = "";
@@ -796,7 +825,93 @@ let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   titleField.toggleAttribute("readonly", saving);
-  for (const c of [chooseButton, removeButton, useTitle, deleteButton]) c.disabled = saving;
+  for (const c of [chooseButton, removeButton, useTitle, deleteButton, tagField]) c.disabled = saving;
+  for (const c of dialog.querySelectorAll(".edit-tag-remove, .edit-suggest-item")) c.disabled = saving;
+};
+const keyOf = (name) => name.trim().replace(/\s+/g, " ").toLowerCase();
+const clear = (list) => {
+  while (list.firstChild) list.removeChild(list.firstChild);
+};
+const listItem = (list, child) => {
+  const item = document.createElement("li");
+  item.append(child);
+  list.append(item);
+  return item;
+};
+const renderTags = () => {
+  clear(tagList);
+  for (const t of tags) {
+    const name = document.createElement("span");
+    name.textContent = t.name;
+    const item = listItem(tagList, name);
+    item.className = "edit-tag";
+    if (t.source === "inferred") {
+      const guess = document.createElement("span");
+      guess.className = "edit-tag-guess";
+      guess.textContent = " (a guess)";
+      item.append(guess);
+    }
+    const remove = document.createElement("button");
+    remove.setAttribute("type", "button");
+    remove.className = "edit-tag-remove";
+    remove.setAttribute("aria-label", "Remove " + t.name);
+    remove.setAttribute("data-key", t.key);
+    remove.innerHTML = "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg>";
+    remove.disabled = saving;
+    item.append(remove);
+  }
+};
+// Up to 6 catalog names containing the typed text and not on the link yet, those that start with it first.
+const showSuggestions = () => {
+  clear(suggestList);
+  const text = keyOf(tagField.value);
+  const have = new Set(tags.map((t) => t.key));
+  const hits = text === "" ? [] : catalog.filter((n) => keyOf(n).includes(text) && !have.has(keyOf(n)));
+  const first = hits.filter((n) => keyOf(n).startsWith(text));
+  const rest = hits.filter((n) => !keyOf(n).startsWith(text));
+  for (const name of [...first, ...rest].slice(0, 6)) {
+    const button = document.createElement("button");
+    button.setAttribute("type", "button");
+    button.className = "edit-suggest-item";
+    button.textContent = name;
+    button.disabled = saving;
+    listItem(suggestList, button);
+  }
+  suggestList.hidden = !suggestList.firstChild;
+};
+// Adds the typed name, unless its key is already there. A tag the card opened with comes back as
+// it was, so a guess stays a guess.
+const addTag = (raw) => {
+  const name = raw.trim().replace(/\s+/g, " ");
+  const key = keyOf(name);
+  if (name === "" || tags.some((t) => t.key === key)) {
+    tagField.value = "";
+    return;
+  }
+  const before = openedTags.find((t) => t.key === key);
+  const known = catalog.find((n) => keyOf(n) === key);
+  tags.push(before ? { ...before } : { key, name: known || name, source: "stated" });
+  tagField.value = "";
+};
+const loadNames = async () => {
+  const turn = ++namesTurn;
+  const res = await fetch("/tags/names", { redirect: "manual" }).catch(() => null);
+  const got = res && res.status === 200 ? await res.json().catch(() => null) : null;
+  if (turn !== namesTurn) return;
+  catalog = got && Array.isArray(got.names) ? got.names.filter((n) => typeof n === "string") : [];
+  showSuggestions();
+};
+const readTags = (d) => {
+  let held = [];
+  try {
+    held = JSON.parse(d.tags || "[]");
+  } catch {}
+  openedTags = Array.isArray(held) ? held : [];
+  tags = openedTags.map((t) => ({ ...t }));
+  tagField.value = "";
+  catalog = [];
+  renderTags();
+  showSuggestions();
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
@@ -902,6 +1017,17 @@ const showCard = (target, answer) => {
   d.pageVersion = answer.picture.pageVersion === null ? "" : answer.picture.pageVersion;
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
+  d.tags = JSON.stringify(answer.tags);
+  // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
+  // which a Home card has none of.
+  for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
+  if (answer.space) target.classList.add("space-" + answer.space.color);
+  const slot = target.querySelector(".line-space");
+  if (slot) {
+    const spaceName = slot.querySelector("[data-space-name]");
+    if (spaceName) spaceName.textContent = answer.lineSpace ? answer.lineSpace.name : "";
+    slot.toggleAttribute("hidden", !answer.lineSpace);
+  }
   const label = answer.shown;
   const heading = target.querySelector("[data-card-title]");
   if (heading) (heading.querySelector("a") || heading).textContent = label;
@@ -954,6 +1080,8 @@ const open = (from, menu) => {
   const d = card.dataset;
   titleField.value = d.title;
   openedTitle = titleField.value;
+  readTags(d);
+  loadNames();
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
   pageLine.hidden = page === "" || page === d.title.trim();
@@ -991,6 +1119,38 @@ deleteButton.addEventListener("click", () => {
   dropPick();
   dialog.close();
   deleteCard(target);
+});
+tagList.addEventListener("click", (event) => {
+  const remove = event.target.closest(".edit-tag-remove");
+  if (!remove || remove.disabled) return;
+  tags = tags.filter((t) => t.key !== remove.getAttribute("data-key"));
+  renderTags();
+  showSuggestions();
+  tagField.focus();
+});
+suggestList.addEventListener("click", (event) => {
+  const item = event.target.closest(".edit-suggest-item");
+  if (!item || item.disabled) return;
+  editError.textContent = "";
+  addTag(item.textContent);
+  renderTags();
+  showSuggestions();
+  tagField.focus();
+});
+tagField.addEventListener("input", showSuggestions);
+// Enter adds the typed name; it does not send the form.
+tagField.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  if (saving || event.isComposing) return;
+  editError.textContent = "";
+  addTag(tagField.value);
+  renderTags();
+  showSuggestions();
+});
+// On a phone the keyboard covers the sheet's lower half: bring the field into view.
+tagField.addEventListener("focus", () => {
+  if (tagField.scrollIntoView) tagField.scrollIntoView({ block: "center" });
 });
 useTitle.addEventListener("click", () => {
   titleField.value = pageTitle.textContent;
@@ -1057,6 +1217,20 @@ form.addEventListener("submit", async (event) => {
     body.append("title", titleField.value);
     changed = true;
   }
+  // Text left in the tag field is a tag too. The names go with the tags the dialog opened with, so
+  // the server writes them only while the link still holds those; and only when the keys' order differs.
+  editError.textContent = "";
+  addTag(tagField.value);
+  renderTags();
+  const keys = (list) => JSON.stringify(list.map((t) => t.key));
+  if (keys(tags) !== keys(openedTags)) {
+    body.append("tags", JSON.stringify(tags.map((t) => t.name)));
+    body.append("seen", JSON.stringify(openedTags.map((t) => ({ key: t.key, source: t.source }))));
+    changed = true;
+  }
+  const listView = editRoot ? editRoot.dataset : {};
+  if (listView.within) body.append("within", listView.within);
+  if (listView.own === "1") body.append("own", "1");
   if (picture) {
     if (picture.kind === "file") body.append("picture", picture.blob, "picture");
     else body.append("picture", "page");
@@ -1088,7 +1262,12 @@ form.addEventListener("submit", async (event) => {
   if (current) finish();
   if (!answer.editId) return;
   const offer = () => target.isConnected && showUndo.offers() === offersAtSave && showUndo("Link updated", async () => {
-    const back = await post("/links/edit/undo", { id: target.dataset.id, editId: answer.editId });
+    const back = await post("/links/edit/undo", {
+      id: target.dataset.id,
+      editId: answer.editId,
+      ...(listView.within && { within: listView.within }),
+      ...(listView.own === "1" && { own: "1" }),
+    });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
     if (undone) showCard(target, undone);
     else editAlert.textContent = await failure(back);

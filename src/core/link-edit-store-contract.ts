@@ -6,7 +6,7 @@ import {
   imageVersion,
   type LinkImageReader,
 } from "./image-store.js";
-import type { LinkEditStore } from "./link-edit-store.js";
+import type { LinkEdit, LinkEditStore } from "./link-edit-store.js";
 import type { SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
 import type { LinkRemover, LinkStore } from "./store.js";
@@ -58,9 +58,10 @@ export function describeLinkEditStoreContract(
       version: (await h.images.imageVersions(owner, [id])).get(id)?.version ?? null,
       info: (await h.images.pictureInfo(owner, [id])).get(id) ?? null,
     });
-    const editId = async (p: Promise<{ editId: string | null } | null>) => {
+    const editId = async (p: ReturnType<LinkEditStore["applyEdit"]>) => {
       const result = await p;
-      if (!result?.editId) throw new Error(`expected an edit id, got ${JSON.stringify(result)}`);
+      if (typeof result === "string" || !result?.editId)
+        throw new Error(`expected an edit id, got ${JSON.stringify(result)}`);
       return result.editId;
     };
 
@@ -284,6 +285,147 @@ export function describeLinkEditStoreContract(
         expect(await h.images.image(A, id, "page")).toBeNull();
       }
       expect(await h.images.pictureInfo(A, ["0", "abc"])).toEqual(new Map());
+    });
+
+    describe("tags in an edit", () => {
+      const tag = (key: string, source: LinkTag["source"] = "stated"): LinkTag => ({
+        key,
+        name: key,
+        source,
+        kind: "topic",
+        kindSource: "inferred",
+      });
+      const seenOf = (tags: LinkTag[]) => tags.map(({ key, source }) => ({ key, source }));
+      /** An edit that sets `set`, expecting the link to hold `held`. */
+      const withTags = (held: LinkTag[], set: LinkTag[], more: LinkEdit = {}): LinkEdit => ({
+        ...more,
+        tags: { expected: seenOf(held), set },
+      });
+      const keys = async (owner: string, id: string) =>
+        (await h.links.get(owner, id))?.tags.map((t) => [t.key, t.source]);
+      const linkTagged = async (tags: LinkTag[], title = "Old") => {
+        const id = await linkWith(A, { title });
+        await h.links.update(A, id, { tags });
+        return id;
+      };
+
+      it("writes the tags in the order given, each with its source", async () => {
+        const held = [tag("a", "inferred"), tag("b", "stated")];
+        const id = await linkTagged(held);
+        const set = [tag("b", "stated"), tag("c", "stated"), tag("a", "inferred")];
+        await editId(h.edits.applyEdit(A, id, withTags(held, set), at(10)));
+        expect(await keys(A, id)).toEqual([
+          ["b", "stated"],
+          ["c", "stated"],
+          ["a", "inferred"],
+        ]);
+      });
+
+      it("a new tag joins the owner's catalog and not another owner's", async () => {
+        const id = await linkTagged([]);
+        await editId(h.edits.applyEdit(A, id, withTags([], [tag("fresh")]), at(10)));
+        expect((await h.links.listTags(A)).map((t) => t.key)).toContain("fresh");
+        expect((await h.links.listTags(B)).map((t) => t.key)).not.toContain("fresh");
+      });
+
+      it("an existing catalog tag keeps its name, kind, pin and colour", async () => {
+        await linkTagged([tag("kept")]);
+        await h.links.updateTag(A, "kept", { kind: "project" }, "topic");
+        await h.links.pinTag(A, "kept", { pinned: true, color: "teal" });
+        const catalog = async () => (await h.links.listTags(A)).find((t) => t.key === "kept");
+        const before = await catalog();
+        expect(before).toMatchObject({ kind: "project", pinned: true, color: "teal" });
+        const id = await linkTagged([]);
+        await editId(
+          h.edits.applyEdit(A, id, withTags([], [{ ...tag("kept"), name: "KEPT" }]), at(10)),
+        );
+        expect(await catalog()).toEqual(before);
+        expect((await h.links.get(A, id))?.tags[0]).toMatchObject({
+          name: "kept",
+          kind: "project",
+        });
+      });
+
+      it("a stale expected is a conflict and writes nothing, the title and picture included", async () => {
+        const id = await linkTagged([tag("a")], "Old");
+        const edit = withTags([tag("zzz")], [tag("a"), tag("b")], {
+          title: "New",
+          picture: { set: png(5) },
+        });
+        expect(await h.edits.applyEdit(A, id, edit, at(10))).toBe("conflict");
+        expect(await keys(A, id)).toEqual([["a", "stated"]]);
+        expect(await shows(A, id)).toEqual({ title: "Old", version: null, info: null });
+        expect((await h.links.listTags(A)).map((t) => t.key)).not.toContain("b");
+      });
+
+      it("a source that differs from the one held is a conflict too", async () => {
+        const id = await linkTagged([tag("a", "inferred")]);
+        const edit = withTags([tag("a", "stated")], [tag("a", "stated")]);
+        expect(await h.edits.applyEdit(A, id, edit, at(10))).toBe("conflict");
+        expect(await keys(A, id)).toEqual([["a", "inferred"]]);
+      });
+
+      it("one edit of title, picture and tags is undone by one Undo, order and sources included", async () => {
+        const held = [tag("a", "inferred"), tag("b", "stated")];
+        const id = await linkTagged(held, "Old");
+        const set = [tag("b", "stated"), tag("n", "stated")];
+        const more = { title: "New", picture: { set: png(7) } };
+        const edit = await editId(h.edits.applyEdit(A, id, withTags(held, set, more), at(10)));
+        expect(await keys(A, id)).toEqual([
+          ["b", "stated"],
+          ["n", "stated"],
+        ]);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await keys(A, id)).toEqual([
+          ["a", "inferred"],
+          ["b", "stated"],
+        ]);
+        expect(await shows(A, id)).toEqual({ title: "Old", version: null, info: null });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+      });
+
+      it.each([
+        [
+          "updateWithReceipt",
+          (id: string) =>
+            h.links.updateWithReceipt(A, id, { tags: [tag("ai", "inferred")] }, at(20)),
+        ],
+        ["update", (id: string) => h.links.update(A, id, { tags: [tag("ai", "inferred")] })],
+      ])("Undo conflicts after an AI retag by %s, keeping the AI's tags", async (_n, retag) => {
+        const held = [tag("a")];
+        const id = await linkTagged(held);
+        const edit = await editId(h.edits.applyEdit(A, id, withTags(held, [tag("b")]), at(10)));
+        await retag(id);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+        expect(await keys(A, id)).toEqual([["ai", "inferred"]]);
+      });
+
+      it("the same tags with the same sources, and nothing else changed, is no edit and keeps the last record", async () => {
+        const held = [tag("a", "inferred"), tag("b")];
+        const id = await linkTagged(held, "Same");
+        const first = await editId(h.edits.applyEdit(A, id, { title: "Changed" }, at(9)));
+        expect(await h.edits.applyEdit(A, id, withTags(held, held), at(10))).toEqual({
+          editId: null,
+        });
+        expect(await h.edits.undoEdit(A, id, first)).toBe("undone");
+      });
+
+      it("the same keys in another order is a change", async () => {
+        const held = [tag("a"), tag("b")];
+        const id = await linkTagged(held);
+        await editId(h.edits.applyEdit(A, id, withTags(held, [tag("b"), tag("a")]), at(10)));
+        expect(await keys(A, id)).toEqual([
+          ["b", "stated"],
+          ["a", "stated"],
+        ]);
+      });
+
+      it("never touches another owner's link: B's tag edit reads as absent", async () => {
+        const id = await linkTagged([tag("a")]);
+        expect(await h.edits.applyEdit(B, id, withTags([tag("a")], [tag("x")]), at(10))).toBeNull();
+        expect(await keys(A, id)).toEqual([["a", "stated"]]);
+        expect((await h.links.listTags(B)).map((t) => t.key)).not.toContain("x");
+      });
     });
 
     describe("receipts for an AI edit (updateWithReceipt)", () => {

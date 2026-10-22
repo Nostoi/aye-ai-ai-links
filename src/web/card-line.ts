@@ -16,7 +16,7 @@ import { escapeHtml } from "./page.js";
 export function cardLine(
   link: Link,
   {
-    space = null,
+    space,
     copy,
     saved,
     marker,
@@ -31,10 +31,14 @@ export function cardLine(
   } = {},
 ): string {
   const host = hostOf(link.url);
+  // A card whose page passes `space: null` holds an empty hidden slot where its space goes, so a
+  // Save that gives the link a space can show it (the edit dialog's `showCard`). It is no part: a
+  // line with only the slot draws nothing. A page that passes no `space` (Home's cards) has none.
+  const slot =
+    space === undefined
+      ? ""
+      : `<span class="line-space"${space ? "" : " hidden"}><span class="dot" aria-hidden="true"></span><span data-space-name>${space ? escapeHtml(space.name) : ""}</span></span>`;
   const parts = [
-    space
-      ? `<span class="line-space"><span class="dot" aria-hidden="true"></span>${escapeHtml(space.name)}</span>`
-      : "",
     host ? `<span>${escapeHtml(host)}</span>` : "",
     saved ? `<span>${space || host ? "saved" : "Saved"} ${escapeHtml(saved)}</span>` : "",
     copy
@@ -42,5 +46,5 @@ export function cardLine(
       : "",
     marker ? `<span>${escapeHtml(marker)}</span>` : "",
   ].filter(Boolean);
-  return parts.length === 0 ? "" : `<p class="card-line">${parts.join("")}</p>\n`;
+  return parts.length === 0 && !space ? "" : `<p class="card-line">${slot}${parts.join("")}</p>\n`;
 }

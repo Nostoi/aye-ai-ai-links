@@ -42,7 +42,7 @@ export function createDeps(
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     /** Preview images: the image pass writes them, the web door reads them. */
     images: new SqliteImageStore(db),
-    /** The owner's title and picture edits and their Undo (#145). */
+    /** The owner's title, picture and tag edits and their Undo (#145, #239). */
     edits: new SqliteLinkEditStore(db),
     profile: new SqliteProfileStore(db),
     pages: store,

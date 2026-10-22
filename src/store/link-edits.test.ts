@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { describeLinkEditStoreContract } from "../core/link-edit-store-contract.js";
+import { newLink } from "../core/snapshot-store-contract.js";
+import { FtsSearch } from "../search/fts-search.js";
 import { openDatabase } from "./database.js";
 import { MIGRATIONS, migrate } from "./migrations.js";
 import { SqliteImageStore } from "./sqlite-image-store.js";
@@ -104,10 +106,42 @@ describe("the owner_images and link_edits migration, from the version before it"
     );
     const later = Buffer.from([0x89, 0x50, 0x4e, 0x47, 2]);
     db.prepare("UPDATE owner_images SET sha256 = 'later', bytes = ? WHERE link_id = 1").run(later);
-    expect(await edits.undoEdit("a", "1", applied?.editId as string)).toBe("conflict");
+    expect(await edits.undoEdit("a", "1", (applied as { editId: string }).editId)).toBe("conflict");
     expect(db.prepare("SELECT sha256, bytes FROM owner_images WHERE link_id = 1").get()).toEqual({
       sha256: "later",
       bytes: later,
     });
+  });
+});
+
+describe("a tag added through an edit", () => {
+  it("is found by the link's keyword search, and not found once Undone", async () => {
+    const db = openDatabase(":memory:");
+    open.push(db);
+    const store = new SqliteStore(db);
+    store.ensureUser("a", "a");
+    const { link } = await store.insertIfAbsent("a", newLink(1, new Date(0)));
+    const search = new FtsSearch(db);
+    const edits = new SqliteLinkEditStore(db);
+    const find = () => search.search("a", "quokkas", {}, 10);
+    expect(await find()).toEqual([]);
+    const tag = {
+      key: "quokkas",
+      name: "quokkas",
+      source: "stated" as const,
+      kind: "topic" as const,
+      kindSource: "inferred" as const,
+    };
+    const applied = await edits.applyEdit(
+      "a",
+      link.id,
+      { tags: { expected: [], set: [tag] } },
+      new Date(1),
+    );
+    expect(await find()).toEqual([link.id]);
+    expect(await edits.undoEdit("a", link.id, (applied as { editId: string }).editId)).toBe(
+      "undone",
+    );
+    expect(await find()).toEqual([]);
   });
 });

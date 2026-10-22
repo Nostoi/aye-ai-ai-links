@@ -293,7 +293,8 @@ describe("Your spaces on the home page", () => {
     await setTagPinned(depsOf(world), A, { name: "Kitchen", pinned: true });
     const home = html(await a.send("/"));
     expect(hrefsOf(home, "a.home-space")).toEqual(["/spaces?tag=kitchen"]);
-    expect(home).not.toContain("Baking");
+    // A card's edit data (data-tags) names all of its own link's tags; no other place on Home does.
+    expect(home.replace(/ data-tags="[^"]*"/g, "")).not.toContain("Baking");
     expect(home).not.toContain("Bsecretspace");
     expect(html(await b.send("/"))).not.toContain("Kitchen");
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linkSpace, spaceColor } from "./link-space.js";
+import { lineSpace, linkSpace, spaceColor } from "./link-space.js";
 import type { Link, LinkTag, Tag } from "./types.js";
 
 const tag = (over: Partial<Tag> & { key: string }): Tag => ({
@@ -67,6 +67,20 @@ describe("linkSpace", () => {
     expect(linkSpace(link("bad", "kitchen"), [bad, KITCHEN], { within: "bad" })?.key).toBe(
       "kitchen",
     );
+  });
+});
+
+describe("lineSpace", () => {
+  const kitchen = { key: "kitchen", name: "Kitchen", color: "clay" } as const;
+  it("names the space on every list but a space page's own, where it goes without saying", () => {
+    expect(lineSpace(kitchen, {})).toEqual(kitchen);
+    expect(lineSpace(kitchen, { within: "kitchen" })).toEqual(kitchen);
+    expect(lineSpace(kitchen, { within: "kitchen", own: true })).toBeNull();
+  });
+
+  it("names another space on a space page, such as an unpinned tag's page", () => {
+    expect(lineSpace(kitchen, { within: "baking", own: true })).toEqual(kitchen);
+    expect(lineSpace(null, { within: "baking", own: true })).toBeNull();
   });
 });
 

@@ -130,9 +130,9 @@ describe("the All links page", () => {
     expect(plain?.querySelector(".row-why")?.textContent).toBe('"because 1"');
     expect(colored?.querySelector(".row-why")).toBeNull();
     expect(plain?.className).not.toMatch(/space-/);
-    expect(plain?.querySelector(".dot")).toBeNull();
+    expect(plain?.querySelector(".line-space:not([hidden]) .dot")).toBeNull();
     const parts = (card: Element | undefined) =>
-      [...(card?.querySelectorAll(".card-line > *") ?? [])].map((e) => e.textContent);
+      [...(card?.querySelectorAll(".card-line > :not([hidden])") ?? [])].map((e) => e.textContent);
     expect(parts(plain)).toEqual(["site1.example"]);
     expect(colored?.className).toContain("space-clay");
     expect(parts(colored)).toEqual(["Kitchen", "kitchen.example"]);

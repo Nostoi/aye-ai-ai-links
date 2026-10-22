@@ -17,6 +17,14 @@ export type Answer = {
   redirected?: boolean;
 };
 
+/**
+ * The edit dialog reads the owner's tag names every time it opens. That request is not an action:
+ * it is kept in `names`, apart from `sent`, which holds each action a test counts, and it is
+ * answered by `tagNames` (no names, by default), not by the test's `answer`.
+ */
+const NAMES_URL = "/tags/names";
+const NO_NAMES = (): Answer => ({ status: 200, body: { names: [] } });
+
 /** How the menu's own script starts, as the page embeds it. */
 const MENU_SCRIPT_START = '\ndocument.getElementById("sign-out")';
 
@@ -27,8 +35,12 @@ const MENU_SCRIPT_START = '\ndocument.getElementById("sign-out")';
  * `FormData`) is kept as sent) and replies with `answer`; timers never fire, so an Undo bar stays
  * up until the test clicks it.
  */
-export function runPage(html: string, answer: (sent: Post) => Answer = () => ({ status: 204 })) {
-  return start(html, answer, false, false);
+export function runPage(
+  html: string,
+  answer: (sent: Post) => Answer = () => ({ status: 204 }),
+  tagNames: (sent: Post) => Answer = NO_NAMES,
+) {
+  return start(html, answer, false, false, undefined, false, tagNames);
 }
 
 /**
@@ -55,6 +67,7 @@ function start(
   phone: boolean,
   stored?: unknown,
   menu = false,
+  tagNames: (sent: Post) => Answer = NO_NAMES,
 ) {
   const { document, DOMParser } = parseHTML(html);
   const focusLog: Element[] = [];
@@ -76,6 +89,7 @@ function start(
     .filter((s) => (ask ? menu || !s.startsWith(MENU_SCRIPT_START) : !s.includes("sign-out")))
     .join("\n");
   const sent: Post[] = [];
+  const names: Post[] = [];
   const fetch = async (
     url: string,
     init?: { body?: string | FormData; redirect?: string; keepalive?: boolean },
@@ -86,8 +100,8 @@ function start(
       redirect: init?.redirect,
       keepalive: init?.keepalive,
     };
-    sent.push(request);
-    const a = answer(request);
+    (url === NAMES_URL ? names : sent).push(request);
+    const a = (url === NAMES_URL ? tagNames : answer)(request);
     if (a.networkFails) throw new TypeError("network down");
     if (a.wait) await a.wait;
     return {
@@ -158,7 +172,7 @@ function start(
     for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  return { document, sent, dispatch, settle, $, location, items, focused: () => focusLog };
+  return { document, sent, names, dispatch, settle, $, location, items, focused: () => focusLog };
 }
 
 /**

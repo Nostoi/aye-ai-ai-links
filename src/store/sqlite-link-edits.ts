@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
+import { sameTags } from "../core/covered-fields.js";
 import type { ImageType } from "../core/fetch.js";
 import type { LinkEdit, LinkEditStore, UndoOutcome } from "../core/link-edit-store.js";
 import type { OwnerId } from "../core/types.js";
 import {
+  attachTags,
   type ReceiptRow,
   readCovered,
   receiptHolds,
@@ -23,7 +25,7 @@ type EditRow = ReceiptRow & {
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-/** The owner's title and picture edits (`owner_images`, `link_edits`) and their Undo. */
+/** The owner's title, picture and tag edits (`owner_images`, `link_edits`) and their Undo. */
 export class SqliteLinkEditStore implements LinkEditStore {
   constructor(private readonly db: Database) {}
 
@@ -33,38 +35,16 @@ export class SqliteLinkEditStore implements LinkEditStore {
     const set = edit.picture !== undefined && edit.picture !== "page" ? edit.picture.set : null;
     const setSha = set ? sha256(set.bytes) : null;
     return this.db
-      .transaction((): { editId: string | null } | null => {
-        const link = this.link(owner, n);
-        if (!link) return null;
+      .transaction((): { editId: string | null } | "conflict" | null => {
+        const current = readCovered(this.db, owner, n);
+        if (!current) return null;
+        if (edit.tags && !sameTags(current.tags, edit.tags.expected)) return "conflict";
         const own = this.own(owner, n);
-        const titleChanged = edit.title !== undefined && edit.title !== link.title;
+        const titleChanged = edit.title !== undefined && edit.title !== current.title;
         const pictureChanged =
           edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
-        if (!titleChanged && !pictureChanged) return { editId: null };
-        const editId = randomUUID();
-        const prior = pictureChanged ? own : undefined;
-        this.db
-          .prepare(
-            `INSERT OR REPLACE INTO link_edits (owner_id, link_id, edit_id, title_changed,
-               picture_changed, prior_title, written_title, prior_content_type, prior_bytes,
-               prior_sha256, prior_set_at, written_sha256, at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(
-            owner,
-            n,
-            editId,
-            titleChanged ? 1 : 0,
-            pictureChanged ? 1 : 0,
-            titleChanged ? link.title : null,
-            titleChanged ? (edit.title ?? null) : null,
-            prior?.content_type ?? null,
-            prior?.bytes ?? null,
-            prior?.sha256 ?? null,
-            prior?.set_at ?? null,
-            pictureChanged ? setSha : null,
-            at.getTime(),
-          );
+        const tags = edit.tags && !sameTags(current.tags, edit.tags.set) ? edit.tags.set : null;
+        if (!titleChanged && !pictureChanged && !tags) return { editId: null };
         if (titleChanged) this.writeTitle(owner, n, edit.title ?? null);
         if (pictureChanged) {
           if (set && setSha) {
@@ -76,6 +56,40 @@ export class SqliteLinkEditStore implements LinkEditStore {
             });
           } else this.removeOwn(owner, n);
         }
+        let writtenTags: string | null = null;
+        if (tags) {
+          this.db.prepare("DELETE FROM link_tags WHERE link_id = ? AND owner_id = ?").run(n, owner);
+          attachTags(this.db, owner, n, tags);
+          writtenTags = JSON.stringify(readCovered(this.db, owner, n)?.tags);
+        }
+        const editId = randomUUID();
+        const prior = pictureChanged ? own : undefined;
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO link_edits (owner_id, link_id, edit_id, title_changed,
+               picture_changed, prior_title, written_title, prior_content_type, prior_bytes,
+               prior_sha256, prior_set_at, written_sha256, tags_changed, prior_tags, written_tags,
+               at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            owner,
+            n,
+            editId,
+            titleChanged ? 1 : 0,
+            pictureChanged ? 1 : 0,
+            titleChanged ? current.title : null,
+            titleChanged ? (edit.title ?? null) : null,
+            prior?.content_type ?? null,
+            prior?.bytes ?? null,
+            prior?.sha256 ?? null,
+            prior?.set_at ?? null,
+            pictureChanged ? setSha : null,
+            tags ? 1 : 0,
+            tags ? JSON.stringify(current.tags) : null,
+            writtenTags,
+            at.getTime(),
+          );
         return { editId };
       })
       .immediate();
@@ -112,12 +126,6 @@ export class SqliteLinkEditStore implements LinkEditStore {
         return "undone";
       })
       .immediate();
-  }
-
-  private link(owner: OwnerId, n: number) {
-    return this.db
-      .prepare("SELECT title FROM links WHERE owner_id = ? AND id = ? AND deleted_at IS NULL")
-      .get(owner, n) as { title: string | null } | undefined;
   }
 
   private own(owner: OwnerId, n: number) {

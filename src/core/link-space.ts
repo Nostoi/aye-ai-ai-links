@@ -30,3 +30,14 @@ export function linkSpace(
   });
   return spaces.find((s) => s.key === within) ?? spaces[0] ?? null;
 }
+
+/**
+ * The space a card's grey line names. A space page's own list (`own`) leaves out its own space
+ * (`within`), which goes without saying; every other list names the card's space.
+ */
+export function lineSpace(
+  space: Space | null,
+  { within, own = false }: { within?: string | undefined; own?: boolean },
+): Space | null {
+  return own && space && space.key === within ? null : space;
+}

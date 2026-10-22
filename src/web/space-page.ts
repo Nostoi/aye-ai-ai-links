@@ -1,6 +1,6 @@
 import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
-import { linkSpace } from "../core/link-space.js";
+import { lineSpace, linkSpace } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { LinkOrder } from "../core/search.js";
 import type { HandyView } from "../core/tools.js";
@@ -107,7 +107,7 @@ function row(
     from: spaceHref(tag.key, { done, ...(order === undefined ? {} : { order }) }),
     space,
     // The page's own space goes without saying; another one, on an unpinned tag's page, is named.
-    lineSpace: space?.key === tag.key ? null : space,
+    lineSpace: lineSpace(space, { within: tag.key, own: true }),
     picture: images.get(link.id),
     info: pictures.get(link.id),
     copy: copies.get(link.id),
@@ -173,7 +173,7 @@ export function spacePage(input: Input): string {
   const list =
     links.length === 0
       ? `<p>${emptyText({ order, later })}</p>`
-      : `<div id="space-links">\n${monthSections(links, { order, now }, (l) => row(l, input))}\n</div>`;
+      : `<div id="space-links" data-within="${escapeHtml(tag.key)}" data-own="1">\n${monthSections(links, { order, now }, (l) => row(l, input))}\n</div>`;
   const more = older
     ? `<p><a class="show-older" id="older" href="${escapeHtml(spaceHref(tag.key, { done, order, before: older }))}">${order === "newest" ? "Show older links" : "Show more links"}</a></p>\n`
     : "";

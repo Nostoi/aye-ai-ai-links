@@ -22,6 +22,14 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-22:** Edit link changes a link's tags (#239; design in #239's comments). The menu item is now **Edit link…**.
+  - One Save of title, picture and tags is one Undo record.
+  - A Save that changes tags carries the tags the dialog opened with. If the link's tags changed while the dialog was open, nothing is written and the owner is told to reload.
+  - An in-app AI edit after the Save still replaces the tags and the Save's Undo, as the dialog's title Undo already is.
+  - A tag the owner adds is `stated`. A tag kept, or removed and added back, keeps its source, so a guess stays a guess and the dialog labels it "(a guess)".
+  - Suggestions come from the owner's tag names (`GET /tags/names`).
+  - Removing a space page's own tag leaves the row on that page, in its next space's colour, until reload.
+
 - **2026-10-22:** Tags get edited on the web (owner, in session; #239 comment 6347498875). #239 (add and remove a link's tags in Edit link) and #240 (rename, merge and delete a tag) go after saved summaries (#160) and before stats (#161). Putting #239 before #240 is the controller's call: it is smaller, and #240 waits on owner rulings. #160 and #239 are worked in parallel sessions (owner).
 
 - **2026-10-22:** markdown-it is 15.0.3 (#234), an exception to the two-week dependency rule (owner, in session). It went in at 6 days old because it fixes GHSA-gfr2-rv44-r23c and GHSA-vfgh-jcmw-g37q. This replaces the 2026-10-18 saved-copies entry's "pinned at 15.0.2 until 15.0.3 is two weeks old" and closes #164. The `argparse` 3.0.2 override stays.

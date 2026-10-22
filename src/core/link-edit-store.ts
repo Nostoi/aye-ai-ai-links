@@ -1,18 +1,26 @@
 import type { ImageBytes } from "./image-store.js";
-import type { OwnerId } from "./types.js";
+import type { LinkTag, OwnerId, Source } from "./types.js";
 
 /** A picture edit: set the owner's picture, or "page" to remove it so the fetched one shows. */
 export type PictureEdit = { set: ImageBytes } | "page";
 
-/** What one edit asks for. An absent field is left as it is; a null title removes the title. */
-export type LinkEdit = { title?: string | null; picture?: PictureEdit };
+/**
+ * What one edit asks for. An absent field is left as it is; a null title removes the title.
+ * `tags` replaces the link's whole ordered tag set with `set`, but only while the link still
+ * holds `expected`: the ordered keys and sources the owner saw.
+ */
+export type LinkEdit = {
+  title?: string | null;
+  picture?: PictureEdit;
+  tags?: { expected: { key: string; source: Source }[]; set: LinkTag[] };
+};
 
 export type UndoOutcome = "undone" | "conflict";
 
 /**
- * Persistence contract for the owner's title and picture edits and their Undo. Any
- * implementation must meet all of it. The rules (the title rule, the image check) are core's:
- * the store writes what it is given.
+ * Persistence contract for the owner's title, picture and tag edits and their Undo. Any
+ * implementation must meet all of it. The rules (the title rule, the image check, tag
+ * normalisation) are core's: the store writes what it is given.
  *
  * - Owner scoping: both methods take the owner and never read or change another owner's link;
  *   another owner's link reads as absent (null).
@@ -21,17 +29,21 @@ export type UndoOutcome = "undone" | "conflict";
  */
 export interface LinkEditStore {
   /**
-   * In one transaction: reads the link's title and owner picture. When neither would change,
-   * writes nothing and returns `{ editId: null }`. Otherwise it replaces the link's edit record
-   * with what this edit replaced and wrote, under a new random edit id, applies the edit and
-   * returns that id. Null when the link is absent.
+   * In one transaction: reads the link's title, owner picture and ordered tags. When the edit
+   * has tags and the link's tags (keys and sources, in order) differ from `tags.expected`, it
+   * writes nothing, title and picture included, and answers "conflict". When nothing would
+   * change (tags compared by key, source and order), it writes nothing and returns
+   * `{ editId: null }`. Otherwise it replaces the link's edit record with what this edit
+   * replaced and wrote, under a new random edit id, applies the edit and returns that id. Tags
+   * are attached as `LinkStore` attaches them: a catalog tag that exists keeps its name, kind,
+   * colour and pin, and a new one joins the owner's catalog. Null when the link is absent.
    */
   applyEdit(
     owner: OwnerId,
     linkId: string,
     edit: LinkEdit,
     at: Date,
-  ): Promise<{ editId: string | null } | null>;
+  ): Promise<{ editId: string | null } | "conflict" | null>;
 
   /**
    * In one transaction: puts back what the edit replaced, and removes its record. It does this

@@ -536,7 +536,7 @@ export const ASK_SCRIPT = `<script>
         const button = make("button", "ask-edit", "Edit");
         button.setAttribute("type", "button");
         button.setAttribute("data-id", id);
-        button.setAttribute("title", "Edit title and picture");
+        button.setAttribute("title", "Edit link");
         button.addEventListener("click", () => runEdit(id, button, note, block));
         row.appendChild(button);
       }

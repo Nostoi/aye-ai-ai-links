@@ -16,8 +16,10 @@ export const coveredOf = (l: Covered): Covered => ({
 const sameWhy = (a: Labelled | null, b: Labelled | null) =>
   a?.text === b?.text && a?.source === b?.source;
 
+type TagMark = Pick<LinkTag, "key" | "source">;
+
 /** Tags are the same when they list the same keys with the same sources in the same order. */
-export const sameTags = (a: LinkTag[], b: LinkTag[]) =>
+export const sameTags = (a: TagMark[], b: TagMark[]) =>
   a.length === b.length && a.every((t, i) => t.key === b[i]?.key && t.source === b[i]?.source);
 
 export const changedFields = (before: Covered, after: Covered): Changed => ({

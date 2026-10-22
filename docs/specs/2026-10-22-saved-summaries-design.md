@@ -20,7 +20,8 @@ Two things stand in the way today:
 ## Non-goals
 
 - No summary edit field on the web. The owner changes a summary by asking an AI.
-- No summary on Home, Worth a look, the saved copy page or Tidy up in this work. These may come later.
+- No summary on Home, Worth a look, the saved copy page, Tidy up or the Ask AI panel's cards in this work. These may come later. The in-app AI still reads summaries through its tools.
+- No scheduling between the pass and Ask AI on the shared model. The pass makes one call at a time with a gap, which leaves room for chat.
 - The server does not re-summarise when a page changes. One summary per link, unless the owner clears it (below).
 - No cost tracking or usage limits beyond pacing.
 
@@ -54,7 +55,7 @@ So a summary written by the server is never redone. One written by an AI on its 
 
 **Writes follow the same order: owner over server over an AI on its own.** The controller decided these after the builder check:
 
-- **An `inferred` summary fills only a gap.** It is written when the link has no summary, or one that is `inferred` or unlabelled. It never replaces the server's summary or the owner's. Otherwise an AI touching a link would undo the server's summary, and the pass would redo it, over and over. When the owner wants the server's summary corrected, they ask for it, and that write is `stated` or `asked`.
+- **An `inferred` summary fills only a gap.** It is written when the link has no summary, or one that is `inferred` or unlabelled. It never replaces the server's summary or the owner's. The check is made in the same atomic write as the rest of the edit, not before it, so an owner edit landing in between is never lost (solution challenge, objection 1). The edit's other fields are still written. Otherwise an AI touching a link would undo the server's summary, and the pass would redo it, over and over. When the owner wants the server's summary corrected, they ask for it, and that write is `stated` or `asked`.
 - **An owner summary (`stated` or `asked`) always writes**, over anything.
 - **A repeat `save_link` of a saved URL ignores the summary**, as it does today. Only a missing why is filled. A change goes through `update_link`.
 - **`summary: null` clears the text and the label together**, whatever source is sent. The link is then one the server summarises again, from the page text it already has. It does not fetch the page again.
@@ -80,7 +81,12 @@ A background pass, built like the existing passes in `src/start-server.ts`: star
 - **One model call per link**, with no tools. The system prompt asks for one plain sentence about what the page is, at most `SUMMARY_MAX` characters. The page text is passed as material to summarise, never as instructions.
 - **Writes conditionally.** It writes only if the link's summary and label are still what it read before the call. So an owner's edit made during the call is never overwritten.
 - **Checks the reply.** It trims the reply to one line. A reply that is empty or still over the cap after trimming counts as a failure. The text is stored as plain text and escaped wherever it is shown, as summaries are today.
-- **Paces itself.** One call at a time, with a gap between calls. A failure backs off per link, and an unavailable AI (`AiUnavailable`) backs off the whole pass, so an outage doesn't use up every link's attempts.
+- **Paces itself.** One call at a time, with a gap between calls.
+- **Handles failures.**
+  - Any failure backs off that link alone, and the pass moves on to the next one. `AiUnavailable` also covers request-specific errors, such as an HTTP 400 for one page, so it says nothing about the AI as a whole.
+  - The whole pass pauses only after several failures in a row on different links.
+  - There is no attempt cap. A link that keeps failing is retried at most about once a day.
+  - A link's backoff ends when its summary changes. So the owner clearing a summary always gets a fresh try.
 - **Stops promptly.** On stop it aborts the call in flight through the request's `AbortSignal` and writes nothing for that link.
 
 Everything else follows from the existing triggers and indexers:
@@ -91,18 +97,19 @@ Everything else follows from the existing triggers and indexers:
 
 The in-app AI's Undo receipts cover the summary text (`src/core/covered-fields.ts`). They also need to cover its label. Otherwise undoing an owner-asked change would put back the old text marked as the owner's, and it would stick.
 
-A server summary written after an AI edit makes that edit's Undo answer "changed since". That is the existing rule (ROADMAP, #181), and it is accepted.
+A server summary written after an AI edit that changed the summary makes that edit's Undo answer "changed since". That is the existing rule (ROADMAP, #181), and it is accepted. An edit that changed only other fields still undoes, since receipts compare only the fields they changed.
 
 ### The web
 
 - On `linkRow` (`src/web/link-rows.ts`), used by All links and space pages, a row with no why shows the summary in the why's place, styled as grey text: one line with an ellipsis on desktop, two lines on a phone.
 - A row with a why is unchanged, and so is a row with neither.
+- On a space page, a row with no why also keeps its Tell me why. When the owner answers it, the summary line goes as the why appears, so the row never shows both.
 - Search results keep showing the summary as they do now.
 - The `__ask_off__` byte snapshots change wherever a sample row has no why but has a summary.
 
 ### Export
 
-`links.json` carries the label next to `summary`, and re-importing restores it, as the export design asks for the why's source. A file without the label reads as unlabelled, so its summaries are replaced, the same as summaries saved before this change. The builder decides whether this needs `EXPORT_VERSION` 3 or an optional field in version 2.
+`links.json` carries the label next to `summary`, and re-importing restores it, as the export design asks for the why's source. A file without the label reads as unlabelled, so its summaries are replaced, the same as summaries saved before this change. This is `EXPORT_VERSION` 3: the export design says "Adding a key is a new version" (`docs/specs/2026-10-18-export-design.md`). The reader keeps accepting versions 1 and 2.
 
 ### Docs
 
@@ -116,7 +123,7 @@ These are the controller's calls unless a reviewer finds a reason against:
 
 - `SUMMARY_MAX`, about 160 characters, sized for two lines on a phone.
 - How much page text goes to the model: about 6,000 characters, from the start of the snapshot text, after the title and description.
-- The gap between calls, the per-link backoff and its attempt cap, and the per-call timeout. A local model (#187) is slow, so allow at least 60 s.
+- The gap between calls, the per-link backoff, how many failures in a row pause the pass, and the per-call timeout. A local model (#187) is slow, so allow at least 60 s.
 - The column shape (above), the migration and the migration test.
 - Whether backoff state is kept in memory, as the copy pass keeps it, or in the database.
 - The exact prompt wording.

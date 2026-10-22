@@ -176,6 +176,22 @@ describe("the copy page", () => {
     expect(html).toContain("two");
   });
 
+  it("shows a link saved around blocks (#220) as the card, then one link", async () => {
+    const { w, owner, save } = await world();
+    const id = await save("owner", "https://a.example/cards");
+    const card = "https://cards.example/skill";
+    const markdown = `[\n\n### Skill\n\nAbout it.\n\n](${card})`;
+    const draft = { markdown, imageUrls: [], nonce: NONCE };
+    expect(await w.savedCopies.saveCopy("owner", id, draft, LIMITS, new Date())).toBe("saved");
+    const res = await owner.send(`/links/${id}/copy`);
+    const html = res.bytes.toString("utf8");
+    expect(res.status).toBe(200);
+    expect(html).toContain("<h3>Skill</h3>");
+    expect(html.match(new RegExp(`<a href="${card}"`, "g"))).toHaveLength(1);
+    expect(html).not.toContain("](");
+    expect(html).not.toContain("<p>[</p>");
+  });
+
   it("gives every copy that is not the owner's the same 404, with the copy headers", async () => {
     const { w, id, owner, save } = await world();
     const none = await save("owner", "https://a.example/none");

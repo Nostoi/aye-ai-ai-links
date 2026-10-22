@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import TurndownService from "turndown";
 import type { CopyDraft } from "../core/saved-copy.ts";
-import { imageRef, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
+import { imageRef, linkLabel, MAX_COPY_IMAGES } from "../core/saved-copy.ts";
 
 const webUrl = (url: URL): boolean => url.protocol === "http:" || url.protocol === "https:";
 
@@ -34,6 +34,15 @@ export function makeCopy(article: Element | null, base: string): CopyDraft | nul
   }
 }
 
+type LinkRule = { replacement: (content: string, node: Node, options: unknown) => string };
+
+// @types/turndown doesn't declare `options.rules`; the built-in inline link rule lives there.
+function inlineLinkRule(td: TurndownService): LinkRule {
+  const rules = (td.options as { rules?: { inlineLink?: LinkRule } }).rules;
+  if (!rules?.inlineLink) throw new Error("turndown has no inlineLink rule");
+  return rules.inlineLink;
+}
+
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 const escapeAlt = (alt: string): string => collapse(alt).replace(/[\\[\]]/g, "\\$&");
 
@@ -52,6 +61,18 @@ export function articleMarkdown(article: Element, base: string, nonce: string): 
   const td = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
   const found: { url: string; text: string }[] = [];
   const provisional = new Map<string, number>();
+  const inlineLink = inlineLinkRule(td);
+  // A link can't hold blocks: show them unlinked, then the link on a line of its own.
+  td.addRule("copyLink", {
+    filter: (node) => node.nodeName === "A" && !!node.getAttribute("href"),
+    replacement: (content, node, options) => {
+      if (!content.includes("\n\n")) return inlineLink.replacement(content, node, options);
+      const bare = node.cloneNode(false) as Element;
+      bare.removeAttribute("title");
+      const label = td.escape(linkLabel(bare.getAttribute("href") ?? ""));
+      return `${content.trimEnd()}\n\n${inlineLink.replacement(label, bare, options)}\n\n`;
+    },
+  });
   td.addRule("copyImage", {
     filter: "img",
     replacement: (_content, node) => {

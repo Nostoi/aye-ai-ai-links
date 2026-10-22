@@ -2,6 +2,7 @@ import TurndownService from "turndown";
 import { describe, expect, it } from "vitest";
 import type { CopyDraft } from "../core/saved-copy.js";
 import { finishedMarkdown } from "../core/saved-copy.js";
+import { copyHtml } from "../web/copy-markdown.js";
 import { parsePage } from "./extract.ts";
 import { articleMarkdown, copyBase, makeCopy } from "./extract-copy.ts";
 import { EXTRACT_DEADLINE_MS } from "./extract-runner.js";
@@ -157,6 +158,78 @@ describe("articleMarkdown images", () => {
   it("escapes brackets and backslashes in an alt and collapses whitespace", () => {
     const d = draft('<p>x <img src="https://ex.com/a.png" alt="A [x] \\ y\n  z"></p>');
     expect(d.markdown).toContain(`![A \\[x\\] \\\\ y z](images/01-${NONCE})`);
+  });
+});
+
+describe("a link around blocks", () => {
+  const CARD = "https://mcpmarket.com/tools/skills/x";
+  const LINE = `[mcpmarket.com/tools/skills/x](${CARD})`;
+  const card = (inner: string, href = CARD) => `<a href="${href}">${inner}</a>`;
+  const show = (markdown: string) =>
+    copyHtml(markdown, { linkId: "7", nonce: NONCE, images: new Map() });
+  const noStray = (html: string) => {
+    expect(html).not.toContain("](");
+    expect(html).not.toContain("<p>[");
+  };
+
+  it("writes the content, then the link on its own line", () => {
+    const d = draft(
+      card('<img src="https://ex.com/i1.png" alt=""><h3>Title</h3><p>About the skill.</p>'),
+    );
+    expect(d.markdown).toContain(
+      `![](images/01-${NONCE})\n\n### Title\n\nAbout the skill.\n\n${LINE}`,
+    );
+    expect(d.markdown).not.toContain("[![");
+    const html = show(d.markdown);
+    expect(html.match(/<a href="https:\/\/mcpmarket\.com\/tools\/skills\/x"/g)).toHaveLength(1);
+    noStray(html);
+  });
+
+  it.each([
+    ["a list", "<ul><li>one</li><li>two</li></ul>"],
+    ["a quote", "<blockquote><p>said</p></blockquote>"],
+    ["a div", "<div>boxed</div>"],
+    ["a heading", "<h2>Head</h2>"],
+    ["a paragraph", "<p>Para</p>"],
+  ])("unlinks %s and adds the link line", (_name, inner) => {
+    const d = draft(card(inner));
+    expect(d.markdown).toContain(`\n\n${LINE}\n\n`);
+    const html = show(d.markdown);
+    expect(html.match(/<a /g)).toHaveLength(1);
+    noStray(html);
+  });
+
+  it("keeps two adjacent card anchors apart, each with its own address", () => {
+    const d = draft(
+      `${card("<h3>One</h3><p>first</p>", "https://e.example/a")}${card("<h3>Two</h3><p>second</p>", "https://e.example/b")}`,
+    );
+    expect(d.markdown).toContain("[e.example/a](https://e.example/a)");
+    expect(d.markdown).toContain("[e.example/b](https://e.example/b)");
+    const html = show(d.markdown);
+    expect(html).toContain('<a href="https://e.example/a"');
+    expect(html).toContain('<a href="https://e.example/b"');
+    noStray(html);
+  });
+
+  it("drops the card's title from the link line", () => {
+    const d = draft(`<a href="${CARD}" title="Hidden words"><h3>Title</h3><p>About.</p></a>`);
+    expect(d.markdown).toContain(`About.\n\n${LINE}\n\n`);
+    expect(d.markdown).not.toContain("Hidden words");
+  });
+
+  it("escapes Markdown in the link line's label", () => {
+    const d = draft(card("<h3>Title</h3>", "https://e.example/_a_/*b*"));
+    expect(d.markdown).toContain("[e.example/\\_a\\_/\\*b\\*](https://e.example/_a_/*b*)");
+    expect(show(d.markdown)).not.toContain("<em>");
+  });
+
+  it("leaves an inline link, a picture link and a titled link as before", () => {
+    const d = draft(
+      '<p>see <a href="https://a.b/c">here</a> now</p><p><a href="https://a.b/d"><img src="https://ex.com/p.png" alt="P"></a></p><p><a href="https://a.b/e" title="T">titled</a></p>',
+    );
+    expect(d.markdown).toContain("see [here](https://a.b/c) now");
+    expect(d.markdown).toContain(`[![P](images/01-${NONCE})](https://a.b/d)`);
+    expect(d.markdown).toContain('[titled](https://a.b/e "T")');
   });
 });
 

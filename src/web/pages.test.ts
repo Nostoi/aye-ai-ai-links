@@ -418,6 +418,11 @@ describe("the search page's cards", () => {
     expect(html).toContain("Side-by-side &lt;costs&gt;");
   });
 
+  it("gives the summary the same class a row's summary has", () => {
+    const d = parseHTML(results([link({ summary: "Side-by-side <costs>" })])).document;
+    expect(d.querySelector("p.row-about")?.textContent).toBe("Side-by-side <costs>");
+  });
+
   it("adds the year to a date that is not in the current year", () => {
     expect(results([link({ savedAt: new Date("2025-03-12T10:00:00Z") })])).toContain(
       "saved March 12, 2025",

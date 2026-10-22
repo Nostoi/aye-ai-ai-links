@@ -563,6 +563,25 @@ describe("Tell me why on a space card", () => {
     expect(why.textContent).toBe('"for the <attic>"');
   });
 
+  it("removes the row's summary when the answer shows the why", async () => {
+    const withSummary = space({
+      links: [link("7", { why: null, summary: "About seven" }), link("8")],
+    });
+    expect(
+      parseHTML(withSummary).document.querySelector('[data-id="7"] .row-about'),
+    ).not.toBeNull();
+    const r = await answerWhy(withSummary, { status: 204 }, "for the attic");
+    const card = r.document.querySelector('[data-id="7"]') as HTMLElement;
+    expect(card.querySelector(".row-about")).toBeNull();
+    expect(card.querySelector(".row-why")?.textContent).toBe('"for the attic"');
+  });
+
+  it("keeps the summary when the answer is refused", async () => {
+    const withSummary = space({ links: [link("7", { why: null, summary: "About seven" })] });
+    const r = await answerWhy(withSummary, { status: 409, body: { message: "no" } }, "x");
+    expect(r.document.querySelector('[data-id="7"] .row-about')?.textContent).toBe("About seven");
+  });
+
   it("shows the refusal's words on a 409 and keeps the question", async () => {
     const message = "This link already has a reason. Reload.";
     const r = await answerWhy(page(), { status: 409, body: { code: "conflict", message } }, "x");

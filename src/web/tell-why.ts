@@ -97,6 +97,7 @@ if (whyRoot) {
     answer.textContent = answer.dataset.prefix + '"' + input.value.trim() + '"';
     answer.hidden = false;
     card.querySelector(".ask").remove();
+    card.querySelector(".row-about")?.remove();
     card.classList.remove("needs-you");
   });
 }

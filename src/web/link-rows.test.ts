@@ -73,6 +73,38 @@ describe("a link row", () => {
     expect(known.querySelector(".ask")).toBeNull();
   });
 
+  it("shows the summary, escaped, in the why's place when there is no why", () => {
+    const d = row(link({ summary: "<b>x</b>" }));
+    const body = d.querySelector(".link-row > .row-body");
+    expect([...(body?.children ?? [])].map((e) => e.className || e.tagName)).toEqual([
+      "H3",
+      "row-about",
+      "card-line",
+    ]);
+    expect(d.querySelector(".row-about")?.innerHTML).toBe("&lt;b&gt;x&lt;/b&gt;");
+    expect(d.querySelector("b")).toBeNull();
+  });
+
+  it("shows no summary on a row with a why, and none on a row with neither", () => {
+    const withWhy = row(link({ summary: "A summary", why: { text: "w", source: "stated" } }));
+    expect(withWhy.querySelector(".row-about")).toBeNull();
+    expect(withWhy.querySelector(".row-why")?.textContent).toBe('"w"');
+    expect(row(link()).querySelector(".row-about")).toBeNull();
+  });
+
+  it("puts the summary before Tell me why, which stays, on a row that asks", () => {
+    const d = row(link({ summary: "A summary" }), { ask: true });
+    const body = d.querySelector(".link-row > .row-body");
+    expect([...(body?.children ?? [])].map((e) => e.className || e.tagName)).toEqual([
+      "H3",
+      "row-about",
+      "row-why",
+      "ask",
+      "card-line",
+    ]);
+    expect(d.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
+  });
+
   it("takes its color from `space` and names `lineSpace` on its grey line", () => {
     const d = row(link(), { space: KITCHEN, lineSpace: null, faded: true });
     expect(d.querySelector(".link-row")?.className).toBe("link-row space-clay faded");

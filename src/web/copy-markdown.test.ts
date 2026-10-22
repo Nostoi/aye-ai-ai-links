@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { CPU_BUDGET_TIMEOUT_MS, cpuTimed } from "../core/cpu-time-test-kit.js";
 import type { CopyImageInfo } from "../core/saved-copy.js";
 import { type CopyRefs, copyHtml, copyImageSrc } from "./copy-markdown.js";
 
@@ -207,17 +208,15 @@ describe("copyHtml rendering budget", () => {
       wide("h") + wide("-") + wide("x").repeat(Math.ceil(TWO_MIB / wide("x").length)),
     pipes: pad("|"),
   };
-  // Alone the slowest takes ~1.3 s and the full suite's load triples that; a quadratic rule takes minutes.
+  // The slowest takes under 2 s of CPU, alone or under the full suite's load; a quadratic rule takes minutes.
   const BUDGET_MS = 10_000;
 
   it.each(Object.entries(inputs))(
     "renders %s within the budget",
     (_name, md) => {
-      const start = performance.now();
-      copyHtml(md, refs());
-      expect(performance.now() - start).toBeLessThan(BUDGET_MS);
+      expect(cpuTimed(() => copyHtml(md, refs())).ms).toBeLessThan(BUDGET_MS);
     },
-    30_000,
+    CPU_BUDGET_TIMEOUT_MS,
   );
 });
 
@@ -377,13 +376,18 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
     expect(text(html).replace(/\s+/g, "")).toMatch(/^\[onetwo/);
   });
 
-  it("pairs many openers with one paragraph of many closers in linear time", () => {
-    const n = 40_000;
-    const start = performance.now();
-    const html = copyHtml(`${"[\n\n".repeat(n)}${`x](${A})`.repeat(n)}`, refs());
-    expect(performance.now() - start).toBeLessThan(3_000);
-    expect(html.match(/<a /g)).toHaveLength(n);
-  });
+  it(
+    "pairs many openers with one paragraph of many closers in linear time",
+    () => {
+      const n = 40_000;
+      const { result: html, ms } = cpuTimed(() =>
+        copyHtml(`${"[\n\n".repeat(n)}${`x](${A})`.repeat(n)}`, refs()),
+      );
+      expect(ms).toBeLessThan(3_000);
+      expect(html.match(/<a /g)).toHaveLength(n);
+    },
+    CPU_BUDGET_TIMEOUT_MS,
+  );
 
   it("does not take a closer inside a code span for one", () => {
     const html = copyHtml("[\n\nT\n\nsee `a](https://e.example/a)` ok", refs());
@@ -396,11 +400,10 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
   it.each(["](", '](a "', "](a '", "](a ("])(
     "renders 256 KiB of %s in one paragraph after an opener within the budget",
     (unit) => {
-      const start = performance.now();
-      copyHtml(`[\n\n${unit.repeat(Math.ceil((256 * 1024) / unit.length))}`, refs());
-      expect(performance.now() - start).toBeLessThan(5_000);
+      const md = `[\n\n${unit.repeat(Math.ceil((256 * 1024) / unit.length))}`;
+      expect(cpuTimed(() => copyHtml(md, refs())).ms).toBeLessThan(5_000);
     },
-    10_000,
+    CPU_BUDGET_TIMEOUT_MS,
   );
 
   it.each([
@@ -412,11 +415,9 @@ describe("copyHtml repairs a link that was saved around blocks (#220)", () => {
     "renders a long run of %s within the budget",
     (_name, unit, kib) => {
       const md = unit.repeat(Math.ceil((kib * 1024) / unit.length));
-      const start = performance.now();
-      copyHtml(md, refs());
-      expect(performance.now() - start).toBeLessThan(5_000);
+      expect(cpuTimed(() => copyHtml(md, refs())).ms).toBeLessThan(5_000);
     },
-    10_000,
+    CPU_BUDGET_TIMEOUT_MS,
   );
 });
 
@@ -619,12 +620,14 @@ describe("copyHtml reading look (#223)", () => {
     expect(sel(html, "h1, script")).toHaveLength(0);
   });
 
-  it("renders about 2 MiB of picture paragraphs within the budget", () => {
-    const md = `${SAVED}\n\n${LOST}\n\n[${SAVED}](${P})\n\n`.repeat(20_000);
-    const start = performance.now();
-    copyHtml(md, refs());
-    expect(performance.now() - start).toBeLessThan(10_000);
-  }, 30_000);
+  it(
+    "renders about 2 MiB of picture paragraphs within the budget",
+    () => {
+      const md = `${SAVED}\n\n${LOST}\n\n[${SAVED}](${P})\n\n`.repeat(20_000);
+      expect(cpuTimed(() => copyHtml(md, refs())).ms).toBeLessThan(10_000);
+    },
+    CPU_BUDGET_TIMEOUT_MS,
+  );
 
   it("renders one paragraph of 100,000 pictures", () => {
     const html = copyHtml(`${LOST}\n`.repeat(100_000), refs());

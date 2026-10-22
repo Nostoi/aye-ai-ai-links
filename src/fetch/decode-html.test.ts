@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CPU_BUDGET_TIMEOUT_MS, cpuTimed } from "../core/cpu-time-test-kit.js";
 import { decodeHtml } from "./decode-html.js";
 
 const latin1 = (text: string) => Buffer.from(text, "latin1");
@@ -12,11 +13,14 @@ describe("decodeHtml", () => {
     expect(decodeHtml(latin1("<p>café</p>"), "text/html; charset=ISO-8859-1")).toBe("<p>café</p>");
   });
 
-  it("reads a header padded with 16,000 spaces after charset= in linear time", () => {
-    const started = performance.now();
-    decodeHtml(Buffer.from("<p>x"), `text/html; charset=${" ".repeat(16_000)}`);
-    expect(performance.now() - started).toBeLessThan(100);
-  });
+  it(
+    "reads a header padded with 16,000 spaces after charset= in linear time",
+    () => {
+      const header = `text/html; charset=${" ".repeat(16_000)}`;
+      expect(cpuTimed(() => decodeHtml(Buffer.from("<p>x"), header)).ms).toBeLessThan(100);
+    },
+    CPU_BUDGET_TIMEOUT_MS,
+  );
 
   it("takes the charset from <meta charset> when the header has none", () => {
     const bytes = latin1('<meta charset="iso-8859-2"><p>\xb1</p>');
@@ -74,15 +78,19 @@ describe("decodeHtml", () => {
       expect(decodeHtml(page, "text/html")).toContain("\u20ac\u201c\u201d\u2013\u2122\u0081");
     });
 
-    it("decodes a 5 MB page quickly", () => {
-      const page = Buffer.alloc(5 * 1024 * 1024, 0x93);
-      const started = performance.now();
-      const text = decodeHtml(page, "text/html; charset=windows-1252");
-      const elapsed = performance.now() - started;
-      expect(text.length).toBe(page.length);
-      expect(text.startsWith("““")).toBe(true);
-      expect(elapsed).toBeLessThan(500);
-    });
+    it(
+      "decodes a 5 MB page quickly",
+      () => {
+        const page = Buffer.alloc(5 * 1024 * 1024, 0x93);
+        const { result: text, ms } = cpuTimed(() =>
+          decodeHtml(page, "text/html; charset=windows-1252"),
+        );
+        expect(text.length).toBe(page.length);
+        expect(text.startsWith("““")).toBe(true);
+        expect(ms).toBeLessThan(500);
+      },
+      CPU_BUDGET_TIMEOUT_MS,
+    );
 
     it("leaves bytes above 0x9F as in ISO-8859-1", () => {
       expect(decodeHtml(Buffer.from([0xe9, 0xff]), "text/html; charset=windows-1252")).toBe(

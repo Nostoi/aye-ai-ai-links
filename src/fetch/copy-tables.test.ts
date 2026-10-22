@@ -129,6 +129,16 @@ describe("a table in a copy", () => {
     expect(html).toContain("<td>z</td>");
   });
 
+  it("keeps a pipe in the alt text of a lost picture with a refused source in its cell", () => {
+    const md = markdown(
+      '<table><tr><th>A</th><th>B</th></tr><tr><td><img src="data:image/png;base64,AAAA" alt="a|b"></td><td>z</td></tr></table>',
+    );
+    expect(md).toContain("![a\\|b]()");
+    const html = copyHtml(md, refs(1));
+    expect(count(html, "td")).toBe(2);
+    expect(html).toContain("<td>z</td>");
+  });
+
   it("puts a header written after its footer first, and the footer last", () => {
     const md = markdown(
       "<table><tfoot><tr><td>f1</td><td>f2</td></tr></tfoot><thead><tr><th>h1</th><th>h2</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>",

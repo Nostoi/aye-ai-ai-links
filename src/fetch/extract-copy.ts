@@ -46,6 +46,8 @@ function inlineLinkRule(td: TurndownService): LinkRule {
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 const escapeAlt = (alt: string): string => collapse(alt).replace(/[\\[\]]/g, "\\$&");
+/** A picture the copy has no file for: the reader shows its alt text as a "Picture not saved" note. */
+const lostPicture = (alt: string): string => `![${alt}]()`;
 
 /**
  * Turns Readability's article element into Markdown, working on the element in place.
@@ -82,7 +84,7 @@ export function articleMarkdown(article: Element, base: string, nonce: string): 
       const src = (node as Element).getAttribute("src");
       const url = src ? resolve(src, base) : null;
       const text = td.escape(collapse(alt));
-      if (!url || !webUrl(url)) return text;
+      if (!url || !webUrl(url)) return lostPicture(text);
       let k = provisional.get(url.href);
       if (k === undefined) {
         k = found.length;
@@ -104,7 +106,7 @@ export function articleMarkdown(article: Element, base: string, nonce: string): 
     let n = given.get(Number(k));
     if (n === undefined) {
       // `\|` shows as `|`, and keeps a picture that lands in a table cell inside it.
-      if (imageUrls.length >= MAX_COPY_IMAGES) return image.text.replace(/\|/g, "\\|");
+      if (imageUrls.length >= MAX_COPY_IMAGES) return lostPicture(image.text.replace(/\|/g, "\\|"));
       imageUrls.push(image.url);
       n = imageUrls.length;
       given.set(Number(k), n);

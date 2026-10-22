@@ -1,6 +1,7 @@
 import type { StateCore, Token } from "markdown-it";
 import MarkdownIt from "markdown-it";
 import { COPY_NONCE, type CopyImageInfo, IMAGE_EXT, linkLabel } from "../core/saved-copy.js";
+import { bandPictures, lineLinks, markUnsavedPicture, shiftHeadings } from "./copy-pictures.js";
 
 /** What a copy's image references can resolve to. */
 export type CopyRefs = { linkId: string; nonce: string | null; images: Map<number, CopyImageInfo> };
@@ -243,6 +244,7 @@ function safeTokens(state: StateCore): void {
             state.md.options,
             state.env,
           );
+          markUnsavedPicture(alt);
           kept.push(alt);
           continue;
         }
@@ -274,9 +276,16 @@ md.disable("reference");
 md.validateLink = () => true;
 md.core.ruler.push("copy_safe", safeTokens);
 md.core.ruler.push("copy_plain_cells", plainCells);
+md.core.ruler.push("copy_pictures", bandPictures);
+md.core.ruler.push("copy_link_lines", lineLinks);
+md.core.ruler.push("copy_headings", shiftHeadings);
 md.core.ruler.before("text_join", "copy_repair", repairBlockLinks);
 
-/** The copy's Markdown as safe HTML (R39): only http(s)/mailto links, only this copy's ledger-ok images. */
+/**
+ * The copy's Markdown as safe HTML (R39): only http(s)/mailto links, only this copy's ledger-ok images.
+ * Headings sit one level down. A picture standing alone is a band (a lost one a note, a link around
+ * it a line below), built by `copy-pictures.ts` from fixed tags.
+ */
 export function copyHtml(markdown: string, refs: CopyRefs): string {
   return md.render(markdown, refs);
 }

@@ -852,6 +852,71 @@ describe("MCP door over HTTP", () => {
     expect(cleared.body.result.structuredContent.link.title).toBeNull();
   });
 
+  it("takes a summary as text or as {text, source}, and returns its source", async () => {
+    await call(app, "key-a", "save_link", {
+      url: "https://example.com/s1",
+      summary: { text: "Mine", source: "stated" },
+    });
+    await call(app, "key-a", "save_link", { url: "https://example.com/s2", summary: "Plain" });
+    const sources = [];
+    for (const id of ["1", "2"]) {
+      const { link } = (await call(app, "key-a", "get_link", { id })).body.result.structuredContent;
+      sources.push([link.summary, link.summarySource]);
+    }
+    expect(sources).toEqual([
+      ["Mine", "stated"],
+      ["Plain", "inferred"],
+    ]);
+  });
+
+  it("update_link keeps an owner's summary against an AI's own, and lets the owner's word replace it", async () => {
+    await call(app, "key-a", "save_link", {
+      url: "https://example.com/s3",
+      summary: { text: "Mine", source: "asked" },
+    });
+    const own = await call(app, "key-a", "update_link", { id: "1", title: "T", summary: "AI" });
+    expect(own.body.result.structuredContent.link).toMatchObject({
+      title: "T",
+      summary: "Mine",
+      summarySource: "asked",
+    });
+    const said = await call(app, "key-a", "update_link", {
+      id: "1",
+      summary: { text: "Better", source: "stated" },
+    });
+    expect(said.body.result.structuredContent.link).toMatchObject({
+      summary: "Better",
+      summarySource: "stated",
+    });
+  });
+
+  it("refuses source server on a summary, writing nothing", async () => {
+    const save = await call(app, "key-a", "save_link", {
+      url: "https://example.com/s4",
+      summary: { text: "x", source: "server" },
+    });
+    expect(save.body.result?.isError ?? Boolean(save.body.error)).toBe(true);
+    expect(linkCount(db)).toBe(0);
+    await call(app, "key-a", "save_link", { url: "https://example.com/s5", summary: "ok" });
+    const update = await call(app, "key-a", "update_link", {
+      id: "1",
+      summary: { text: "x", source: "server" },
+    });
+    expect(update.body.result?.isError ?? Boolean(update.body.error)).toBe(true);
+    const got = await call(app, "key-a", "get_link", { id: "1" });
+    expect(got.body.result.structuredContent.link.summary).toBe("ok");
+  });
+
+  it("describes the summary label on save_link and update_link", async () => {
+    const list = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
+    for (const name of ["save_link", "update_link"]) {
+      const tool = list.body.result.tools.find((t: Json) => t.name === name);
+      expect(JSON.stringify(tool.inputSchema.properties.summary), name).toContain(
+        "only when the owner gave",
+      );
+    }
+  });
+
   it("refuses to serve a request whose caller has no owner", async () => {
     const blank = appFor({
       deps,

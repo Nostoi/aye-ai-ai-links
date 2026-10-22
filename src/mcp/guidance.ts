@@ -4,6 +4,8 @@ import { TEXT_CHARS } from "../core/snapshot-text.js";
 
 const KIND_SOURCE_RULE = `When you send kind, source also labels the kind: send kind with "stated" or "asked" only if the owner gave the kind; otherwise leave kind out, or send it with source "inferred".`;
 
+const SUMMARY_RULE = `The server may replace a summary you wrote yourself. Send the owner's as {text, source} with "stated" or "asked".`;
+
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 
 The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline, or it is a bad moment, infer it from the conversation and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
@@ -22,23 +24,21 @@ Profile: get_profile (or save_link's profile) has notes about the owner and what
 
 export const SAVE_LINK = `Save a link to the owner's library.
 
-Send summary, why and tags in the same call when you know them. Give the why as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context.
+Send summary, why and tags in the same call when you know them. Give the why as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context. ${SUMMARY_RULE}
 
-If the URL is already saved you get the existing link back with created: false. Only a missing why is filled in; use update_link to change anything else.
+If the URL is already saved you get the existing link back with created: false. Only a missing why is filled in, and the tags you sent (a requested project too) are discarded; use update_link to change anything else, with the full tag set to file it.
 
-Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. Check the returned tag's kind: if it differs from what you asked for, the tag already existed. If the owner wants that tag's kind changed, call update_tag; do NOT invent a near-duplicate name to get a project.
+Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. If the returned tag's kind differs from what you asked for, the tag already existed: call update_tag if the owner wants it changed, never a near-duplicate name.
 
 ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
 
-A repeat save (created: false) discards the tags you sent, including a requested project. To file it, call update_link with the full tag set.
-
-Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it. A repeat save does not fetch the page again.
+Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it.
 
 Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" at most once, only after a save returns created: true: send "keep" or "not_handy" with "asked" through update_link. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.`;
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means stale, out of sight for good. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means stale, out of sight for good. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 

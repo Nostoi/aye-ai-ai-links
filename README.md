@@ -59,7 +59,7 @@ The tools your AI uses:
 | Tool | What it does |
 |---|---|
 | `save_link` | Saves a link (a title is at most 200 characters). Saving one that's already saved returns the existing link. A new link can also be kept handy, or suggested. |
-| `update_link` | Changes a link's title (at most 200 characters), summary, why, tags, state or snooze date, or whether it is kept handy. |
+| `update_link` | Changes a link's title (at most 200 characters), summary (labelled stated or asked when it is the owner's own words), why, tags, state or snooze date, or whether it is kept handy. |
 | `update_tag` | Switches a tag between topic and project, or confirms its kind as yours. |
 | `search_links` | Finds links, best match first. A blank search lists the newest. |
 | `list_links` | Lists every link, newest first, oldest first or most recently opened, a page at a time, with a total. |

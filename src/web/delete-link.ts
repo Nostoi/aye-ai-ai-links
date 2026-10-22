@@ -11,7 +11,8 @@ export const deleteLinkItem: MenuItem = { act: "delete-link", icon: TRASH, text:
  *   next shown card in the list, across months, or else on the page's heading, then removes the
  *   card (`remove`) or hides it, and hides its month when no shown card is left in it. It returns
  *   the function that puts the card back where it was and shows its month. It's stale
- *   (`doneLinkScript`) uses it too.
+ *   (`doneLinkScript`) uses it too, and passes a fourth argument, the change the route answered,
+ *   which this `takeOut` ignores.
  * - `deleteCard(card)`, which the edit dialog's Delete also calls: it posts `/links/delete`, takes
  *   the card out and offers Undo, which posts `/links/restore` and puts the same card back. It
  *   sends nothing while another action on the card is out (`whileBusy`). A refusal, or an Undo that

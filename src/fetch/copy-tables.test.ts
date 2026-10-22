@@ -162,6 +162,12 @@ describe("a table that stays as its text", () => {
     "a heading in a cell": cell("<h3>head</h3>"),
     "a pre in a cell": cell("<pre>code</pre>"),
     "a quote in a cell": cell("<blockquote>said</blockquote>"),
+    "text in a row between cells": `<table>${head}<tr><td>a</td>STRAY<td>b</td></tr></table>`,
+    "a block between rows": `<table>${head}<div>NOTE prices exclude tax</div><tr><td>a</td><td>b</td></tr></table>`,
+    "a paragraph after the body": `<table><tbody>${head}<tr><td>a</td><td>b</td></tr></tbody><p>FOOTNOTE</p></table>`,
+    "a span in a row": `<table>${head}<tr><td>a</td><span>SPAN</span><td>b</td></tr></table>`,
+    "a caption inside a cell": cell("<caption>inner</caption>"),
+    "two captions": `<table><caption>One</caption><caption>Two</caption>${head}<tr><td>a</td><td>b</td></tr></table>`,
     "a row inside a cell": `<table>${head}<tr><td>a<tr><td>q</td><td>r</td></tr></td><td>d</td></tr></table>`,
     "a colspan of 1000 over 1,000 rows": `<table><tr><th colspan="1000">Wide</th></tr>${rows(1000, (i) => `<td>${i}</td><td>x</td>`)}</table>`,
   };
@@ -169,6 +175,21 @@ describe("a table that stays as its text", () => {
     const md = markdown(body);
     expect(md).toBe(before(body));
     expect(md).not.toContain("| --- |");
+  });
+
+  it("keeps a picture written between rows, as text blocks", () => {
+    const md = markdown(
+      `<table>${head}<img src="https://ex.com/p.png" alt="P"><tr><td>a</td><td>b</td></tr></table>`,
+    );
+    expect(md).toContain(`![P](images/01-${NONCE})`);
+    expect(md).not.toContain("| --- |");
+  });
+
+  it("still makes a grid of a table with column groups and blank space between its parts", () => {
+    const md = markdown(
+      `<table>\n<caption>C</caption>\n<colgroup><col><col></colgroup>\n<thead>\n${head}\n</thead>\n<tbody>\n<tr><td>a</td><td>b</td></tr>\n</tbody>\n</table>`,
+    );
+    expect(md).toContain("C\n\n| A | B |\n| --- | --- |\n| a | b |");
   });
 
   it("still makes a grid of a table inside a layout table", () => {

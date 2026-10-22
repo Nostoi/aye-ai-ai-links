@@ -7,7 +7,7 @@ import type TurndownService from "turndown";
 type Facts = { rows: Element[]; columns: number };
 
 /** Not a heading, list, code block, quote, rule or definition list: a Markdown cell holds one line. */
-const BLOCKS = "h1,h2,h3,h4,h5,h6,ul,ol,pre,blockquote,hr,dl";
+const BLOCKS = "h1,h2,h3,h4,h5,h6,ul,ol,pre,blockquote,hr,dl,caption";
 
 const cellsOf = (row: Element): Element[] =>
   [...row.children].filter((c) => c.nodeName === "TD" || c.nodeName === "TH");
@@ -27,15 +27,48 @@ const rowspanOne = (cell: Element): boolean => {
   return Number.isNaN(n) || n < 0 || n === 1;
 };
 
+const blank = (node: Node): boolean =>
+  node.nodeType === 8 || (node.nodeType === 3 && !node.textContent?.trim());
+
+const only = (parent: Element, take: (child: Element) => boolean): boolean =>
+  [...parent.childNodes].every((n) => (n.nodeType === 1 ? take(n as Element) : blank(n)));
+
+function rowsOf(table: Element): Element[] | null {
+  const head: Element[] = [];
+  const body: Element[] = [];
+  const foot: Element[] = [];
+  let captions = 0;
+  const row = (into: Element[]) => (child: Element) => {
+    if (child.nodeName !== "TR") return false;
+    into.push(child);
+    return only(child, (c) => c.nodeName === "TD" || c.nodeName === "TH");
+  };
+  const fits = only(table, (child) => {
+    switch (child.nodeName) {
+      case "CAPTION":
+        return ++captions === 1;
+      case "COLGROUP":
+        return only(child, (c) => c.nodeName === "COL");
+      case "COL":
+        return true;
+      case "THEAD":
+        return only(child, row(head));
+      case "TBODY":
+        return only(child, row(body));
+      case "TFOOT":
+        return only(child, row(foot));
+      default:
+        return row(body)(child);
+    }
+  });
+  return fits ? [...head, ...body, ...foot] : null;
+}
+
 /** Worked out from the attributes alone, before anything is built, so a huge `colspan` costs nothing. */
 function factsOf(table: Element): Facts | null {
   if (table.querySelector("table")) return null;
-  const all = [...table.querySelectorAll("tr")];
-  const inPart = (name: string) => all.filter((row) => row.parentElement?.nodeName === name);
-  const head = inPart("THEAD");
-  const foot = inPart("TFOOT");
-  const placed = new Set([...head, ...foot]);
-  const rows = [...head, ...all.filter((row) => !placed.has(row)), ...foot];
+  const rows = rowsOf(table);
+  if (rows === null) return null;
   let cells = 0;
   let columns = 0;
   for (const row of rows) {

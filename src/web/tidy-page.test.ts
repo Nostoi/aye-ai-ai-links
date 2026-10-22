@@ -353,7 +353,7 @@ describe("the Tidy up session", () => {
     expect(finished()).toBe(true);
   });
 
-  it("an Undo while a choice on the next link is in flight sends nothing", async () => {
+  it("an Undo while a choice on the next link is in flight waits for it, then runs", async () => {
     let release: () => void = () => {};
     const wait = new Promise<void>((r) => {
       release = r;
@@ -367,8 +367,9 @@ describe("the Tidy up session", () => {
     expect(urls(p)).toEqual(["/home/put-away", "/home/archive"]);
     release();
     await p.settle();
-    expect(urls(p)).toEqual(["/home/put-away", "/home/archive"]);
-    expect(shown()).toEqual([ids[2]]);
+    expect(urls(p)).toEqual(["/home/put-away", "/home/archive", "/home/undo-state"]);
+    expect(p.sent[2]).toEqual(post("/home/undo-state", { id: ids[0], change: PUT_CHANGE }));
+    expect(shown()).toEqual([ids[0]]);
   });
 
   it("sends one request for a double click", async () => {

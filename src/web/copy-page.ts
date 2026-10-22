@@ -3,15 +3,30 @@ import type { CopyView } from "../core/copy-reading.js";
 import { isWebUrl } from "../core/url-key.js";
 import { copyHtml } from "./copy-markdown.js";
 import { hostOf } from "./host.js";
-import { escapeHtml, PAGE_STYLE, page, savedOn } from "./page.js";
+import { openedScript } from "./open-link.js";
+import { escapeHtml, PAGE_STYLE, page, pageScripts, savedOn, scriptText } from "./page.js";
 
 export const copyHref = (linkId: string) => `/links/${encodeURIComponent(linkId)}/copy`;
 
-const styleHash = createHash("sha256").update(PAGE_STYLE).digest("base64");
+/** The one element holding the page's frame, whose clicks on an `a[data-open]` it records. */
+const FRAME_ID = "copy-frame";
+const OPENED = openedScript(FRAME_ID, "/links/opened");
 
-/** Every answer of the copy route: the page runs no script and loads nothing from outside. */
+/**
+ * Every script of the copy page: the page's own for its menu, and the one recording an opening.
+ * The CSP lists these and no other, hashed from here and never from the page they render into,
+ * so a script that reached the page through the article would still be refused.
+ */
+export const copyScripts = [...pageScripts({ menu: true }), scriptText(OPENED)];
+
+const hash = (text: string) => `'sha256-${createHash("sha256").update(text).digest("base64")}'`;
+
+/**
+ * Every answer of the copy route: loads nothing from outside, runs only `copyScripts` and sends
+ * requests only to the app itself (the sign-out and the opening it records).
+ */
 export const COPY_HEADERS: Record<string, string> = {
-  "Content-Security-Policy": `default-src 'none'; img-src 'self' data:; style-src 'sha256-${styleHash}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  "Content-Security-Policy": `default-src 'none'; img-src 'self' data:; style-src ${hash(PAGE_STYLE)}; script-src ${[...new Set(copyScripts)].map(hash).join(" ")}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store",
@@ -38,13 +53,14 @@ export function copyPage(view: CopyView, now: Date): string {
           })}</article>`;
   return page(
     title,
-    `<main class="copy">
+    `<main class="copy" id="${FRAME_ID}">
 <h1>${escapeHtml(title)}</h1>
 ${site}<p class="small">Saved copy from ${savedOn(view.madeAt, now)}</p>
 <p class="small">${NEUTRAL}</p>
 ${body}
-</main>`,
-    { home: true },
+</main>
+${OPENED}`,
+    { menu: true },
   );
 }
 

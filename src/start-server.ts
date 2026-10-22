@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
 import { createChatModel } from "./ai/create-model.js";
+import { createSummarizer } from "./ai/summarize.js";
 import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
 import { openAuthDatabase } from "./auth/better-auth.js";
@@ -21,6 +22,7 @@ import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-r
 import { createLinkPurger } from "./core/link-removal.js";
 import { pausedMessage } from "./core/saved-copy.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
+import { createSummaryPass, type SummaryPass } from "./core/summary-pass.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { createChildExtractor } from "./fetch/extract-runner.js";
@@ -45,7 +47,7 @@ const SETTLE_MS = 5_000;
  * fetcher (5 MiB cap) and the child extractor. `imageFetcher` replaces the guarded image fetcher
  * the image pass uses. `copyExtractor` replaces the copy pass's own child extractor, and
  * `copyPollMs` its sweep interval. `iconExtractor` replaces the icon backfill's own child extractor, and
- * `iconPollMs` its sweep interval. `linkChecker` replaces the guarded link checker the check runner uses.
+ * `iconPollMs` its sweep interval. `summaryPollMs` and `summaryGapMs` set the summary pass's sweep interval and the gap between its AI calls. `linkChecker` replaces the guarded link checker the check runner uses.
  * `wrapAuthMigrations` runs around the auth migrations, so a test can hold
  * them. `jsonFetcher` replaces the guarded JSON fetcher that fetches OAuth client metadata.
  */
@@ -76,6 +78,10 @@ export type StartOptions = {
   iconExtractor?: PageExtractor;
   /** Time between icon backfill sweeps; its 15 s default when left out. */
   iconPollMs?: number;
+  /** Time between summary pass sweeps; its 60 s default when left out. */
+  summaryPollMs?: number;
+  /** Time between the summary pass's AI calls; its 5 s default when left out. */
+  summaryGapMs?: number;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
   jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
   refresherIntervalMs?: number;
@@ -93,27 +99,28 @@ export type StartOptions = {
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
- * The snapshot runner, the vector indexer, the image pass, the copy pass, the icon backfill, the check runner, the link purger and the
+ * The snapshot runner, the vector indexer, the image pass, the copy pass, the icon backfill, the summary pass (only when the AI is set up), the check runner, the link purger and the
  * metadata refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
  * 1. In-app AI turns are stopped first: a model call in flight is aborted and the turn answers
  *    that the server is stopping, so its request ends before the drain; a tool call already
  *    running carries on, and step 3 waits for it.
- *    The runner, the indexer, the image pass, the copy pass, the icon backfill and the check runner take no new work;
- *    running jobs, an embedding, an image fetch, a copy in the making, a page being read for its icon
- *    and a link check in flight carry on.
+ *    The runner, the indexer, the image pass, the copy pass, the icon backfill, the summary pass and the check runner take no new work;
+ *    running jobs, an embedding, an image fetch, a copy in the making, a page being read for its icon,
+ *    a summary being written and a link check in flight carry on.
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
  * 3. The runner aborts its jobs, which give their attempts back, the image pass aborts its fetch,
  *    leaving that image pending, the copy pass aborts its fetch or extraction, leaving the copy for
  *    the next sweep, the icon backfill aborts its fetch or extraction, recording nothing, so the link
- *    stays a candidate, and the check runner aborts its check, recording nothing, so the
+ *    stays a candidate, the summary pass aborts its AI call, writing nothing, so the link stays a
+ *    candidate, and the check runner aborts its check, recording nothing, so the
  *    link stays due. Stop waits for them, for the indexer's sweep and for any tool call still
  *    running, up to the settle limit.
  * 4. Export builds are told to stop, before any wait: a running build stops at its next read and
  *    discards its temporary file, or the next start deletes it.
  *    The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
- *    The image pass's, the copy pass's, the icon backfill's and the check runner's stops are awaited again. Then the
+ *    The image pass's, the copy pass's, the icon backfill's, the summary pass's and the check runner's stops are awaited again. Then the
  *    JSON fetcher closes, the image fetcher, the link checker, the page fetcher, and the three
  *    extractors (killing any child).
  * 5. The MCP handler closes, then the database, then the auth database.
@@ -140,6 +147,8 @@ export async function startServer(
     copyPollMs,
     iconExtractor = createChildExtractor(),
     iconPollMs,
+    summaryPollMs,
+    summaryGapMs,
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher({ version: config.version }),
     refresherIntervalMs,
@@ -156,6 +165,7 @@ export async function startServer(
   let images: ImageIndexer | undefined;
   let copyPass: CopyPass | undefined;
   let iconBackfill: IconBackfill | undefined;
+  let summaryPass: SummaryPass | undefined;
   let checks: LinkCheckRunner | undefined;
   let purger: ReturnType<typeof createLinkPurger> | undefined;
   let exports: ExportBuilds | undefined;
@@ -168,6 +178,7 @@ export async function startServer(
     await images?.stop();
     await copyPass?.stop();
     await iconBackfill?.stop();
+    await summaryPass?.stop();
     // The same for the check in flight and its checker.
     await checks?.stop();
     await jsonFetcher.close();
@@ -252,6 +263,18 @@ export async function startServer(
       now: deps.now,
       ...(iconPollMs !== undefined && { pollMs: iconPollMs }),
     });
+    // One connection for the web door's chat and the summary pass.
+    const chat = config.ai && createChatModel(config.ai);
+    if (chat) {
+      summaryPass = createSummaryPass({
+        store: deps.store,
+        pages: deps.store,
+        summarizer: createSummarizer(chat),
+        now: deps.now,
+        ...(summaryPollMs !== undefined && { pollMs: summaryPollMs }),
+        ...(summaryGapMs !== undefined && { gapMs: summaryGapMs }),
+      });
+    }
     checks = createLinkCheckRunner({
       checks: deps.checks,
       checker: linkChecker,
@@ -282,7 +305,7 @@ export async function startServer(
         saveWaitMs,
         copyLimitBytes: config.savedCopies.limitBytes,
         version: config.version,
-        ai: config.ai && createChatModel(config.ai),
+        ai: chat,
       },
       identify: auth.identify,
       auth: { ...auth, keys },
@@ -310,6 +333,7 @@ export async function startServer(
   images?.start();
   copyPass?.start();
   iconBackfill?.start();
+  summaryPass?.start();
   checks?.start();
   purger?.start();
   refresher.start();
@@ -352,6 +376,10 @@ export async function startServer(
     const iconsStopped = (iconBackfill?.stop() ?? Promise.resolve()).then(() => {
       iconsEnded = true;
     });
+    let summariesEnded = false;
+    const summariesStopped = (summaryPass?.stop() ?? Promise.resolve()).then(() => {
+      summariesEnded = true;
+    });
     let checksEnded = false;
     const checksStopped = (checks?.stop() ?? Promise.resolve()).then(() => {
       checksEnded = true;
@@ -366,13 +394,14 @@ export async function startServer(
       imagesStopped,
       copiesStopped,
       iconsStopped,
+      summariesStopped,
       checksStopped,
       calls().ended,
     ]).then(() => false as const);
     try {
       if (await Promise.race([ended, timedOut])) {
         console.error(
-          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
+          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
         );
       }
     } finally {
@@ -387,6 +416,7 @@ export async function startServer(
     images?.quiesce();
     copyPass?.quiesce();
     iconBackfill?.quiesce();
+    summaryPass?.quiesce();
     checks?.quiesce();
     await drain();
     await settle();

@@ -39,7 +39,7 @@
     "hono": "4.13.13",
     "ipaddr.js": "2.5.0",
     "linkedom": "0.18.13",
-    "markdown-it": "15.0.2",
+    "markdown-it": "15.0.3",
     "sqlite-vec": "0.1.9",
     "turndown": "7.2.4",
     "undici": "8.11.2",

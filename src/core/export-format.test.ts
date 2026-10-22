@@ -34,6 +34,7 @@ const link = (n: number, over: Partial<Link> = {}): Link => ({
   urlKey: `ex.com/${n}`,
   title: `Title ${n}`,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: T(n),

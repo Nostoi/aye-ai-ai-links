@@ -1,6 +1,13 @@
 import type { StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { SNAPSHOT_STATUSES, SOURCES, STATES, TAG_KINDS, TOOL_STATUSES } from "../core/types.js";
+import {
+  SNAPSHOT_STATUSES,
+  SOURCES,
+  STATES,
+  SUMMARY_SOURCES,
+  TAG_KINDS,
+  TOOL_STATUSES,
+} from "../core/types.js";
 
 // The JSON form of core's results: `ok()` in server.ts turns each Date into a string.
 // Timestamps are plain strings because `Date#toJSON` is not always a four-digit ISO year.
@@ -77,6 +84,7 @@ export const linkOutput = z.strictObject({
   urlKey: z.string(),
   title: z.string().nullable(),
   summary: z.string().nullable(),
+  summarySource: z.enum(SUMMARY_SOURCES).nullable(),
   why: labelledOutput.nullable(),
   tags: z.array(linkTagOutput),
   savedAt: timestamp,

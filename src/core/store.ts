@@ -6,6 +6,7 @@ import type {
   NewLink,
   OwnerId,
   Source,
+  SummarySource,
   Tag,
   TagKind,
   TagPatch,
@@ -196,14 +197,17 @@ export interface LinkRemover {
 }
 
 /**
- * What a conditional write expects of a link. `snoozedUntil` and `putAwayAt` match to the millisecond, and
- * `whySource` lists the accepted sources of its why, with null for no why.
+ * What a conditional write expects of a link. `snoozedUntil` and `putAwayAt` match to the millisecond,
+ * `whySource` lists the accepted sources of its why, with null for no why, and `summary` matches the
+ * summary text while `summarySource` lists the accepted sources of its label, with null for none.
  */
 export type LinkExpectation = {
   state?: LinkState;
   snoozedUntil?: Date | null;
   putAwayAt?: Date | null;
   whySource?: (Source | null)[];
+  summary?: string | null;
+  summarySource?: (SummarySource | null)[];
 };
 
 export type SurfacedClaim = { link: Link; previousSurfacedAt: Date | null };

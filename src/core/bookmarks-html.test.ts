@@ -20,6 +20,7 @@ const L = (n: number, over: Partial<Link> = {}): Link => ({
   urlKey: `ex.com/${n}`,
   title: `Title ${n}`,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: new Date(Date.UTC(2026, 9, 1) + n * 1000),

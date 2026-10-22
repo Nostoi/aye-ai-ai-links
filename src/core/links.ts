@@ -155,6 +155,7 @@ export async function saveLink(
     urlKey: key,
     title,
     summary: input.summary ?? null,
+    summarySource: null,
     why,
     tags,
     savedAt: now(),

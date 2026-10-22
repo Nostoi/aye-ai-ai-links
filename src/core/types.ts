@@ -4,6 +4,9 @@ export const TAG_KINDS = ["topic", "project"] as const;
 export type TagKind = (typeof TAG_KINDS)[number];
 export const STATES = ["active", "archived"] as const;
 export type LinkState = (typeof STATES)[number];
+/** Who wrote a summary: the owner (stated, asked), an AI on its own (inferred), or the server. */
+export const SUMMARY_SOURCES = [...SOURCES, "server"] as const;
+export type SummarySource = (typeof SUMMARY_SOURCES)[number];
 export type Labelled = { text: string; source: Source };
 export type OwnerId = string;
 export const SNAPSHOT_STATUSES = [
@@ -50,6 +53,8 @@ export type Link = {
   urlKey: string;
   title: string | null;
   summary: string | null;
+  /** Null for no summary, and for one written before sources were recorded; set only with a summary. */
+  summarySource: SummarySource | null;
   why: Labelled | null;
   tags: LinkTag[];
   savedAt: Date;
@@ -83,12 +88,18 @@ export type TagPatch = Partial<Pick<Tag, "kind" | "kindSource" | "projectStatus"
 
 export type NewLink = Omit<Link, "id" | "snapshot">;
 
-/** Fields a patch may set; an absent (undefined) field is left untouched. */
+/**
+ * Fields a patch may set; an absent (undefined) field is left untouched. A `summary` written
+ * without a `summarySource` is unlabelled. With `summaryOver`, the summary and its source are
+ * written only while the row's summary source is one of those listed (null for none), decided in
+ * the same write; the rest of the patch is written either way.
+ */
 export type LinkPatch = Partial<
   Pick<
     Link,
     | "title"
     | "summary"
+    | "summarySource"
     | "why"
     | "tags"
     | "state"
@@ -97,7 +108,7 @@ export type LinkPatch = Partial<
     | "putAwayAt"
     | "tidyKeptAt"
   >
->;
+> & { summaryOver?: (SummarySource | null)[] };
 
 /** A note about the owner. `source` says how the writer learned it. */
 export type ProfileNote = {

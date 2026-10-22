@@ -326,6 +326,15 @@ export const MIGRATIONS: Migration[] = [
   ALTER TABLE links ADD COLUMN put_away_at INTEGER;
   ALTER TABLE links ADD COLUMN tidy_kept_at INTEGER;
   `,
+  // Who wrote each summary (#160). An existing summary stays unlabelled (NULL). link_edits gets the
+  // same pair, so Undo puts the label back with the text.
+  `
+  ALTER TABLE links ADD COLUMN summary_source TEXT
+    CHECK (summary_source IS NULL
+      OR (summary IS NOT NULL AND summary_source IN ('stated', 'asked', 'inferred', 'server')));
+  ALTER TABLE link_edits ADD COLUMN prior_summary_source TEXT;
+  ALTER TABLE link_edits ADD COLUMN written_summary_source TEXT;
+  `,
 ];
 
 /**

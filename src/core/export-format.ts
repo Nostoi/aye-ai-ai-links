@@ -316,6 +316,7 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
     urlKey: urlKey(entry.url),
     title: entry.title,
     summary: entry.summary,
+    summarySource: null,
     why: entry.why && { text: entry.why.text, source: entry.why.source },
     tags: entry.tags.map((t) => ({
       key: t.key,

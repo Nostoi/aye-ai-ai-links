@@ -23,6 +23,7 @@ export const newLink = (n: number, savedAt: Date): NewLink => ({
   urlKey: `ex.com/${n}`,
   title: null,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt,

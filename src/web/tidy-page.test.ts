@@ -18,6 +18,7 @@ const link = (over: Partial<Link> = {}): Link => {
     urlKey: `example.com/${n}`,
     title: `Title ${n}`,
     summary: null,
+    summarySource: null,
     why: { text: "to compare", source: "stated" },
     tags: [],
     savedAt: new Date("2026-03-12T10:00:00Z"),

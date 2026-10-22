@@ -692,6 +692,7 @@ describe("Edit under a change line (#183)", () => {
         urlKey: `x.example/${id}`,
         title,
         summary: null,
+        summarySource: null,
         why: null,
         tags: [],
         savedAt: new Date("2026-10-20T00:00:00Z"),

@@ -421,7 +421,13 @@ export class FakeStore
   async update(owner: OwnerId, id: string, patch: LinkPatch) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    const fields = structuredClone(patch);
+    const { summaryOver, ...fields } = structuredClone(patch);
+    if (summaryOver && !summaryOver.includes(found.summarySource)) {
+      delete fields.summary;
+      delete fields.summarySource;
+    } else if (fields.summary !== undefined && fields.summarySource === undefined) {
+      fields.summarySource = null;
+    }
     for (const [k, v] of Object.entries(fields)) {
       if (v !== undefined) (found as Record<string, unknown>)[k] = v;
     }
@@ -517,7 +523,11 @@ export class FakeStore
         (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
       (expected.putAwayAt === undefined ||
         (found.putAwayAt?.getTime() ?? null) === (expected.putAwayAt?.getTime() ?? null)) &&
-      (expected.whySource === undefined || expected.whySource.includes(found.why?.source ?? null));
+      (expected.whySource === undefined ||
+        expected.whySource.includes(found.why?.source ?? null)) &&
+      (expected.summary === undefined || found.summary === expected.summary) &&
+      (expected.summarySource === undefined ||
+        expected.summarySource.includes(found.summarySource));
     if (!matches) return { link: this.view(owner, found), applied: false };
     return { link: (await this.update(owner, id, patch)) as Link, applied: true };
   }

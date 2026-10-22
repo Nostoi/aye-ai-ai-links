@@ -1273,6 +1273,7 @@ export function describeStoreContract(
             urlKey: `https://ex.com/${n}`,
             title: null,
             summary: null,
+            summarySource: null,
             why: null,
             tags: [],
             savedAt: new Date("2026-01-01T00:00:00Z"),
@@ -1447,6 +1448,7 @@ export function describeStoreContract(
             urlKey: `https://ex.com/${n}`,
             title: null,
             summary: null,
+            summarySource: null,
             why: null,
             tags: [],
             savedAt: new Date("2026-01-01T00:00:00Z"),
@@ -1493,6 +1495,109 @@ export function describeStoreContract(
       });
     });
 
+    describe("summary source", () => {
+      const seed = async (n: number, over: Partial<Link> = {}) =>
+        (
+          await h.store.insertIfAbsent(A, {
+            url: `https://ex.com/s${n}`,
+            urlKey: `https://ex.com/s${n}`,
+            title: "t",
+            summary: null,
+            summarySource: null,
+            why: null,
+            tags: [],
+            savedAt: new Date("2026-01-01T00:00:00Z"),
+            savedBy: "t",
+            lastOpenedAt: null,
+            lastSurfacedAt: null,
+            snoozedUntil: null,
+            putAwayAt: null,
+            tidyKeptAt: null,
+            state: "active",
+            ...over,
+          })
+        ).link;
+      const pair = async (id: string) => {
+        const l = await h.store.get(A, id);
+        return [l?.summary, l?.summarySource];
+      };
+
+      it("keeps a summary's source through insert, get and update", async () => {
+        const link = await seed(1, { summary: "S", summarySource: "inferred" });
+        expect(await pair(link.id)).toEqual(["S", "inferred"]);
+        const set = await h.store.update(A, link.id, { summary: "T", summarySource: "stated" });
+        expect([set?.summary, set?.summarySource]).toEqual(["T", "stated"]);
+        const cleared = await h.store.update(A, link.id, { summary: null, summarySource: null });
+        expect([cleared?.summary, cleared?.summarySource]).toEqual([null, null]);
+      });
+
+      it("summaryOver skips the summary but writes the rest", async () => {
+        const patch = {
+          title: "T",
+          summary: "AI",
+          summarySource: "inferred" as const,
+          summaryOver: [null, "inferred" as const],
+        };
+        const writes = [
+          (id: string) => h.store.update(A, id, patch),
+          (id: string) => h.store.updateWithReceipt(A, id, patch, clock),
+          (id: string) => h.store.updateIf(A, id, {}, patch),
+        ];
+        for (const [i, write] of writes.entries()) {
+          const link = await seed(10 + i, { summary: "Mine", summarySource: "stated" });
+          await write(link.id);
+          expect((await h.store.get(A, link.id))?.title, `write ${i}`).toBe("T");
+          expect(await pair(link.id), `write ${i}`).toEqual(["Mine", "stated"]);
+        }
+        const wrote = await seed(20, { summary: "Mine", summarySource: "stated" });
+        expect((await h.store.updateWithReceipt(A, wrote.id, patch, clock))?.editId).not.toBeNull();
+        const nothing = await seed(21, { title: "T", summary: "Mine", summarySource: "server" });
+        expect((await h.store.updateWithReceipt(A, nothing.id, patch, clock))?.editId).toBeNull();
+      });
+
+      it("summaryOver applies over no label and over no summary", async () => {
+        const unlabelled = await seed(30, { summary: "Old", summarySource: null });
+        const empty = await seed(31);
+        for (const link of [unlabelled, empty]) {
+          await h.store.update(A, link.id, {
+            summary: "AI",
+            summarySource: "inferred",
+            summaryOver: [null, "inferred"],
+          });
+          expect(await pair(link.id)).toEqual(["AI", "inferred"]);
+        }
+      });
+
+      it("updateIf matches an unlabelled summary", async () => {
+        const link = await seed(40, { summary: "Old", summarySource: null });
+        const result = await h.store.updateIf(
+          A,
+          link.id,
+          { summary: "Old", summarySource: [null] },
+          { summary: "New", summarySource: "server" },
+        );
+        expect(result?.applied).toBe(true);
+        expect(await pair(link.id)).toEqual(["New", "server"]);
+      });
+
+      it("updateIf refuses when the summary or its source changed", async () => {
+        const expected = { summary: "S", summarySource: ["inferred" as const] };
+        const held = [
+          ["S", "stated"],
+          ["S2", "inferred"],
+        ] as const;
+        for (const [i, [summary, summarySource]] of held.entries()) {
+          const link = await seed(50 + i, { summary, summarySource });
+          const result = await h.store.updateIf(A, link.id, expected, {
+            summary: "New",
+            summarySource: "server",
+          });
+          expect(result?.applied, summary).toBe(false);
+          expect(await pair(link.id)).toEqual([summary, summarySource]);
+        }
+      });
+    });
+
     describe("updateIf", () => {
       const snoozed = new Date("2026-04-01T10:20:30.456Z");
       const seed = async (owner: string, n: number, over: Partial<Link> = {}) =>
@@ -1502,6 +1607,7 @@ export function describeStoreContract(
             urlKey: `https://ex.com/${n}`,
             title: "t",
             summary: null,
+            summarySource: null,
             why: null,
             tags: [],
             savedAt: new Date("2026-01-01T00:00:00Z"),

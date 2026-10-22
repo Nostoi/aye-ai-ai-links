@@ -21,6 +21,7 @@ const link: Link = {
   urlKey: "ex.com/7",
   title: "Link 7",
   summary: null,
+  summarySource: null,
   why: { text: "because 7", source: "stated" },
   tags: [
     { key: "kitchen", name: "Kitchen", source: "stated", kind: "topic", kindSource: "stated" },

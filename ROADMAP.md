@@ -16,11 +16,13 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), stats and what they say about you (#161), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), a link's tags in Edit link (#239), renaming, merging and deleting tags (#240), stats and what they say about you (#161), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-22:** Tags get edited on the web (owner, in session; #239 comment 6347498875). #239 (add and remove a link's tags in Edit link) and #240 (rename, merge and delete a tag) go after saved summaries (#160) and before stats (#161). Putting #239 before #240 is the controller's call: it is smaller, and #240 waits on owner rulings. #160 and #239 are worked in parallel sessions (owner).
 
 - **2026-10-22:** markdown-it is 15.0.3 (#234), an exception to the two-week dependency rule (owner, in session). It went in at 6 days old because it fixes GHSA-gfr2-rv44-r23c and GHSA-vfgh-jcmw-g37q. This replaces the 2026-10-18 saved-copies entry's "pinned at 15.0.2 until 15.0.3 is two weeks old" and closes #164. The `argparse` 3.0.2 override stays.
 

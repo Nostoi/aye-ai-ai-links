@@ -586,4 +586,9 @@ describe("copyHtml reading look (#223)", () => {
     copyHtml(md, refs());
     expect(performance.now() - start).toBeLessThan(10_000);
   }, 30_000);
+
+  it("renders one paragraph of 100,000 pictures", () => {
+    const html = copyHtml(`${LOST}\n`.repeat(100_000), refs());
+    expect(html.split('class="copy-pic-note"').length - 1).toBe(100_000);
+  }, 30_000);
 });

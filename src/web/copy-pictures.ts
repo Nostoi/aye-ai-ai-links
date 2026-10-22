@@ -115,7 +115,7 @@ export function bandPictures(state: StateCore): void {
     if (open.type === "paragraph_open" && inline?.type === "inline" && inline.children) {
       const units = pictureUnits(inline.children);
       if (units) {
-        out.push(...pictureBlocks(state, units));
+        for (const block of pictureBlocks(state, units)) out.push(block);
         i += 2;
         continue;
       }

@@ -6,8 +6,8 @@
 <title>Sign in · Aye-AI-AI Links</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2036%22%3E%3Crect%20x%3D%223.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Crect%20x%3D%2227.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3C%2Fsvg%3E">
 <style>
-:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;}
-@media (prefers-color-scheme: dark){:root{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--line:#3A3A40;--field:#77736D;--amber:#E8A33D;--amber-bg:#3A2E17;--amber-ink:#F2C374;--teal:#4FB3A5;--clay:#E08A63;--violet:#A08BE3;--blue:#7099EA;--green:#6DBB6D;--rose:#DE7E9F;--plate:#E9E6E0;--pic:#323236;}}
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;--fill:#EDEAE3;}
+@media (prefers-color-scheme: dark){:root{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--line:#3A3A40;--field:#77736D;--amber:#E8A33D;--amber-bg:#3A2E17;--amber-ink:#F2C374;--teal:#4FB3A5;--clay:#E08A63;--violet:#A08BE3;--blue:#7099EA;--green:#6DBB6D;--rose:#DE7E9F;--plate:#E9E6E0;--pic:#323236;--fill:#34343A;}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
@@ -426,6 +426,13 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 @media (max-width:600px){.menu-page{display:none}.account-list .menu-phone-only{display:flex}.label-wide,.icon-wide{display:none}.label-phone{display:inline}.icon-phone{display:inline-flex}}
 @media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}.tidy-choices .key{display:none}.tidy-choices button{padding-right:20px}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.copy-end{margin-top:28px}
+.copy-end-acts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.copy-end-label{font-size:15px;color:var(--soft);margin-right:6px}
+.copy-end-acts button{min-height:44px;padding:0 18px;border:0;border-radius:999px;background:var(--fill);color:var(--ink);font-size:15px}
+.copy-end [data-handy],.copy-end .handy-on{display:contents}
+.copy-end-line{min-height:44px;margin:0}
+.copy-end .back-link{margin-top:16px}
 </style>
 </head>
 <body>

@@ -55,6 +55,7 @@ import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue, tidyReady } from "..
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
+  handyOf,
   keepHandy,
   linkViews,
   listShelf,
@@ -898,7 +899,8 @@ export function webApp({
     if (view === null) return c.html(copyNotFoundPage(), 404, COPY_HEADERS);
     const from = c.req.query("from");
     const back = backTarget(from, from === undefined ? [] : await deps.store.listTags(owner));
-    const html = copyPage(view, (deps.now ?? (() => new Date()))(), back);
+    const handy = await handyOf(deps, owner, view.link);
+    const html = copyPage(view, (deps.now ?? (() => new Date()))(), back, handy);
     return c.html(html, view.copy === "unreadable" ? 503 : 200, COPY_HEADERS);
   });
   app.get(COPY_IMAGE_ROUTE, session, async (c) => {

@@ -20,6 +20,7 @@ export const tokens = {
     rose: "#C2557A",
     plate: "#FFFFFF",
     pic: "#F2F2F2",
+    fill: "#EDEAE3",
   },
   dark: {
     bg: "#1C1C20",
@@ -39,6 +40,7 @@ export const tokens = {
     rose: "#DE7E9F",
     plate: "#E9E6E0",
     pic: "#323236",
+    fill: "#34343A",
   },
 };
 
@@ -481,7 +483,15 @@ ${spaceClasses}
 @media (max-width:600px){.menu-page{display:none}.account-list .menu-phone-only{display:flex}.label-wide,.icon-wide{display:none}.label-phone{display:inline}.icon-phone{display:inline-flex}}
 @media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}.tidy-choices .key{display:none}.tidy-choices button{padding-right:20px}}
 @media (max-width:600px){.copy-article{padding:24px 20px;font-size:17.5px;line-height:1.65}.copy-article h2{font-size:22px}.copy-article>.copy-band{margin-left:-20px;margin-right:-20px}.copy-band-note{padding:18px 20px}}
-@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}`;
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.copy-end{margin-top:28px}
+.copy-end-acts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.copy-end-label{font-size:15px;color:var(--soft);margin-right:6px}
+.copy-end-acts button{min-height:44px;padding:0 18px;border:0;border-radius:999px;background:var(--fill);color:var(--ink);font-size:15px}
+.copy-end [data-handy],.copy-end .handy-on{display:contents}
+.copy-end-line{min-height:44px;margin:0}
+.copy-nav .back-link,.copy-end .back-link{gap:8px;font-size:15px;color:var(--soft);text-decoration:none}
+.copy-end .back-link{margin-top:16px}`;
 
 /**
  * The Ask AI panel's styles (#159), in a second `<style>` that `page()` adds only when the AI is

@@ -25,6 +25,7 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
     ["ink", "surface"],
     ["soft", "bg"],
     ["soft", "surface"],
+    ["ink", "fill"],
     ["amber-ink", "amber-bg"],
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
@@ -939,5 +940,39 @@ describe("the saved copy's reading look", () => {
     expect(themeCss.indexOf(phone)).toBeGreaterThan(
       themeCss.indexOf(".tidy-title{font-size:20px}"),
     );
+  });
+});
+
+describe("the end of the saved copy", () => {
+  const block = themeCss.slice(themeCss.indexOf(".copy-end{"));
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\n)${selector.replace(/[.[\]*>]/g, "\\$&")}\\{([^}]*)\\}`).exec(block)?.[1] ??
+    "";
+
+  it("closes the stylesheet, as one block", () => {
+    expect(themeCss.indexOf(".copy-end{")).toBeGreaterThan(
+      themeCss.indexOf("prefers-reduced-motion"),
+    );
+    expect(block).toMatch(/\.copy-end \.back-link\{[^}]*\}$/);
+  });
+
+  it("makes each button a soft, filled pill at least 44px tall, with theme tokens only", () => {
+    const buttons = rule(".copy-end-acts button");
+    expect(buttons).toContain("min-height:44px");
+    expect(buttons).toContain("background:var(--fill)");
+    expect(buttons).toContain("border-radius:999px");
+    expect(block).not.toMatch(/#[0-9a-f]{3,6}\b|amber/i);
+    expect(rule(".copy-end-line")).toContain("min-height:44px");
+  });
+
+  it("lets the row wrap and flattens the Keep handy wrappers into it", () => {
+    expect(rule(".copy-end-acts")).toContain("flex-wrap:wrap");
+    expect(rule(".copy-end [data-handy],.copy-end .handy-on")).toBe("display:contents");
+  });
+
+  it("spaces both Back links' arrow from their words, in the soft colour (#228)", () => {
+    const back = rule(".copy-nav .back-link,.copy-end .back-link");
+    expect(back).toContain("gap:8px");
+    expect(back).toContain("color:var(--soft)");
   });
 });

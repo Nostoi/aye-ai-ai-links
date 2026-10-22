@@ -31,8 +31,10 @@ export function handyControl(link: Link, view: HandyView | null | undefined): st
  * those Show older links appends. Keep handy posts `/tools/keep` and Not handy anymore
  * `/tools/not-handy`; every row and control on the card then shows the new state, so the two agree,
  * and focus moves to the control's visible button, or to the ⋯ when the menu was used. Each offers
- * Undo, which sends back the rows the action answered to `/tools/undo`. A refusal is shown in
- * `#error`. A card takes no other action while one is out (`whileBusy`). A block; needs
+ * Undo, which sends back the rows the action answered to `/tools/undo`, then shows the state those
+ * rows had (`previous`): an action that changed nothing leaves it as it was. A refusal is shown in
+ * `#error`. A card takes no other action while one, or its Undo, is out (`whileBusy`); an Undo clicked
+ * meanwhile waits for it (`whenFree`). A block; needs
  * `CARD_FETCH` and `showUndo`.
  */
 export const keepHandyScript = (root: string, error: string) => `{
@@ -68,11 +70,13 @@ if (keepRoot) {
         return;
       }
       showKept(card, keep, menu);
-      showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", async () => {
-        const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-        if (back && back.status === 204) showKept(card, !keep, menu);
-        else keepError.textContent = await failure(back);
-      });
+      showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
+        whenFree(card, async () => {
+          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
+          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
+          else keepError.textContent = await failure(back);
+        }),
+      );
     });
   });
 }

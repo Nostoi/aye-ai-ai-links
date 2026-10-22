@@ -6,8 +6,8 @@
 <title>Title 3</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2036%22%3E%3Crect%20x%3D%223.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Crect%20x%3D%2227.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3C%2Fsvg%3E">
 <style>
-:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;}
-@media (prefers-color-scheme: dark){:root{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--line:#3A3A40;--field:#77736D;--amber:#E8A33D;--amber-bg:#3A2E17;--amber-ink:#F2C374;--teal:#4FB3A5;--clay:#E08A63;--violet:#A08BE3;--blue:#7099EA;--green:#6DBB6D;--rose:#DE7E9F;--plate:#E9E6E0;--pic:#323236;}}
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;--fill:#EDEAE3;}
+@media (prefers-color-scheme: dark){:root{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--line:#3A3A40;--field:#77736D;--amber:#E8A33D;--amber-bg:#3A2E17;--amber-ink:#F2C374;--teal:#4FB3A5;--clay:#E08A63;--violet:#A08BE3;--blue:#7099EA;--green:#6DBB6D;--rose:#DE7E9F;--plate:#E9E6E0;--pic:#323236;--fill:#34343A;}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
@@ -441,6 +441,14 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 @media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}.tidy-choices .key{display:none}.tidy-choices button{padding-right:20px}}
 @media (max-width:600px){.copy-article{padding:24px 20px;font-size:17.5px;line-height:1.65}.copy-article h2{font-size:22px}.copy-article>.copy-band{margin-left:-20px;margin-right:-20px}.copy-band-note{padding:18px 20px}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.copy-end{margin-top:28px}
+.copy-end-acts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.copy-end-label{font-size:15px;color:var(--soft);margin-right:6px}
+.copy-end-acts button{min-height:44px;padding:0 18px;border:0;border-radius:999px;background:var(--fill);color:var(--ink);font-size:15px}
+.copy-end [data-handy],.copy-end .handy-on{display:contents}
+.copy-end-line{min-height:44px;margin:0}
+.copy-nav .back-link,.copy-end .back-link{gap:8px;font-size:15px;color:var(--soft);text-decoration:none}
+.copy-end .back-link{margin-top:16px}
 </style>
 </head>
 <body>
@@ -454,6 +462,20 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <article class="copy-article"><h2>Hello</h2>
 <p>A paragraph.</p>
 </article>
+<section class="copy-end" id="copy-end" aria-label="Finished with this link?">
+<div class="copy-end-acts" id="copy-end-active">
+<span class="copy-end-label" tabindex="-1">Finished with this link?</span>
+<button type="button" data-act="archive">It&#39;s stale</button>
+<button type="button" data-act="put-away">Put it away</button>
+<span data-handy><button type="button" data-act="keep">Keep handy</button><span class="handy-on" hidden><button type="button" data-act="not-handy">Not handy anymore</button></span></span>
+</div>
+<div class="copy-end-acts" id="copy-end-out" hidden>
+<p class="card-line copy-end-line" tabindex="-1"><span>Out of your lists</span><span>Put away</span></p>
+<button type="button" data-act="bring-back">Bring it back</button>
+</div>
+<p class="error" id="copy-end-error" role="alert"></p>
+<a class="back-link" href="/all"><span aria-hidden="true">←</span> Back to All links</a>
+</section>
 </main>
 <script>
 {
@@ -468,6 +490,9 @@ const recordOpen = (event) => {
     body: JSON.stringify({ id: card.dataset.id }),
     redirect: "manual",
     keepalive: true,
+  }).then((answer) => {
+    const last = card.querySelector(".card-line > :last-child");
+    if (answer.ok && last && last.textContent === "Put away") takeOut(openRoot, card, false);
   }).catch(() => {});
 };
 if (openRoot) {
@@ -476,7 +501,234 @@ if (openRoot) {
 }
 }
 </script>
+<script>const post = (url, body, extra) =>
+  fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    redirect: "manual",
+    ...extra,
+  }).catch(() => null);
+const failure = async (res) => {
+  const data = res && [400, 404, 409].includes(res.status) ? await res.json().catch(() => null) : null;
+  return data && typeof data.message === "string"
+    ? data.message
+    : "That did not work. Reload the page and try again.";
+};
+const cardBusy = new WeakSet();
+const cardWaiting = new WeakMap();
+const whileBusy = async (card, run) => {
+  if (cardBusy.has(card)) return;
+  cardBusy.add(card);
+  try {
+    return await run();
+  } finally {
+    cardBusy.delete(card);
+    for (const wake of cardWaiting.get(card) || []) wake();
+    cardWaiting.delete(card);
+  }
+};
+const whenFree = async (card, run) => {
+  while (cardBusy.has(card))
+    await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
+  return whileBusy(card, run);
+};
+const takeOut = (listRoot, card, remove, change) => {
+  const active = card.querySelector("#copy-end-active");
+  const out = card.querySelector("#copy-end-out");
+  const marker = out.querySelector(".card-line > :last-child");
+  const show = (state) => {
+    const isOut = !!state && state.state !== "active";
+    active.hidden = isOut;
+    out.hidden = !isOut;
+    if (isOut) marker.textContent = state.putAwayAt ? "Put away" : "Stale";
+    return isOut ? out.querySelector(".copy-end-line") : active.querySelector(".copy-end-label");
+  };
+  if (change) show(change.after).focus();
+  else show(null);
+  return () => {
+    if (change) show(change.before).focus();
+  };
+};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Let go.","text":"You won't see it again unless you search for it."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
+const stateCard = (card, act) =>
+  whileBusy(card, async () => {
+    const listRoot = document.getElementById("copy-frame");
+    const doneAlert = document.getElementById("copy-end-error");
+    const id = card.dataset.id;
+    const { route, undo } = STATE_ACTS[act];
+    doneAlert.textContent = "";
+    const res = await post(route, { id });
+    const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (!change || !change.before || !change.after) {
+      doneAlert.textContent = await failure(res);
+      return;
+    }
+    const putBack = takeOut(listRoot, card, false, change);
+    showUndo(undo.text, () => whenFree(card, async () => {
+      const back = await post("/home/undo-state", { id, change });
+      if (back && back.status === 204) putBack();
+      else doneAlert.textContent = await failure(back);
+    }), undo.title);
+  });
+const doneCard = (card) => stateCard(card, "archive");
+{
+const doneRoot = document.getElementById("copy-frame");
+if (doneRoot) {
+  doneRoot.addEventListener("click", (event) => {
+    const button = event.target.closest(".card-menu button");
+    if (!button || !(button.dataset.act in STATE_ACTS)) return;
+    button.closest("details").open = false;
+    stateCard(button.closest("[data-id]"), button.dataset.act);
+  });
+}
+}
+{
+const keepRoot = document.getElementById("copy-frame");
+const keepError = document.getElementById("copy-end-error");
+const showKept = (card, kept, menu) => {
+  for (const b of card.querySelectorAll("button[data-act=keep]")) b.hidden = kept;
+  for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
+  const control = card.querySelector("[data-handy]");
+  const on = control && control.querySelector(".handy-on");
+  if (on) on.hidden = !kept;
+  if (menu || !control) card.querySelector(".card-menu summary").focus();
+  else (kept ? on.querySelector("button") : control.querySelector("button[data-act=keep]")).focus();
+};
+if (keepRoot) {
+  keepRoot.addEventListener("click", async (event) => {
+    const button = event.target.closest(
+      "[data-handy] button[data-act], .card-menu button[data-act=keep], .card-menu button[data-act=not-handy]",
+    );
+    if (!button) return;
+    const card = button.closest("[data-id]");
+    const menu = button.closest("details");
+    if (menu) menu.open = false;
+    await whileBusy(card, async () => {
+      const id = card.dataset.id;
+      const keep = button.dataset.act === "keep";
+      keepError.textContent = "";
+      const res = await post(keep ? "/tools/keep" : "/tools/not-handy", { id });
+      const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (!moved || !moved.tool) {
+        (menu ? menu.querySelector("summary") : button).focus();
+        keepError.textContent = await failure(res);
+        return;
+      }
+      showKept(card, keep, menu);
+      showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
+        whenFree(card, async () => {
+          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
+          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
+          else keepError.textContent = await failure(back);
+        }),
+      );
+    });
+  });
+}
+}
+{
+const endRoot = document.getElementById("copy-end");
+endRoot.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-act]");
+  if (button && button.dataset.act in STATE_ACTS) stateCard(button.closest("[data-id]"), button.dataset.act);
+});
+}</script>
 </div>
+<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>
+<script>
+const showUndo = (() => {
+  const bar = document.getElementById("undo-bar");
+  const text = bar.querySelector("span");
+  const button = bar.querySelector("button");
+  let current = null;
+  let focused = false;
+  let hovered = false;
+  let returnTo = null;
+  const arm = (action) => {
+    clearTimeout(action.timer);
+    if (!focused && !hovered) action.timer = setTimeout(() => close(action), 10000);
+  };
+  const pause = () => {
+    if (current) clearTimeout(current.timer);
+  };
+  const resume = () => {
+    if (current && !current.running) arm(current);
+  };
+  // `held`: the bar had focus when Undo was clicked; disabling the button may have dropped it
+  // to the body since.
+  const close = (action, held = false) => {
+    if (current !== action) return;
+    clearTimeout(action.timer);
+    clearTimeout(action.ceiling);
+    current = null;
+    const now = document.activeElement;
+    const hadFocus = bar.contains(now) || (held && (!now || now === document.body));
+    bar.hidden = true;
+    focused = false;
+    hovered = false;
+    if (hadFocus && returnTo && returnTo.isConnected) returnTo.focus();
+    returnTo = null;
+  };
+  bar.addEventListener("focusin", () => {
+    focused = true;
+    pause();
+  });
+  bar.addEventListener("focusout", (event) => {
+    if (bar.contains(event.relatedTarget)) return;
+    focused = false;
+    resume();
+  });
+  bar.addEventListener("mouseenter", () => {
+    hovered = true;
+    pause();
+  });
+  bar.addEventListener("mouseleave", () => {
+    hovered = false;
+    resume();
+  });
+  button.addEventListener("click", async () => {
+    const action = current;
+    if (!action || action.running) return;
+    action.running = true;
+    clearTimeout(action.timer);
+    clearTimeout(action.ceiling);
+    const held = bar.contains(document.activeElement);
+    button.disabled = true;
+    try {
+      await action.undo();
+    } finally {
+      if (current === action) button.disabled = false;
+      close(action, held);
+    }
+  });
+  let offers = 0;
+  const show = (message, undo, title) => {
+    offers++;
+    if (current) {
+      clearTimeout(current.timer);
+      clearTimeout(current.ceiling);
+    }
+    if (!current || !bar.contains(document.activeElement)) returnTo = document.activeElement;
+    const action = { undo, running: false };
+    action.ceiling = setTimeout(() => close(action), 45000);
+    current = action;
+    text.replaceChildren();
+    if (title) {
+      const lead = document.createElement("strong");
+      lead.textContent = title;
+      text.append(lead, " ");
+    }
+    text.append(message);
+    button.disabled = false;
+    bar.hidden = false;
+    arm(action);
+    button.focus();
+  };
+  show.offers = () => offers;
+  return show;
+})();
+</script>
 <script>
 document.getElementById("sign-out").addEventListener("click", async () => {
   await fetch("/api/auth/sign-out", { method: "POST" });

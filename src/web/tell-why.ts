@@ -25,7 +25,8 @@ export const whyAnswer = (tag: "p" | "span", prefix: string, className?: string)
  * `whileBusy(card, run)` runs `run` and answers what it answers, unless the card is busy, when it
  * runs nothing and answers nothing. The mark is held until `run` has finished, including its
  * page update and Undo, and released whether it returns or throws. Every action on a card that
- * posts goes through it, so a card takes one action at a time.
+ * posts goes through it, so a card takes one action at a time. An Undo goes through
+ * `whenFree(card, run)` instead: it waits for the action in flight, then runs under the mark.
  */
 export const CARD_FETCH = `const post = (url, body, extra) =>
   fetch(url, {
@@ -42,6 +43,7 @@ const failure = async (res) => {
     : "That did not work. Reload the page and try again.";
 };
 const cardBusy = new WeakSet();
+const cardWaiting = new WeakMap();
 const whileBusy = async (card, run) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
@@ -49,7 +51,14 @@ const whileBusy = async (card, run) => {
     return await run();
   } finally {
     cardBusy.delete(card);
+    for (const wake of cardWaiting.get(card) || []) wake();
+    cardWaiting.delete(card);
   }
+};
+const whenFree = async (card, run) => {
+  while (cardBusy.has(card))
+    await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
+  return whileBusy(card, run);
 };`;
 
 /**

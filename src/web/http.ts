@@ -101,7 +101,7 @@ import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { backTarget } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
-import { EDIT_MAX_TAG_TEXT, EDIT_MAX_TAGS, shownTags } from "./edit-link.js";
+import { shownTags } from "./edit-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -256,14 +256,12 @@ type EditForm = View & {
   tags?: { names: string[]; seen: { key: string; source: string }[] };
 };
 
-const fitsTagText = (value: unknown): value is string =>
-  typeof value === "string" && value.length <= EDIT_MAX_TAG_TEXT;
+const isText = (value: unknown): value is string => typeof value === "string";
 
 /**
  * The `tags` and `seen` form fields, JSON, which are sent together or not at all: `undefined` when
- * neither was sent, `null` when they are not that shape (an array of at most 50 texts, and an
- * array of at most 50 `{ key, source }` texts, each at most 200 characters). Shapes only: that a
- * source is one is core's rule.
+ * neither was sent, `null` when they are not that shape (an array of texts, and an array of
+ * `{ key, source }` texts).
  */
 function takeTags(tags: unknown, seen: unknown): EditForm["tags"] | null | undefined {
   if (tags === null && seen === null) return undefined;
@@ -276,15 +274,13 @@ function takeTags(tags: unknown, seen: unknown): EditForm["tags"] | null | undef
   } catch {
     return null;
   }
-  if (!Array.isArray(names) || names.length > EDIT_MAX_TAGS || !names.every(fitsTagText)) {
-    return null;
-  }
+  if (!Array.isArray(names) || !names.every(isText)) return null;
   const fits = (m: unknown): m is { key: string; source: string } =>
     typeof m === "object" &&
     m !== null &&
-    fitsTagText((m as { key?: unknown }).key) &&
-    fitsTagText((m as { source?: unknown }).source);
-  if (!Array.isArray(marks) || marks.length > EDIT_MAX_TAGS || !marks.every(fits)) return null;
+    isText((m as { key?: unknown }).key) &&
+    isText((m as { source?: unknown }).source);
+  if (!Array.isArray(marks) || !marks.every(fits)) return null;
   return { names, seen: marks.map(({ key, source }) => ({ key, source })) };
 }
 

@@ -148,19 +148,9 @@ describe("tags in POST /links/edit and its Undo", () => {
     ["tags that are not JSON", { tags: "{", seen: "[]" }],
     ["tags that are not an array", { tags: '"a"', seen: "[]" }],
     ["a tag that is not text", { tags: "[1]", seen: "[]" }],
-    ["a tag over 200 characters", { tags: JSON.stringify(["a".repeat(201)]), seen: "[]" }],
-    ["more than 50 tags", { tags: JSON.stringify(Array(51).fill("a")), seen: "[]" }],
     ["seen that is not an array", { tags: "[]", seen: "{}" }],
     ["a seen entry without a key", { tags: "[]", seen: '[{"source":"stated"}]' }],
     ["a seen entry without a source", { tags: "[]", seen: '[{"key":"a"}]' }],
-    [
-      "a seen key over 200 characters",
-      { tags: "[]", seen: JSON.stringify([{ key: "a".repeat(201), source: "stated" }]) },
-    ],
-    [
-      "more than 50 seen entries",
-      { tags: "[]", seen: JSON.stringify(Array(51).fill({ key: "a", source: "stated" })) },
-    ],
     ["own that is not 1", { own: "yes" }],
   ])("refuses %s with 400, and every row stays", async (_, fields) => {
     const { world, browser, id } = await tagged();
@@ -168,6 +158,23 @@ describe("tags in POST /links/edit and its Undo", () => {
     const res = await edit(browser, { id, ...fields });
     expect(res.status).toBe(400);
     expect(allRows(world)).toEqual(before);
+  });
+
+  it.each([
+    ["more than 50 tags", Array.from({ length: 60 }, (_, i) => `Tag ${i}`)],
+    ["a tag name over 200 characters", ["x".repeat(201), "Short"]],
+  ])("lets the owner remove a tag from a link with %s", async (_, names) => {
+    const { world, browser, id } = await tagged();
+    await updateLink(linkDeps(world), A, id, {
+      tags: names.map((name) => ({ name, source: "stated" as const })),
+    });
+    const seen = rowsOf(world, id) as { key: string; source: string }[];
+    const kept = names.slice(1);
+    const res = await edit(browser, { id, ...tagFields(kept, seen) });
+    expect(res.status).toBe(200);
+    expect(rowsOf(world, id).map((r) => (r as { key: string }).key)).toEqual(
+      kept.map((n) => n.toLowerCase()),
+    );
   });
 
   it("refuses a within sent as a file with 400, and every row stays", async () => {

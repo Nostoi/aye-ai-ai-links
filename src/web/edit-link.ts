@@ -94,8 +94,6 @@ export function editData(
 }
 
 export {
-  EDIT_MAX_TAG_TEXT,
-  EDIT_MAX_TAGS,
   editDialog,
   editLinkScript,
   SHRINK_SIDE,

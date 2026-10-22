@@ -27,10 +27,15 @@ What it enables, reachable today: on `/links/<id>/copy` there is no way to move 
 - **The new CSP:** today's directives, plus `script-src` with exactly those hashes and `connect-src 'self'` for the sign-out and opening posts. Everything else stays as it is, including `form-action 'none'`, `no-referrer` and `img-src 'self' data:`. The Markdown rendering is untouched.
 - **The top bar:** `page(…, { menu: true })` without `ask`, so All links, Spaces and tags, and the account menu (on a phone, the Menu button). The not-found page keeps `home: true`.
 - **The Back / Open line** sits above the title: **← Back to <place>** on the left, **Open on <site> ↗** on the right, each at least 44px tall. The Open link opens in a new tab, with hidden " (opens in a new tab)" text. It's an `openLink` (`data-open`) inside an element carrying the link's `data-id`, with `openedScript` for it posting to `/links/opened`. A non-web link has no Open link.
-- **Where you came from:** `copyHref(linkId, from?)` adds `?from=<the list page's path and query>`. `cardLine` and the gone row take a `from` from the page that renders them. The copy route accepts a `from` only when it parses as a same-site path whose path is one of `/`, `/all`, `/all/done`, `/spaces`, `/spaces/done` or `/search`. It rebuilds the address from the parsed path and query, never echoing the raw value. The label is fixed by the path: Home, All links, Out of your lists (`OUT_OF_LISTS`), the space's name (looked up in the owner's tags; a name the owner lacks falls back), or your search. Anything else, or none, is **Back to All links**. Tidy up passes no copy, so it needs no `from`.
-- **Title and lines:** the title is `displayTitle(link)`, the page's only `h1`. One grey line, "Your copy from <date> · the page may have changed", replaces the two grey lines and `NEUTRAL`. The why shows as `whyText`, 15px in ink, when the link has one.
+- **Where you came from:** `copyHref(linkId, from?)` adds `?from=<the list page's path and query>`. `cardLine` and the gone row take a `from` from the page that renders them, including rows that Show older appends. The copy route accepts a `from` only when it parses as a same-site path whose path is one of `/`, `/all`, `/all/done`, `/spaces`, `/spaces/done` or `/search`. It keeps only what picks the list and rebuilds the address with the existing builders (`allHref`, `spaceHref`, `searchHref`), never echoing the raw value:
+  - a space keeps its `tag` only when `findSpaceTag` finds it in the owner's catalog, else it falls back;
+  - a search keeps `q`, and `keep=1`, and its `tag` only when the owner has it (else the tag is dropped);
+  - order and page position (`order`, `before`) are dropped, so Back lands on the list's first page in its default order and never on a 400 or 404 (Sol, solution-choice review).
+  The label is fixed by the path: Home, All links, Out of your lists (`OUT_OF_LISTS`), the space's name, or your search. Anything else, or none, is **Back to All links**. Tidy up passes no copy, so it needs no `from`.
+- **What counts as an opening:** only the frame's Open on <site> link. A link inside the article to the same address isn't recorded: that would mean changing the renderer, and an article rarely links its own address.
+- **Title and lines:** the title is `displayTitle(link)`. Making it the page's only `h1` needs the article's headings moved down one level, which is #223 step 3's renderer work. One grey line, "Your copy from <date> · the page may have changed", replaces the two grey lines and `NEUTRAL`. The why shows as `whyText`, 15px in ink, when the link has one.
 - **Styles** go in `theme.ts`, with no `style=` attribute. They're only for the new line and the why; step 3 restyles the article.
-- **Records:** in `src/web/AGENTS.md`, drop the no-script exception and reword the CSP rule (scripts by hash from `pageScripts`). A ROADMAP decision-log entry ends the 2026-10-18 exception. The README's saved-copy lines change if they mention what the page offers.
+- **Records:** in `src/web/AGENTS.md`, drop the no-script exception and reword the CSP rule (scripts by hash from `pageScripts`). A ROADMAP decision-log entry ends the 2026-10-18 exception and the 2026-10-20 note that left the copy page out of `displayTitle`, and records the owner's 2026-10-21 ruling to run this step alongside tables. The README's saved-copy lines change if they mention what the page offers.
 
 ## Not in PR A
 
@@ -40,8 +45,8 @@ What it enables, reachable today: on `/links/<id>/copy` there is no way to move 
 ## PR A tasks
 
 - [ ] **1. Red tests: CSP** (`src/web/copy-routes.test.ts`):
-  - every `<script>` in a served copy page has its content's `sha256` in `script-src`, and `script-src` holds no other hash;
-  - a copy whose Markdown holds `<script>alert(1)</script>` and a `javascript:` link still renders no script element and no such link;
+  - every `<script>` in a served 200 copy page has its content's `sha256` in `script-src`, and `script-src` holds no other hash (the 404, which has no scripts, shares the same static headers);
+  - a copy whose Markdown holds `<script>alert(1)</script>` and a `javascript:` link adds no script inside the article and no such link: the page's scripts are exactly those of `pageScripts({ menu: true })` plus the copy page's own;
   - `connect-src 'self'` and today's other directives are present, unchanged;
   - the 404 and 503 answers carry the same headers.
 - [ ] **2. Implement `pageScripts`** and the new `COPY_HEADERS`. Changing `page.ts` must leave every other page's HTML byte for byte the same. Prove it with an existing snapshot or a before-and-after comparison test.
@@ -55,10 +60,13 @@ What it enables, reachable today: on `/links/<id>/copy` there is no way to move 
 - [ ] **4. Red tests: `from`:**
   - each list page's Saved copy link carries its own `from` (All links, its done view, a space page, search with a query, Home's featured card and its gone row);
   - the copy route maps each to its label and address;
+  - a Saved copy link in rows appended by Show older carries the same `from`, and a search's `from` keeps `q`, `tag` and `keep`;
+  - `/spaces?tag=<owned>&order=banana`, `/all?before=garbage` and `/search?q=x&tag=<not owned>` give working addresses (order and cursor dropped, the unowned tag dropped);
   - each of these falls back to Back to All links: `//evil.example/`, `https://evil.example/all`, `/\evil`, `javascript:alert(1)`, `/links/1/copy`, an unknown path, a space name the owner lacks, and another owner's space name. Each must also leave no trace of the raw value in the page.
 - [ ] **5. Implement** the frame, `from` and styles.
 - [ ] **6. Records**, then `npm run check`.
+- [ ] **7. Browser check** on a local server under the real headers (the orchestrator does this): the account menu opens and closes on Escape and an outside press, Sign out works, Open on <site> records an opening, and the console shows no CSP violation.
 
 ## PR B (outline, planned in full after PR A merges)
 
-Under the sheet: "Finished with this link?" with It's stale, Put it away and Keep handy (Not handy anymore once kept), as quiet buttons in the ⋯ menu's order. A link out of your lists shows only Bring it back. After It's stale or Put it away, the row says what happened and offers Undo through the Undo bar, and the Back link stays. The buttons reuse the routes and Undo texts in `done-link.ts` and `keep-handy.ts`. Its script joins the page's hashed scripts.
+Under the sheet: "Finished with this link?" with It's stale, Put it away and Keep handy (Not handy anymore once kept), as quiet buttons in the ⋯ menu's order. A link out of your lists shows only Bring it back. After It's stale or Put it away, the row says what happened and offers Undo through the Undo bar, and the Back link stays. The buttons reuse the routes and Undo texts in `done-link.ts` and `keep-handy.ts`. Its script joins the page's hashed scripts. An opening brings a put-away link back to your lists (`recordOpening`, `src/core/links.ts`), so PR B owns making the end buttons agree with the link's state after Open on <site> is clicked.

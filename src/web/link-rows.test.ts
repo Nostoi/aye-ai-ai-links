@@ -76,7 +76,7 @@ describe("a link row", () => {
   it("takes its color from `space` and names `lineSpace` on its grey line", () => {
     const d = row(link(), { space: KITCHEN, lineSpace: null, faded: true });
     expect(d.querySelector(".link-row")?.className).toBe("link-row space-clay faded");
-    expect(d.querySelector(".card-line .line-space")).toBeNull();
+    expect(d.querySelector(".card-line .line-space:not([hidden])")).toBeNull();
   });
 });
 

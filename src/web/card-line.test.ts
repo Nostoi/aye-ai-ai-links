@@ -28,7 +28,7 @@ const link = (url = "https://ex.com/7"): Link => ({
 });
 /** The line's parts as the reader sees them, in order. */
 const parts = (html: string) =>
-  [...parseHTML(`<div>${html}</div>`).document.querySelectorAll(".card-line > *")].map(
+  [...parseHTML(`<div>${html}</div>`).document.querySelectorAll(".card-line > :not([hidden])")].map(
     (e) => e.textContent,
   );
 
@@ -58,6 +58,27 @@ describe("cardLine", () => {
 
   it("draws nothing when no part is there", () => {
     expect(cardLine(link(NOT_WEB))).toBe("");
+    expect(cardLine(link(NOT_WEB), { space: null })).toBe("");
+  });
+
+  it("holds an empty hidden slot where the space goes when the link has none, so a Save can fill it", () => {
+    const slot = (html: string) => parseHTML(html).document.querySelector(".line-space");
+    const hidden = slot(cardLine(link(), { space: null }));
+    const shown = slot(cardLine(link(), { space: KITCHEN }));
+    expect(hidden?.hasAttribute("hidden")).toBe(true);
+    expect(shown?.hasAttribute("hidden")).toBe(false);
+    // Same structure either way: a dot, then the name in [data-space-name].
+    const shape = (e: Element | null | undefined) => [
+      e?.children.length,
+      e?.children[0]?.className,
+      e?.children[1]?.hasAttribute("data-space-name"),
+    ];
+    expect(shape(hidden)).toEqual([2, "dot", true]);
+    expect(shape(shown)).toEqual(shape(hidden));
+    expect(hidden?.querySelector("[data-space-name]")?.textContent).toBe("");
+    expect(shown?.querySelector("[data-space-name]")?.textContent).toBe("Kitchen");
+    // A card that doesn't pass a space (Home's) gets no slot at all.
+    expect(slot(cardLine(link()))).toBeNull();
   });
 
   it("puts the space's color dot before its name", () => {

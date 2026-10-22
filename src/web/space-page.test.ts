@@ -72,7 +72,7 @@ const space = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
 const dom = (html: string) => parseHTML(html).document;
 /** The parts of a card's grey line. */
 const lineParts = (card: Element | null | undefined) =>
-  [...(card?.querySelectorAll(".card-line > *") ?? [])].map((e) => e.textContent);
+  [...(card?.querySelectorAll(".card-line > :not([hidden])") ?? [])].map((e) => e.textContent);
 const hrefs = (html: string, selector: string) =>
   [...dom(html).querySelectorAll(selector)].map((a) => a.getAttribute("href") as string);
 /** The `tag` a rendered href names, read the way the server reads it. */

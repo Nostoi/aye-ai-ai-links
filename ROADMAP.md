@@ -22,6 +22,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-22:** Saved summaries (#160; owner decisions: https://github.com/Nostoi/aye-ai-ai-links/issues/160#issuecomment-6350963012; design: `docs/specs/2026-10-22-saved-summaries-design.md`). The server will write a short summary for every link whose page it could read, through the one AI connection, and All links and space rows will show it where the owner wrote no why. It lands in three PRs: (1) the label, (2) the pass, (3) the rows.
+  - **This replaces** the 2026-10-12 entry's "no source label" for summaries: that entry said a title works like summary and has no label because it is the agent's own wording. A summary now records who wrote it (`summarySource`: `stated`, `asked`, `inferred` or `server`; none for older ones).
+  - **Owner decisions:** rows show the summary only where there is no why, in a secondary ink, at most 90 characters; the server replaces every summary a saving AI wrote, the existing ones included; a summary the owner gave or asked for (`stated`, `asked`) is never replaced; summaries carry no "(a guess)" mark.
+  - **Controller's calls:** the order is owner over server over an AI writing on its own, so an AI's plain-text summary only fills a gap, and the store decides that in the same write as the rest of the edit; `summary: null` clears text and label together and so asks for a fresh server summary; Undo covers the label; a repeat `save_link` still ignores the summary.
+  - **Export is version 3.** `links.json` carries `summarySource` beside `summary`. Versions 1 and 2 still parse, with every summary unlabelled; a version 1 or 2 file that carries the field is refused.
+  - **PR 1 (the label)** stores, returns and exports the label and enforces the write order. The server writes no summary until PR 2.
 - **2026-10-22:** Edit link changes a link's tags (#239; design in #239's comments). The menu item is now **Edit link…**.
   - One Save of title, picture and tags is one Undo record.
   - A Save that changes tags carries the tags the dialog opened with. If the link's tags changed while the dialog was open, nothing is written and the owner is told to reload.

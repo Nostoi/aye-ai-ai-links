@@ -159,11 +159,11 @@ const keysDeep = (v: unknown): string[] =>
 
 describe("buildManifest", () => {
   const m = buildManifest(reads());
-  it("is a valid v2 links-only manifest, links in list order, in every state", () => {
+  it("is a valid v3 links-only manifest, links in list order, in every state", () => {
     expect(manifestSchema.safeParse(m).success).toBe(true);
     expect(m).toMatchObject({
       format: "aye-links-export",
-      version: 2,
+      version: 3,
       exportedAt: T(1000).toISOString(),
       includesFiles: false,
     });
@@ -246,7 +246,7 @@ describe("manifestSchema", () => {
       m.format = "other";
     });
     refuses((m) => {
-      m.version = 3;
+      m.version = 4;
     });
     refuses((m) => {
       m.links[0].id = "1";
@@ -306,6 +306,69 @@ describe("toNewLink", () => {
   });
 });
 
+describe("summary source (version 3)", () => {
+  const r = () => {
+    const x = reads();
+    x.links = [
+      link(1, { summary: "By the server", summarySource: "server" }),
+      link(2, { summary: "Theirs", summarySource: "stated" }),
+      link(3, { summary: "Old, unlabelled" }),
+      link(4),
+    ];
+    return x;
+  };
+  const written = () => JSON.parse(JSON.stringify(buildManifest(r())));
+  const restored = (manifest: unknown) => {
+    const parsed = manifestSchema.parse(manifest);
+    return parsed.links.map((l) => {
+      const saved = toNewLink(l, parsed.tags);
+      return [saved.summary, saved.summarySource];
+    });
+  };
+  const refused = (manifest: unknown) => manifestSchema.safeParse(manifest).success === false;
+
+  it("round-trips the server's and the owner's labels, and leaves the rest unlabelled", () => {
+    expect(restored(written())).toEqual([
+      ["By the server", "server"],
+      ["Theirs", "stated"],
+      ["Old, unlabelled", null],
+      [null, null],
+    ]);
+  });
+  it("reads a version-2 file without the field as unlabelled", () => {
+    const v2 = written();
+    v2.version = 2;
+    for (const l of v2.links) delete l.summarySource;
+    expect(restored(v2)).toEqual([
+      ["By the server", null],
+      ["Theirs", null],
+      ["Old, unlabelled", null],
+      [null, null],
+    ]);
+  });
+  it("refuses version 2 and 1 files that carry the field, and a version-3 link without it", () => {
+    expect(refused({ ...written(), version: 2 })).toBe(true);
+    const v1 = written();
+    v1.version = 1;
+    for (const l of v1.links) {
+      delete l.putAwayAt;
+      delete l.tidyKeptAt;
+    }
+    expect(refused(v1)).toBe(true);
+    const v3 = written();
+    delete v3.links[0].summarySource;
+    expect(refused(v3)).toBe(true);
+  });
+  it("refuses a source with no summary, and a source that is not one", () => {
+    const noSummary = written();
+    noSummary.links[3].summarySource = "server";
+    expect(refused(noSummary)).toBe(true);
+    const unknown = written();
+    unknown.links[0].summarySource = "robot";
+    expect(refused(unknown)).toBe(true);
+  });
+});
+
 describe("put-away and Tidy-kept dates (version 2)", () => {
   const putAway = T(300);
   const kept = T(400);
@@ -345,6 +408,7 @@ describe("put-away and Tidy-kept dates (version 2)", () => {
     for (const l of v1.links) {
       delete l.putAwayAt;
       delete l.tidyKeptAt;
+      delete l.summarySource;
     }
     expect(await restored(v1)).toEqual([
       [null, null],
@@ -352,8 +416,8 @@ describe("put-away and Tidy-kept dates (version 2)", () => {
       [null, null],
     ]);
   });
-  it("refuses version 3", () => {
-    expect(manifestSchema.safeParse({ ...written(), version: 3 }).success).toBe(false);
+  it("refuses version 4", () => {
+    expect(manifestSchema.safeParse({ ...written(), version: 4 }).success).toBe(false);
   });
   it("refuses a version-2 link missing a date key, and a version-1 link that has one", () => {
     const v2 = written();

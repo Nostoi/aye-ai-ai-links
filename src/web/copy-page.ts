@@ -41,7 +41,7 @@ const hash = (text: string) => `'sha256-${createHash("sha256").update(text).dige
 
 /**
  * Every answer of the copy route: loads nothing from outside, runs only `copyScripts` and sends
- * requests only to the app itself (the sign-out and the opening it records).
+ * requests only to the app itself (the sign-out, the opening it records and the end row's actions).
  */
 export const COPY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": `default-src 'none'; img-src 'self' data:; style-src ${hash(PAGE_STYLE)}; script-src ${[...new Set(copyScripts)].map(hash).join(" ")}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,

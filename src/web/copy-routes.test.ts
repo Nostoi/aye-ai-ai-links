@@ -558,7 +558,7 @@ describe("the end of the copy page, against the store", () => {
     expect((await owner.send("/links/delete", post(id))).status).toBe(204);
     const res = await owner.send(`/links/${id}/copy`);
     expect(res.status).toBe(404);
-    expect(res.bytes.toString("utf8")).not.toContain("copy-end");
+    expect(parseHTML(res.bytes.toString("utf8")).document.querySelector("#copy-end")).toBeNull();
     expect(res.headers.get("content-security-policy")).toBe(csp);
   });
 

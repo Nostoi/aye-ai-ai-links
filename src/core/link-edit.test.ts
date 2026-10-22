@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { FakeStore } from "./fake-store.js";
 import { jpeg, png, svg } from "./image-test-kit.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./image-type.js";
-import { BAD_PICTURE, editLink, UNDO_CONFLICT, undoEdit } from "./link-edit.js";
+import { BAD_PICTURE, editLink, TAGS_CONFLICT, UNDO_CONFLICT, undoEdit } from "./link-edit.js";
 import { updateLink } from "./links.js";
 import { newLink } from "./snapshot-store-contract.js";
+import { normalizeTags } from "./tags.js";
 
 const T0 = new Date("2026-10-17T09:00:00Z");
 const SHOT = png(64, 48, Buffer.from("a screenshot"));
@@ -78,6 +79,97 @@ describe("editLink", () => {
       code: "not_found",
     });
     expect((await store.get("a", id))?.title).toBe("Quokka habitat");
+  });
+});
+
+describe("editLink with tags", () => {
+  const seenOf = (tags: { key: string; source: string }[]) =>
+    tags.map(({ key, source }) => ({ key, source }));
+  const keysOf = async (store: FakeStore, id: string) =>
+    (await store.get("a", id))?.tags.map((t) => [t.key, t.source]);
+  async function tagged() {
+    const s = await setup();
+    await s.store.update("a", s.id, {
+      tags: normalizeTags([
+        { name: "Guess", source: "inferred" },
+        { name: "Mine", source: "asked" },
+      ]),
+    });
+    const seen = seenOf((await s.store.get("a", s.id))?.tags ?? []);
+    return { ...s, seen };
+  }
+
+  it("writes the names in order: a kept tag keeps its seen source, a new one is stated", async () => {
+    const { store, deps, id, seen } = await tagged();
+    await editLink(deps, "a", id, { tags: { names: ["mine", "New one", "Guess"], seen } });
+    expect(await keysOf(store, id)).toEqual([
+      ["mine", "asked"],
+      ["new one", "stated"],
+      ["guess", "inferred"],
+    ]);
+    expect((await store.get("a", id))?.tags[1]?.name).toBe("New one");
+  });
+
+  it("removing a tag and adding it back cancels out: no edit, the guess stays a guess", async () => {
+    const { store, deps, id, seen } = await tagged();
+    expect(await editLink(deps, "a", id, { tags: { names: ["Guess", "Mine"], seen } })).toBeNull();
+    expect(await keysOf(store, id)).toEqual([
+      ["guess", "inferred"],
+      ["mine", "asked"],
+    ]);
+  });
+
+  it("dedupes names by key", async () => {
+    const { store, deps, id, seen } = await tagged();
+    await editLink(deps, "a", id, { tags: { names: ["x", " X ", "y"], seen } });
+    expect(await keysOf(store, id)).toEqual([
+      ["x", "stated"],
+      ["y", "stated"],
+    ]);
+  });
+
+  it("refuses a blank name as invalid_input, writing nothing", async () => {
+    const { store, deps, id, seen } = await tagged();
+    await expect(
+      editLink(deps, "a", id, { title: "Changed", tags: { names: ["ok", "  "], seen } }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect((await store.get("a", id))?.title).toBe("Quokka habitat");
+    expect(await keysOf(store, id)).toHaveLength(2);
+  });
+
+  it("refuses a seen source that is not a source as invalid_input", async () => {
+    const { deps, id } = await tagged();
+    await expect(
+      editLink(deps, "a", id, {
+        tags: { names: ["a"], seen: [{ key: "guess", source: "bogus" }] },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+  });
+
+  it("answers a link whose tags changed since the dialog opened as a conflict, writing nothing", async () => {
+    const { store, deps, id, seen } = await tagged();
+    await updateLink(deps, "a", id, { tags: [{ name: "agent", source: "inferred" }] });
+    await expect(
+      editLink(deps, "a", id, { title: "Changed", tags: { names: ["Guess", "z"], seen } }),
+    ).rejects.toMatchObject({ code: "conflict", message: TAGS_CONFLICT });
+    expect((await store.get("a", id))?.title).toBe("Quokka habitat");
+    expect(await keysOf(store, id)).toEqual([["agent", "inferred"]]);
+  });
+
+  it("one Undo puts back the title, picture and the old tags with their sources", async () => {
+    const { store, deps, id, seen } = await tagged();
+    const edit = await editLink(deps, "a", id, {
+      title: "New",
+      picture: new Uint8Array(SHOT),
+      tags: { names: ["only"], seen },
+    });
+    await undoEdit(deps, "a", id, edit as string);
+    expect((await store.get("a", id))?.title).toBe("Quokka habitat");
+    expect(await store.image("a", id)).toBeNull();
+    expect(await keysOf(store, id)).toEqual([
+      ["guess", "inferred"],
+      ["mine", "asked"],
+    ]);
   });
 });
 

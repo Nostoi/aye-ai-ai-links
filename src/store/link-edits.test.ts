@@ -106,7 +106,7 @@ describe("the owner_images and link_edits migration, from the version before it"
     );
     const later = Buffer.from([0x89, 0x50, 0x4e, 0x47, 2]);
     db.prepare("UPDATE owner_images SET sha256 = 'later', bytes = ? WHERE link_id = 1").run(later);
-    expect(await edits.undoEdit("a", "1", applied?.editId as string)).toBe("conflict");
+    expect(await edits.undoEdit("a", "1", (applied as { editId: string }).editId)).toBe("conflict");
     expect(db.prepare("SELECT sha256, bytes FROM owner_images WHERE link_id = 1").get()).toEqual({
       sha256: "later",
       bytes: later,

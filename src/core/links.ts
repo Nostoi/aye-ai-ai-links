@@ -57,7 +57,7 @@ export type UpdateLinkInput = Omit<LinkPatch, "tags" | "lastOpenedAt"> & {
   opened?: true;
 };
 
-const isSource = (s: string): s is Source => (SOURCES as readonly string[]).includes(s);
+export const isSource = (s: string): s is Source => (SOURCES as readonly string[]).includes(s);
 const isState = (s: string): s is LinkState => (STATES as readonly string[]).includes(s);
 
 function invalid(message: string): CoreError {

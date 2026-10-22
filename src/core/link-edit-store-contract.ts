@@ -60,7 +60,8 @@ export function describeLinkEditStoreContract(
     });
     const editId = async (p: ReturnType<LinkEditStore["applyEdit"]>) => {
       const result = await p;
-      if (typeof result === "string" || !result?.editId) throw new Error(`expected an edit id, got ${JSON.stringify(result)}`);
+      if (typeof result === "string" || !result?.editId)
+        throw new Error(`expected an edit id, got ${JSON.stringify(result)}`);
       return result.editId;
     };
 

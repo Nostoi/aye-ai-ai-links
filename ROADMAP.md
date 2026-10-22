@@ -22,6 +22,8 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-22:** markdown-it is 15.0.3 (#234), an exception to the two-week dependency rule (owner, in session). It went in at 6 days old because it fixes GHSA-gfr2-rv44-r23c and GHSA-vfgh-jcmw-g37q. This replaces the 2026-10-18 saved-copies entry's "pinned at 15.0.2 until 15.0.3 is two weeks old" and closes #164. The `argparse` 3.0.2 override stays.
+
 - **2026-10-21:** The saved copy reads as an article on a sheet (#223, step 3; plan: `docs/plans/2026-10-21-reader-look.md`). Closes #221, which PR A already met (`.copy-open` and `.back-link` are 44px tall and the old site line is gone).
   - **Headings** in a copy sit one level down (`# ` is an `h2`), on tokens, so setext headings and old copies shift too. The page title is now the only `h1`, which settles the 2026-10-21 frame entry's note below.
   - **Bands, and an exception to `src/web/AGENTS.md` rule 4** (owner, 2026-10-21): a picture standing alone in a paragraph runs edge to edge across the sheet on a band of the page color, centred, uncropped and no taller than 60% of the screen. A picture inside text, a link with words, a heading or a cell stays inline. Bands, notes and caption lines are built from tokens with fixed tags only (`src/web/copy-pictures.ts`).

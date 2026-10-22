@@ -4,6 +4,7 @@ import net from "node:net";
 import { Readability } from "@mozilla/readability";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CPU_BUDGET_TIMEOUT_MS, cpuTimed } from "../core/cpu-time-test-kit.js";
 import { extractSnapshot } from "./extract.js";
 
 const URL0 = "https://example.com/post/1";
@@ -361,15 +362,19 @@ describe("icon urls", () => {
     }
   });
 
-  it("ranks 5,000 declarations into the best two", () => {
-    const small = Array.from({ length: 2_500 }, (_, i) =>
-      link(`rel="icon" sizes="16x16" href="/s${i}.png"`),
-    ).join("");
-    const head = `${small}${link('rel="icon" sizes="192x192" href="/big.png"')}${small.replaceAll("/s", "/t")}`;
-    const start = performance.now();
-    expect(icons(head)).toEqual(["https://example.com/big.png", "https://example.com/t2499.png"]);
-    expect(performance.now() - start).toBeLessThan(5_000);
-  });
+  it(
+    "ranks 5,000 declarations into the best two",
+    () => {
+      const small = Array.from({ length: 2_500 }, (_, i) =>
+        link(`rel="icon" sizes="16x16" href="/s${i}.png"`),
+      ).join("");
+      const head = `${small}${link('rel="icon" sizes="192x192" href="/big.png"')}${small.replaceAll("/s", "/t")}`;
+      const { result, ms } = cpuTimed(() => icons(head));
+      expect(result).toEqual(["https://example.com/big.png", "https://example.com/t2499.png"]);
+      expect(ms).toBeLessThan(5_000);
+    },
+    CPU_BUDGET_TIMEOUT_MS,
+  );
 });
 
 describe("text", () => {

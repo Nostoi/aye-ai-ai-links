@@ -1,5 +1,6 @@
 import TurndownService from "turndown";
 import { describe, expect, it } from "vitest";
+import { CPU_BUDGET_TIMEOUT_MS, cpuTimed } from "../core/cpu-time-test-kit.js";
 import type { CopyDraft } from "../core/saved-copy.js";
 import { finishedMarkdown } from "../core/saved-copy.js";
 import { copyHtml } from "../web/copy-markdown.js";
@@ -249,15 +250,18 @@ describe("page text that looks like a reference", () => {
 });
 
 describe("budget", () => {
-  it("converts 1 MiB of paragraphs with 30 images in well under the extraction deadline", () => {
-    const para =
-      "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>";
-    const body = para.repeat(Math.ceil((1024 * 1024) / para.length));
-    const t0 = performance.now();
-    const d = draft(body + imgs(30));
-    expect(performance.now() - t0).toBeLessThan(EXTRACT_DEADLINE_MS / 2);
-    expect(d.imageUrls).toHaveLength(30);
-  }, 30_000);
+  it(
+    "converts 1 MiB of paragraphs with 30 images in well under the extraction deadline",
+    () => {
+      const para =
+        "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>";
+      const body = para.repeat(Math.ceil((1024 * 1024) / para.length));
+      const { result: d, ms } = cpuTimed(() => draft(body + imgs(30)));
+      expect(ms).toBeLessThan(EXTRACT_DEADLINE_MS / 2);
+      expect(d.imageUrls).toHaveLength(30);
+    },
+    CPU_BUDGET_TIMEOUT_MS,
+  );
 });
 
 describe("makeCopy", () => {

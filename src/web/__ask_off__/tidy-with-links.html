@@ -594,7 +594,7 @@ const choose = (step, act) =>
     showNext();
     if (!undo) return;
     showUndo(undo.text, () =>
-      whileBusy(tidyRoot, async () => {
+      whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";
         const back = await post("/home/undo-state", { id, change });
         if (!back || back.status !== 204) {

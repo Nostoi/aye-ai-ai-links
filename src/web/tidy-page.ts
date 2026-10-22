@@ -97,8 +97,8 @@ const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
 
 /**
  * The session's one script, after `CARD_FETCH` and the Undo bar's `showUndo`. The whole session
- * is one card for `whileBusy`, so a choice, an Undo and a second click each wait for the one
- * before. A choice posts its route; only an answer that is OK hides the link and shows the first
+ * is one card for `whileBusy`: a second click is dropped while a choice is out, and an Undo
+ * waits for it (`whenFree`), then runs. A choice posts its route; only an answer that is OK hides the link and shows the first
  * link not yet decided, or the finish screen, and moves focus to its heading. Put it away and
  * It's stale answer the `StateChange` that their Undo posts back to `/home/undo-state` exactly as
  * received, then shows that link again as undecided. A refusal is shown in `#tidy-error`.
@@ -139,7 +139,7 @@ const choose = (step, act) =>
     showNext();
     if (!undo) return;
     showUndo(undo.text, () =>
-      whileBusy(tidyRoot, async () => {
+      whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";
         const back = await post("/home/undo-state", { id, change });
         if (!back || back.status !== 204) {

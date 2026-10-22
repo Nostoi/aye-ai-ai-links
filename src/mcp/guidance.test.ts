@@ -58,6 +58,12 @@ describe("summary guidance", () => {
       expect(text).toContain('{text, source} with "stated" or "asked"');
     }
   });
+
+  it("tells update_link that plain text never replaces the server's or the owner's summary", () => {
+    expect(UPDATE_LINK).toContain(
+      'Plain text never replaces the server\'s or the owner\'s summary: to change one at the owner\'s request, send {text, source: "stated"} (or "asked").',
+    );
+  });
 });
 
 describe("get_digest guidance", () => {

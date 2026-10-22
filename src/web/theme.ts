@@ -411,7 +411,7 @@ ${spaceClasses}
 .copy-article hr{border:0;border-top:1px solid var(--line);margin:24px 0}
 .copy-article .copy-table{max-width:100%;overflow-x:auto;margin:16px 0}
 .copy-article table{border-collapse:collapse;font-size:15.5px;line-height:1.5}
-.copy-article th,.copy-article td{padding:8px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}
+.copy-article th,.copy-article td{padding:8px 12px;overflow-wrap:break-word;border:1px solid var(--line);text-align:left;vertical-align:top}
 .copy-article th{font-weight:600}
 .save{max-width:620px}
 .save p{overflow-wrap:anywhere}

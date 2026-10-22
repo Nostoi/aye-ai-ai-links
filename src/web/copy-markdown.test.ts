@@ -149,10 +149,27 @@ describe("copyHtml images (F5)", () => {
 });
 
 describe("copyHtml tables and references", () => {
-  it("renders no table and no style attribute", () => {
+  // Changed from "renders no table" with the table rule (#223): copies keep their tables now.
+  it("renders a table inside a scroll box", () => {
+    const html = copyHtml("| a | b |\n| --- | --- |\n| 1 | 2 |", refs());
+    expect(html).toMatch(/^<div class="copy-table"><table>[\s\S]*<\/table>\s*<\/div>\n?$/);
+    expect(text(html).replace(/\s+/g, "")).toBe("ab12");
+  });
+
+  it("renders an aligned column with no style attribute", () => {
     const html = copyHtml("| a | b |\n|:-:|--:|\n| 1 | 2 |", refs());
-    expect(html).not.toContain("<table");
+    expect(html).toContain("<td>2</td>");
     expect(html).not.toContain("style=");
+  });
+
+  it("keeps only the label of an unsafe link in a cell, and refuses an unknown picture", () => {
+    const html = copyHtml(
+      "| a | b |\n| --- | --- |\n| [js](javascript:alert(1)) | ![x](https://e.example/a.png) |",
+      refs(),
+    );
+    expect(attrs(html, "href")).toEqual([]);
+    expect(all(html).filter((e) => e.tagName === "IMG")).toHaveLength(0);
+    expect(text(html)).toContain("js");
   });
 
   it("does not resolve a reference link, and leaks neither definition syntax nor nonce", () => {
@@ -171,6 +188,7 @@ describe("copyHtml rendering budget", () => {
     { length: Math.ceil(TWO_MIB / 90) },
     (_, i) => `Paragraph ${i} with *emphasis*, a [link](https://e.example/${i}) and \`code\`.\n`,
   ).join("\n");
+  const wide = (cell: string) => `|${` ${cell} |`.repeat(30_000)}\n`;
   const inputs: Record<string, string> = {
     "multiline reference definition": pad("x\n", '[a]: /u "'),
     "unclosed multiline link label": pad("a\n", "["),
@@ -178,6 +196,10 @@ describe("copyHtml rendering budget", () => {
     "open brackets": pad("["),
     "unclosed emphasis": pad("*a"),
     "realistic article": article,
+    "table rows": pad("| a | b |\n", "| h | i |\n| - | - |\n"),
+    "table columns":
+      wide("h") + wide("-") + wide("x").repeat(Math.ceil(TWO_MIB / wide("x").length)),
+    pipes: pad("|"),
   };
   // Alone the slowest takes ~1.3 s and the full suite's load triples that; a quadratic rule takes minutes.
   const BUDGET_MS = 10_000;

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { GoneView } from "../core/link-check.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
+import { doneLinkScript } from "./done-link.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
+import { page } from "./page.js";
 import { searchPage } from "./pages.js";
 import { spacePage } from "./space-page.js";
+import { CARD_FETCH } from "./tell-why.js";
 
 const NOW = new Date("2026-10-17T12:00:00Z");
 const SEPTEMBER = new Date("2026-09-10T12:00:00Z");
@@ -254,5 +257,78 @@ describe("Put it away from the ⋯ menu", () => {
     expect(p.$("[data-id='7']").hidden).toBe(false);
     expect(p.$("#undo-bar").hidden).toBe(true);
     expect(p.$("#all-error").textContent).not.toBe("");
+  });
+});
+
+describe("the state script on a page whose card stays visible", () => {
+  /** A card with its own `takeOut`, which writes what it was given and what was put back. */
+  const stay = (answer: (s: Post) => Answer) =>
+    runPage(
+      page(
+        "Test",
+        `<p id="err" role="alert"></p>
+<ul id="list"><li data-id="7"><details class="card-menu"><summary>More</summary><button data-act="archive">Stale</button></details></li></ul>
+<p id="seen"></p>
+<script>
+${CARD_FETCH}
+const takeOut = (root, card, remove, change) => {
+  document.getElementById("seen").textContent = JSON.stringify(change);
+  return () => { document.getElementById("seen").textContent = "put back"; };
+};
+${doneLinkScript("list", "err")}
+</script>`,
+        { undo: true },
+      ),
+      answer,
+    );
+
+  it("hands takeOut the change the route answered, and calls the put-back it returned after an Undo", async () => {
+    const p = stay(fine);
+    await click(p, "[data-act=archive]");
+    expect(JSON.parse(p.$("#seen").textContent ?? "")).toEqual(CHANGE);
+    await click(p, "#undo-bar button");
+    expect(p.$("#seen").textContent).toBe("put back");
+  });
+
+  it("takes no other action until an Undo has been answered", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = stay((s) => (s.url === "/home/undo-state" ? { status: 204, wait: held } : fine(s)));
+    await click(p, "[data-act=archive]");
+    await click(p, "#undo-bar button");
+    await click(p, "[data-act=archive]");
+    expect(p.sent.map((s) => s.url)).toEqual(["/home/archive", "/home/undo-state"]);
+    release();
+    await p.settle();
+    expect(p.sent.map((s) => s.url)).toEqual(["/home/archive", "/home/undo-state"]);
+    expect(p.$("#seen").textContent).toBe("put back");
+  });
+
+  it("an Undo clicked while another action is out waits for it, then runs", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let archives = 0;
+    const p = stay((s) =>
+      s.url === "/home/archive" && ++archives === 2
+        ? { status: 200, body: CHANGE, wait: held }
+        : fine(s),
+    );
+    await click(p, "[data-act=archive]");
+    await click(p, "[data-act=archive]");
+    await click(p, "#undo-bar button");
+    expect(p.sent.map((s) => s.url)).toEqual(["/home/archive", "/home/archive"]);
+    release();
+    await p.settle();
+    expect(p.sent.map((s) => s.url)).toEqual([
+      "/home/archive",
+      "/home/archive",
+      "/home/undo-state",
+    ]);
+    expect(p.$("#seen").textContent).toBe("put back");
+    expect(p.$("#err").textContent).toBe("");
   });
 });

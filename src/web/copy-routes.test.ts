@@ -308,14 +308,16 @@ describe("the copy page's scripts and CSP", () => {
     expect(unreadable.headers.get("content-security-policy")).toBe(csp);
   });
 
-  it("runs only the app's own scripts: the page's menu script and the copy page's own", async () => {
+  it("runs only the app's own scripts: the page's menu and Undo bar, the opening script and the end script", async () => {
     const { w, id, owner, save } = await world();
     const hostile = await save("owner", "https://a.example/hostile");
     const markdown =
       "<script>alert(1)</script>\n\n[click](javascript:alert(2))\n\n<img src=x onerror=alert(3)>";
     const draft = { markdown, imageUrls: [], nonce: NONCE };
     expect(await w.savedCopies.saveCopy("owner", hostile, draft, LIMITS, new Date())).toBe("saved");
-    expect(copyScripts).toEqual(expect.arrayContaining(pageScripts({ menu: true })));
+    const own = pageScripts({ menu: true, undo: true });
+    expect(copyScripts).toHaveLength(own.length + 2);
+    expect(copyScripts.slice(0, own.length)).toEqual(own);
     for (const which of [id, hostile]) {
       const res = await owner.send(`/links/${which}/copy`);
       expect(res.status).toBe(200);
@@ -488,5 +490,91 @@ describe("POST /links/copy/remove and /links/copy/restore", () => {
     } finally {
       chmodSync(root, 0o755);
     }
+  });
+});
+
+describe("the end of the copy page, against the store", () => {
+  /** The row as the next GET shows it: the visible group's text and the visible buttons. */
+  const endOf = async (owner: Awaited<ReturnType<typeof world>>["owner"], id: string) => {
+    const doc = parseHTML((await owner.send(`/links/${id}/copy`)).bytes.toString("utf8")).document;
+    const shown = (el: Element) => el.closest("[hidden]") === null;
+    return {
+      line: shown(doc.querySelector("#copy-end-out") as Element)
+        ? [...doc.querySelectorAll("#copy-end-out .card-line > span")].map((s) => s.textContent)
+        : null,
+      acts: [...doc.querySelectorAll("#copy-end button[data-act]")]
+        .filter(shown)
+        .map((b) => b.getAttribute("data-act")),
+    };
+  };
+  const stored = async (w: Awaited<ReturnType<typeof world>>["w"], id: string) => {
+    const deps = createDeps(w.links, new FakeEmbedder(DIMS));
+    const link = await deps.store.get("owner", id);
+    return { state: link?.state, putAwayAt: link?.putAwayAt ?? null };
+  };
+  const ACTIVE_ROW = { line: null, acts: ["archive", "put-away", "keep"] };
+
+  it("Keep handy, then the page shows Not handy anymore", async () => {
+    const { id, owner } = await world();
+    expect(await endOf(owner, id)).toEqual(ACTIVE_ROW);
+    expect((await owner.send("/tools/keep", post(id))).status).toBe(200);
+    expect((await endOf(owner, id)).acts).toEqual(["archive", "put-away", "not-handy"]);
+  });
+
+  it("Put it away: the store holds it archived with putAwayAt set, and the page shows the put-away row", async () => {
+    const { w, id, owner } = await world();
+    expect((await owner.send("/home/put-away", post(id))).status).toBe(200);
+    const link = await stored(w, id);
+    expect(link.state).toBe("archived");
+    expect(link.putAwayAt).not.toBeNull();
+    expect(await endOf(owner, id)).toEqual({
+      line: ["Out of your lists", "Put away"],
+      acts: ["bring-back"],
+    });
+  });
+
+  it("an opening (204) brings a put-away link back: the store is active and the page shows the active row", async () => {
+    const { w, id, owner } = await world();
+    await owner.send("/home/put-away", post(id));
+    expect((await owner.send("/links/opened", post(id))).status).toBe(204);
+    expect(await stored(w, id)).toEqual({ state: "active", putAwayAt: null });
+    expect(await endOf(owner, id)).toEqual(ACTIVE_ROW);
+  });
+
+  it("an opening of a stale link leaves it stale in the store and on the page", async () => {
+    const { w, id, owner } = await world();
+    await owner.send("/home/archive", post(id));
+    expect((await owner.send("/links/opened", post(id))).status).toBe(204);
+    expect(await stored(w, id)).toEqual({ state: "archived", putAwayAt: null });
+    expect(await endOf(owner, id)).toEqual({
+      line: ["Out of your lists", "Stale"],
+      acts: ["bring-back"],
+    });
+  });
+
+  it("answers 404 with no end row for a deleted link, under the same CSP", async () => {
+    const { id, owner } = await world();
+    const csp = (await owner.send(`/links/${id}/copy`)).headers.get("content-security-policy");
+    expect((await owner.send("/links/delete", post(id))).status).toBe(204);
+    const res = await owner.send(`/links/${id}/copy`);
+    expect(res.status).toBe(404);
+    expect(parseHTML(res.bytes.toString("utf8")).document.querySelector("#copy-end")).toBeNull();
+    expect(res.headers.get("content-security-policy")).toBe(csp);
+  });
+
+  it("repeats the Back link of an owned space after the row", async () => {
+    const { w, id, owner } = await world();
+    const deps = createDeps(w.links, new FakeEmbedder(DIMS));
+    await saveLink(deps, "owner", {
+      url: "https://t.example/kitchen",
+      savedBy: "seed",
+      tags: [{ name: "Kitchen", source: "stated" }],
+    });
+    const from = encodeURIComponent("/spaces?tag=kitchen");
+    const html = (await owner.send(`/links/${id}/copy?from=${from}`)).bytes.toString("utf8");
+    const hrefs = [...parseHTML(html).document.querySelectorAll("a.back-link")].map((a) =>
+      a.getAttribute("href"),
+    );
+    expect(hrefs).toEqual(["/spaces?tag=kitchen", "/spaces?tag=kitchen"]);
   });
 });

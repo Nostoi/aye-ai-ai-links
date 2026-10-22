@@ -501,6 +501,46 @@ export function describeLinkEditStoreContract(
         expect((await h.links.get(A, id))?.title).toBe("Old");
       });
 
+      const summaryPair = async (id: string) => {
+        const l = await h.links.get(A, id);
+        return [l?.summary, l?.summarySource];
+      };
+
+      it("Undo puts back the summary's source", async () => {
+        const id = await filled();
+        await h.links.update(A, id, { summary: "Srv", summarySource: "server" });
+        const edit = await editId(receipt(A, id, { summary: "Mine", summarySource: "stated" }));
+        expect(await summaryPair(id)).toEqual(["Mine", "stated"]);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await summaryPair(id)).toEqual(["Srv", "server"]);
+      });
+
+      it("a source-only change is a summary change", async () => {
+        const id = await filled();
+        await h.links.update(A, id, { summary: "S", summarySource: "inferred" });
+        const edit = await editId(receipt(A, id, { summary: "S", summarySource: "stated" }));
+        expect(await summaryPair(id)).toEqual(["S", "stated"]);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await summaryPair(id)).toEqual(["S", "inferred"]);
+      });
+
+      it("Undo does not undo a summary whose source has changed since", async () => {
+        const id = await filled();
+        await h.links.update(A, id, { summary: "S", summarySource: "inferred" });
+        const edit = await editId(receipt(A, id, { summary: "T", summarySource: "inferred" }));
+        await h.links.update(A, id, { summary: "T", summarySource: "server" });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+        expect(await summaryPair(id)).toEqual(["T", "server"]);
+      });
+
+      it("Undo back to no summary leaves no source", async () => {
+        const id = await filled();
+        await h.links.update(A, id, { summary: null, summarySource: null });
+        const edit = await editId(receipt(A, id, { summary: "Mine", summarySource: "stated" }));
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await summaryPair(id)).toEqual([null, null]);
+      });
+
       it("returns the link as written, with the change", async () => {
         const id = await filled();
         const result = await receipt(A, id, { summary: "new summary", state: "archived" });

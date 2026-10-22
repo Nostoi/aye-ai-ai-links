@@ -822,7 +822,10 @@ export class FakeStore
     }
     const { changed, prior } = row;
     if (changed.title) link.title = prior.title;
-    if (changed.summary) link.summary = prior.summary;
+    if (changed.summary) {
+      link.summary = prior.summary;
+      link.summarySource = prior.summarySource;
+    }
     if (changed.why) link.why = prior.why && { ...prior.why };
     if (changed.tags) {
       link.tags = prior.tags.map((t) => ({ ...t }));

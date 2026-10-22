@@ -292,7 +292,7 @@ describe("MCP door over HTTP", () => {
         urlKey: expect.any(String),
         title: "Example",
         summary: "A page",
-        summarySource: null,
+        summarySource: "inferred",
         why: { text: "for the launch", source: "stated" },
         tags: [
           {

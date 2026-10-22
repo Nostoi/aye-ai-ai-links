@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
 import { filingContext } from "./filing-context.js";
-import { getLink, saveLink, updateLink } from "./links.js";
+import { getLink, saveLink, updateLink, updateLinkWithReceipt } from "./links.js";
 import { setProjectStatus } from "./project-status.js";
 import { type SavePageInput, savePage } from "./save-page.js";
 import type { LinkRemover, LinkStore } from "./store.js";
 import { changeTagKind } from "./tag-kind.js";
 import { SPACE_COLORS, setTagColor, setTagPinned } from "./tag-space.js";
-import type { Labelled, Link, Tag, TagKind } from "./types.js";
+import type { Labelled, Link, SummarySource, Tag, TagKind } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
@@ -315,7 +315,7 @@ export function describeStoreContract(
           ...forbidden,
         } as never);
         expect(updated.summary).toBe("s");
-        expect(await h.all(A)).toEqual([{ ...link, summary: "s" }]);
+        expect(await h.all(A)).toEqual([{ ...link, summary: "s", summarySource: "inferred" }]);
       });
     });
 
@@ -1595,6 +1595,92 @@ export function describeStoreContract(
           expect(result?.applied, summary).toBe(false);
           expect(await pair(link.id)).toEqual([summary, summarySource]);
         }
+      });
+    });
+
+    describe("summary precedence", () => {
+      const held = async (summary: string, summarySource: SummarySource) => {
+        const { link } = await saveLink(deps(), A, { url: "https://ex.com/p", savedBy: "t" });
+        await h.store.update(A, link.id, { summary, summarySource });
+        return link.id;
+      };
+      const pair = async (id: string) => {
+        const l = await getLink(deps(), A, id);
+        return [l.summary, l.summarySource];
+      };
+
+      it("saves a plain-text summary as inferred, and a labelled one as labelled", async () => {
+        const plain = await saveLink(deps(), A, {
+          url: "https://ex.com/1",
+          savedBy: "t",
+          summary: " Plain ",
+        });
+        expect([plain.link.summary, plain.link.summarySource]).toEqual(["Plain", "inferred"]);
+        const asked = await saveLink(deps(), A, {
+          url: "https://ex.com/2",
+          savedBy: "t",
+          summary: { text: "Theirs", source: "asked" },
+        });
+        expect([asked.link.summary, asked.link.summarySource]).toEqual(["Theirs", "asked"]);
+        const none = await saveLink(deps(), A, { url: "https://ex.com/3", savedBy: "t" });
+        expect([none.link.summary, none.link.summarySource]).toEqual([null, null]);
+      });
+
+      it.each([
+        ["the server's", "Srv", "server"],
+        ["the owner's", "Mine", "stated"],
+        ["an asked-for", "Asked", "asked"],
+      ] as const)("an AI's summary doesn't replace %s", async (_n, summary, source) => {
+        const id = await held(summary, source);
+        await updateLink(deps(), A, id, { title: "Other", summary: "AI" });
+        expect((await getLink(deps(), A, id)).title).toBe("Other");
+        expect(await pair(id)).toEqual([summary, source]);
+        await updateLinkWithReceipt(deps(), A, id, { summary: { text: "AI", source: "inferred" } });
+        expect(await pair(id)).toEqual([summary, source]);
+      });
+
+      it("an AI's summary fills a gap and replaces its own and an unlabelled one", async () => {
+        const { link } = await saveLink(deps(), A, { url: "https://ex.com/q", savedBy: "t" });
+        await updateLink(deps(), A, link.id, { summary: "First" });
+        expect(await pair(link.id)).toEqual(["First", "inferred"]);
+        await updateLink(deps(), A, link.id, { summary: "Second" });
+        expect(await pair(link.id)).toEqual(["Second", "inferred"]);
+        await h.store.update(A, link.id, { summary: "Old" });
+        await updateLink(deps(), A, link.id, { summary: "Third" });
+        expect(await pair(link.id)).toEqual(["Third", "inferred"]);
+      });
+
+      it("an owner's summary replaces the server's", async () => {
+        const id = await held("Srv", "server");
+        await updateLink(deps(), A, id, { summary: { text: "Mine", source: "stated" } });
+        expect(await pair(id)).toEqual(["Mine", "stated"]);
+      });
+
+      it("clearing a summary clears its source, and so does a blank one", async () => {
+        for (const cleared of [null, "  ", { text: " ", source: "stated" as const }]) {
+          const id = await held("Mine", "stated");
+          await updateLink(deps(), A, id, { summary: cleared });
+          expect(await pair(id), JSON.stringify(cleared)).toEqual([null, null]);
+        }
+      });
+
+      it("a repeat save ignores the summary", async () => {
+        const id = await held("Srv", "server");
+        await saveLink(deps(), A, {
+          url: "https://ex.com/p",
+          savedBy: "t",
+          summary: { text: "Again", source: "stated" },
+        });
+        expect(await pair(id)).toEqual(["Srv", "server"]);
+      });
+
+      it("refuses a summary source that is not stated, asked or inferred", async () => {
+        const id = await held("Srv", "server");
+        const bad = { text: "x", source: "server" } as unknown as { text: string; source: "asked" };
+        expect(await code(updateLink(deps(), A, id, { summary: bad }))).toBe("invalid_input");
+        const save = saveLink(deps(), A, { url: "https://ex.com/z", savedBy: "t", summary: bad });
+        expect(await code(save)).toBe("invalid_input");
+        expect(await pair(id)).toEqual(["Srv", "server"]);
       });
     });
 

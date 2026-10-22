@@ -124,7 +124,27 @@ describe("a table in a copy", () => {
     const md = markdown(
       `<table><tr><th>A</th><th>B</th></tr><tr><td>${pics}</td><td>z</td></tr></table>`,
     );
-    expect(count(copyHtml(md, refs(1)), "td")).toBe(2);
+    const html = copyHtml(md, refs(1));
+    expect(count(html, "td")).toBe(2);
+    expect(html).toContain("<td>z</td>");
+  });
+
+  it("puts a header written after its footer first, and the footer last", () => {
+    const md = markdown(
+      "<table><tfoot><tr><td>f1</td><td>f2</td></tr></tfoot><thead><tr><th>h1</th><th>h2</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>",
+    );
+    expect(md).toContain("| h1 | h2 |\n| --- | --- |\n| 1 | 2 |\n| f1 | f2 |");
+  });
+});
+
+describe("a table part outside any table", () => {
+  it.each([
+    ["a cell", "<td>x</td>"],
+    ["a cell in a div", "<div><td>x</td></div>"],
+    ["a caption", "<caption>c</caption>"],
+    ["a row", "<tr><td>a</td><td>b</td></tr>"],
+  ])("%s keeps its text, as before", (_name, body) => {
+    expect(markdown(body)).toBe(before(body));
   });
 });
 
@@ -142,6 +162,7 @@ describe("a table that stays as its text", () => {
     "a heading in a cell": cell("<h3>head</h3>"),
     "a pre in a cell": cell("<pre>code</pre>"),
     "a quote in a cell": cell("<blockquote>said</blockquote>"),
+    "a row inside a cell": `<table>${head}<tr><td>a<tr><td>q</td><td>r</td></tr></td><td>d</td></tr></table>`,
     "a colspan of 1000 over 1,000 rows": `<table><tr><th colspan="1000">Wide</th></tr>${rows(1000, (i) => `<td>${i}</td><td>x</td>`)}</table>`,
   };
   it.each(Object.entries(cases))("%s", (_name, body) => {

@@ -30,7 +30,12 @@ const rowspanOne = (cell: Element): boolean => {
 /** Worked out from the attributes alone, before anything is built, so a huge `colspan` costs nothing. */
 function factsOf(table: Element): Facts | null {
   if (table.querySelector("table")) return null;
-  const rows = [...table.querySelectorAll("tr")];
+  const all = [...table.querySelectorAll("tr")];
+  const inPart = (name: string) => all.filter((row) => row.parentElement?.nodeName === name);
+  const head = inPart("THEAD");
+  const foot = inPart("TFOOT");
+  const placed = new Set([...head, ...foot]);
+  const rows = [...head, ...all.filter((row) => !placed.has(row)), ...foot];
   let cells = 0;
   let columns = 0;
   for (const row of rows) {
@@ -42,6 +47,7 @@ function factsOf(table: Element): Facts | null {
     }
     columns = Math.max(columns, width);
   }
+  if (table.querySelectorAll("td,th").length !== cells) return null;
   if (rows.length < 2 || columns < 2 || rows.length * columns > 2 * cells) return null;
   return { rows, columns };
 }
@@ -58,9 +64,11 @@ const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim().repla
 // So the rule for a grid table's cells and caption notes each one's line here, and the table's rule
 // reads them back.
 const lines = new WeakMap<Element, string>();
-const isPart = (node: Node): boolean =>
-  (node.nodeName === "TD" || node.nodeName === "TH" || node.nodeName === "CAPTION") &&
-  grid((node as Element).closest("table") as Element) !== null;
+const isPart = (node: Node): boolean => {
+  if (node.nodeName !== "TD" && node.nodeName !== "TH" && node.nodeName !== "CAPTION") return false;
+  const table = (node as Element).closest("table");
+  return table !== null && grid(table) !== null;
+};
 
 function rowLine(row: Element, columns: number): string {
   const out: string[] = [];

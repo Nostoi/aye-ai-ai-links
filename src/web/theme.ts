@@ -475,6 +475,7 @@ ${spaceClasses}
 .copy-end-acts button{min-height:44px;padding:0 18px;border:0;border-radius:999px;background:var(--fill);color:var(--ink);font-size:15px}
 .copy-end [data-handy],.copy-end .handy-on{display:contents}
 .copy-end-line{min-height:44px;margin:0}
+.copy-nav .back-link,.copy-end .back-link{gap:8px;font-size:15px;color:var(--soft);text-decoration:none}
 .copy-end .back-link{margin-top:16px}`;
 
 /**

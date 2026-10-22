@@ -899,4 +899,10 @@ describe("the end of the saved copy", () => {
     expect(rule(".copy-end-acts")).toContain("flex-wrap:wrap");
     expect(rule(".copy-end [data-handy],.copy-end .handy-on")).toBe("display:contents");
   });
+
+  it("spaces both Back links' arrow from their words, in the soft colour (#228)", () => {
+    const back = rule(".copy-nav .back-link,.copy-end .back-link");
+    expect(back).toContain("gap:8px");
+    expect(back).toContain("color:var(--soft)");
+  });
 });

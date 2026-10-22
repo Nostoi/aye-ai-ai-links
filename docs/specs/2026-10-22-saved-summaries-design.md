@@ -33,7 +33,7 @@ Two things stand in the way today:
 
 ## Owner decisions (2026-10-22)
 
-1. **Rows show the summary only where there's no why** (option C of the canvas mockups, section 6, "What was that link about?"). It takes the why's place, in grey, one line on desktop and two on a phone. Rows with a why are unchanged.
+1. **Rows show the summary only where there's no why** (option C of the canvas mockups, section 6, "What was that link about?"). It takes the why's place, one line on desktop and two on a phone. After the design critique the owner approved a secondary ink, darker than the grey line, and a 90-character length. Rows with a why are unchanged.
 2. **The server replaces every summary a saving AI wrote**, the existing ones included, so all match.
 3. **A summary the owner asked for sticks.** It is labelled like a why. **"stated"** or **"asked"** means the owner gave it, and the server never replaces it. **"inferred"**, or no label, means an AI wrote it on its own, and the server replaces it.
 4. **No "(a guess)" mark on summaries.** The 2026-10-12 decision-log entry already treats a summary as the AI's description of the page, not a guess about the owner. This was the controller's proposal; the owner did not object.
@@ -101,7 +101,8 @@ A server summary written after an AI edit that changed the summary makes that ed
 
 ### The web
 
-- On `linkRow` (`src/web/link-rows.ts`), used by All links and space pages, a row with no why shows the summary in the why's place, styled as grey text: one line with an ellipsis on desktop, two lines on a phone.
+- On `linkRow` (`src/web/link-rows.ts`), used by All links and space pages and their Pictures view, a row with no why shows the summary in the why's place: one line with an ellipsis on desktop, two lines on a phone.
+- The summary is in a secondary ink, darker than the grey line under it and lighter than a why. So the owner's words, the page's description and the details are three levels. Search results use the same style, unclamped.
 - A row with a why is unchanged, and so is a row with neither.
 - On a space page, a row with no why also keeps its Tell me why. When the owner answers it, the summary line goes as the why appears, so the row never shows both.
 - Search results keep showing the summary as they do now.
@@ -121,7 +122,7 @@ A server summary written after an AI edit that changed the summary makes that ed
 
 These are the controller's calls unless a reviewer finds a reason against:
 
-- `SUMMARY_MAX`, about 160 characters, sized for two lines on a phone.
+- `SUMMARY_MAX`, 90 characters. A phone row holds about 34 characters a line, so two lines are about 70. A desktop row holds about 90 on its one line. These are estimated from the mockup's sizes, not measured (design critique, 2026-10-22; it was 160).
 - How much page text goes to the model: about 6,000 characters, from the start of the snapshot text, after the title and description.
 - The gap between calls, the per-link backoff, how many failures in a row pause the pass, and the per-call timeout. A local model (#187) is slow, so allow at least 60 s.
 - The column shape (above), the migration and the migration test.

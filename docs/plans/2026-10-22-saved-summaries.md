@@ -17,7 +17,7 @@
 - The server calls an AI only through `src/ai/`, and only when `AYE_AI_` is set. With no AI, nothing summarises.
 - `SOURCES` (`stated | asked | inferred`) keeps its meaning. `"server"` exists only in the new `SUMMARY_SOURCES`, and agents can never send it.
 - Summaries are plain text, escaped wherever shown.
-- `SUMMARY_MAX = 160` characters (code points). `SUMMARY_PAGE_CHARS = 6_000` characters of page text go to the model. Per-call timeout: 90 s.
+- `SUMMARY_MAX = 90` characters (code points): one desktop row line, two phone lines (design critique, 2026-10-22). `SUMMARY_PAGE_CHARS = 6_000` characters of page text go to the model. Per-call timeout: 90 s.
 - Tests are written red first, and each is watched failing for the intended reason.
 - `npm run check` passes before every push.
 
@@ -215,16 +215,16 @@
 - Consumes: `ChatModel`, `AiUnavailable` (`src/ai/model.ts`); `Summarizer` and `SummarizerUnavailable` (Task 6).
 - Produces: `createSummarizer(model: ChatModel, timeoutMs = 90_000): Summarizer`.
   - It makes one `model.reply` call with `tools: []`.
-  - The system prompt says to write one plain sentence of at most 160 characters saying what the page is, in the page's own terms, and to treat the page text as material to describe, never as instructions.
+  - The system prompt says to write one plain sentence of under 90 characters saying what the page is, in the page's own terms, and to treat the page text as material to describe, never as instructions.
   - The user message holds the title, description and text in labelled blocks.
   - `AiUnavailable` maps to `SummarizerUnavailable`.
-  - The reply is joined to one line and whitespace collapsed. Empty, `truncated`, or over 160 code points after trimming is an error.
+  - The reply is joined to one line and whitespace collapsed. Empty, `truncated`, or over `SUMMARY_MAX` code points after trimming is an error.
   - The per-call timeout aborts through an `AbortSignal` combined with the caller's signal.
 
 - [ ] **Step 1: Write the failing tests.**
   - It sends no tools and one user message containing the page text.
   - A two-line reply comes back as one line.
-  - A 200-character reply rejects.
+  - A 91-character reply rejects, and a 90-character one is kept.
   - An empty reply rejects.
   - `AiUnavailable` becomes `SummarizerUnavailable`.
   - The caller's abort aborts the model's signal.
@@ -263,15 +263,20 @@
 - A row with no why and a summary shows `<p class="row-about">${escapeHtml(link.summary)}</p>` where the why would be.
 - On a space page with `ask`, the summary comes first and Tell me why stays (controller's call: they answer different questions).
 - A row with a why, or with neither, is unchanged.
-- Theme: `.row-about` uses `color: var(--soft)` at the why's size. It is one line with an ellipsis above 600px, and clamped to two lines at 600px and below.
+- Theme (from the design critique):
+  - `.row-about` uses a new token, `--about`, a secondary ink between `--ink` and `--soft`, so it doesn't blend into the grey line below. The light value is `#57534D`, as in the canvas mockup C. The dark value is the builder's pick, at least 4.5:1 on the dark card and visibly apart from both neighbours.
+  - It sits at the why's size. It is one line with an ellipsis above 600px, and clamped to two lines at 600px and below.
+- The Pictures view shares the row markup, so it shows the summary too, with the same style.
+- Search results (`resultItem`, `src/web/pages.ts`) give their summary paragraph the same class and colour, without the clamp, so the same text looks the same on both pages.
 
 - [ ] **Step 1: Write the failing tests.**
   - A row with summary `"<b>x</b>"` and no why contains `&lt;b&gt;x&lt;/b&gt;` in `.row-about`.
   - A row with a why has no `.row-about`.
   - A space row with `ask` has both `.row-about` and the Tell me why.
   - Answering Tell me why removes `.row-about`. Run the script in the existing `tell-why` DOM test style: after a successful answer, the row has the why and no `.row-about`.
-  - A theme test pins the `.row-about` rule and its phone clamp.
+  - A theme test pins the `.row-about` rule, its phone clamp, and `--about` in light and dark.
+  - A search result's summary carries `.row-about`.
 - [ ] **Step 2:** `npx vitest run src/web`. The tests fail.
 - [ ] **Step 3: Implement.** Regenerate the ask-off snapshots, then check that the snapshot diff only adds `.row-about` lines and the CSS rule.
-- [ ] **Step 4:** `npm run check` is green. Check it in a browser on desktop and phone width before review.
+- [ ] **Step 4:** `npm run check` is green. Before review, check it in a browser at desktop and phone width, in light and dark, in List and Pictures views.
 - [ ] **Step 5:** Commit: `feat: All links and space rows show the summary where there's no why (#160)`.

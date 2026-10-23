@@ -373,6 +373,25 @@ export const MIGRATIONS: Migration[] = [
     input_hash TEXT NOT NULL
   );
   `,
+  // Tag rename, merge and delete (#240): the old keys that reach a tag, and the receipts a merge
+  // or delete's Undo reads. Additive.
+  `
+  CREATE TABLE tag_aliases (
+    owner_id TEXT NOT NULL,
+    old_key TEXT NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, old_key),
+    FOREIGN KEY (owner_id, tag_id) REFERENCES tags(owner_id, id) ON DELETE CASCADE
+  );
+  CREATE TABLE tag_changes (
+    owner_id TEXT NOT NULL REFERENCES users(id),
+    change_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('merge', 'delete')),
+    at INTEGER NOT NULL,
+    receipt TEXT NOT NULL,
+    PRIMARY KEY (owner_id, change_id)
+  );
+  `,
 ];
 
 /**

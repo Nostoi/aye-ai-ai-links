@@ -52,6 +52,8 @@ import type {
   SurfacedClaim,
 } from "./store.js";
 import type { LoggedEvent } from "./store-contract.js";
+import { receiptsMeet, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
+import { strongerSource } from "./tags.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
@@ -61,11 +63,35 @@ import type {
   NewLink,
   OwnerId,
   SnapshotStatus,
+  Source,
   SummarySource,
   Tag,
   TagKind,
   TagPatch,
 } from "./types.js";
+
+type TagMark = { key: string; source: Source };
+/** A merge or delete's receipt, as `tag_changes` holds it: see `SqliteTagEditStore`. */
+type TagChange = {
+  at: Date;
+  removed: Tag;
+  aliases: string[];
+  address?: string | null;
+  kept?: { key: string; before: TagSettings; after: TagSettings; links: string[] };
+  links: { id: string; before: TagMark[]; after: TagMark[] }[];
+};
+const settingsOf = (t: TagSettings): TagSettings => ({
+  kind: t.kind,
+  kindSource: t.kindSource,
+  color: t.color,
+  pinned: t.pinned,
+  description: t.description,
+  projectStatus: t.projectStatus,
+});
+const sameSettings = (a: TagSettings, b: TagSettings) =>
+  JSON.stringify(settingsOf(a)) === JSON.stringify(settingsOf(b));
+const marksOf = (link: Link): TagMark[] => link.tags.map(({ key, source }) => ({ key, source }));
+const sameTag = (a: Tag, b: Tag) => a.key === b.key && a.name === b.name && sameSettings(a, b);
 
 type ImageStatus = "pending" | "ok" | ImageEnd;
 const imageKey = (owner: OwnerId, linkId: string) => JSON.stringify([owner, linkId]);
@@ -128,7 +154,8 @@ export class FakeStore
     IconBackfillStore,
     SummaryCandidates,
     StatsStore,
-    StatsReadingStore
+    StatsReadingStore,
+    TagEditStore
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -136,6 +163,9 @@ export class FakeStore
   private links = new Map<OwnerId, Map<string, Link>>();
   private hidden = new Map<OwnerId, Map<string, { link: Link; at: Date }>>();
   private tags = new Map<OwnerId, Map<string, Tag>>();
+  /** Old key to the live key it reaches, by owner. Every value is a live key: actions keep it so. */
+  private aliases = new Map<OwnerId, Map<string, string>>();
+  private tagChanges = new Map<OwnerId, Map<string, TagChange>>();
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
   private storedImages = new Map<string, StoredImage & { role: ImageRole }>();
@@ -635,8 +665,251 @@ export class FakeStore
     return structuredClone(entry);
   }
 
+  async tagLinkCounts(owner: OwnerId) {
+    const counts = new Map<string, number>();
+    for (const link of this.owned(owner).values()) {
+      for (const t of link.tags) counts.set(t.key, (counts.get(t.key) ?? 0) + 1);
+    }
+    return counts;
+  }
+
+  async renameTag(owner: OwnerId, key: string, name: string, newKey: string) {
+    const catalog = this.catalogOf(owner);
+    const entry = catalog.get(key);
+    if (!entry) return null;
+    if (newKey !== key && catalog.has(newKey)) return "taken";
+    entry.name = name;
+    for (const link of this.everyLink(owner)) {
+      for (const t of link.tags) if (t.key === key) Object.assign(t, { key: newKey, name });
+    }
+    if (newKey !== key) {
+      catalog.delete(key);
+      entry.key = newKey;
+      catalog.set(newKey, entry);
+      this.repointAliases(owner, key, newKey);
+      this.aliasesOf(owner).set(key, newKey);
+      this.cancelLinkEdits(owner, key);
+    }
+    return structuredClone(entry);
+  }
+
+  async mergeTag(
+    owner: OwnerId,
+    m: { from: Tag; into: Tag; set: TagSettings; at: Date; pruneBefore: Date },
+  ) {
+    if (m.from.key === m.into.key) throw new Error("A tag cannot be merged into itself.");
+    this.pruneTagChanges(owner, m.pruneBefore);
+    const catalog = this.catalogOf(owner);
+    const from = catalog.get(m.from.key);
+    const into = catalog.get(m.into.key);
+    if (!from || !into) return null;
+    if (!sameTag(from, m.from) || !sameTag(into, m.into)) return "conflict";
+    const moved = this.liveWith(owner, from.key);
+    const changed = this.everyLink(owner).filter((l) => l.tags.some((t) => t.key === from.key));
+    const before = changed.map((l) => marksOf(l));
+    const aliases = this.reachingAliases(owner, from.key);
+    const keptBefore = settingsOf(into);
+    for (const link of changed) {
+      const old = link.tags.findIndex((t) => t.key === from.key);
+      const kept = link.tags.find((t) => t.key === into.key);
+      const oldTag = link.tags[old];
+      if (!oldTag) continue;
+      if (kept) {
+        kept.source = strongerSource(kept.source, oldTag.source);
+        link.tags.splice(old, 1);
+      } else Object.assign(oldTag, { key: into.key, name: into.name });
+    }
+    this.repointAliases(owner, from.key, into.key);
+    this.aliasesOf(owner).set(from.key, into.key);
+    this.cancelLinkEdits(owner, from.key);
+    catalog.delete(from.key);
+    Object.assign(into, settingsOf(m.set));
+    const changeId = this.recordTagChange(owner, {
+      at: new Date(m.at),
+      removed: structuredClone(from),
+      aliases,
+      kept: {
+        key: into.key,
+        before: keptBefore,
+        after: settingsOf(into),
+        links: this.everyLink(owner)
+          .filter((l) => l.tags.some((t) => t.key === into.key))
+          .map((l) => l.id),
+      },
+      links: changed.map((l, i) => ({ id: l.id, before: before[i] ?? [], after: marksOf(l) })),
+    });
+    return { tag: structuredClone(into), changeId, moved, links: this.liveWith(owner, into.key) };
+  }
+
+  async deleteTag(owner: OwnerId, d: { tag: Tag; at: Date; pruneBefore: Date }) {
+    this.pruneTagChanges(owner, d.pruneBefore);
+    const catalog = this.catalogOf(owner);
+    const entry = catalog.get(d.tag.key);
+    if (!entry) return null;
+    if (!sameTag(entry, d.tag)) return "conflict";
+    const moved = this.liveWith(owner, entry.key);
+    const changed = this.everyLink(owner).filter((l) => l.tags.some((t) => t.key === entry.key));
+    const before = changed.map((l) => marksOf(l));
+    const aliases = this.reachingAliases(owner, entry.key);
+    for (const link of changed) link.tags = link.tags.filter((t) => t.key !== entry.key);
+    const mine = this.aliasesOf(owner);
+    for (const [old, to] of mine) if (to === entry.key) mine.delete(old);
+    this.cancelLinkEdits(owner, entry.key);
+    catalog.delete(entry.key);
+    const changeId = this.recordTagChange(owner, {
+      at: new Date(d.at),
+      removed: structuredClone(entry),
+      aliases,
+      address: this.aliasesOf(owner).get(entry.key) ?? null,
+      links: changed.map((l, i) => ({ id: l.id, before: before[i] ?? [], after: marksOf(l) })),
+    });
+    return { changeId, moved };
+  }
+
+  async undoTagChange(owner: OwnerId, changeId: string, since: Date) {
+    const r = this.tagChanges.get(owner)?.get(changeId);
+    if (!r || r.at.getTime() < since.getTime()) return null;
+    if (!this.unchangedSince(owner, r)) return "conflict";
+    const waiting = [...(this.tagChanges.get(owner) ?? [])].map(([id, c]) => ({ id, ...c }));
+    const newer = waiting.slice(waiting.findIndex((c) => c.id === changeId) + 1);
+    const live = (c: TagChange) => c.at.getTime() >= since.getTime();
+    if (newer.some((c) => live(c) && receiptsMeet(r, c) && this.unchangedSince(owner, c)))
+      return "conflict";
+    const catalog = this.catalogOf(owner);
+    const mine = this.aliasesOf(owner);
+    const kept = r.kept && catalog.get(r.kept.key);
+    const links = r.links.flatMap((l) => {
+      const link = this.linkOf(owner, l.id);
+      return link ? [{ link, ...l }] : [];
+    });
+    const restored = structuredClone(r.removed);
+    catalog.set(restored.key, restored);
+    for (const key of r.aliases) mine.set(key, restored.key);
+    if (r.kept && kept) {
+      mine.delete(restored.key);
+      Object.assign(kept, settingsOf(r.kept.before));
+    }
+    for (const { link, before } of links) {
+      link.tags = before.map(({ key, source }) => {
+        const t = catalog.get(key);
+        if (!t) throw new Error(`Undo found no tag ${key} to put back.`);
+        return { key, name: t.name, source, kind: t.kind, kindSource: t.kindSource };
+      });
+    }
+    this.tagChanges.get(owner)?.delete(changeId);
+    return {
+      tags: [restored, ...(kept ? [kept] : [])].map((t) => ({
+        tag: structuredClone(t),
+        links: this.liveWith(owner, t.key),
+      })),
+    };
+  }
+
+  async currentKey(owner: OwnerId, key: string) {
+    if (this.catalogOf(owner).has(key)) return key;
+    return this.aliases.get(owner)?.get(key) ?? null;
+  }
+
+  /** Whether everything the receipt's Undo would put back is still as the change left it. */
+  private unchangedSince(owner: OwnerId, r: TagChange): boolean {
+    const catalog = this.catalogOf(owner);
+    const mine = this.aliasesOf(owner);
+    if (catalog.has(r.removed.key)) return false;
+    if (!r.kept && (mine.get(r.removed.key) ?? null) !== (r.address ?? null)) return false;
+    const kept = r.kept && catalog.get(r.kept.key);
+    if (r.kept) {
+      if (!kept || !sameSettings(kept, r.kept.after)) return false;
+      const recorded = r.kept.links.filter((id) => this.linkOf(owner, id) !== undefined);
+      const keptKey = kept.key;
+      const now = this.everyLink(owner)
+        .filter((l) => l.tags.some((t) => t.key === keptKey))
+        .map((l) => l.id);
+      if (recorded.length !== now.length || recorded.some((id) => !now.includes(id))) return false;
+      if (mine.get(r.removed.key) !== kept.key) return false;
+    }
+    const changed = r.links.some((l) => {
+      const link = this.linkOf(owner, l.id);
+      return link !== undefined && !sameTags(marksOf(link), l.after);
+    });
+    if (changed) return false;
+    return r.aliases.every(
+      (key) => !catalog.has(key) && mine.get(key) === (kept ? kept.key : undefined),
+    );
+  }
+
+  private linkOf(owner: OwnerId, id: string): Link | undefined {
+    return this.owned(owner).get(id) ?? this.hidden.get(owner)?.get(id)?.link;
+  }
+
+  /** The owner's links, hidden included: a tag change rewrites both. */
+  private everyLink(owner: OwnerId): Link[] {
+    return [
+      ...this.owned(owner).values(),
+      ...[...(this.hidden.get(owner)?.values() ?? [])].map((e) => e.link),
+    ];
+  }
+
+  private liveWith(owner: OwnerId, key: string): number {
+    return [...this.owned(owner).values()].filter((l) => l.tags.some((t) => t.key === key)).length;
+  }
+
+  private aliasesOf(owner: OwnerId): Map<string, string> {
+    let m = this.aliases.get(owner);
+    if (!m) {
+      m = new Map();
+      this.aliases.set(owner, m);
+    }
+    return m;
+  }
+
+  private repointAliases(owner: OwnerId, from: string, to: string): void {
+    const mine = this.aliasesOf(owner);
+    for (const [old, key] of mine) if (key === from) mine.set(old, to);
+  }
+
+  /** The old keys that reach the tag: its aliases that no live tag shadows. */
+  private reachingAliases(owner: OwnerId, key: string): string[] {
+    const catalog = this.catalogOf(owner);
+    return [...this.aliasesOf(owner)]
+      .filter(([old, to]) => to === key && !catalog.has(old))
+      .map(([old]) => old)
+      .sort();
+  }
+
+  /** Removes the owner's link-edit records whose tags, before or after, name `key`. */
+  private cancelLinkEdits(owner: OwnerId, key: string): void {
+    for (const [k, record] of this.editRecords) {
+      const [recordOwner] = JSON.parse(k) as [OwnerId, string];
+      const names = [...record.prior.tags, ...record.written.tags].some((t) => t.key === key);
+      if (recordOwner === owner && record.changed.tags && names) this.editRecords.delete(k);
+    }
+  }
+
+  private pruneTagChanges(owner: OwnerId, before: Date): void {
+    const mine = this.tagChanges.get(owner);
+    for (const [id, r] of mine ?? []) if (r.at.getTime() < before.getTime()) mine?.delete(id);
+  }
+
+  private recordTagChange(owner: OwnerId, change: TagChange): string {
+    let mine = this.tagChanges.get(owner);
+    if (!mine) {
+      mine = new Map();
+      this.tagChanges.set(owner, mine);
+    }
+    const changeId = randomUUID();
+    mine.set(changeId, change);
+    return changeId;
+  }
+
   async listLinks(owner: OwnerId) {
     return [...this.owned(owner).values()].map((l) => this.view(owner, l));
+  }
+
+  /** Both reads start before either is awaited, so no other call runs between them. */
+  async listLinksAndTags(owner: OwnerId) {
+    const links = this.listLinks(owner);
+    const tags = this.listTags(owner);
+    return { links: await links, tags: await tags };
   }
 
   async dueChecks(cutoffs: CheckCutoffs, limit: number): Promise<DueCheck[]> {

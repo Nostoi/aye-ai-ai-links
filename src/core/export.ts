@@ -20,7 +20,7 @@ import { createZipWriter, type ZipSink } from "./zip.js";
 
 /** AppDeps' names (R2), so a route or `createDeps` can pass its deps as they are. */
 export type ExportDeps = ManifestDeps & {
-  store: Pick<LinkStore, "listLinks" | "listTags" | "get">;
+  store: Pick<LinkStore, "listLinksAndTags" | "get">;
   images: Pick<LinkImageReader, "pictureInfo" | "image">;
   savedCopies: SavedCopyReader;
   readGate: ReadGate;
@@ -68,9 +68,7 @@ export async function writeExport(
   check();
   const exportedAt = deps.now();
   check();
-  const links = await deps.store.listLinks(owner);
-  check();
-  const catalog = await deps.store.listTags(owner);
+  const { links, tags: catalog } = await deps.store.listLinksAndTags(owner);
   check();
   const tools = await deps.tools.listTools(owner);
   check();

@@ -10,7 +10,8 @@ import type { LinkEdit, LinkEditStore } from "./link-edit-store.js";
 import type { SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
 import type { LinkRemover, LinkStore } from "./store.js";
-import type { Labelled, LinkTag } from "./types.js";
+import type { TagEditStore } from "./tag-edit-store.js";
+import type { Labelled, LinkTag, Tag } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
@@ -19,6 +20,7 @@ export type EditHarness = {
   links: LinkStore & SnapshotStore & LinkRemover;
   images: ImageStore & LinkImageReader;
   edits: LinkEditStore;
+  tagEdits: TagEditStore;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
 };
@@ -308,6 +310,69 @@ export function describeLinkEditStoreContract(
         await h.links.update(A, id, { tags });
         return id;
       };
+
+      describe("older edits after a tag change", () => {
+        const PRUNE = at(-3600);
+        const tagOf = async (key: string): Promise<Tag> => {
+          const found = (await h.links.listTags(A)).find((t) => t.key === key);
+          if (!found) throw new Error(`no tag ${key}`);
+          return found;
+        };
+        const deleteA = async () =>
+          h.tagEdits.deleteTag(A, { tag: await tagOf("a"), at: at(30), pruneBefore: PRUNE });
+        const mergeAIntoC = async () => {
+          const into = await tagOf("c");
+          const { kind, kindSource, color, pinned, description, projectStatus } = into;
+          return h.tagEdits.mergeTag(A, {
+            from: await tagOf("a"),
+            into,
+            set: { kind, kindSource, color, pinned, description, projectStatus },
+            at: at(30),
+            pruneBefore: PRUNE,
+          });
+        };
+        const renameAToD = () => h.tagEdits.renameTag(A, "a", "d", "d");
+
+        it.each([
+          ["deleted", deleteA],
+          ["merged into c", mergeAIntoC],
+          ["renamed to d", renameAToD],
+        ])("Undo answers conflict after the removed tag was %s", async (_n, change) => {
+          const id = await linkTagged([tag("a"), tag("b")]);
+          await linkTagged([tag("c")], "Other");
+          const held = [tag("a"), tag("b")];
+          const edit = await editId(h.edits.applyEdit(A, id, withTags(held, [tag("b")]), at(10)));
+          expect(await change()).not.toBeNull();
+          const catalog = await h.links.listTags(A);
+          expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+          expect(await keys(A, id)).toEqual([["b", "stated"]]);
+          expect(await h.links.listTags(A)).toEqual(catalog);
+          expect(catalog.map((t) => t.key)).not.toContain("a");
+        });
+
+        it("Undo answers conflict when the old key was reused", async () => {
+          const held = [tag("banking"), tag("tax")];
+          const id = await linkTagged(held);
+          const edit = await editId(h.edits.applyEdit(A, id, withTags(held, [tag("tax")]), at(10)));
+          expect(await h.tagEdits.renameTag(A, "banking", "finance", "finance")).not.toBeNull();
+          await linkTagged([tag("banking")], "Reused");
+          expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+          expect(await keys(A, id)).toEqual([["tax", "stated"]]);
+        });
+
+        it("a receipt not naming the changed key still undoes", async () => {
+          const held = [tag("x"), tag("y")];
+          const id = await linkTagged(held);
+          await linkTagged([tag("a")], "Other");
+          const edit = await editId(h.edits.applyEdit(A, id, withTags(held, [tag("y")]), at(10)));
+          expect(await deleteA()).not.toBeNull();
+          expect(await h.edits.undoEdit(A, id, edit)).not.toBe("conflict");
+          expect(await keys(A, id)).toEqual([
+            ["x", "stated"],
+            ["y", "stated"],
+          ]);
+        });
+      });
 
       it("writes the tags in the order given, each with its source", async () => {
         const held = [tag("a", "inferred"), tag("b", "stated")];

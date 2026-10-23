@@ -357,7 +357,7 @@ export const exportFilename = (exportedAt: Date, ext: "json" | "zip") =>
   `aye-links-${exportedAt.toISOString().slice(0, 10)}.${ext}`;
 
 export type ManifestDeps = {
-  store: Pick<LinkStore, "listLinks" | "listTags">;
+  store: Pick<LinkStore, "listLinksAndTags">;
   tools: Pick<ToolStore, "listTools">;
   checks: Pick<LinkCheckStore, "listChecks">;
   profile: Pick<ProfileStore, "listNotes" | "listFocus">;
@@ -368,8 +368,7 @@ export type ManifestDeps = {
 /** Reads the owner's library, clock first, one owner-scoped read per collection, and builds the links-only manifest. */
 export async function exportManifest(deps: ManifestDeps, owner: OwnerId): Promise<ExportManifest> {
   const exportedAt = deps.now();
-  const links = await deps.store.listLinks(owner);
-  const catalog = await deps.store.listTags(owner);
+  const { links, tags: catalog } = await deps.store.listLinksAndTags(owner);
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
   const notes = await deps.profile.listNotes(owner);

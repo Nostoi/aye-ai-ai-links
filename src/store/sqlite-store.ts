@@ -73,7 +73,8 @@ type LinkRow = {
 
 type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 
-const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
+/** A catalog row as `Tag` reads it, `pinned` still 0 or 1. */
+export const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
   project_status AS projectStatus`;
 
 type SnapshotRow = {
@@ -215,6 +216,10 @@ export class SqliteStore
   }
 
   async listTags(owner: OwnerId) {
+    return this.readTags(owner);
+  }
+
+  private readTags(owner: OwnerId): Tag[] {
     const rows = this.db
       .prepare(`SELECT ${TAG_COLUMNS} FROM tags WHERE owner_id = ? ORDER BY key`)
       .all(owner) as TagRow[];
@@ -296,6 +301,13 @@ export class SqliteStore
 
   async listLinks(owner: OwnerId) {
     return this.db.transaction(() => this.readAll(owner))();
+  }
+
+  async listLinksAndTags(owner: OwnerId) {
+    return this.db.transaction(() => ({
+      links: this.readAll(owner),
+      tags: this.readTags(owner),
+    }))();
   }
 
   async claimSurfaced(

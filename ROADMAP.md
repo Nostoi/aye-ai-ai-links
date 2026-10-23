@@ -22,6 +22,12 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-23:** Rename, merge and delete a tag, with Undo (#240; design: `docs/specs/2026-10-23-tag-rename-merge-delete-design.md`). The Tags page and the AI tools get all three. The rules live in `src/core/tag-edit.ts`; the order against #161 is in the 2026-10-22 entry below.
+  - **Owner decisions:** merge and delete can be undone for one hour, from the page or an AI (longer than a link delete's 60 seconds, so "undo that" still works in a chat); nothing asks "Are you sure?" first; an agent changes tags only when the owner asks or confirms, and its merge or delete is covered by Undo; renaming onto an existing tag offers a merge into it ("Merge into game art" or "Keep pixel-art"); old addresses keep reaching the renamed or kept tag.
+  - **Merge settings:** pinned if either was; the kept tag's own colour, description, kind and status, falling back to the old tag's colour and description; a topic that absorbs a stated or asked project becomes that project.
+  - **Controller's calls** are in the design: a capitals-only rename keeps the key; rename has no Undo bar; Undo refuses and changes nothing if anything it would put back has moved; tag counts show beside each tag.
+  - **#251 (the app suggesting merges, and grouping the Tags page) is split out and follows #240.** An agent's merge suggestions here are tool-description guidance only.
+
 - **2026-10-23:** The stats reading shows only beside links saved before it (#161, owner in session). It is hidden while every live link was saved after it, and it is dated when its stats were read. A hidden reading is rewritten on the next hourly check rather than after 7 days. With no AI connection, no reading shows.
 - **2026-10-22:** Stats (#161; design: `docs/specs/2026-10-22-stats-design.md`, approved by the owner in session). A Stats section on the profile page, a `link_events` history log from now on, a read-only `get_stats` MCP tool, and a weekly AI reading through the one AI connection. It lands in three PRs: the log, the counts, the reading.
   - **Owner decisions:**

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
 import { createChatModel } from "./ai/create-model.js";
+import { createStatsReader } from "./ai/read-stats.js";
 import { createSummarizer } from "./ai/summarize.js";
 import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
@@ -22,6 +23,7 @@ import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-r
 import { createLinkPurger } from "./core/link-removal.js";
 import { pausedMessage } from "./core/saved-copy.js";
 import { createSnapshotRunner } from "./core/snapshot-runner.js";
+import { createStatsReadingPass, type StatsReadingPass } from "./core/stats-reading-pass.js";
 import { createSummaryPass, type SummaryPass } from "./core/summary-pass.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
@@ -82,6 +84,8 @@ export type StartOptions = {
   summaryPollMs?: number;
   /** Time between the summary pass's AI calls; its 5 s default when left out. */
   summaryGapMs?: number;
+  /** Time between stats reading sweeps; its 1 h default when left out. */
+  readingPollMs?: number;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
   jsonFetcher?: { fetch: JsonFetch; close: () => Promise<void> };
   refresherIntervalMs?: number;
@@ -149,6 +153,7 @@ export async function startServer(
     iconPollMs,
     summaryPollMs,
     summaryGapMs,
+    readingPollMs,
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher({ version: config.version }),
     refresherIntervalMs,
@@ -166,6 +171,7 @@ export async function startServer(
   let copyPass: CopyPass | undefined;
   let iconBackfill: IconBackfill | undefined;
   let summaryPass: SummaryPass | undefined;
+  let readingPass: StatsReadingPass | undefined;
   let checks: LinkCheckRunner | undefined;
   let purger: ReturnType<typeof createLinkPurger> | undefined;
   let exports: ExportBuilds | undefined;
@@ -179,6 +185,7 @@ export async function startServer(
     await copyPass?.stop();
     await iconBackfill?.stop();
     await summaryPass?.stop();
+    await readingPass?.stop();
     // The same for the check in flight and its checker.
     await checks?.stop();
     await jsonFetcher.close();
@@ -265,7 +272,7 @@ export async function startServer(
     });
     // One connection for the web door's chat and the summary pass.
     const chat = config.ai && createChatModel(config.ai);
-    if (chat) {
+    if (chat && config.ai) {
       summaryPass = createSummaryPass({
         store: deps.store,
         pages: deps.store,
@@ -273,6 +280,17 @@ export async function startServer(
         now: deps.now,
         ...(summaryPollMs !== undefined && { pollMs: summaryPollMs }),
         ...(summaryGapMs !== undefined && { gapMs: summaryGapMs }),
+      });
+      readingPass = createStatsReadingPass({
+        readings: deps.statsReadings,
+        store: deps.store,
+        tools: deps.tools,
+        stats: deps.stats,
+        profile: deps.profile,
+        reader: createStatsReader(chat),
+        writtenBy: config.ai.name,
+        now: deps.now,
+        ...(readingPollMs !== undefined && { pollMs: readingPollMs }),
       });
     }
     checks = createLinkCheckRunner({
@@ -334,6 +352,7 @@ export async function startServer(
   copyPass?.start();
   iconBackfill?.start();
   summaryPass?.start();
+  readingPass?.start();
   checks?.start();
   purger?.start();
   refresher.start();
@@ -380,6 +399,10 @@ export async function startServer(
     const summariesStopped = (summaryPass?.stop() ?? Promise.resolve()).then(() => {
       summariesEnded = true;
     });
+    let readingsEnded = false;
+    const readingsStopped = (readingPass?.stop() ?? Promise.resolve()).then(() => {
+      readingsEnded = true;
+    });
     let checksEnded = false;
     const checksStopped = (checks?.stop() ?? Promise.resolve()).then(() => {
       checksEnded = true;
@@ -395,13 +418,14 @@ export async function startServer(
       copiesStopped,
       iconsStopped,
       summariesStopped,
+      readingsStopped,
       checksStopped,
       calls().ended,
     ]).then(() => false as const);
     try {
       if (await Promise.race([ended, timedOut])) {
         console.error(
-          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
+          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; stats reading pass ${readingsEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
         );
       }
     } finally {
@@ -417,6 +441,7 @@ export async function startServer(
     copyPass?.quiesce();
     iconBackfill?.quiesce();
     summaryPass?.quiesce();
+    readingPass?.quiesce();
     checks?.quiesce();
     await drain();
     await settle();

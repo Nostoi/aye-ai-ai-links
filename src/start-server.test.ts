@@ -1501,27 +1501,35 @@ describe("startServer", () => {
         "SELECT summary, summary_source AS source FROM links",
       );
 
-    /** An OpenAI-style AI that records each request body, and answers `reply` or never. */
+    const READING = "Maybe you save a lot about cats.";
+    const readings = () =>
+      read<{ text: string; by: string }>("SELECT text, written_by AS by FROM stats_readings");
+
+    /** An OpenAI-style AI that records each summary request body, and answers `reply` or never. */
     const fakeAi = async (reply: string | null) => {
       const bodies: string[] = [];
       let closed = 0;
       const server = http.createServer((req, res) => {
         let body = "";
+        let reading = false;
         req.on("data", (chunk) => {
           body += chunk;
         });
         req.on("end", () => {
-          bodies.push(body);
-          if (reply === null) return;
+          // The stats reading pass shares this connection; it always gets an answer and is not a summary call.
+          reading = body.includes("What the numbers mean");
+          if (!reading) bodies.push(body);
+          const answer = reading ? READING : reply;
+          if (answer === null) return;
           res.setHeader("content-type", "application/json");
           res.end(
             JSON.stringify({
-              choices: [{ message: { content: reply }, finish_reason: "stop" }],
+              choices: [{ message: { content: answer }, finish_reason: "stop" }],
             }),
           );
         });
         res.on("close", () => {
-          closed++;
+          if (!reading) closed++;
         });
       });
       await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -1599,6 +1607,20 @@ describe("startServer", () => {
       await startWith(undefined);
       await sleep(300);
       expect(held()).toEqual([{ summary: "Old words", source: "inferred" }]);
+      expect(readings()).toEqual([]);
+    });
+
+    it("with an AI set up, also writes the stats reading, signed with the AI's name", async () => {
+      await seedRead();
+      const fake = await fakeAi("A page about the cats of Rome");
+      try {
+        await startWith(fake.ai);
+        await vi.waitFor(() => expect(readings()).toEqual([{ text: READING, by: "Fake" }]), {
+          timeout: 3_000,
+        });
+      } finally {
+        await fake.close();
+      }
     });
   });
 

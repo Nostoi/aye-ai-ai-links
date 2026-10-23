@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { A, at, B, newLink } from "./snapshot-store-contract.js";
 import type { LinkStore } from "./store.js";
+import type { LoggedEvent } from "./store-contract.js";
 import type { ToolRecord, ToolStore } from "./tool-store.js";
 
 type MaybeAsync<T> = T | Promise<T>;
@@ -10,6 +11,8 @@ export type ToolHarness = {
   store: LinkStore & ToolStore;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
+  /** The owner's log events for one link, in the order they were written, bypassing the stores. */
+  eventsOf(owner: string, id: string): MaybeAsync<LoggedEvent[]>;
 };
 
 const kept = (over: Partial<ToolRecord> = {}): ToolRecord => ({
@@ -28,6 +31,7 @@ export function describeToolStoreContract(
   describe(name, () => {
     let store: LinkStore & ToolStore;
     let n: number;
+    let eventsOf: ToolHarness["eventsOf"];
 
     const save = async (owner: string): Promise<string> =>
       (await store.insertIfAbsent(owner, newLink(++n, at(0)))).link.id;
@@ -35,6 +39,7 @@ export function describeToolStoreContract(
     beforeEach(async () => {
       const h = await makeHarness();
       store = h.store;
+      eventsOf = h.eventsOf;
       await h.addOwner(A);
       await h.addOwner(B);
       n = 0;
@@ -134,6 +139,59 @@ export function describeToolStoreContract(
         expect(await store.updateToolIf(A, id, null, kept())).toBeNull();
         expect(await store.updateToolIf(A, id, kept(), null)).toBeNull();
       }
+    });
+
+    describe("events", () => {
+      const T1 = new Date("2026-05-01T10:00:00.000Z");
+      const T2 = new Date("2026-05-01T09:00:00.000Z");
+      const row = (kind: LoggedEvent["kind"], when: Date) => ({
+        kind,
+        at: when,
+        backfilled: false,
+      });
+
+      it("updateToolIf records the events it is given when applied", async () => {
+        const id = await save(A);
+        await store.updateToolIf(A, id, null, kept(), [{ record: "not_handy", at: T1 }]);
+        expect(await eventsOf(A, id)).toEqual([row("not_handy", T1)]);
+      });
+
+      it("updateToolIf records nothing when it is not applied", async () => {
+        const id = await save(A);
+        await store.updateToolIf(A, id, null, kept());
+        const result = await store.updateToolIf(A, id, null, kept({ waitDays: 60 }), [
+          { record: "not_handy", at: T1 },
+        ]);
+        expect(result?.applied).toBe(false);
+        expect(await eventsOf(A, id)).toEqual([]);
+      });
+
+      it("updateToolIf records nothing for another owner's link", async () => {
+        const id = await save(A);
+        expect(
+          await store.updateToolIf(B, id, null, kept(), [{ record: "not_handy", at: T1 }]),
+        ).toBeNull();
+        expect(await eventsOf(A, id)).toEqual([]);
+      });
+
+      it("updateToolIf unrecord removes only the event at its time", async () => {
+        const id = await save(A);
+        await store.update(A, id, {}, [
+          { record: "not_handy", at: T1 },
+          { record: "not_handy", at: T2 },
+          { record: "opened", at: T2 },
+        ]);
+        await store.updateToolIf(A, id, null, kept(), [{ unrecord: "not_handy", at: T2 }]);
+        expect(await eventsOf(A, id)).toEqual([row("not_handy", T1), row("opened", T2)]);
+      });
+
+      it("a failed event write rolls back the tool write", async () => {
+        const id = await save(A);
+        const bad = [{ record: "nonsense" as LoggedEvent["kind"], at: T1 }];
+        await expect(store.updateToolIf(A, id, null, kept(), bad)).rejects.toThrow();
+        expect(await store.getTool(A, id)).toBeNull();
+        expect(await eventsOf(A, id)).toEqual([]);
+      });
     });
 
     it("claimSurfaced with exceptKeptTools skips a kept tool, writing nothing, and claims the rest", async () => {

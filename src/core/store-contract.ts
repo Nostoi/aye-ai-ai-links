@@ -7,7 +7,7 @@ import { type SavePageInput, savePage } from "./save-page.js";
 import type { LinkRemover, LinkStore } from "./store.js";
 import { changeTagKind } from "./tag-kind.js";
 import { SPACE_COLORS, setTagColor, setTagPinned } from "./tag-space.js";
-import type { Labelled, Link, SummarySource, Tag, TagKind } from "./types.js";
+import type { Labelled, Link, LinkEventKind, SummarySource, Tag, TagKind } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
@@ -21,7 +21,12 @@ export type StoreHarness = {
   /** The owner's tag catalog, in creation order. */
   catalog(owner: string): MaybeAsync<Tag[]>;
   seedTag(owner: string, tag: Tag): MaybeAsync<void>;
+  /** The owner's log events for one link, in the order they were written, bypassing the LinkStore interface. */
+  eventsOf(owner: string, id: string): MaybeAsync<LoggedEvent[]>;
 };
+
+/** One row of a link's event log, as the harness reads it back. */
+export type LoggedEvent = { kind: LinkEventKind; at: Date; backfilled: boolean };
 
 const A = "owner-a";
 const B = "owner-b";
@@ -41,9 +46,9 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
   return {
     insertIfAbsent: (owner, link) => inner.insertIfAbsent(owner, link),
     get: (owner, id) => inner.get(owner, id),
-    update: (owner, id, patch) => inner.update(owner, id, patch),
-    updateWithReceipt: (owner, id, patch, at, extend) =>
-      inner.updateWithReceipt(owner, id, patch, at, extend),
+    update: (owner, id, patch, events) => inner.update(owner, id, patch, events),
+    updateWithReceipt: (owner, id, patch, at, extend, events) =>
+      inner.updateWithReceipt(owner, id, patch, at, extend, events),
     fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
     fillWhyWithReceipt: (owner, id, why, at, extend) =>
       inner.fillWhyWithReceipt(owner, id, why, at, extend),
@@ -54,7 +59,8 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     listLinks: (owner) => inner.listLinks(owner),
     claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
     unclaimSurfaced: (owner, id, claim) => inner.unclaimSurfaced(owner, id, claim),
-    updateIf: (owner, id, expected, patch) => inner.updateIf(owner, id, expected, patch),
+    updateIf: (owner, id, expected, patch, events) =>
+      inner.updateIf(owner, id, expected, patch, events),
     ...over,
   };
 }
@@ -2121,6 +2127,122 @@ export function describeStoreContract(
           expect(await h.all(A)).toEqual(before);
           expect(await h.all(B)).toHaveLength(1);
         });
+      });
+    });
+
+    describe("events", () => {
+      const T1 = new Date("2026-05-01T10:00:00.000Z");
+      const T2 = new Date("2026-05-01T09:00:00.000Z");
+      const seed = async (owner: string, n: number) =>
+        (await saveLink(deps(), owner, { url: `https://ex.com/ev${n}`, savedBy: "t" })).link.id;
+      const log = async (owner: string, id: string) => await h.eventsOf(owner, id);
+      const badKind = "nonsense" as LinkEventKind;
+      const row = (kind: LinkEventKind, at: Date) => ({ kind, at, backfilled: false });
+
+      it("update records the events it is given", async () => {
+        const id = await seed(A, 1);
+        await h.store.update(A, id, { title: "x" }, [
+          { record: "opened", at: T1 },
+          { record: "put_away", at: T2 },
+        ]);
+        expect(await log(A, id)).toEqual([row("opened", T1), row("put_away", T2)]);
+      });
+
+      it("updateIf records nothing when it is not applied", async () => {
+        const id = await seed(A, 1);
+        const refused = await h.store.updateIf(A, id, { state: "archived" }, { title: "x" }, [
+          { record: "put_away", at: T1 },
+        ]);
+        expect(refused?.applied).toBe(false);
+        expect(await log(A, id)).toEqual([]);
+        const applied = await h.store.updateIf(A, id, { state: "active" }, { title: "x" }, [
+          { record: "put_away", at: T1 },
+        ]);
+        expect(applied?.applied).toBe(true);
+        expect(await log(A, id)).toEqual([row("put_away", T1)]);
+      });
+
+      it("unrecord removes only the event at its time", async () => {
+        const id = await seed(A, 1);
+        await h.store.update(A, id, {}, [
+          { record: "stale", at: T1 },
+          { record: "stale", at: T2 },
+          { record: "opened", at: T2 },
+        ]);
+        await h.store.update(A, id, {}, [{ unrecord: "stale", at: T2 }]);
+        expect(await log(A, id)).toEqual([row("stale", T1), row("opened", T2)]);
+        await h.store.update(A, id, {}, [{ unrecord: "stale", at: T2 }]);
+        expect(await log(A, id)).toEqual([row("stale", T1), row("opened", T2)]);
+      });
+
+      it("unrecord removes one row when two share the time", async () => {
+        const id = await seed(A, 1);
+        await h.store.update(A, id, {}, [
+          { record: "opened", at: T1 },
+          { record: "opened", at: T1 },
+        ]);
+        await h.store.update(A, id, {}, [{ unrecord: "opened", at: T1 }]);
+        expect(await log(A, id)).toEqual([row("opened", T1)]);
+      });
+
+      it("record unlessBefore skips when the row already matched", async () => {
+        const id = await seed(A, 1);
+        await h.store.update(A, id, { state: "archived" });
+        await h.store.update(A, id, {}, [
+          { record: "put_away", at: T1, unlessBefore: { state: "archived" } },
+        ]);
+        expect(await log(A, id)).toEqual([]);
+      });
+
+      it("record unlessBefore records when it did not", async () => {
+        const id = await seed(A, 1);
+        await h.store.update(A, id, { state: "archived" }, [
+          { record: "put_away", at: T1, unlessBefore: { state: "archived" } },
+        ]);
+        expect(await log(A, id)).toEqual([row("put_away", T1)]);
+      });
+
+      it("a failed event write rolls back the link write", async () => {
+        const id = await seed(A, 1);
+        const before = await h.store.get(A, id);
+        const bad = [{ record: badKind, at: T1 }];
+        await expect(h.store.update(A, id, { title: "changed" }, bad)).rejects.toThrow();
+        await expect(h.store.updateIf(A, id, {}, { title: "changed" }, bad)).rejects.toThrow();
+        await expect(
+          h.store.updateWithReceipt(A, id, { title: "changed" }, T1, undefined, bad),
+        ).rejects.toThrow();
+        expect(await h.store.get(A, id)).toEqual(before);
+        expect(await log(A, id)).toEqual([]);
+      });
+
+      it("updateWithReceipt records its events when no covered field changed", async () => {
+        const id = await seed(A, 1);
+        const result = await h.store.updateWithReceipt(A, id, { lastOpenedAt: T1 }, T1, undefined, [
+          { record: "opened", at: T1 },
+        ]);
+        expect(result?.editId).toBeNull();
+        expect(await log(A, id)).toEqual([row("opened", T1)]);
+      });
+
+      it("a write without events leaves the log alone", async () => {
+        const id = await seed(A, 1);
+        await h.store.update(A, id, {}, [{ record: "opened", at: T1 }]);
+        await h.store.update(A, id, { title: "a" });
+        await h.store.updateIf(A, id, {}, { title: "b" });
+        await h.store.updateWithReceipt(A, id, { title: "c" }, T1);
+        expect(await log(A, id)).toEqual([row("opened", T1)]);
+      });
+
+      it("events for another owner's link are not written", async () => {
+        const id = await seed(A, 1);
+        const events = [{ record: "opened" as const, at: T1 }];
+        expect(await h.store.update(B, id, { title: "x" }, events)).toBeNull();
+        expect(await h.store.updateIf(B, id, {}, { title: "x" }, events)).toBeNull();
+        expect(
+          await h.store.updateWithReceipt(B, id, { title: "x" }, T1, undefined, events),
+        ).toBeNull();
+        expect(await log(A, id)).toEqual([]);
+        expect(await log(B, id)).toEqual([]);
       });
     });
 

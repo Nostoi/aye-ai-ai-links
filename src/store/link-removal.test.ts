@@ -220,9 +220,23 @@ describe("writes on a hidden link", () => {
     expect(beforeRows.every((rows) => rows.length === 1)).toBe(true);
     const editId = (db.prepare("SELECT edit_id FROM link_edits").get() as { edit_id: string })
       .edit_id;
+    await deps.store.update(A, id, {}, [{ record: "opened", at: at(7) }]);
+    const events = [
+      { record: "opened" as const, at: at(8) },
+      { unrecord: "opened" as const, at: at(7) },
+    ];
+    const logRows = () => db.prepare("SELECT * FROM link_events").all();
+    const beforeLog = logRows();
+    expect(beforeLog).toHaveLength(1);
     hideRowOnly(id, bare);
 
     expect(await deps.tools.updateToolIf(A, id, kept, null)).toBeNull();
+    expect(await deps.tools.updateToolIf(A, id, kept, null, events)).toBeNull();
+    expect(await deps.store.update(A, id, { title: "again" }, events)).toBeNull();
+    expect(await deps.store.updateIf(A, id, {}, { title: "again" }, events)).toBeNull();
+    expect(
+      await deps.store.updateWithReceipt(A, id, { title: "again" }, at(4), undefined, events),
+    ).toBeNull();
     expect(
       await deps.edits.applyEdit(A, id, { title: "again", picture: "page" }, at(4)),
     ).toBeNull();
@@ -243,6 +257,7 @@ describe("writes on a hidden link", () => {
     expect(await deps.savedCopies.saveCopy(A, bare, draft, copyLimits(10_000), at(6))).toBeNull();
 
     expect(titleOf()).toEqual(beforeTitle);
+    expect(logRows()).toEqual(beforeLog);
     expect(rowsOf(id)).toEqual(removed);
     expect(removed.slice(0, -1)).toEqual(beforeRows.slice(0, -1));
     expect(rowsOf(bare)).toEqual([[], [], [], [], [], []]);

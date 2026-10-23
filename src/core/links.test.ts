@@ -28,6 +28,7 @@ function harnessFor(store: FakeStore): StoreHarness {
     all: (owner) => store.all(owner),
     catalog: (owner) => store.catalog(owner),
     seedTag: (owner, tag) => store.seedTag(owner, tag),
+    eventsOf: (owner, id) => store.eventsOf(owner, id),
   };
 }
 

@@ -41,6 +41,7 @@ import {
   type SnapshotStore,
 } from "./snapshot-store.js";
 import type {
+  EventWrite,
   LinkExpectation,
   LinkRemover,
   LinkStore,
@@ -48,10 +49,12 @@ import type {
   SummaryCandidates,
   SurfacedClaim,
 } from "./store.js";
+import type { LoggedEvent } from "./store-contract.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
   Link,
+  LinkEventKind,
   LinkPatch,
   NewLink,
   OwnerId,
@@ -93,6 +96,22 @@ const stored = (own: OwnRecord): StoredImage => ({
   version: imageVersion(own.sha256),
 });
 
+const LINK_EVENT_KINDS: readonly string[] = ["opened", "put_away", "stale", "not_now", "not_handy"];
+
+/** Whether the link still matches every field `expected` names (see `LinkStore.updateIf`). */
+function matchesExpectation(found: Link, expected: LinkExpectation): boolean {
+  return (
+    (expected.state === undefined || found.state === expected.state) &&
+    (expected.snoozedUntil === undefined ||
+      (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
+    (expected.putAwayAt === undefined ||
+      (found.putAwayAt?.getTime() ?? null) === (expected.putAwayAt?.getTime() ?? null)) &&
+    (expected.whySource === undefined || expected.whySource.includes(found.why?.source ?? null)) &&
+    (expected.summary === undefined || found.summary === expected.summary) &&
+    (expected.summarySource === undefined || expected.summarySource.includes(found.summarySource))
+  );
+}
+
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
 export class FakeStore
   implements
@@ -122,6 +141,14 @@ export class FakeStore
   private toolRows = new Map<OwnerId, Map<string, ToolRecord>>();
   private checkRows = new Map<OwnerId, Map<string, LinkCheck>>();
   private copies: CopyHooks | null = null;
+  /** The event log, as `link_events` holds it. */
+  private events: {
+    owner: OwnerId;
+    linkId: string;
+    kind: LinkEventKind;
+    at: Date;
+    backfilled: boolean;
+  }[] = [];
   private nextId = 1;
 
   private owned(owner: OwnerId): Map<string, Link> {
@@ -403,8 +430,10 @@ export class FakeStore
     linkId: string,
     expected: ToolRecord | null,
     next: ToolRecord | null,
+    events?: EventWrite[],
   ): Promise<ToolWrite | null> {
-    if (!this.owned(owner).has(linkId)) return null;
+    const link = this.owned(owner).get(linkId);
+    if (!link) return null;
     let mine = this.toolRows.get(owner);
     if (!mine) {
       mine = new Map();
@@ -414,6 +443,7 @@ export class FakeStore
     if (!sameTool(current, expected)) {
       return { tool: current && structuredClone(current), applied: false };
     }
+    this.writeEvents(owner, linkId, this.settleEvents(link, events));
     if (next === null) {
       mine.delete(linkId);
       return { tool: null, applied: true };
@@ -427,9 +457,11 @@ export class FakeStore
     return found ? this.view(owner, found) : null;
   }
 
-  async update(owner: OwnerId, id: string, patch: LinkPatch) {
+  async update(owner: OwnerId, id: string, patch: LinkPatch, events?: EventWrite[]) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
+    const settled = this.settleEvents(found, events);
+    this.checkEventKinds(settled);
     const { summaryOver, ...fields } = structuredClone(patch);
     if (summaryOver && !summaryOver.includes(found.summarySource)) {
       delete fields.summary;
@@ -441,7 +473,41 @@ export class FakeStore
       if (v !== undefined) (found as Record<string, unknown>)[k] = v;
     }
     if (fields.tags) this.ensureTags(owner, fields.tags);
+    this.writeEvents(owner, id, settled);
     return this.view(owner, found);
+  }
+
+  /** Drops the `record`s whose `unlessBefore` the link already matches; call it before the write. */
+  private settleEvents(link: Link, events: EventWrite[] = []): EventWrite[] {
+    return events.filter(
+      (e) => !("record" in e) || !e.unlessBefore || !matchesExpectation(link, e.unlessBefore),
+    );
+  }
+
+  /** A kind outside the log's five fails before anything is written, as SQLite's CHECK does. */
+  private checkEventKinds(events: EventWrite[]): void {
+    for (const e of events) {
+      const kind = "record" in e ? e.record : e.unrecord;
+      if (!LINK_EVENT_KINDS.includes(kind)) throw new Error(`Unknown event kind "${kind}".`);
+    }
+  }
+
+  private writeEvents(owner: OwnerId, linkId: string, events: EventWrite[]): void {
+    this.checkEventKinds(events);
+    for (const e of events) {
+      if ("record" in e) {
+        this.events.push({ owner, linkId, kind: e.record, at: new Date(e.at), backfilled: false });
+        continue;
+      }
+      const i = this.events.findIndex(
+        (x) =>
+          x.owner === owner &&
+          x.linkId === linkId &&
+          x.kind === e.unrecord &&
+          x.at.getTime() === e.at.getTime(),
+      );
+      if (i >= 0) this.events.splice(i, 1);
+    }
   }
 
   async updateWithReceipt(
@@ -450,11 +516,12 @@ export class FakeStore
     patch: LinkPatch,
     _at: Date,
     extend?: string,
+    events?: EventWrite[],
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
     const before = coveredOf(this.view(owner, found));
-    const link = (await this.update(owner, id, patch)) as Link;
+    const link = (await this.update(owner, id, patch, events)) as Link;
     const after = coveredOf(link);
     const changed = changedFields(before, after);
     if (!anyChanged(changed)) return { link, editId: null };
@@ -523,22 +590,19 @@ export class FakeStore
     return structuredClone(entry);
   }
 
-  async updateIf(owner: OwnerId, id: string, expected: LinkExpectation, patch: LinkPatch) {
+  async updateIf(
+    owner: OwnerId,
+    id: string,
+    expected: LinkExpectation,
+    patch: LinkPatch,
+    events?: EventWrite[],
+  ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    const matches =
-      (expected.state === undefined || found.state === expected.state) &&
-      (expected.snoozedUntil === undefined ||
-        (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
-      (expected.putAwayAt === undefined ||
-        (found.putAwayAt?.getTime() ?? null) === (expected.putAwayAt?.getTime() ?? null)) &&
-      (expected.whySource === undefined ||
-        expected.whySource.includes(found.why?.source ?? null)) &&
-      (expected.summary === undefined || found.summary === expected.summary) &&
-      (expected.summarySource === undefined ||
-        expected.summarySource.includes(found.summarySource));
-    if (!matches) return { link: this.view(owner, found), applied: false };
-    return { link: (await this.update(owner, id, patch)) as Link, applied: true };
+    if (!matchesExpectation(found, expected)) {
+      return { link: this.view(owner, found), applied: false };
+    }
+    return { link: (await this.update(owner, id, patch, events)) as Link, applied: true };
   }
 
   async pinTag(
@@ -973,6 +1037,13 @@ export class FakeStore
     return (
       s.status === "ok" && s.imageUrl === null && !this.imageStates.has(imageKey(owner, linkId))
     );
+  }
+
+  /** Test inspection: the owner's log events for one link, in the order they were written. */
+  eventsOf(owner: OwnerId, linkId: string): LoggedEvent[] {
+    return this.events
+      .filter((e) => e.owner === owner && e.linkId === linkId)
+      .map(({ kind, at, backfilled }) => ({ kind, at: new Date(at), backfilled }));
   }
 
   /** Test inspection: all of an owner's links. */

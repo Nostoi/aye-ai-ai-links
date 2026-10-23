@@ -52,7 +52,7 @@ import type {
   SurfacedClaim,
 } from "./store.js";
 import type { LoggedEvent } from "./store-contract.js";
-import { receiptKeys, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
+import { receiptsMeet, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
 import { strongerSource } from "./tags.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
@@ -774,9 +774,8 @@ export class FakeStore
     if (catalog.has(r.removed.key)) return "conflict";
     const waiting = [...(this.tagChanges.get(owner) ?? [])].map(([id, c]) => ({ id, ...c }));
     const newer = waiting.slice(waiting.findIndex((c) => c.id === changeId) + 1);
-    const keys = receiptKeys(r);
-    const names = (c: TagChange) => [...receiptKeys(c)].some((k) => keys.has(k));
-    if (newer.some((c) => c.at.getTime() >= since.getTime() && names(c))) return "conflict";
+    if (newer.some((c) => c.at.getTime() >= since.getTime() && receiptsMeet(r, c)))
+      return "conflict";
     if (!r.kept && (mine.get(r.removed.key) ?? null) !== (r.address ?? null)) return "conflict";
     const kept = r.kept && catalog.get(r.kept.key);
     const linkOf = (id: string) =>

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
-import { receiptKeys, type TagEditStore, type TagSettings } from "../core/tag-edit-store.js";
+import { receiptsMeet, type TagEditStore, type TagSettings } from "../core/tag-edit-store.js";
 import { strongerSource } from "../core/tags.js";
 import type { OwnerId, Source, Tag } from "../core/types.js";
 import { TAG_COLUMNS } from "./sqlite-store.js";
@@ -186,7 +186,7 @@ export class SqliteTagEditStore implements TagEditStore {
         if (!found) return null;
         const r = JSON.parse(found.receipt) as Receipt;
         if (this.tagRow(owner, r.removed.key)) return "conflict";
-        if (this.newerReceiptNames(owner, changeId, since, r)) return "conflict";
+        if (this.newerReceiptMeets(owner, changeId, since, r)) return "conflict";
         if (!r.kept && this.addressOf(owner, r.removed.key) !== (r.address ?? null))
           return "conflict";
         const kept = r.kept && this.tagRow(owner, r.kept.key);
@@ -375,9 +375,8 @@ export class SqliteTagEditStore implements TagEditStore {
     return found ?? null;
   }
 
-  /** Whether a receipt written after this one, still in its window, names a key this one names. */
-  private newerReceiptNames(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
-    const mine = receiptKeys(r);
+  /** Whether a receipt written after this one, still in its window, shares a key or link with it. */
+  private newerReceiptMeets(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
     const newer = this.db
       .prepare(
         `SELECT receipt FROM tag_changes WHERE owner_id = ? AND at >= ?
@@ -385,9 +384,7 @@ export class SqliteTagEditStore implements TagEditStore {
       )
       .pluck()
       .all(owner, since.getTime(), owner, changeId) as string[];
-    return newer.some((json) =>
-      [...receiptKeys(JSON.parse(json) as Receipt)].some((k) => mine.has(k)),
-    );
+    return newer.some((json) => receiptsMeet(r, JSON.parse(json) as Receipt));
   }
 
   private setAlias(owner: OwnerId, key: string, tagId: number): void {

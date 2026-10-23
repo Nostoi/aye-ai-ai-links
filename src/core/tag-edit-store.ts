@@ -6,18 +6,29 @@ export type TagSettings = Pick<
   "kind" | "kindSource" | "color" | "pinned" | "description" | "projectStatus"
 >;
 
-export const receiptKeys = (r: {
+/** What a merge or delete receipt records that its Undo checks or writes. */
+type Footprinted = {
   removed: { key: string };
-  kept?: { key: string };
+  kept?: { key: string; links: (string | number)[] };
   aliases: string[];
   address?: string | null;
-}): Set<string> =>
-  new Set([
-    r.removed.key,
-    ...(r.kept ? [r.kept.key] : []),
-    ...r.aliases,
-    ...(r.address ? [r.address] : []),
-  ]);
+  links: { id: string | number }[];
+};
+
+/** Its tag keys and every link it recorded, purged ones included. */
+const footprint = (r: Footprinted): Set<string> => {
+  const keys = [r.removed.key, ...r.aliases];
+  if (r.kept) keys.push(r.kept.key);
+  if (r.address) keys.push(r.address);
+  const links = [...(r.kept?.links ?? []), ...r.links.map((l) => l.id)];
+  return new Set([...keys.map((k) => `tag:${k}`), ...links.map((id) => `link:${id}`)]);
+};
+
+/** Whether two receipts share a tag key or a link. */
+export const receiptsMeet = (a: Footprinted, b: Footprinted): boolean => {
+  const mine = footprint(a);
+  return [...footprint(b)].some((x) => mine.has(x));
+};
 
 /**
  * Persistence contract for renaming, merging and deleting the owner's tags, and the Undo of a

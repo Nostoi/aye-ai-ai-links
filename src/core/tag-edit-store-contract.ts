@@ -480,6 +480,46 @@ export function describeTagEditStoreContract(
         expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
         expect(await marks(A, fresh)).toEqual([["m", "stated"]]);
       });
+
+      for (const [label, older] of [
+        ["delete", () => remove("a")],
+        ["merge", () => merge("a", "b")],
+      ] as const) {
+        it(`a newer delete sharing only a link with an older ${label} stays undoable`, async () => {
+          const one = await save(A, [mention("a"), mention("b")]);
+          const two = await save(A, [mention("x")]);
+          const three = await save(A, [mention("x")]);
+          await h.links.pinTag(A, "x", { pinned: true, color: "blue" });
+          const first = await older();
+          await h.links.update(A, one, { tags: [mention("b"), mention("x")] });
+          const ids = [one, two, three];
+          const tagsBefore = await h.links.listTags(A);
+          const marksBefore = await Promise.all(ids.map((id) => marks(A, id)));
+          const x = await tag(A, "x");
+          const second = await remove("x");
+          await refused(first.changeId, ids);
+          expect(await undo(second.changeId)).toEqual({ tags: [{ tag: x, links: 3 }] });
+          expect(x).toMatchObject({ pinned: true, color: "blue" });
+          expect(await h.links.listTags(A)).toEqual(tagsBefore);
+          expect(await Promise.all(ids.map((id) => marks(A, id)))).toEqual(marksBefore);
+        });
+      }
+
+      for (const oldestFirst of [true, false]) {
+        it(`two changes with no key or link in common undo ${oldestFirst ? "oldest" : "newest"} first`, async () => {
+          const one = await save(A, [mention("a"), mention("b")]);
+          const two = await save(A, [mention("x"), mention("y")]);
+          const ids = [one, two];
+          const tagsBefore = await h.links.listTags(A);
+          const marksBefore = await Promise.all(ids.map((id) => marks(A, id)));
+          const first = await remove("a");
+          const second = await merge("x", "y");
+          const order = oldestFirst ? [first, second] : [second, first];
+          for (const { changeId } of order) expect(await undo(changeId)).not.toBe("conflict");
+          expect(await h.links.listTags(A)).toEqual(tagsBefore);
+          expect(await Promise.all(ids.map((id) => marks(A, id)))).toEqual(marksBefore);
+        });
+      }
     });
 
     describe("undo waits for a newer merge into the same tag and respects a later address", () => {

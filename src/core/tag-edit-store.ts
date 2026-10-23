@@ -6,6 +6,19 @@ export type TagSettings = Pick<
   "kind" | "kindSource" | "color" | "pinned" | "description" | "projectStatus"
 >;
 
+export const receiptKeys = (r: {
+  removed: { key: string };
+  kept?: { key: string };
+  aliases: string[];
+  address?: string | null;
+}): Set<string> =>
+  new Set([
+    r.removed.key,
+    ...(r.kept ? [r.kept.key] : []),
+    ...r.aliases,
+    ...(r.address ? [r.address] : []),
+  ]);
+
 /**
  * Persistence contract for renaming, merging and deleting the owner's tags, and the Undo of a
  * merge or delete (#240). Any implementation must meet all of it. The rules (the new name's key,

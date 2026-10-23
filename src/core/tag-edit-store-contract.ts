@@ -450,10 +450,35 @@ export function describeTagEditStoreContract(
         await rename("w", "x");
         const { changeId } = await remove("x");
         const other = await save(A, [mention("w")]);
-        await refused(changeId, [id, other], () =>
-          h.links.update(A, other, { tags: [] }).then(() => remove("w")),
-        );
-        expect(await h.tagEdits.currentKey(A, "w")).toBe("x");
+        await refused(changeId, [id, other]);
+        await h.links.update(A, other, { tags: [] });
+        await remove("w");
+        await refused(changeId, [id, other]);
+      });
+
+      it("a newer change that removed a tag with a recorded old key stays undoable", async () => {
+        const one = await save(A, [mention("a")]);
+        const first = await remove("a");
+        const fresh = await save(A, [mention("a")]);
+        await rename("a", "b");
+        const freshTag = await tag(A, "b");
+        const second = await remove("b");
+        await refused(first.changeId, [one, fresh]);
+        expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
+        expect(await marks(A, fresh)).toEqual([["b", "stated"]]);
+      });
+
+      it("a newer change whose recorded old key is the same one stays undoable", async () => {
+        const one = await save(A, [mention("k")]);
+        await rename("k", "x");
+        const first = await remove("x");
+        const fresh = await save(A, [mention("k")]);
+        await rename("k", "m");
+        const freshTag = await tag(A, "m");
+        const second = await remove("m");
+        await refused(first.changeId, [one, fresh]);
+        expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
+        expect(await marks(A, fresh)).toEqual([["m", "stated"]]);
       });
     });
 

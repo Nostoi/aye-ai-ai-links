@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
-import type { TagEditStore, TagSettings } from "../core/tag-edit-store.js";
+import { receiptKeys, type TagEditStore, type TagSettings } from "../core/tag-edit-store.js";
 import { strongerSource } from "../core/tags.js";
 import type { OwnerId, Source, Tag } from "../core/types.js";
 import { TAG_COLUMNS } from "./sqlite-store.js";
@@ -377,7 +377,7 @@ export class SqliteTagEditStore implements TagEditStore {
 
   /** Whether a receipt written after this one, still in its window, names a key this one names. */
   private newerReceiptNames(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
-    const mine = [r.removed.key, r.kept?.key];
+    const mine = receiptKeys(r);
     const newer = this.db
       .prepare(
         `SELECT receipt FROM tag_changes WHERE owner_id = ? AND at >= ?
@@ -385,10 +385,9 @@ export class SqliteTagEditStore implements TagEditStore {
       )
       .pluck()
       .all(owner, since.getTime(), owner, changeId) as string[];
-    return newer.some((json) => {
-      const n = JSON.parse(json) as Receipt;
-      return [n.removed.key, n.kept?.key].some((k) => k !== undefined && mine.includes(k));
-    });
+    return newer.some((json) =>
+      [...receiptKeys(JSON.parse(json) as Receipt)].some((k) => mine.has(k)),
+    );
   }
 
   private setAlias(owner: OwnerId, key: string, tagId: number): void {

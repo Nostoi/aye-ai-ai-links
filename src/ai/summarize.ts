@@ -25,17 +25,24 @@ const QUOTES = [
   ["‘", "’"],
 ] as const;
 
+const BOLD = ["**", "__"] as const;
+
+/** The text inside `open` and `close` when they wrap all of it and neither occurs again inside. */
+function unwrapped(text: string, open: string, close: string): string {
+  if (text.length < open.length + close.length) return text;
+  if (!text.startsWith(open) || !text.endsWith(close)) return text;
+  const inner = text.slice(open.length, text.length - close.length);
+  return inner.includes(open) || inner.includes(close) ? text : inner;
+}
+
 /** A reply without the markdown or quotes a model wraps around a sentence. */
 function plain(line: string): string {
   let text = line;
   for (;;) {
     const before = text;
-    text = text.replace(/^(\*\*|__)(.+)\1$/, "$2").replace(/^(?:[#>]+\s*|[*-]\s+)+/, "");
-    for (const [open, close] of QUOTES) {
-      if (text.length >= 2 && text.startsWith(open) && text.endsWith(close)) {
-        text = text.slice(1, -1);
-      }
-    }
+    for (const mark of BOLD) text = unwrapped(text, mark, mark);
+    text = text.replace(/^(?:[#>]+\s+|[*-]\s+)+/, "");
+    for (const [open, close] of QUOTES) text = unwrapped(text, open, close);
     text = text.trim();
     if (text === before) return text;
   }

@@ -47,7 +47,6 @@ describe("createSummarizer", () => {
     ["double quotes", '"A guide to Rome’s cats"'],
     ["single quotes", "'A guide to Rome’s cats'"],
     ["curly double quotes", "“A guide to Rome’s cats”"],
-    ["curly single quotes", "‘A guide to Rome’s cats’"],
     ["a heading marker", "# A guide to Rome’s cats"],
     ["a bullet", "- A guide to Rome’s cats"],
     ["a star bullet", "* A guide to Rome’s cats"],
@@ -63,10 +62,28 @@ describe("createSummarizer", () => {
   });
 
   it.each([
+    ["a bold pair", "**A guide**", "A guide"],
+    ["curly single quotes", "‘A guide to Rome cats’", "A guide to Rome cats"],
+    ["a heading marker and text", "# A guide", "A guide"],
+    ["a quote marker and text", "> A guide", "A guide"],
+    ["a pair that wraps text holding the other kind", '"The “cats” of Rome"', "The “cats” of Rome"],
+  ])("still strips %s", async (_name, text, want) => {
+    const model = scriptedModel("m", [says(text)]);
+    expect(await createSummarizer(model).summarize(PAGE, new AbortController().signal)).toBe(want);
+  });
+
+  it.each([
     "The “cats” of Rome",
     "Rome’s cats, a guide to the city’s strays’",
     "-5 degrees in Rome",
     "A *very* short guide",
+    '"Rust" vs "Go"',
+    "“Rust” vs “Go”",
+    "**Bold** and **bold**",
+    "__Bold__ and __bold__",
+    "#1 ranked tool for X",
+    "#hashtag explained",
+    ">5 minutes to read",
   ])("leaves %s as it is", async (text) => {
     const model = scriptedModel("m", [says(text)]);
     const out = await createSummarizer(model).summarize(PAGE, new AbortController().signal);

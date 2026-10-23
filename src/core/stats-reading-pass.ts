@@ -152,6 +152,8 @@ export function createStatsReadingPass(o: StatsReadingPassOptions): StatsReading
     const failed = failures.get(owner);
     if (failed && now().getTime() < failed.retryAt) return;
     const deps = { store: o.store, tools: o.tools, stats: o.stats, now };
+    // The reading is dated when its stats were read, so a link saved during the call counts as newer.
+    const readAt = now();
     const [allTime, lastMonth, focus, previous] = await Promise.all([
       getStats(deps, owner, "all"),
       getStats(deps, owner, "30"),
@@ -174,7 +176,7 @@ export function createStatsReadingPass(o: StatsReadingPassOptions): StatsReading
       const done = await readings.putReadingIf(owner, previous?.writtenAt ?? null, {
         text,
         writtenBy: o.writtenBy,
-        writtenAt: now(),
+        writtenAt: readAt,
         inputHash,
       });
       if (done) failures.delete(owner);

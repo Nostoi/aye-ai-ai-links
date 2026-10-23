@@ -75,6 +75,19 @@ describe("the stats reading pass", () => {
     expect(reading?.inputHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("dates the reading when its stats were read, not when the reply came", async () => {
+    // A link saved during a slow call must count as newer than the reading.
+    let advance = (_ms: number) => {};
+    const t = setup(() => {
+      advance(MINUTE);
+      return "You saved a little.";
+    });
+    advance = t.advance;
+    await t.seed(1);
+    await t.pass.sweep();
+    expect((await t.store.getReading(OWNER))?.writtenAt).toEqual(at(1000));
+  });
+
   it("writes nothing when the stats are unchanged", async () => {
     const t = setup();
     await t.seed(1);

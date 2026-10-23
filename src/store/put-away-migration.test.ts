@@ -37,7 +37,7 @@ afterEach(() => db.close());
 
 describe("put-away migration", () => {
   it("is the entry after the links rebuilds", () => {
-    expect(LATEST_VERSION).toBe(PUT_AWAY + 3);
+    expect(LATEST_VERSION).toBe(PUT_AWAY + 4);
     expect(db.pragma("user_version", { simple: true })).toBe(LATEST_VERSION);
   });
 

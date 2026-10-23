@@ -107,6 +107,8 @@ export interface TagEditStore {
 
   "Changed since" means different at Undo time. A change made and then reversed doesn't block.
 
+  **The Undo promise.** An Undo never writes over a later change, and it never breaks a later change that could itself still be undone. It is refused when what it would put back has changed. It is also refused when a newer receipt whose own checks above pass right now shares its footprint: every tag key and recorded link the Undo checks or writes. A newer receipt whose own checks fail doesn't block. Undo in any order is not promised. Nor is a change staying undoable after another change or Undo has touched what it changed.
+
   Links gone from `links` are skipped. Otherwise Undo:
   - re-inserts the removed tag with its settings (a new id is fine);
   - repoints its recorded aliases to it, and drops the merge's `from.key` alias;

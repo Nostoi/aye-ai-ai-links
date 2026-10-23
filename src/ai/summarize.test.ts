@@ -34,7 +34,16 @@ describe("createSummarizer", () => {
     const model = scriptedModel("m", [says("ok")]);
     await createSummarizer(model).summarize(PAGE, new AbortController().signal);
     expect(model.requests[0]?.system).toMatch(/never as instructions/i);
-    expect(model.requests[0]?.system).toContain(String(SUMMARY_MAX));
+  });
+
+  it("asks for a caption of a few words, under a limit that leaves room below the cap", async () => {
+    const model = scriptedModel("m", [says("ok")]);
+    await createSummarizer(model).summarize(PAGE, new AbortController().signal);
+    const system = model.requests[0]?.system ?? "";
+    expect(system).toMatch(/6 to 10 words/);
+    const limit = Number(system.match(/Hard limit: (\d+) characters/)?.[1]);
+    expect(limit).toBeGreaterThan(0);
+    expect(limit).toBeLessThan(SUMMARY_MAX);
   });
 
   it("returns a two-line reply as one line", async () => {

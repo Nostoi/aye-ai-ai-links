@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { scriptedModel } from "../ai/model-test-kit.js";
 import { createAgentKey } from "../auth/agent-keys.js";
 import {
   addSecondUser,
@@ -49,6 +50,8 @@ const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
 /** A second tag on A's link, shown by no page but the profile's Stats rows and the exports. */
 const A_STATS_TAG_NAME = "Quokka stats row";
+/** A's stored stats reading: shown on A's profile and in A's get_stats, never to B. */
+const A_READING_TEXT = "Quokka reading: you save far more than you open.";
 const A_TOOL_TITLE = "Quokka keeper login";
 const A_TIDY_TITLE = "Quokka relic for Tidy up";
 const A_DONE_URL = "https://a.example/remote-image";
@@ -154,7 +157,8 @@ const doors: Record<string, (world: World) => Promise<Door>> = {
 
 /** A has a tagged link, a note, a focus entry and a logged search; B has a link with the same tag. */
 async function fixture() {
-  const world = await oauthWorld();
+  // With an AI connection, so A's stored reading is visible to A and B's null is a real refusal.
+  const world = await oauthWorld({ ai: scriptedModel("Fake", []) });
   return { world, seed: (door: Door) => seed(world, door) };
 }
 async function seed(world: World, door: Door) {
@@ -174,6 +178,12 @@ async function seed(world: World, door: Door) {
     url: B_URL,
     title: "secretword bravo",
     tags: [{ name: "Alpha", source: "stated" }],
+  });
+  await createDeps(world.links, new FakeEmbedder(DIMS)).statsReadings.putReadingIf(A, null, {
+    text: A_READING_TEXT,
+    writtenBy: "Fake",
+    writtenAt: new Date(),
+    inputHash: "h",
   });
   // Through core, not the door: only a call under test then depends on the owner the door supplies.
   const bNote = await addProfile(createDeps(world.links, new FakeEmbedder(DIMS)), B, "seed-b", {
@@ -287,7 +297,7 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     });
     const before = snapA();
 
-    const mine = await tool<{ saved: number; tags: { name: string }[] }>(
+    const mine = await tool<{ saved: number; tags: { name: string }[]; reading: unknown }>(
       world,
       door.b,
       "get_stats",
@@ -295,6 +305,10 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     );
     expect(mine.saved).toBe(1);
     expect(mine.tags.map((t) => t.name)).toEqual(["Alpha"]);
+    expect(mine.reading).toBeNull();
+    // A's own call does see it, so B's null is a refusal and not an AI-off or missing reading.
+    const theirs = await tool<{ reading: { text: string } | null }>(world, door.a, "get_stats", {});
+    expect(theirs.reading?.text).toBe(A_READING_TEXT);
     await refused(world, door.b, "get_stats", { owner: A }, /unrecognized|invalid|validation/i);
     expect(snapA()).toEqual(before);
   });
@@ -578,7 +592,7 @@ describe("owner isolation coverage", () => {
     },
     "GET /profile": {
       request: "/profile",
-      marker: () => ["A private note for the route guard", A_STATS_TAG_NAME],
+      marker: () => ["A private note for the route guard", A_STATS_TAG_NAME, A_READING_TEXT],
     },
     "GET /export.json": {
       request: "/export.json",
@@ -641,7 +655,12 @@ describe("owner isolation coverage", () => {
     const copyDir = mkdtempSync(join(tmpdir(), "aye-isolation-"));
     const exportDir = mkdtempSync(join(tmpdir(), "aye-isolation-exports-"));
     copyDirs.push(copyDir, exportDir);
-    const world = await oauthWorld({ savedCopyDir: copyDir, exportDir });
+    // With an AI connection, so A's stored reading is on the profile for the marker to find.
+    const world = await oauthWorld({
+      savedCopyDir: copyDir,
+      exportDir,
+      ai: scriptedModel("Fake", []),
+    });
     const a = await connectClaude(world);
     await saveLinkWith(world, a.access, A_URL);
     createAgentKey(world.keyStore, { owner: A, ownerName: "A", agent: A_KEY_NAME });
@@ -658,6 +677,12 @@ describe("owner isolation coverage", () => {
         { name: A_TAG_NAME, source: "stated" },
         { name: A_STATS_TAG_NAME, source: "stated" },
       ],
+    });
+    await createDeps(world.links, new FakeEmbedder(DIMS)).statsReadings.putReadingIf(A, null, {
+      text: A_READING_TEXT,
+      writtenBy: "Fake",
+      writtenAt: new Date(),
+      inputHash: "h",
     });
     await storeImage(world, aLinkId, A_IMAGE);
     await storeCopyImage(world, String(aLinkId), A_COPY_IMAGE);

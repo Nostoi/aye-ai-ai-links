@@ -1,3 +1,4 @@
+import type { StatsReading, StatsReadingStore } from "./stats-reading-store.js";
 import type { StatsEvent, StatsStore } from "./stats-store.js";
 import type { LinkStore } from "./store.js";
 import type { ToolStore } from "./tool-store.js";
@@ -125,4 +126,15 @@ export async function getStats(
   ]);
   const declined = new Set([...tools].filter(([, t]) => t.status === "declined").map(([id]) => id));
   return computeStats({ links, declined, events, trackingSince }, window, deps.now());
+}
+
+/**
+ * The reading to show, or null. The one visibility rule: without an AI connection (`readingOn`
+ * false) a stored reading is never shown, to the page, an agent or Ask AI.
+ */
+export async function statsReading(
+  deps: { readings: StatsReadingStore; readingOn?: boolean | undefined },
+  owner: OwnerId,
+): Promise<StatsReading | null> {
+  return deps.readingOn ? deps.readings.getReading(owner) : null;
 }

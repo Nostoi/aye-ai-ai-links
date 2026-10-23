@@ -138,4 +138,28 @@ describe("the profile stats section", () => {
     expect(html).toContain("so Not now before then is only partly counted.");
     expect(html).not.toContain("openings");
   });
+
+  it("the reading shows as a guess with who and when", () => {
+    const html = profileStats(stats(), NOW, {
+      text: "You save <b>more</b> than you open.",
+      writtenBy: "Claude <3",
+      writtenAt: new Date("2026-10-20T08:00:00Z"),
+      inputHash: "h",
+    });
+    expect(html).toContain("<h3>What this might say about you</h3>");
+    expect(html).toContain("You save &lt;b&gt;more&lt;/b&gt; than you open.");
+    expect(html).toContain('<small class="small">A guess by Claude &lt;3, October 20</small>');
+    expect(html.indexOf("What this might say about you")).toBeGreaterThan(
+      html.indexOf("Openings from bookmarks"),
+    );
+    expect(html).not.toContain("style=");
+  });
+
+  it("no reading, no heading", () => {
+    for (const html of [profileStats(stats(), NOW), profileStats(stats(), NOW, null)]) {
+      expect(html).not.toContain("What this might say about you");
+      expect(html).not.toContain("A guess by");
+      expect(html).not.toContain("stat-reading");
+    }
+  });
 });

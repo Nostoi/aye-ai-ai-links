@@ -129,6 +129,9 @@ export function resourceChallenge(baseUrl: string): string {
   return value;
 }
 
+/** What the MCP door needs, less `readingOn`, which `createApp` derives from the AI connection. */
+type AppMcpDeps = Omit<McpDeps, "readingOn">;
+
 export type AppOptions = {
   identify: Identify;
   allowedHosts?: string[] | undefined;
@@ -136,10 +139,10 @@ export type AppOptions = {
   /** Receives one line per request; no request log when left out. */
   log?: ((line: string) => void) | undefined;
 } & (
-  | { deps: McpDeps; auth?: undefined }
+  | { deps: AppMcpDeps; auth?: undefined }
   /** The web door also reads stored pictures, writes the owner's edits and deletes links. */
   | {
-      deps: McpDeps & {
+      deps: AppMcpDeps & {
         store: LinkRemover;
         images: LinkImageReader;
         edits: LinkEditStore;
@@ -175,8 +178,10 @@ export function createApp(options: AppOptions) {
   const tracker = createCallTracker();
   const turns = new AbortController();
   const stopTurns = () => turns.abort();
+  // The stats reading is shown only while the server has an AI connection (#161).
+  const readingOn = web?.deps.ai !== undefined;
   const mcp = mcpApp({
-    deps,
+    deps: { ...deps, readingOn },
     tracker,
     identify,
     allowedHosts,
@@ -218,7 +223,7 @@ export function createApp(options: AppOptions) {
       "/",
       webApp({
         // Owner ruling on #93: web searches aren't logged until opens are recorded.
-        deps: { ...web.deps, searchLog: undefined },
+        deps: { ...web.deps, readingOn, searchLog: undefined },
         auth: betterAuth,
         withAuthLock,
         baseUrl,
@@ -238,7 +243,7 @@ export function createApp(options: AppOptions) {
         // door's own searches above are not (#134).
         ai: web.deps.ai && {
           model: web.deps.ai,
-          deps: web.deps,
+          deps: { ...web.deps, readingOn },
           track: tracker.track,
           signal: turns.signal,
         },

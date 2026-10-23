@@ -15,6 +15,7 @@ import { SqliteImageStore } from "./store/sqlite-image-store.js";
 import { SqliteLinkCheckStore } from "./store/sqlite-link-checks.js";
 import { SqliteLinkEditStore } from "./store/sqlite-link-edits.js";
 import { SqliteStatsStore } from "./store/sqlite-stats.js";
+import { SqliteStatsReadingStore } from "./store/sqlite-stats-readings.js";
 import { SqliteStore } from "./store/sqlite-store.js";
 import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
 
@@ -53,6 +54,8 @@ export function createDeps(
     checks: new SqliteLinkCheckStore(db),
     /** The event log and its start, for the Stats counts (#161). */
     stats: new SqliteStatsStore(db),
+    /** The AI's latest reading of each owner's stats (#161). */
+    statsReadings: new SqliteStatsReadingStore(db),
     /** Saved copies: one instance per process, so it owns the folder and its checked state. Without a folder (tests) copies read as missing and none are written. */
     savedCopies: new SqliteSavedCopyStore(db, savedCopyDir),
     /** The one saved-copy read gate: the copy pass and the copy pages share it. */

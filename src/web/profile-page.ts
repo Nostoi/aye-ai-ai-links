@@ -1,5 +1,6 @@
 import { WEB_SAVED_BY } from "../auth/session.js";
 import type { Stats } from "../core/stats.js";
+import type { StatsReading } from "../core/stats-reading-store.js";
 import type { FocusEntry, ProfileNote } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -48,10 +49,12 @@ export const profilePage = ({
   now,
   ask,
   stats,
+  reading = null,
 }: {
   notes: ProfileNote[];
   focus: FocusEntry[];
   stats: Stats;
+  reading?: StatsReading | null;
   now: Date;
   ask?: Ask | undefined;
 }) =>
@@ -80,7 +83,7 @@ ${notes.map(noteItem).join("\n")}
 ${focus.length === 0 ? "<p>Nothing yet.</p>" : `<ol class="focus-list">\n${focus.map((f) => focusItem(f, now)).join("\n")}\n</ol>`}
 </section>
 </div>
-${profileStats(stats, now)}
+${profileStats(stats, now, reading)}
 </main>
 <script>
 const list = document.getElementById("notes");

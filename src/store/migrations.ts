@@ -363,6 +363,16 @@ export const MIGRATIONS: Migration[] = [
   INSERT INTO link_events (owner_id, link_id, kind, at, backfilled)
     SELECT owner_id, link_id, 'not_handy', since, 1 FROM link_tools WHERE status = 'declined';
   `,
+  // Stats readings (#161): the AI's latest reading of an owner's stats. Additive.
+  `
+  CREATE TABLE stats_readings (
+    owner_id TEXT PRIMARY KEY REFERENCES users(id),
+    text TEXT NOT NULL CHECK (text <> ''),
+    written_by TEXT NOT NULL,
+    written_at INTEGER NOT NULL,
+    input_hash TEXT NOT NULL
+  );
+  `,
 ];
 
 /**

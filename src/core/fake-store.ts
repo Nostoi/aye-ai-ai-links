@@ -40,6 +40,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
+import type { StatsReading, StatsReadingStore } from "./stats-reading-store.js";
 import type { StatsEvent, StatsStore } from "./stats-store.js";
 import type {
   EventWrite,
@@ -126,7 +127,8 @@ export class FakeStore
     LinkEditStore,
     IconBackfillStore,
     SummaryCandidates,
-    StatsStore
+    StatsStore,
+    StatsReadingStore
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -153,6 +155,7 @@ export class FakeStore
   }[] = [];
   private nextId = 1;
   private readonly since: Date;
+  private readings = new Map<OwnerId, StatsReading>();
 
   constructor(options: { trackingSince?: Date } = {}) {
     this.since = options.trackingSince ?? new Date(0);
@@ -1056,6 +1059,33 @@ export class FakeStore
 
   async trackingSince(): Promise<Date> {
     return new Date(this.since);
+  }
+
+  async getReading(owner: OwnerId): Promise<StatsReading | null> {
+    const r = this.owned(owner).size > 0 ? this.readings.get(owner) : undefined;
+    return r ? { ...r, writtenAt: new Date(r.writtenAt) } : null;
+  }
+
+  async putReadingIf(
+    owner: OwnerId,
+    expectedWrittenAt: Date | null,
+    reading: StatsReading,
+  ): Promise<boolean> {
+    if (this.owned(owner).size === 0) return false;
+    const held = this.readings.get(owner)?.writtenAt.getTime() ?? null;
+    if (held !== (expectedWrittenAt?.getTime() ?? null)) return false;
+    this.readings.set(owner, { ...reading, writtenAt: new Date(reading.writtenAt) });
+    return true;
+  }
+
+  async readingCandidates(dueBefore: Date): Promise<OwnerId[]> {
+    return [...this.links]
+      .filter(([owner, mine]) => {
+        const r = this.readings.get(owner);
+        return mine.size > 0 && (!r || r.writtenAt.getTime() <= dueBefore.getTime());
+      })
+      .map(([owner]) => owner)
+      .sort();
   }
 
   /** Test inspection: the owner's log events for one link, in the order they were written. */

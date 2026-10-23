@@ -76,7 +76,7 @@ describe("Ask AI's get_stats", () => {
     await deps.statsReadings.putReadingIf(A, null, {
       text: "Ask AI sees this reading.",
       writtenBy: "Fake",
-      writtenAt: new Date("2026-10-20T08:00:00Z"),
+      writtenAt: new Date(Date.now() + 86_400_000), // after the link saved above
       inputHash: "h",
     });
 

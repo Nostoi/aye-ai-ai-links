@@ -102,6 +102,21 @@ describe("the stats reading pass", () => {
     expect(next?.writtenAt).toEqual(new Date(at(1000).getTime() + READING_EVERY_MS + DAY));
   });
 
+  it("a hidden reading is rewritten on the next sweep, within 7 days", async () => {
+    let text = "games";
+    const t = setup(() => text);
+    const old = await t.seed(1);
+    await t.pass.sweep();
+    await t.store.markDeleted(OWNER, old.link.id, at(1001));
+    // Saved after the reading was written, so the old reading is about links now gone.
+    await t.store.insertIfAbsent(OWNER, newLink(2, at(1002)));
+    expect(await t.store.getReading(OWNER)).toBeNull();
+    text = "cooking";
+    t.advance(MINUTE);
+    await t.pass.sweep();
+    expect((await t.store.getReading(OWNER))?.text).toBe("cooking");
+  });
+
   it("does not rewrite within 7 days even if the stats changed", async () => {
     const t = setup();
     await t.seed(1);

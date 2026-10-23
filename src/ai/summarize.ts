@@ -18,10 +18,33 @@ function pageMessage(page: { title: string | null; description: string | null; t
   ].join("\n\n");
 }
 
+const QUOTES = [
+  ['"', '"'],
+  ["'", "'"],
+  ["“", "”"],
+  ["‘", "’"],
+] as const;
+
+/** A reply without the markdown or quotes a model wraps around a sentence. */
+function plain(line: string): string {
+  let text = line;
+  for (;;) {
+    const before = text;
+    text = text.replace(/^(\*\*|__)(.+)\1$/, "$2").replace(/^(?:[#>]+\s*|[*-]\s+)+/, "");
+    for (const [open, close] of QUOTES) {
+      if (text.length >= 2 && text.startsWith(open) && text.endsWith(close)) {
+        text = text.slice(1, -1);
+      }
+    }
+    text = text.trim();
+    if (text === before) return text;
+  }
+}
+
 /** Joins a reply's lines into one and checks it is a summary: not empty, cut off or over the cap. */
 function oneLine(reply: { text: string; truncated?: boolean }): string {
   if (reply.truncated) throw new Error("the reply was cut off");
-  const text = reply.text.replace(/\s+/g, " ").trim();
+  const text = plain(reply.text.replace(/\s+/g, " ").trim());
   if (text === "") throw new Error("the reply was empty");
   if (capCodePoints(text, SUMMARY_MAX).truncated) throw new Error("the reply was too long");
   return text;

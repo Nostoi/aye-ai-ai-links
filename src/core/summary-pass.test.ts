@@ -240,16 +240,17 @@ describe("summary pass", () => {
     });
     for (const n of [1, 2, 3]) await t.seed(n);
     await t.pass.sweep();
+    expect(t.calls).toHaveLength(3);
     t.advance(MINUTE);
     await t.pass.sweep();
-    expect(t.calls).toHaveLength(4);
+    expect(t.calls).toHaveLength(6);
     t.advance(MINUTE);
     await t.pass.sweep();
-    expect(t.calls).toHaveLength(4);
+    expect(t.calls).toHaveLength(6);
     t.advance(MINUTE);
     failing = false;
     await t.pass.sweep();
-    expect(t.calls.length).toBeGreaterThan(4);
+    expect(t.calls.length).toBeGreaterThan(6);
 
     failing = true;
     for (const n of [4, 5, 6, 7]) await t.seed(n);
@@ -259,6 +260,35 @@ describe("summary pass", () => {
     t.advance(MINUTE);
     await t.pass.sweep();
     expect(t.calls.length).toBeGreaterThan(before + 3);
+  });
+
+  it("after a pause, one failure alone does not pause the pass again", async () => {
+    const t = setup((_page, _signal, url) => {
+      if (["link-1", "link-2", "link-3"].includes(url)) throw new SummarizerUnavailable("down");
+      return `For ${url}`;
+    });
+    for (const n of [1, 2, 3, 4]) await t.seed(n);
+    await t.pass.sweep();
+    expect(t.calls).toHaveLength(3);
+    expect(await t.store.markDeleted(OWNER, "link-2", at(5))).toBe(true);
+    expect(await t.store.markDeleted(OWNER, "link-3", at(5))).toBe(true);
+    t.advance(MINUTE);
+    await t.pass.sweep();
+    expect(t.calls.slice(3)).toEqual(["link-1", "link-4"]);
+    expect(await t.held("link-4")).toEqual(["For link-4", "server"]);
+  });
+
+  it("a store write that keeps failing pauses the pass, like a failing AI", async () => {
+    const t = setup();
+    vi.spyOn(t.store, "updateIf").mockRejectedValue(new Error("disk full"));
+    for (const n of [1, 2, 3, 4]) await t.seed(n);
+    await t.pass.sweep();
+    expect(t.calls).toHaveLength(3);
+    await t.pass.sweep();
+    expect(t.calls).toHaveLength(3);
+    t.advance(MINUTE);
+    await t.pass.sweep();
+    expect(t.calls.length).toBeGreaterThan(3);
   });
 
   it("gives a cleared summary a fresh try", async () => {

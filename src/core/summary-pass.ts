@@ -75,7 +75,9 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  *
  * A failure backs off that link alone: 60 s, doubling to 24 h, with no cap on tries, and it ends
  * when the link's summary changes. Three failures in a row on different links pause the whole
- * pass: 60 s, doubling to 1 h, until one call succeeds. Backoffs are kept in memory, so a restart
+ * pass: 60 s, then each later pause twice as long, up to 1 h, until a link is summarised or
+ * refused by the conditional write. After a pause it takes three fresh failures to pause again.
+ * A failed write counts as a failure, like a failed call. Backoffs are kept in memory, so a restart
  * tries everything again. `stop` aborts the call in flight, stops waiting for it, and writes
  * nothing for it, even if it answers later.
  */
@@ -134,24 +136,23 @@ export function createSummaryPass(o: SummaryPassOptions): SummaryPass {
     }
   }
 
-  /** Backs the link off. `pause` also counts the failure toward pausing the whole pass. */
+  /** Backs the link off, and counts the failure toward pausing the whole pass. */
   function fail(
     key: string,
     seen: { summary: string | null; summarySource: SummarySource | null },
     why: string,
     error: unknown,
-    pause: boolean,
   ): void {
     const attempts = (failures.get(key)?.attempts ?? 0) + 1;
     const retryAt = now().getTime() + doubling(LINK_BACKOFF_BASE_MS, LINK_BACKOFF_MAX_MS, attempts);
     failures.set(key, { attempts, retryAt, summary: seen.summary, source: seen.summarySource });
     log(`summary ${key}: ${why}: ${messageOf(error)} (attempt ${attempts})`);
-    if (!pause) return;
     streak.add(key);
-    if (pauses > 0 || streak.size >= PAUSE_AFTER) {
+    if (streak.size >= PAUSE_AFTER) {
       pauses += 1;
       pausedUntil = now().getTime() + doubling(PAUSE_BASE_MS, PAUSE_MAX_MS, pauses);
       log(`summary pass paused after ${streak.size} failing links`);
+      streak.clear();
     }
   }
 
@@ -189,12 +190,9 @@ export function createSummaryPass(o: SummaryPassOptions): SummaryPass {
       if (reply === ABORTED || signal.aborted) return true;
       text = checked(reply);
     } catch (error) {
-      if (!signal.aborted) fail(key, read, "could not summarise", error, true);
+      if (!signal.aborted) fail(key, read, "could not summarise", error);
       return true;
     }
-    streak.clear();
-    pauses = 0;
-    pausedUntil = 0;
     try {
       const done = await store.updateIf(
         c.owner,
@@ -203,8 +201,11 @@ export function createSummaryPass(o: SummaryPassOptions): SummaryPass {
         { summary: text, summarySource: "server" },
       );
       if (done?.applied) failures.delete(key);
+      streak.clear();
+      pauses = 0;
+      pausedUntil = 0;
     } catch (error) {
-      fail(key, read, "a store call failed", error, false);
+      if (!signal.aborted) fail(key, read, "a store call failed", error);
     }
     return true;
   }

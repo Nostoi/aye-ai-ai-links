@@ -43,6 +43,42 @@ describe("createSummarizer", () => {
     expect(out).toBe("A guide to Rome's cats");
   });
 
+  it.each([
+    ["double quotes", '"A guide to Rome’s cats"'],
+    ["single quotes", "'A guide to Rome’s cats'"],
+    ["curly double quotes", "“A guide to Rome’s cats”"],
+    ["curly single quotes", "‘A guide to Rome’s cats’"],
+    ["a heading marker", "# A guide to Rome’s cats"],
+    ["a bullet", "- A guide to Rome’s cats"],
+    ["a star bullet", "* A guide to Rome’s cats"],
+    ["a quote marker", "> A guide to Rome’s cats"],
+    ["bold stars", "**A guide to Rome’s cats**"],
+    ["bold underscores", "__A guide to Rome’s cats__"],
+    ["a bullet and quotes", '- "A guide to Rome’s cats"'],
+    ["quotes and surrounding space", '  "A guide to Rome’s cats"  '],
+  ])("strips %s from the reply", async (_name, text) => {
+    const model = scriptedModel("m", [says(text)]);
+    const out = await createSummarizer(model).summarize(PAGE, new AbortController().signal);
+    expect(out).toBe("A guide to Rome’s cats");
+  });
+
+  it.each([
+    "The “cats” of Rome",
+    "Rome’s cats, a guide to the city’s strays’",
+    "-5 degrees in Rome",
+    "A *very* short guide",
+  ])("leaves %s as it is", async (text) => {
+    const model = scriptedModel("m", [says(text)]);
+    const out = await createSummarizer(model).summarize(PAGE, new AbortController().signal);
+    expect(out).toBe(text);
+  });
+
+  it("checks the length after stripping a wrapping quote", async () => {
+    const exact = "x".repeat(SUMMARY_MAX);
+    const model = scriptedModel("m", [says(`"${exact}"`)]);
+    expect(await createSummarizer(model).summarize(PAGE, new AbortController().signal)).toBe(exact);
+  });
+
   it("keeps a reply of SUMMARY_MAX code points and rejects one more", async () => {
     const signal = new AbortController().signal;
     const exact = "😀".repeat(SUMMARY_MAX);

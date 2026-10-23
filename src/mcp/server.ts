@@ -32,6 +32,8 @@ import { LINK_ORDERS, type LinkCount, type LinkSearch } from "../core/search.js"
 import { searchLinks } from "../core/search-links.js";
 import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { PageTextReader } from "../core/snapshot-text.js";
+import { getStats, parseWindow, STATS_WINDOWS } from "../core/stats.js";
+import type { StatsStore } from "../core/stats-store.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { normalizeTags } from "../core/tags.js";
@@ -54,6 +56,7 @@ import {
   getDigestOutput,
   getLinkOutput,
   getProfileOutput,
+  getStatsOutput,
   linkResultOutput,
   listLinksOutput,
   profileOutput,
@@ -71,6 +74,7 @@ export type McpDeps = {
   keywordSearch: LinkSearch;
   count: LinkCount;
   profile: ProfileStore;
+  stats: StatsStore;
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
   pages: PageTextReader;
@@ -170,6 +174,10 @@ const getLinkInput = z.object({ id: z.string() });
 // A strict empty object advertises additionalProperties: false, the schema MCP recommends for a tool with no parameters.
 const getProfileInput = z.strictObject({});
 const getDigestInput = z.strictObject({});
+// A number is read as its string, so a model that sends 30 gets the same window as "30".
+const getStatsInput = z.strictObject({
+  window: z.union([z.enum(STATS_WINDOWS), z.literal(30), z.literal(90), z.literal(365)]).optional(),
+});
 const labelledText = z.object({ text: z.string(), source });
 const addProfileInput = z.object({
   addNotes: z.array(labelledText).optional(),
@@ -491,6 +499,26 @@ export function buildMcpServer(
       },
     },
     () => getProfile(deps, owner),
+  );
+
+  register(
+    "get_stats",
+    {
+      description: guidance.GET_STATS,
+      inputSchema: getStatsInput,
+      outputSchema: getStatsOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ window }) => ({
+      ...(await getStats(deps, owner, parseWindow(window))),
+      // The stored reading arrives later (#161); the shape is fixed now.
+      reading: null,
+    }),
   );
 
   register(

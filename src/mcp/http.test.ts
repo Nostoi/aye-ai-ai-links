@@ -208,7 +208,7 @@ describe("MCP door over HTTP", () => {
     );
   });
 
-  it("lists the ten tools with their annotations and string dates", async () => {
+  it("lists the eleven tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
@@ -217,6 +217,7 @@ describe("MCP door over HTTP", () => {
       "get_digest",
       "get_link",
       "get_profile",
+      "get_stats",
       "list_links",
       "save_link",
       "search_links",
@@ -249,6 +250,7 @@ describe("MCP door over HTTP", () => {
     expect(tools.save_link.description).toMatch(/"pending".*not been fetched yet.*get_link/);
     expect(tools.get_link.description).toContain("up to 20,000 characters");
     expect(tools.get_profile.annotations).toEqual(hints(true, false, true));
+    expect(tools.get_stats.annotations).toEqual(hints(true, false, true));
     expect(tools.add_profile.annotations).toEqual(hints(false, false, false));
     expect(tools.edit_profile.annotations).toEqual(hints(false, true, false));
     // Each call marks the links it returns as surfaced, so a repeat returns others.
@@ -1068,6 +1070,39 @@ describe("MCP door over HTTP", () => {
       expect(res.body.result.structuredContent.notes[0].writtenBy).toBe("claude-code");
       expect(noteTexts(await profileOf("key-b"))).toEqual([]);
       expect(noteTexts(await profileOf("key-a"))).toEqual(["mine"]);
+    });
+
+    it("get_stats returns the owner's counts for the window", async () => {
+      await call(app, "key-a", "save_link", {
+        url: "https://example.com/s1",
+        tags: [{ name: "Launch", source: "stated" }],
+      });
+      await call(app, "key-b", "save_link", {
+        url: "https://example.com/s2",
+        tags: [{ name: "BOnly", source: "stated" }],
+      });
+      const res = await call(app, "key-a", "get_stats", { window: 30 });
+      const stats = res.body.result.structuredContent;
+      expect(stats).toMatchObject({
+        window: "30",
+        saved: 1,
+        opened: 0,
+        notOpenedYet: 1,
+        setAside: 0,
+        notNow: 0,
+        tags: [{ name: "Launch", saved: 1, opened: 0 }],
+        partial: true,
+        reading: null,
+      });
+      expect(Number.isNaN(Date.parse(stats.trackingSince))).toBe(false);
+      expect(JSON.stringify(res.body)).not.toContain("BOnly");
+    });
+
+    it("get_stats defaults to all time", async () => {
+      const res = await call(app, "key-a", "get_stats", {});
+      expect(res.body.result.structuredContent).toMatchObject({ window: "all", partial: true });
+      const odd = await call(app, "key-a", "get_stats", { window: "7" });
+      expect(odd.body.result.isError).toBe(true);
     });
 
     it("refuses a stray argument to get_profile instead of serving another owner", async () => {

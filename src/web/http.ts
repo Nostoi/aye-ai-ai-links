@@ -416,16 +416,18 @@ export const isToolJson = (value: unknown): value is ToolJson => {
 type StateChangeJson = {
   before: { state: LinkState; putAwayAt: string | null; snoozedUntil: string | null };
   after: { state: LinkState; putAwayAt: string | null };
+  at: string;
 };
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
-const stateChangeJson = ({ before, after }: StateChange): StateChangeJson => ({
+const stateChangeJson = ({ before, after, at }: StateChange): StateChangeJson => ({
   before: {
     state: before.state,
     putAwayAt: iso(before.putAwayAt),
     snoozedUntil: iso(before.snoozedUntil),
   },
   after: { state: after.state, putAwayAt: iso(after.putAwayAt) },
+  at: at.toISOString(),
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -433,7 +435,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isState = (value: unknown): value is LinkState =>
   (STATES as readonly unknown[]).includes(value);
 
-/** A change the page sends back: both sides are present, with a state core knows and dates that parse. */
+/** A change the page sends back: both sides and the action's time are present, with a state core knows and dates that parse. */
 export const isStateChangeJson = (value: unknown): value is StateChangeJson => {
   if (!isRecord(value) || !isRecord(value.before) || !isRecord(value.after)) return false;
   const { before, after } = value;
@@ -442,18 +444,20 @@ export const isStateChangeJson = (value: unknown): value is StateChangeJson => {
     isDateOrNull(before.putAwayAt) &&
     isDateOrNull(before.snoozedUntil) &&
     isState(after.state) &&
-    isDateOrNull(after.putAwayAt)
+    isDateOrNull(after.putAwayAt) &&
+    isDate(value.at)
   );
 };
 
 const date = (value: string | null) => (value === null ? null : new Date(value));
-const stateChange = ({ before, after }: StateChangeJson): StateChange => ({
+const stateChange = ({ before, after, at }: StateChangeJson): StateChange => ({
   before: {
     state: before.state,
     putAwayAt: date(before.putAwayAt),
     snoozedUntil: date(before.snoozedUntil),
   },
   after: { state: after.state, putAwayAt: date(after.putAwayAt) },
+  at: new Date(at),
 });
 
 /** An absent row is null; a missing member is refused, never read as null. */

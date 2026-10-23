@@ -2,7 +2,7 @@ import { CoreError } from "./errors.js";
 import { type GoneView, goneView, isGone } from "./link-check.js";
 import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import { notFound } from "./links.js";
-import type { LinkStore } from "./store.js";
+import type { EventWrite, LinkStore } from "./store.js";
 import type { ToolRecord, ToolStore, WaitDays } from "./tool-store.js";
 import type { Link, OwnerId, Source, ToolStatus } from "./types.js";
 
@@ -86,6 +86,13 @@ function moveTo(
   return { status, source, since: now, answeredAt: null, waitDays: FIRST_WAIT_DAYS };
 }
 
+/** The stats event for a row moving from `from` to `to`: Not handy is logged once, when it first declines the link. */
+function declinedEvent(from: ToolRecord | null, to: ToolRecord): EventWrite[] {
+  return to.status === "declined" && from?.status !== "declined"
+    ? [{ record: "not_handy", at: to.since }]
+    : [];
+}
+
 /**
  * Reads the link and its row, lets `decide` work out the next row (returning `current` itself
  * for no change), and writes it only while the row is unchanged since the read.
@@ -102,7 +109,13 @@ async function change(
   const current = await deps.tools.getTool(owner, id);
   const next = decide(current, link, now);
   if (next === current) return { tool: next, previous: current };
-  const result = await deps.tools.updateToolIf(owner, id, current, next);
+  const result = await deps.tools.updateToolIf(
+    owner,
+    id,
+    current,
+    next,
+    declinedEvent(current, next),
+  );
   if (!result) throw notFound(id);
   if (!result.applied) throw new CoreError("conflict", CHANGED);
   return { tool: next, previous: current };
@@ -226,7 +239,12 @@ export async function restoreTool(
   if (previous && !isProducible(previous, deps.now())) {
     throw new CoreError("invalid_input", "That Keep handy state can't be restored.");
   }
-  const result = await deps.tools.updateToolIf(owner, id, expectedCurrent, previous);
+  // Undoing the decline takes back its event, found by the declined row's own `since`.
+  const events: EventWrite[] =
+    expectedCurrent.status === "declined" && previous?.status !== "declined"
+      ? [{ unrecord: "not_handy", at: expectedCurrent.since }]
+      : [];
+  const result = await deps.tools.updateToolIf(owner, id, expectedCurrent, previous, events);
   if (!result) throw notFound(id);
   if (!result.applied) {
     throw new CoreError(

@@ -769,3 +769,69 @@ describe("listSuggestions", () => {
     expect((await listSuggestions(deps(), A)).map((s) => s.link.id)).toEqual([made[1], made[0]]);
   });
 });
+
+describe("stats events from the Keep handy actions (#161)", () => {
+  const log = (id: string) => store.eventsOf(A, id).map((e) => [e.kind, e.at.getTime()]);
+
+  it("Not handy records not_handy at the new row's since", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(7);
+    await notHandy(deps(), A, id, "asked");
+    expect(log(id)).toEqual([["not_handy", day(7).getTime()]]);
+  });
+
+  it("answering a suggestion no records not_handy; yes records nothing", async () => {
+    const no = await saved();
+    const yes = await saved();
+    for (const id of [no, yes]) await keepHandy(deps(), A, id, "inferred");
+    clock = day(3);
+    await answerSuggestion(deps(), A, no, false);
+    await answerSuggestion(deps(), A, yes, true);
+    expect(log(no)).toEqual([["not_handy", day(3).getTime()]]);
+    expect(log(yes)).toEqual([]);
+  });
+
+  it("Not handy on an already declined link records nothing more", async () => {
+    const id = await saved();
+    await notHandy(deps(), A, id, "stated");
+    clock = day(2);
+    await notHandy(deps(), A, id, "asked");
+    expect(log(id)).toEqual([["not_handy", day(0).getTime()]]);
+  });
+
+  it("keeping and Still using record nothing", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(30);
+    await stillUsing(deps(), A, id, "stated");
+    expect(log(id)).toEqual([]);
+  });
+
+  it("undo of Not handy removes its event", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(7);
+    const change = await notHandy(deps(), A, id, "asked");
+    await restoreTool(deps(), A, id, change.previous, change.tool);
+    expect(log(id)).toEqual([]);
+  });
+
+  it("undo of an answer of no removes its event", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "inferred");
+    clock = day(3);
+    const change = await answerSuggestion(deps(), A, id, false);
+    await restoreTool(deps(), A, id, change.previous, change.tool);
+    expect(log(id)).toEqual([]);
+  });
+
+  it("undo of a keep after a decline leaves the earlier not_handy", async () => {
+    const id = await saved();
+    await notHandy(deps(), A, id, "stated");
+    clock = day(2);
+    const kept = await keepHandy(deps(), A, id, "stated");
+    await restoreTool(deps(), A, id, kept.previous, kept.tool);
+    expect(log(id)).toEqual([["not_handy", day(0).getTime()]]);
+  });
+});

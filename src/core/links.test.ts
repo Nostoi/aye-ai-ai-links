@@ -692,3 +692,64 @@ describe("saveLink's receipt option", () => {
     expect((await store.get("a", link.id))?.title).not.toBe("Mine");
   });
 });
+
+describe("stats events from updateLink and updateLinkWithReceipt (#161)", () => {
+  const OPENED = new Date("2026-02-01T00:00:00Z");
+  const writers = [
+    ["updateLink", updateLink],
+    ["updateLinkWithReceipt", updateLinkWithReceipt],
+  ] as const;
+  const setup = async () => {
+    const store = new FakeStore();
+    const { link } = await store.insertIfAbsent("a", newLink(1, T0));
+    return { store, deps: { store, now: () => OPENED }, id: link.id };
+  };
+  const log = (store: FakeStore, id: string) =>
+    store.eventsOf("a", id).map((e) => [e.kind, e.at.getTime()]);
+
+  it.each(writers)("%s: opened records opened at the opening time", async (_n, write) => {
+    const { store, deps, id } = await setup();
+    await write(deps, "a", id, { opened: true });
+    expect(log(store, id)).toEqual([["opened", OPENED.getTime()]]);
+  });
+
+  it.each(writers)(
+    "%s: a snooze into the future records not_now; a past one or null does not",
+    async (_n, write) => {
+      const { store, deps, id } = await setup();
+      await write(deps, "a", id, { snoozedUntil: new Date(OPENED.getTime() - 1) });
+      await write(deps, "a", id, { snoozedUntil: null });
+      expect(log(store, id)).toEqual([]);
+      await write(deps, "a", id, { snoozedUntil: new Date(OPENED.getTime() + 1000) });
+      expect(log(store, id)).toEqual([["not_now", OPENED.getTime()]]);
+    },
+  );
+
+  it.each(writers)("%s: MCP state archived on an active link records stale", async (_n, write) => {
+    const { store, deps, id } = await setup();
+    await write(deps, "a", id, { state: "archived" });
+    expect(log(store, id)).toEqual([["stale", OPENED.getTime()]]);
+  });
+
+  it.each(writers)("%s: MCP state archived on a stale link records nothing", async (_n, write) => {
+    const { store, deps, id } = await setup();
+    await store.update("a", id, { state: "archived", putAwayAt: null });
+    await write(deps, "a", id, { state: "archived" });
+    expect(log(store, id)).toEqual([]);
+  });
+
+  it.each(writers)("%s: MCP state archived on a put-away link records stale", async (_n, write) => {
+    const { store, deps, id } = await setup();
+    await store.update("a", id, { state: "archived", putAwayAt: T0 });
+    await write(deps, "a", id, { state: "archived" });
+    expect(log(store, id)).toEqual([["stale", OPENED.getTime()]]);
+  });
+
+  it.each(writers)("%s: MCP state active, and other edits, record nothing", async (_n, write) => {
+    const { store, deps, id } = await setup();
+    await store.update("a", id, { state: "archived", putAwayAt: null });
+    await write(deps, "a", id, { state: "active" });
+    await write(deps, "a", id, { title: "New" });
+    expect(log(store, id)).toEqual([]);
+  });
+});

@@ -653,6 +653,7 @@ describe("It's stale", () => {
     expect(change).toEqual({
       before: { state: "active", putAwayAt: null, snoozedUntil: at(DAY) },
       after: { state: "active", putAwayAt: null },
+      at: NOW,
     });
     expect(await get(l.id)).toEqual(before);
     await undoStateChange(deps(), A, l.id, change);
@@ -690,6 +691,7 @@ describe("put away, stale, bring back and their Undo", () => {
     expect(change).toEqual({
       before: { state: "active", putAwayAt: null, snoozedUntil: at(DAY) },
       after: { state: "archived", putAwayAt: NOW },
+      at: NOW,
     });
     expect(await get(l.id)).toMatchObject({
       state: "archived",
@@ -715,6 +717,7 @@ describe("put away, stale, bring back and their Undo", () => {
     expect(change).toEqual({
       before: { state: "archived", putAwayAt: stamp, snoozedUntil: null },
       after: { state: "archived", putAwayAt: null },
+      at: NOW,
     });
     expect(await get(away.id)).toMatchObject({ state: "archived", putAwayAt: null });
   });
@@ -807,6 +810,91 @@ describe("put away, stale, bring back and their Undo", () => {
   it("Not now still refuses a stale link", async () => {
     const stale = await link(A, { state: "archived" });
     expect(await code(snoozeLink(deps(), A, stale.id))).toBe("conflict");
+  });
+});
+
+describe("stats events from the state actions (#161)", () => {
+  const kinds = (l: Link) => store.eventsOf(A, l.id).map((e) => [e.kind, e.at.getTime()]);
+
+  it("Put it away records put_away at its stamp", async () => {
+    const l = await link();
+    await putAwayLink(deps(), A, l.id);
+    expect(kinds(l)).toEqual([["put_away", NOW.getTime()]]);
+  });
+
+  it("It's stale records stale at now, and a refused one records nothing", async () => {
+    const l = await link();
+    await archiveLink(deps(), A, l.id);
+    expect(await code(archiveLink(deps(), A, l.id))).toBe("conflict");
+    expect(kinds(l)).toEqual([["stale", NOW.getTime()]]);
+  });
+
+  it("Not now records not_now at now, and a refused one records nothing", async () => {
+    const l = await link();
+    await snoozeLink(deps(), A, l.id);
+    expect(await code(snoozeLink(deps(), A, l.id))).toBe("conflict");
+    expect(kinds(l)).toEqual([["not_now", NOW.getTime()]]);
+  });
+
+  it("undo of Not now removes the not_now event", async () => {
+    const l = await link();
+    const snooze = await snoozeLink(deps(), A, l.id);
+    await unsnoozeLink(deps(), A, l.id, snooze);
+    expect(kinds(l)).toEqual([]);
+  });
+
+  it("Bring it back records nothing and adds no event to undo", async () => {
+    const l = await link(A, { state: "archived" });
+    const change = await bringBackLink(deps(), A, l.id);
+    expect(change.at).toEqual(NOW);
+    expect(kinds(l)).toEqual([]);
+    await undoStateChange(deps(), A, l.id, change);
+    expect(kinds(l)).toEqual([]);
+  });
+
+  it("Bring it back on an already active link still carries its time", async () => {
+    const l = await link();
+    expect((await bringBackLink(deps(), A, l.id)).at).toEqual(NOW);
+  });
+
+  it("undo of Put it away removes the put_away event", async () => {
+    const l = await link();
+    const change = await putAwayLink(deps(), A, l.id);
+    await undoStateChange(deps(), A, l.id, change);
+    expect(kinds(l)).toEqual([]);
+  });
+
+  it("put away, undo, put away again leaves one put_away event", async () => {
+    const l = await link();
+    await undoStateChange(deps(), A, l.id, await putAwayLink(deps(), A, l.id));
+    clock = at(DAY);
+    await putAwayLink(deps(), A, l.id);
+    expect(kinds(l)).toEqual([["put_away", at(DAY).getTime()]]);
+  });
+
+  it("undo of It's stale removes the stale event and leaves an earlier put_away", async () => {
+    const l = await link();
+    await putAwayLink(deps(), A, l.id);
+    clock = at(DAY);
+    const change = await archiveLink(deps(), A, l.id);
+    expect(kinds(l)).toEqual([
+      ["put_away", NOW.getTime()],
+      ["stale", at(DAY).getTime()],
+    ]);
+    await undoStateChange(deps(), A, l.id, change);
+    expect(kinds(l)).toEqual([["put_away", NOW.getTime()]]);
+  });
+
+  it("an old stale Undo removes its own event, not a later one", async () => {
+    const l = await link();
+    const first = await archiveLink(deps(), A, l.id);
+    clock = at(DAY);
+    await bringBackLink(deps(), A, l.id);
+    clock = at(2 * DAY);
+    await archiveLink(deps(), A, l.id);
+    // the row is stale again, so the first Undo still applies and takes out only its own event
+    await undoStateChange(deps(), A, l.id, first);
+    expect(kinds(l)).toEqual([["stale", at(2 * DAY).getTime()]]);
   });
 });
 

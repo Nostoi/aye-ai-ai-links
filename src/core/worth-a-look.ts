@@ -9,7 +9,7 @@ import {
 } from "./digest.js";
 import { CoreError } from "./errors.js";
 import { recordOpening } from "./links.js";
-import type { LinkExpectation } from "./store.js";
+import type { EventWrite, LinkExpectation } from "./store.js";
 import type { ToolItem } from "./tools.js";
 import type { Link, LinkPatch, LinkState, OwnerId } from "./types.js";
 
@@ -107,7 +107,9 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
     snoozedUntil: link.snoozedUntil,
   };
   try {
-    await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF);
+    await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF, [
+      { record: "not_now", at: now },
+    ]);
   } catch (error) {
     if (claim) await unclaimSurfaced(deps, owner, id, now, claim.previousSurfacedAt);
     throw error;
@@ -131,13 +133,22 @@ export async function unsnoozeLink(
   if (snooze.claimedAt) {
     await unclaimSurfaced(deps, owner, id, snooze.claimedAt, snooze.previousSurfacedAt);
   }
-  await changeIf(deps, owner, id, { snoozedUntil: snooze.until }, { snoozedUntil: null });
+  await changeIf(
+    deps,
+    owner,
+    id,
+    { snoozedUntil: snooze.until },
+    { snoozedUntil: null },
+    undefined,
+    [{ unrecord: "not_now", at: new Date(snooze.until.getTime() - SNOOZE_MS) }],
+  );
 }
 
-/** What a state action replaced and what it left; Undo sends both back. */
+/** What a state action replaced and what it left, and when it ran; Undo sends all three back. */
 export type StateChange = {
   before: { state: LinkState; putAwayAt: Date | null; snoozedUntil: Date | null };
   after: { state: LinkState; putAwayAt: Date | null };
+  at: Date;
 };
 
 type StateDeps = Pick<WorthDeps, "store" | "now">;
@@ -165,8 +176,10 @@ export async function putAwayLink(
   const putAwayAt = deps.now();
   const expected = { state: "active" as const, putAwayAt: null, snoozedUntil: link.snoozedUntil };
   const patch: LinkPatch = { state: "archived", putAwayAt, snoozedUntil: null };
-  await changeIf(deps, owner, id, expected, patch, ALREADY_DONE);
-  return { before: beforeOf(link), after: { state: "archived", putAwayAt } };
+  await changeIf(deps, owner, id, expected, patch, ALREADY_DONE, [
+    { record: "put_away", at: putAwayAt },
+  ]);
+  return { before: beforeOf(link), after: { state: "archived", putAwayAt }, at: putAwayAt };
 }
 
 /** It's stale: active or put away -> archived, putAwayAt null. */
@@ -180,8 +193,11 @@ export async function archiveLink(
     throw new CoreError("conflict", ALREADY_DONE);
   }
   const expected = { state: link.state, putAwayAt: link.putAwayAt };
-  await changeIf(deps, owner, id, expected, { state: "archived", putAwayAt: null }, ALREADY_DONE);
-  return { before: beforeOf(link), after: { state: "archived", putAwayAt: null } };
+  const at = deps.now();
+  await changeIf(deps, owner, id, expected, { state: "archived", putAwayAt: null }, ALREADY_DONE, [
+    { record: "stale", at },
+  ]);
+  return { before: beforeOf(link), after: { state: "archived", putAwayAt: null }, at };
 }
 
 /** Bring it back: any archived link -> active, putAwayAt null. */
@@ -191,13 +207,14 @@ export async function bringBackLink(
   id: string,
 ): Promise<StateChange> {
   const link = await current(deps, owner, id);
+  const at = deps.now();
   if (link.state === "active" && link.putAwayAt === null) {
-    return { before: beforeOf(link), after: { state: "active", putAwayAt: null } };
+    return { before: beforeOf(link), after: { state: "active", putAwayAt: null }, at };
   }
   if (link.state !== "archived") throw new CoreError("conflict", CHANGED_SINCE);
   const expected = { state: "archived" as const, putAwayAt: link.putAwayAt };
   await changeIf(deps, owner, id, expected, { state: "active", putAwayAt: null });
-  return { before: beforeOf(link), after: { state: "active", putAwayAt: null } };
+  return { before: beforeOf(link), after: { state: "active", putAwayAt: null }, at };
 }
 
 /** Undo of any of the three: only while the link matches change.after; restores change.before. */
@@ -212,7 +229,16 @@ export async function undoStateChange(
       throw new CoreError("invalid_input", "That can't be undone. Reload the page.");
     }
   }
-  await changeIf(deps, owner, id, change.after, change.before);
+  // Taking the action back takes back the event it recorded, found by its own time.
+  const events: EventWrite[] =
+    change.after.state === "archived"
+      ? [
+          change.after.putAwayAt
+            ? { unrecord: "put_away", at: change.after.putAwayAt }
+            : { unrecord: "stale", at: change.at },
+        ]
+      : [];
+  await changeIf(deps, owner, id, change.after, change.before, undefined, events);
 }
 
 /**
@@ -247,8 +273,9 @@ export async function changeIf(
   expected: LinkExpectation,
   patch: LinkPatch,
   conflict = CHANGED_SINCE,
+  events?: EventWrite[],
 ): Promise<Link> {
-  const result = await deps.store.updateIf(owner, id, expected, patch);
+  const result = await deps.store.updateIf(owner, id, expected, patch, events);
   if (!result) throw new CoreError("not_found", "That link is gone. Reload the page.");
   if (!result.applied) throw new CoreError("conflict", conflict);
   return result.link;

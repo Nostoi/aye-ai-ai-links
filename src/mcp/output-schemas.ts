@@ -157,7 +157,7 @@ export const getStatsOutput = z.strictObject({
     }),
   ),
   trackingSince: timestamp,
-  partial: z.boolean(),
+  partialCounts: z.array(z.enum(["opened", "setAside", "notNow"])),
   reading: z
     .strictObject({
       text: z.string(),

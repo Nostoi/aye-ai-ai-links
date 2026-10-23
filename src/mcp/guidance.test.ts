@@ -32,12 +32,14 @@ describe("list_links guidance", () => {
 describe("get_stats guidance", () => {
   const GET_STATS = (guidance as Record<string, string>).GET_STATS ?? "";
 
-  it("says counts are distinct links, opened misses outside openings, and a partial window may be low", () => {
+  it("says counts are distinct links, opened misses outside openings, and partialCounts names the low ones", () => {
     expect(GET_STATS).toMatch(/distinct links, not events/);
     expect(GET_STATS).toMatch(/opened only counts openings made through the app or an AI/);
     expect(GET_STATS).toMatch(/misses any opening from a browser bookmark/);
     expect(GET_STATS).toMatch(/trackingSince/);
-    expect(GET_STATS).toMatch(/When partial is true.*too low/);
+    expect(GET_STATS).toMatch(
+      /partialCounts names the counts that may be too low.*for those counts only/,
+    );
   });
 
   it("tells agents to present the reading as a guess", () => {

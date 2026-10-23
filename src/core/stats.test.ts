@@ -185,11 +185,11 @@ describe("computeStats", () => {
     ]);
   });
 
-  it("partial is true when the window starts before tracking", () => {
+  it("partialCounts names the counts that may be low", () => {
     const f = facts({ trackingSince: ago(50) });
-    expect(computeStats(f, "30", NOW).partial).toBe(false);
-    expect(computeStats(f, "90", NOW).partial).toBe(true);
-    expect(computeStats(f, "all", NOW).partial).toBe(true);
+    expect(computeStats(f, "30", NOW).partialCounts).toEqual([]);
+    expect(computeStats(f, "90", NOW).partialCounts).toEqual(["opened", "setAside", "notNow"]);
+    expect(computeStats(f, "all", NOW).partialCounts).toEqual(["notNow"]);
     expect(computeStats(f, "90", NOW).trackingSince).toEqual(ago(50));
   });
 

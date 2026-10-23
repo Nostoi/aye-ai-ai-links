@@ -23,6 +23,8 @@ export function parseWindow(raw: string | number | undefined): StatsWindow {
 
 export type TagStat = { name: string; kind: TagKind; saved: number; opened: number };
 
+export type PartialCount = "opened" | "setAside" | "notNow";
+
 export type Stats = {
   window: StatsWindow;
   saved: number;
@@ -33,8 +35,8 @@ export type Stats = {
   /** Every tag, most saved first, ties by name. */
   tags: TagStat[];
   trackingSince: Date;
-  /** The window starts before tracking began (always true for all time). */
-  partial: boolean;
+  /** The counts that may be too low because the window starts before tracking began. */
+  partialCounts: PartialCount[];
 };
 
 export type StatsFacts = {
@@ -105,7 +107,8 @@ export function computeStats(facts: StatsFacts, window: StatsWindow, now: Date):
     notNow: eventLinks("not_now", true).size,
     tags,
     trackingSince,
-    partial: start === null || start < trackingSince,
+    partialCounts:
+      start === null ? ["notNow"] : start < trackingSince ? ["opened", "setAside", "notNow"] : [],
   };
 }
 

@@ -10,5 +10,5 @@ export const emptyStats: Stats = {
   notNow: 0,
   tags: [],
   trackingSince: new Date("2026-10-01T00:00:00Z"),
-  partial: true,
+  partialCounts: ["notNow"],
 };

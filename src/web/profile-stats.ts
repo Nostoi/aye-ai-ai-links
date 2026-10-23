@@ -1,4 +1,10 @@
-import { STATS_TAG_ROWS, type Stats, type StatsWindow, type TagStat } from "../core/stats.js";
+import {
+  type PartialCount,
+  STATS_TAG_ROWS,
+  type Stats,
+  type StatsWindow,
+  type TagStat,
+} from "../core/stats.js";
 import { escapeHtml, savedOn } from "./page.js";
 
 const WINDOW_LABELS: [StatsWindow, string][] = [
@@ -21,12 +27,19 @@ function tagRow(t: TagStat, largest: number): string {
   return `<li class="stat-tag"><span class="stat-name">${escapeHtml(t.name)}</span><span class="stat-bar" aria-hidden="true"><span class="stat-opened pct-${openedPct}"></span><span class="stat-unopened pct-${savedPct - openedPct}"></span></span><span class="stat-counts small">${t.saved} saved · ${t.opened} opened</span></li>`;
 }
 
+const PARTIAL_LABELS: Record<PartialCount, string> = {
+  opened: "openings",
+  setAside: "set-asides",
+  notNow: "Not now",
+};
+
 function partialNote(stats: Stats, now: Date): string {
-  if (!stats.partial) return "";
-  const since = savedOn(stats.trackingSince, now);
-  return stats.window === "all"
-    ? `<p class="small">Not now is counted from ${since}, when counting began.</p>`
-    : `<p class="small">Counting began on ${since}, so openings and set-asides before then are only partly counted.</p>`;
+  const names = stats.partialCounts.map((c) => PARTIAL_LABELS[c]);
+  if (names.length === 0) return "";
+  const list =
+    names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  const verb = names.length === 1 ? "is" : "are";
+  return `<p class="small">Counting began on ${savedOn(stats.trackingSince, now)}, so ${list} before then ${verb} only partly counted.</p>`;
 }
 
 function tagBlock(tags: TagStat[]): string {

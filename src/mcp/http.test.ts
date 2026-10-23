@@ -1091,7 +1091,7 @@ describe("MCP door over HTTP", () => {
         setAside: 0,
         notNow: 0,
         tags: [{ name: "Launch", saved: 1, opened: 0 }],
-        partial: true,
+        partialCounts: ["opened", "setAside", "notNow"],
         reading: null,
       });
       expect(Number.isNaN(Date.parse(stats.trackingSince))).toBe(false);
@@ -1100,7 +1100,10 @@ describe("MCP door over HTTP", () => {
 
     it("get_stats defaults to all time", async () => {
       const res = await call(app, "key-a", "get_stats", {});
-      expect(res.body.result.structuredContent).toMatchObject({ window: "all", partial: true });
+      expect(res.body.result.structuredContent).toMatchObject({
+        window: "all",
+        partialCounts: ["notNow"],
+      });
       const odd = await call(app, "key-a", "get_stats", { window: "7" });
       expect(odd.body.result.isError).toBe(true);
     });

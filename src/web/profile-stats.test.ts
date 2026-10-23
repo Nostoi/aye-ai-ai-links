@@ -14,7 +14,7 @@ const stats = (over: Partial<Stats> = {}): Stats => ({
   notNow: 0,
   tags: [],
   trackingSince: new Date("2026-10-22T09:00:00Z"),
-  partial: false,
+  partialCounts: [],
   ...over,
 });
 
@@ -122,17 +122,20 @@ describe("the profile stats section", () => {
     expect(profileStats(stats({ tags: [] }), NOW)).not.toContain("By project and topic");
   });
 
-  it("the partial note shows only when partial", () => {
-    const partial = profileStats(stats({ partial: true }), NOW);
-    expect(partial).toContain("only partly counted");
-    expect(partial).toContain("October 22");
-    expect(profileStats(stats({ partial: false }), NOW)).not.toContain("partly");
+  it("the partial note shows only when partialCounts is not empty", () => {
+    const html = profileStats(
+      stats({ window: "90", partialCounts: ["opened", "setAside", "notNow"] }),
+      NOW,
+    );
+    expect(html).toContain(
+      "Counting began on October 22, so openings, set-asides and Not now before then are only partly counted.",
+    );
+    expect(profileStats(stats({ partialCounts: [] }), NOW)).not.toContain("partly");
   });
 
   it("the all-time note names only Not now", () => {
-    const html = profileStats(stats({ window: "all", partial: true }), NOW);
-    expect(html).toContain("Not now is counted from October 22");
-    expect(html).not.toContain("partly");
-    expect(html).not.toContain("Openings and set-asides");
+    const html = profileStats(stats({ window: "all", partialCounts: ["notNow"] }), NOW);
+    expect(html).toContain("so Not now before then is only partly counted.");
+    expect(html).not.toContain("openings");
   });
 });

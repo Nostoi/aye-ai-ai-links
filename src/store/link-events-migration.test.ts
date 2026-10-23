@@ -57,8 +57,8 @@ describe("link_events migration", () => {
       tracking_since: number;
     };
     expect(row.only).toBe(1);
-    expect(row.tracking_since).toBeGreaterThanOrEqual(before);
-    expect(row.tracking_since).toBeLessThanOrEqual(after);
+    expect(row.tracking_since).toBeGreaterThanOrEqual(before - 1);
+    expect(row.tracking_since).toBeLessThanOrEqual(after + 1);
   });
 
   it("removes a link's events when the link is purged", () => {

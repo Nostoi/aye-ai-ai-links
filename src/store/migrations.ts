@@ -353,7 +353,7 @@ export const MIGRATIONS: Migration[] = [
     tracking_since INTEGER NOT NULL
   );
   INSERT INTO stats_meta (only, tracking_since)
-    VALUES (1, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
+    VALUES (1, CAST(ROUND(unixepoch('subsec') * 1000) AS INTEGER));
 
   INSERT INTO link_events (owner_id, link_id, kind, at, backfilled)
     SELECT owner_id, id, 'opened', last_opened_at, 1 FROM links WHERE last_opened_at IS NOT NULL;

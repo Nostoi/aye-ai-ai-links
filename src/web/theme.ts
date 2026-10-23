@@ -160,6 +160,8 @@ button.link{background:none;border:0;padding:0 6px;font-weight:400;text-decorati
 .stat-opened{background:var(--ink)}
 .stat-unopened{background:var(--field)}
 .stat-counts{white-space:nowrap}
+.stat-reading{background:var(--surface);border-radius:18px;padding:16px 20px;box-shadow:0 2px 10px #0000000b}
+.stat-reading p{margin:0 0 8px;overflow-wrap:anywhere}
 ${pctClasses}
 .undo-bar{position:fixed;left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100% - 32px);display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--surface);border-radius:28px;padding:6px 6px 6px 22px;box-shadow:0 6px 24px #00000026;font-size:15.5px}
 .undo-bar span{min-width:0;overflow-wrap:anywhere}

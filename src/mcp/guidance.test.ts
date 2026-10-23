@@ -38,8 +38,9 @@ describe("get_stats guidance", () => {
     expect(GET_STATS).toMatch(/misses any opening from a browser bookmark/);
     expect(GET_STATS).toMatch(/trackingSince/);
     expect(GET_STATS).toMatch(
-      /partialCounts names the counts that may be too low.*for those counts only/,
+      /partialCounts names the counts that may be too low.*say so for those counts; the others don't depend on when tracking began/,
     );
+    expect(GET_STATS).not.toMatch(/treat the others as complete/);
   });
 
   it("tells agents to present the reading as a guess", () => {

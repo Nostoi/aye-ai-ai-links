@@ -49,7 +49,8 @@ import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/
 import type { LinkOrder } from "../core/search.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
-import { getStats, parseWindow } from "../core/stats.js";
+import { getStats, parseWindow, statsReading } from "../core/stats.js";
+import type { StatsReadingStore } from "../core/stats-reading-store.js";
 import type { StatsStore } from "../core/stats-store.js";
 import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -635,6 +636,9 @@ export function webApp({
       edits: LinkEditStore;
       profile: ProfileStore;
       stats: StatsStore;
+      /** The stored stats reading, shown on the profile only while `readingOn`. */
+      statsReadings: StatsReadingStore;
+      readingOn?: boolean | undefined;
       savedCopies: SavedCopyReader &
         SavedCopyRemover &
         Pick<SavedCopyUsage, "usedBytes" | "lastCheck">;
@@ -1369,12 +1373,16 @@ export function webApp({
   app.get("/profile", session, async (c) => {
     const { owner } = c.get("caller");
     const { notes, recentFocus } = await profileContext(deps, owner);
-    const stats = await getStats(deps, owner, parseWindow(c.req.query("window")));
+    const [stats, reading] = await Promise.all([
+      getStats(deps, owner, parseWindow(c.req.query("window"))),
+      statsReading({ readings: deps.statsReadings, readingOn: deps.readingOn }, owner),
+    ]);
     return c.html(
       profilePage({
         notes,
         focus: recentFocus,
         stats,
+        reading,
         now: deps.now(),
         ask: askOn(c, "Profile"),
       }),

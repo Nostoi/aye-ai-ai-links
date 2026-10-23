@@ -5,6 +5,7 @@ import {
   type StatsWindow,
   type TagStat,
 } from "../core/stats.js";
+import type { StatsReading } from "../core/stats-reading-store.js";
 import { escapeHtml, savedOn } from "./page.js";
 
 const WINDOW_LABELS: [StatsWindow, string][] = [
@@ -55,8 +56,15 @@ ${tags
 </ul>${more > 0 ? `\n<p class="small">and ${more} more</p>` : ""}`;
 }
 
-/** The profile's "Your library" section: counts for one window, then the tag rows. */
-export function profileStats(stats: Stats, now: Date): string {
+/** The AI's guess, labelled as one; nothing at all without a reading. */
+function readingBlock(reading: StatsReading | null, now: Date): string {
+  if (reading === null) return "";
+  return `\n<h3>What this might say about you</h3>
+<div class="stat-reading"><p>${escapeHtml(reading.text)}</p><small class="small">A guess by ${escapeHtml(reading.writtenBy)}, ${savedOn(reading.writtenAt, now)}</small></div>`;
+}
+
+/** The profile's "Your library" section: counts for one window, the tag rows, then the reading. */
+export function profileStats(stats: Stats, now: Date, reading: StatsReading | null = null): string {
   return `<section class="profile-stats" aria-labelledby="stats-heading">
 <h2 id="stats-heading">Your library</h2>
 <nav class="stat-windows" aria-label="Time window">${WINDOW_LABELS.map((w) => windowLink(w, stats.window)).join("")}</nav>
@@ -69,6 +77,6 @@ ${card("Set aside", stats.setAside, "done, stale, put away or not handy")}
 ${stats.notNow > 0 ? `<p>Put off with Not now: ${stats.notNow}</p>` : ""}
 ${partialNote(stats, now)}
 <p class="small">Openings from bookmarks or outside the app aren't counted.</p>
-${tagBlock(stats.tags)}
+${tagBlock(stats.tags)}${readingBlock(reading, now)}
 </section>`;
 }

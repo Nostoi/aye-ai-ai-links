@@ -32,7 +32,8 @@ import { LINK_ORDERS, type LinkCount, type LinkSearch } from "../core/search.js"
 import { searchLinks } from "../core/search-links.js";
 import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { PageTextReader } from "../core/snapshot-text.js";
-import { getStats, parseWindow, STATS_WINDOWS } from "../core/stats.js";
+import { getStats, parseWindow, STATS_WINDOWS, statsReading } from "../core/stats.js";
+import type { StatsReadingStore } from "../core/stats-reading-store.js";
 import type { StatsStore } from "../core/stats-store.js";
 import type { LinkStore } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
@@ -75,6 +76,10 @@ export type McpDeps = {
   count: LinkCount;
   profile: ProfileStore;
   stats: StatsStore;
+  /** The AI's stored reading of each owner's stats, shown by `get_stats` only when `readingOn`. */
+  statsReadings: StatsReadingStore;
+  /** Whether the server has an AI connection; `createApp` sets it. Left out means off. */
+  readingOn?: boolean | undefined;
   now: () => Date;
   snapshots?: Pick<SnapshotRunner, "kick"> | undefined;
   pages: PageTextReader;
@@ -514,11 +519,21 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ window }) => ({
-      ...(await getStats(deps, owner, parseWindow(window))),
-      // The stored reading arrives later (#161); the shape is fixed now.
-      reading: null,
-    }),
+    async ({ window }) => {
+      const [stats, reading] = await Promise.all([
+        getStats(deps, owner, parseWindow(window)),
+        statsReading({ readings: deps.statsReadings, readingOn: deps.readingOn }, owner),
+      ]);
+      return {
+        ...stats,
+        reading: reading && {
+          text: reading.text,
+          writtenBy: reading.writtenBy,
+          writtenAt: reading.writtenAt,
+          source: "inferred" as const,
+        },
+      };
+    },
   );
 
   register(

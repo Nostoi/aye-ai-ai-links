@@ -107,7 +107,10 @@ export async function mergeTags(
       at,
       pruneBefore: cutoff(at),
     });
-    if (done === null) throw notFound(input.name);
+    if (done === null) {
+      const left = await store.listTags(owner);
+      throw notFound(left.some((t) => t.key === fromKey) ? input.into : input.name);
+    }
     if (done !== "conflict") return done;
   }
   throw conflict(input.name);

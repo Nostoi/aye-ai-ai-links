@@ -13,6 +13,8 @@ type Receipt = {
   removed: Tag;
   /** The old keys that reached the removed tag, leaving out any a live tag shadowed. */
   aliases: string[];
+  /** A delete's: the live key the removed key's own old address reached then, if any. */
+  address?: string | null;
   /** A merge's kept tag: its key, settings before and after, and every link with it afterwards. */
   kept?: { key: string; before: TagSettings; after: TagSettings; links: number[] };
   /** Each link the removed tag was on, hidden included, with its ordered tags before and after. */
@@ -152,6 +154,7 @@ export class SqliteTagEditStore implements TagEditStore {
         const linkIds = this.linksWith(owner, row.id);
         const before = linkIds.map((id) => this.marks(owner, id));
         const aliases = this.reachingAliases(owner, row.id);
+        const address = this.addressOf(owner, row.key);
         this.db
           .prepare("DELETE FROM link_tags WHERE owner_id = ? AND tag_id = ?")
           .run(owner, row.id);
@@ -160,6 +163,7 @@ export class SqliteTagEditStore implements TagEditStore {
         const changeId = this.writeReceipt(owner, "delete", d.at, {
           removed: toTag(row),
           aliases,
+          address,
           links: linkIds.map((id, i) => ({
             id,
             before: before[i] ?? [],
@@ -182,6 +186,9 @@ export class SqliteTagEditStore implements TagEditStore {
         if (!found) return null;
         const r = JSON.parse(found.receipt) as Receipt;
         if (this.tagRow(owner, r.removed.key)) return "conflict";
+        if (this.newerMergeInto(owner, changeId, since, r)) return "conflict";
+        if (!r.kept && this.addressOf(owner, r.removed.key) !== (r.address ?? null))
+          return "conflict";
         const kept = r.kept && this.tagRow(owner, r.kept.key);
         if (r.kept) {
           if (!kept || !sameSettings(toTag(kept), r.kept.after)) return "conflict";
@@ -354,6 +361,31 @@ export class SqliteTagEditStore implements TagEditStore {
       .pluck()
       .get(owner, key) as number | undefined;
     return id ?? null;
+  }
+
+  /** The live key the old key's alias reaches, or null. */
+  private addressOf(owner: OwnerId, key: string): string | null {
+    const found = this.db
+      .prepare(
+        `SELECT t.key FROM tag_aliases a JOIN tags t ON t.id = a.tag_id AND t.owner_id = a.owner_id
+         WHERE a.owner_id = ? AND a.old_key = ?`,
+      )
+      .pluck()
+      .get(owner, key) as string | undefined;
+    return found ?? null;
+  }
+
+  /** Whether a merge written after this one, still in its window, kept the same tag. */
+  private newerMergeInto(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
+    if (!r.kept) return false;
+    const newer = this.db
+      .prepare(
+        `SELECT receipt FROM tag_changes WHERE owner_id = ? AND at >= ?
+           AND rowid > (SELECT rowid FROM tag_changes WHERE owner_id = ? AND change_id = ?)`,
+      )
+      .pluck()
+      .all(owner, since.getTime(), owner, changeId) as string[];
+    return newer.some((json) => (JSON.parse(json) as Receipt).kept?.key === r.kept?.key);
   }
 
   private setAlias(owner: OwnerId, key: string, tagId: number): void {

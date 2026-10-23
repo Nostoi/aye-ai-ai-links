@@ -157,6 +157,22 @@ describe("mergeTags and deleteTag", () => {
     expect(asked).toBe(false);
   });
 
+  it("names the tag that vanished before the write", async () => {
+    const gone = async (name: string) => {
+      const { deps, store } = setup([tag("a"), tag("b")]);
+      const tagEdits = {
+        ...deps.tagEdits,
+        mergeTag: async () => {
+          await store.deleteTag("o", { tag: tag(name), at: NOW, pruneBefore: NOW });
+          return null;
+        },
+      };
+      return failure(mergeTags({ ...deps, tagEdits }, "o", { name: "a", into: "b" }));
+    };
+    expect((await gone("b")).message).toContain('"b"');
+    expect((await gone("a")).message).toContain('"a"');
+  });
+
   it("is not_found when a tag is missing", async () => {
     const { deps } = setup([tag("a")]);
     expect((await failure(mergeTags(deps, "o", { name: "a", into: "zzz" }))).code).toBe(

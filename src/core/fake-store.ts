@@ -76,6 +76,7 @@ type TagChange = {
   at: Date;
   removed: Tag;
   aliases: string[];
+  address?: string | null;
   kept?: { key: string; before: TagSettings; after: TagSettings; links: string[] };
   links: { id: string; before: TagMark[]; after: TagMark[] }[];
 };
@@ -759,6 +760,7 @@ export class FakeStore
       at: new Date(d.at),
       removed: structuredClone(entry),
       aliases,
+      address: this.aliasesOf(owner).get(entry.key) ?? null,
       links: changed.map((l, i) => ({ id: l.id, before: before[i] ?? [], after: marksOf(l) })),
     });
     return { changeId, moved };
@@ -770,6 +772,12 @@ export class FakeStore
     const catalog = this.catalogOf(owner);
     const mine = this.aliasesOf(owner);
     if (catalog.has(r.removed.key)) return "conflict";
+    const waiting = [...(this.tagChanges.get(owner) ?? [])].map(([id, c]) => ({ id, ...c }));
+    const newer = waiting.slice(waiting.findIndex((c) => c.id === changeId) + 1);
+    const keptKey = r.kept?.key;
+    if (keptKey && newer.some((c) => c.at.getTime() >= since.getTime() && c.kept?.key === keptKey))
+      return "conflict";
+    if (!r.kept && (mine.get(r.removed.key) ?? null) !== (r.address ?? null)) return "conflict";
     const kept = r.kept && catalog.get(r.kept.key);
     const linkOf = (id: string) =>
       this.owned(owner).get(id) ?? this.hidden.get(owner)?.get(id)?.link;

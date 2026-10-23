@@ -444,6 +444,51 @@ export function describeTagEditStoreContract(
       });
     });
 
+    describe("undo waits for a newer merge into the same tag and respects a later address", () => {
+      it("two merges into one tag come back newest first, never oldest first", async () => {
+        const one = await save(A, [mention("a")]);
+        const two = await save(A, [mention("b"), mention("c")]);
+        await h.links.pinTag(A, "a", { pinned: true, color: "teal" });
+        await h.links.pinTag(A, "b", { pinned: true, color: "blue" });
+        const tagsBefore = await h.links.listTags(A);
+        const marksBefore = [await marks(A, one), await marks(A, two)];
+        const teal = { pinned: true, color: "teal" };
+        const first = await merge("a", "c", teal);
+        const second = await merge("b", "c", teal);
+        const merged = await world(A, [one, two]);
+
+        expect(await undo(first.changeId)).toBe("conflict");
+        expect(await world(A, [one, two])).toEqual(merged);
+
+        expect(await undo(second.changeId)).not.toBe("conflict");
+        expect(await undo(first.changeId)).not.toBe("conflict");
+        expect(await h.links.listTags(A)).toEqual(tagsBefore);
+        expect([await marks(A, one), await marks(A, two)]).toEqual(marksBefore);
+      });
+
+      it("a delete's undo does not override a later rename of its old address", async () => {
+        await save(A, [mention("banking")]);
+        const { changeId } = await remove("banking");
+        const fresh = await save(A, [mention("banking")]);
+        await rename("banking", "finance");
+        const after = await world(A, [fresh]);
+
+        expect(await undo(changeId)).toBe("conflict");
+        expect(await world(A, [fresh])).toEqual(after);
+        expect(await h.tagEdits.currentKey(A, "banking")).toBe("finance");
+      });
+
+      it("a delete's undo still works when its own key had an old address that has not moved", async () => {
+        const id = await save(A, [mention("a")]);
+        await rename("a", "b");
+        await save(A, [mention("a")]);
+        const { changeId } = await remove("a");
+        expect(await undo(changeId)).not.toBe("conflict");
+        expect(await h.tagEdits.currentKey(A, "a")).toBe("a");
+        expect(await marks(A, id)).toEqual([["b", "stated"]]);
+      });
+    });
+
     it("an old key a live tag shadowed at the time is not recorded, so it does not block undo", async () => {
       await save(A, [mention("a")]);
       await rename("a", "b");

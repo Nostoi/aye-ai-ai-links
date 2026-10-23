@@ -7,6 +7,7 @@ import { saveLink, updateLink } from "../core/links.js";
 import { describeStoreContract, type StoreHarness } from "../core/store-contract.js";
 import type { NewLink, Tag } from "../core/types.js";
 import { openDatabase } from "./database.js";
+import { loggedEvents } from "./logged-events.js";
 import { LATEST_VERSION, MIGRATIONS, migrate } from "./migrations.js";
 import { SqliteStore } from "./sqlite-store.js";
 
@@ -44,6 +45,7 @@ function harnessFor(db: Db): StoreHarness {
         )
         .all(owner)
         .map((r) => ({ ...(r as Tag), pinned: (r as { pinned: number }).pinned === 1 })),
+    eventsOf: (owner, id) => loggedEvents(db, owner, id),
     seedTag: (owner, t) => {
       db.prepare(
         "INSERT INTO tags (owner_id, key, name, kind, kind_source, color, pinned, description, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

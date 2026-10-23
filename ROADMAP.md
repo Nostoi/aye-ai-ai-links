@@ -16,11 +16,19 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), a link's tags in Edit link (#239), renaming, merging and deleting tags (#240), stats and what they say about you (#161), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), a link's tags in Edit link (#239), stats and what they say about you (#161), renaming, merging and deleting tags (#240), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-10-22:** Stats (#161; design: `docs/specs/2026-10-22-stats-design.md`, approved by the owner in session). A Stats section on the profile page, a `link_events` history log from now on, a read-only `get_stats` MCP tool, and a weekly AI reading through the one AI connection. It lands in three PRs: the log, the counts, the reading.
+  - **Owner decisions:**
+    - **An exception to `src/web/AGENTS.md` rule 6, "No guilt counters".** The profile's Stats section shows a "not opened yet" count, because the owner sees it only when they go looking. The rule still governs Home and the lists. This settles the open conflict in the 2026-10-18 entry below.
+    - **Not now is not "set aside".** It means "later". This departs from #161's text.
+    - **Stats don't feed Worth a look in this work.**
+  - **Controller's calls** are listed in the design. Among them: the window switch opens on all time, the reading is not a profile note, and the log isn't exported yet.
+- **2026-10-22:** Stats (#161) go before renaming, merging and deleting tags (#240) (owner, in session). This replaces the order in the 2026-10-22 "Tags get edited on the web" entry below, which put #240 before #161.
 
 - **2026-10-22:** Saved summaries (#160; owner decisions: https://github.com/Nostoi/aye-ai-ai-links/issues/160#issuecomment-6350963012; design: `docs/specs/2026-10-22-saved-summaries-design.md`). The server will write a short summary for every link whose page it could read, through the one AI connection, and All links and space rows will show it where the owner wrote no why. It lands in three PRs: (1) the label, (2) the pass, (3) the rows.
   - **This replaces** the 2026-10-12 entry's "no source label" for summaries: that entry said a title works like summary and has no label because it is the agent's own wording. A summary now records who wrote it (`summarySource`: `stated`, `asked`, `inferred` or `server`; none for older ones).
@@ -259,7 +267,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **#161:** stats over a chosen window (saved, read, saved but not read, put aside), plus an AI reading of what they say about the owner.
   - **Open conflicts, to settle at design with the owner:**
     - #159 and #160 reverse AGENTS.md's "the server never calls an AI model API and needs no API keys", so building them changes that principle on purpose (settled for #159 by the 2026-10-19 entry "The server may call one configured AI");
-    - #161's "saved but not read" count meets src/web/AGENTS.md's "No guilt counters".
+    - #161's "saved but not read" count meets src/web/AGENTS.md's "No guilt counters" (settled by the 2026-10-22 entry "Stats").
 - **2026-10-18:** Saved copies (#135). Owner rulings, 2026-10-17 (#135 comment 6241001150, binding); the naming ruling is the comment before it (comment 6240109297). The design is `docs/specs/2026-10-17-saved-copy-design.md`.
   - **Overrides the 2026-10-10 spec's "Not stored now: full-page archives"** (owner ruling). That spec stays as written; this entry is the override.
   - **Lands in five PRs:** the ledger and folder store (no callers), then copies of new links with the settings, then the copy pass (the one-time backfill, the image pass, finishing, the sweep), then reading them (the copy page and its pictures, the ⋯ menu row, the gone cards' link, `get_link`'s `savedCopy`), then removing them (remove and Undo, the purge, the All links line).

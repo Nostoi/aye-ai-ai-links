@@ -335,6 +335,34 @@ export const MIGRATIONS: Migration[] = [
   ALTER TABLE link_edits ADD COLUMN prior_summary_source TEXT;
   ALTER TABLE link_edits ADD COLUMN written_summary_source TEXT;
   `,
+  // Stats (#161): a log of openings and set-asides, seeded from what links already store. Additive.
+  `
+  CREATE TABLE link_events (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('opened', 'put_away', 'stale', 'not_now', 'not_handy')),
+    at INTEGER NOT NULL,
+    backfilled INTEGER NOT NULL DEFAULT 0 CHECK (backfilled IN (0, 1)),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE
+  );
+  CREATE INDEX link_events_owner_at ON link_events (owner_id, at);
+  CREATE INDEX link_events_link ON link_events (owner_id, link_id, kind, at);
+
+  CREATE TABLE stats_meta (
+    only INTEGER PRIMARY KEY CHECK (only = 1),
+    tracking_since INTEGER NOT NULL
+  );
+  INSERT INTO stats_meta (only, tracking_since)
+    VALUES (1, CAST(ROUND(unixepoch('subsec') * 1000) AS INTEGER));
+
+  INSERT INTO link_events (owner_id, link_id, kind, at, backfilled)
+    SELECT owner_id, id, 'opened', last_opened_at, 1 FROM links WHERE last_opened_at IS NOT NULL;
+  INSERT INTO link_events (owner_id, link_id, kind, at, backfilled)
+    SELECT owner_id, id, 'put_away', put_away_at, 1 FROM links
+      WHERE state = 'archived' AND put_away_at IS NOT NULL;
+  INSERT INTO link_events (owner_id, link_id, kind, at, backfilled)
+    SELECT owner_id, link_id, 'not_handy', since, 1 FROM link_tools WHERE status = 'declined';
+  `,
 ];
 
 /**

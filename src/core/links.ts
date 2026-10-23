@@ -9,7 +9,7 @@ import {
   type SnapshotText,
   TEXT_CHARS,
 } from "./snapshot-text.js";
-import type { LinkStore } from "./store.js";
+import type { EventWrite, LinkStore } from "./store.js";
 import { REPLACEABLE_SUMMARY_SOURCES } from "./summary-rule.js";
 import { isTagKind, normalizeTags } from "./tags.js";
 import {
@@ -323,6 +323,24 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   return patch;
 }
 
+/**
+ * The stats events an update means: an opening, a snooze into the future, and Stale. Archiving
+ * records Stale only when the link was not already stale; the store checks that inside the write.
+ */
+function eventsOf(input: UpdateLinkInput, at: Date): EventWrite[] {
+  const events: EventWrite[] = [];
+  if (input.opened === true) events.push({ record: "opened", at });
+  if (input.snoozedUntil && input.snoozedUntil > at) events.push({ record: "not_now", at });
+  if (input.state === "archived") {
+    events.push({
+      record: "stale",
+      at,
+      unlessBefore: { state: "archived", putAwayAt: null },
+    });
+  }
+  return events;
+}
+
 export async function updateLink(
   { store, now }: Deps,
   owner: OwnerId,
@@ -330,7 +348,13 @@ export async function updateLink(
   input: UpdateLinkInput,
 ): Promise<Link> {
   const stamp = await putAwayStamp(store, owner, id, input);
-  const link = await store.update(owner, id, buildPatch(now, input));
+  const at = now();
+  const link = await store.update(
+    owner,
+    id,
+    buildPatch(() => at, input),
+    eventsOf(input, at),
+  );
   if (!link) throw notFound(id);
   return reactivate(store, owner, id, stamp, link);
 }
@@ -344,7 +368,15 @@ export async function updateLinkWithReceipt(
   extend?: string,
 ): Promise<{ link: Link; editId: string | null }> {
   const stamp = await putAwayStamp(store, owner, id, input);
-  const result = await store.updateWithReceipt(owner, id, buildPatch(now, input), now(), extend);
+  const at = now();
+  const result = await store.updateWithReceipt(
+    owner,
+    id,
+    buildPatch(() => at, input),
+    at,
+    extend,
+    eventsOf(input, at),
+  );
   if (!result) throw notFound(id);
   return { ...result, link: await reactivate(store, owner, id, stamp, result.link) };
 }

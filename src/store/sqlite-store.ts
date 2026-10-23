@@ -8,6 +8,7 @@ import {
   type SnapshotStore,
 } from "../core/snapshot-store.js";
 import type {
+  EventWrite,
   LinkExpectation,
   LinkRemover,
   LinkStore,
@@ -106,20 +107,27 @@ export class SqliteStore
     return n === null ? null : this.read(owner, n);
   }
 
-  async update(owner: OwnerId, id: string, patch: LinkPatch) {
+  async update(owner: OwnerId, id: string, patch: LinkPatch, events?: EventWrite[]) {
     const n = parseId(id);
     return n === null
       ? null
-      : this.db.transaction(() => this.updateSync(owner, n, patch)).immediate();
+      : this.db.transaction(() => this.updateSync(owner, n, patch, {}, events)).immediate();
   }
 
-  async updateWithReceipt(owner: OwnerId, id: string, patch: LinkPatch, at: Date, extend?: string) {
+  async updateWithReceipt(
+    owner: OwnerId,
+    id: string,
+    patch: LinkPatch,
+    at: Date,
+    extend?: string,
+    events?: EventWrite[],
+  ) {
     const n = parseId(id);
     if (n === null) return null;
     return this.db
       .transaction(() => {
         const before = readCovered(this.db, owner, n);
-        const link = this.updateSync(owner, n, patch);
+        const link = this.updateSync(owner, n, patch, {}, events);
         if (!before || !link) return null;
         const changed = changedFields(before, link);
         const editId = anyChanged(changed)
@@ -238,12 +246,18 @@ export class SqliteStore
     return row ? { ...row, pinned: row.pinned === 1 } : null;
   }
 
-  async updateIf(owner: OwnerId, id: string, expected: LinkExpectation, patch: LinkPatch) {
+  async updateIf(
+    owner: OwnerId,
+    id: string,
+    expected: LinkExpectation,
+    patch: LinkPatch,
+    events?: EventWrite[],
+  ) {
     const n = parseId(id);
     if (n === null) return null;
     return this.db
       .transaction(() => {
-        const link = this.updateSync(owner, n, patch, expected);
+        const link = this.updateSync(owner, n, patch, expected, events);
         if (link) return { link, applied: true };
         const current = this.read(owner, n);
         return current ? { link: current, applied: false } : null;
@@ -455,6 +469,7 @@ export class SqliteStore
     linkId: string,
     expected: ToolRecord | null,
     next: ToolRecord | null,
+    events?: EventWrite[],
   ): Promise<ToolWrite | null> {
     const n = parseId(linkId);
     if (n === null) return null;
@@ -466,6 +481,7 @@ export class SqliteStore
         if (!link) return null;
         const current = this.readTool(owner, n);
         if (!sameTool(current, expected)) return { tool: current, applied: false };
+        this.writeEvents(owner, n, this.settleEvents(owner, n, events));
         if (next === null) {
           this.db
             .prepare("DELETE FROM link_tools WHERE owner_id = ? AND link_id = ?")
@@ -550,12 +566,45 @@ export class SqliteStore
     return { link: this.mustRead(owner, existing.id), created: false };
   }
 
+  /**
+   * Drops the `record`s whose `unlessBefore` the row already matches, with the same matching
+   * `updateIf`'s `expected` uses. Call it before the link write, while the row is still as it was.
+   */
+  private settleEvents(owner: OwnerId, id: number, events: EventWrite[] = []): EventWrite[] {
+    return events.filter((event) => {
+      if (!("record" in event) || !event.unlessBefore) return true;
+      const guard = expectationWhere(owner, id, event.unlessBefore);
+      return !this.db
+        .prepare(`SELECT 1 FROM links WHERE ${guard.where.join(" AND ")}`)
+        .get(...guard.values);
+    });
+  }
+
+  /** Applies settled events (see `EventWrite`); a failure here fails the transaction it is in. */
+  private writeEvents(owner: OwnerId, id: number, events: EventWrite[]): void {
+    for (const event of events) {
+      if ("unrecord" in event) {
+        this.db
+          .prepare(
+            `DELETE FROM link_events WHERE rowid = (SELECT rowid FROM link_events
+               WHERE owner_id = ? AND link_id = ? AND kind = ? AND at = ? LIMIT 1)`,
+          )
+          .run(owner, id, event.unrecord, toMs(event.at));
+      } else {
+        this.db
+          .prepare("INSERT INTO link_events (owner_id, link_id, kind, at) VALUES (?, ?, ?, ?)")
+          .run(owner, id, event.record, toMs(event.at));
+      }
+    }
+  }
+
   /** With `expected`, the row is written only while it matches (see `LinkStore.updateIf`). */
   private updateSync(
     owner: OwnerId,
     id: number,
     patch: LinkPatch,
     expected: LinkExpectation = {},
+    events?: EventWrite[],
   ): Link | null {
     const sets: string[] = [];
     const values: unknown[] = [];
@@ -587,37 +636,15 @@ export class SqliteStore
       set("why_source", patch.why?.source ?? null);
     }
     if (sets.length === 0) sets.push("id = id");
-    const where = ["id = ?", "owner_id = ?", "deleted_at IS NULL"];
-    const whereValues: unknown[] = [id, owner];
-    if (expected.state !== undefined) {
-      where.push("state = ?");
-      whereValues.push(expected.state);
-    }
-    if (expected.snoozedUntil !== undefined) {
-      where.push("snoozed_until IS ?");
-      whereValues.push(toMs(expected.snoozedUntil));
-    }
-    if (expected.putAwayAt !== undefined) {
-      where.push("put_away_at IS ?");
-      whereValues.push(toMs(expected.putAwayAt));
-    }
-    for (const [column, list] of [
-      ["why_source", expected.whySource],
-      ["summary_source", expected.summarySource],
-    ] as const) {
-      if (list === undefined) continue;
-      const guard = sourceIn(column, list);
-      where.push(guard.sql);
-      whereValues.push(...guard.values);
-    }
-    if (expected.summary !== undefined) {
-      where.push("summary IS ?");
-      whereValues.push(expected.summary);
-    }
+    const settled = this.settleEvents(owner, id, events);
+    const guard = expectationWhere(owner, id, expected);
     const matched = this.db
-      .prepare(`UPDATE links SET ${sets.join(", ")} WHERE ${where.join(" AND ")} RETURNING id`)
-      .get(...values, ...whereValues);
+      .prepare(
+        `UPDATE links SET ${sets.join(", ")} WHERE ${guard.where.join(" AND ")} RETURNING id`,
+      )
+      .get(...values, ...guard.values);
     if (!matched) return null;
+    this.writeEvents(owner, id, settled);
     if (patch.tags !== undefined) {
       this.db.prepare("DELETE FROM link_tags WHERE link_id = ? AND owner_id = ?").run(id, owner);
       this.attachTags(owner, id, patch.tags);
@@ -760,6 +787,38 @@ export class SqliteStore
 }
 
 /** SQL true while `column` holds one of `list`; a null in the list matches NULL. */
+/** The live row of this owner's link that still matches `expected` (see `LinkStore.updateIf`). */
+function expectationWhere(owner: OwnerId, id: number, expected: LinkExpectation) {
+  const where = ["id = ?", "owner_id = ?", "deleted_at IS NULL"];
+  const values: unknown[] = [id, owner];
+  if (expected.state !== undefined) {
+    where.push("state = ?");
+    values.push(expected.state);
+  }
+  if (expected.snoozedUntil !== undefined) {
+    where.push("snoozed_until IS ?");
+    values.push(toMs(expected.snoozedUntil));
+  }
+  if (expected.putAwayAt !== undefined) {
+    where.push("put_away_at IS ?");
+    values.push(toMs(expected.putAwayAt));
+  }
+  for (const [column, list] of [
+    ["why_source", expected.whySource],
+    ["summary_source", expected.summarySource],
+  ] as const) {
+    if (list === undefined) continue;
+    const guard = sourceIn(column, list);
+    where.push(guard.sql);
+    values.push(...guard.values);
+  }
+  if (expected.summary !== undefined) {
+    where.push("summary IS ?");
+    values.push(expected.summary);
+  }
+  return { where, values };
+}
+
 function sourceIn(column: string, list: readonly (string | null)[]) {
   const sources = list.filter((s) => s !== null);
   const either = sources.map(() => `${column} = ?`);

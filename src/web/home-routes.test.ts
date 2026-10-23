@@ -20,6 +20,13 @@ const row = (world: World, id: string) =>
     unknown
   >;
 
+const eventKinds = (world: World, id: string) =>
+  (
+    world.links
+      .prepare("SELECT kind FROM link_events WHERE link_id = ? ORDER BY at, rowid")
+      .all(Number(id)) as { kind: string }[]
+  ).map((e) => e.kind);
+
 async function home(why: Labelled | null = null) {
   const world = await oauthWorld();
   const { link } = await saveLink(linkDeps(world), A, {
@@ -195,10 +202,13 @@ describe("the home card actions", () => {
     expect(res.body).toEqual({
       before: { state: "active", putAwayAt: null, snoozedUntil: null },
       after: { state: "archived", putAwayAt: null },
+      at: expect.any(String),
     });
     expect(row(world, id).state).toBe("archived");
+    expect(eventKinds(world, id)).toEqual(["stale"]);
     const undo = post({ id, change: res.body });
     expect((await browser.send("/home/undo-state", undo)).status).toBe(204);
+    expect(eventKinds(world, id)).toEqual([]);
     expect(row(world, id).state).toBe("active");
     expect((await browser.send("/home/undo-state", undo)).status).toBe(409);
   });
@@ -222,6 +232,16 @@ describe("the home card actions", () => {
     expect((await browser.send("/home/undo-state", post({ id, change }))).status).toBe(204);
     expect(row(world, id)).toMatchObject({ state: "active", snoozed_until: snoozed });
     expect(row(world, id).put_away_at).toBeNull();
+  });
+
+  it("undo-state without at is refused, leaving the link put away and its event in place", async () => {
+    const { world, browser, id } = await home();
+    const { body } = await browser.send("/home/put-away", post({ id }));
+    const { at: _at, ...withoutAt } = body as Record<string, unknown>;
+    const res = await browser.send("/home/undo-state", post({ id, change: withoutAt }));
+    expect(res.status).toBe(400);
+    expect(row(world, id).state).toBe("archived");
+    expect(eventKinds(world, id)).toEqual(["put_away"]);
   });
 
   it("/home/put-away on a link that is already out of your lists is a 409, changing nothing", async () => {
@@ -304,6 +324,10 @@ describe("the home card actions", () => {
       { ...good, after: { ...good.after, state: 3 } },
       { ...good, after: { ...good.after, putAwayAt: "soon" } },
       { ...good, after: { ...good.after, putAwayAt: undefined } },
+      { ...good, at: undefined },
+      { ...good, at: null },
+      { ...good, at: "soon" },
+      { ...good, at: 5 },
     ]) {
       const res = await browser.send("/home/undo-state", post({ id, change: bad }));
       expect(res.status, JSON.stringify(bad)).toBe(400);
@@ -384,6 +408,7 @@ const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
       change: {
         before: { state: "active", putAwayAt: null, snoozedUntil: null },
         after: { state: "archived", putAwayAt: null },
+        at: "2026-01-01T00:00:00.000Z",
       },
     }),
     { state: "archived" },

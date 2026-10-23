@@ -1,3 +1,4 @@
+import type { EventWrite } from "./store.js";
 import type { OwnerId, Source, ToolStatus } from "./types.js";
 
 /** How long a kept tool waits before "Still using it?", in days. */
@@ -37,13 +38,15 @@ export interface ToolStore {
    * `next` deletes it), but only while the row still equals `expected` (null: no row), as
    * `sameTool` compares them. Returns the row as it is afterwards with `applied`, or null when
    * the link is absent, foreign or never issued; then nothing is written. Core supplies both
-   * rows; the store holds no rule.
+   * rows; the store holds no rule. `events` are applied in the same step, only when it is
+   * applied; an `unlessBefore` is judged against the link as it is before the write.
    */
   updateToolIf(
     owner: OwnerId,
     linkId: string,
     expected: ToolRecord | null,
     next: ToolRecord | null,
+    events?: EventWrite[],
   ): Promise<ToolWrite | null>;
 }
 

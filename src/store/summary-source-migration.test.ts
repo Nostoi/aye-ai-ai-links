@@ -24,8 +24,8 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("summary source migration", () => {
-  it("is the last entry", () => {
-    expect(LATEST_VERSION).toBe(SUMMARY_SOURCE + 1);
+  it("is followed by the link_events entry", () => {
+    expect(LATEST_VERSION).toBe(SUMMARY_SOURCE + 2);
   });
 
   it("leaves an old summary unlabelled", () => {

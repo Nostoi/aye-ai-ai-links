@@ -25,6 +25,9 @@ export type SnapshotStatus = (typeof SNAPSHOT_STATUSES)[number];
 export const TOOL_STATUSES = ["kept", "suggested", "declined"] as const;
 export type ToolStatus = (typeof TOOL_STATUSES)[number];
 
+/** What a link's event log records (#161). */
+export type LinkEventKind = "opened" | "put_away" | "stale" | "not_now" | "not_handy";
+
 /** What a fetch of the page produced, without its text (see SnapshotStore.getSnapshotText). */
 export type SnapshotSummary = {
   status: SnapshotStatus;

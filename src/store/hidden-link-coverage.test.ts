@@ -15,6 +15,7 @@ type Coverage = { test: string } | { reason: string };
 const HIDDEN_LINK_COVERAGE: Record<string, Coverage> = {
   link_checks: { test: RUNNER_AND_BYTE_READS },
   link_edits: { test: HIDDEN_WRITES },
+  link_events: { test: HIDDEN_WRITES },
   link_images: { test: RUNNER_AND_BYTE_READS },
   link_tags: {
     reason: "read only for link rows a guarded links read already returned (TAG_SELECT)",

@@ -1,6 +1,7 @@
 import type {
   Labelled,
   Link,
+  LinkEventKind,
   LinkPatch,
   LinkState,
   NewLink,
@@ -49,9 +50,9 @@ export interface LinkStore {
    * Apply only the fields present in the patch, per field (not a whole-row
    * rewrite). A `tags` field replaces the link's whole tag set. Returns the
    * updated link, or null when absent or foreign; then nothing is written,
-   * including tags and catalog rows.
+   * including tags and catalog rows. `events` are applied in the same step (see `EventWrite`).
    */
-  update(owner: OwnerId, id: string, patch: LinkPatch): Promise<Link | null>;
+  update(owner: OwnerId, id: string, patch: LinkPatch, events?: EventWrite[]): Promise<Link | null>;
 
   /**
    * `update`, for the in-app AI, with a receipt: in the same atomic step it reads the link's
@@ -60,6 +61,7 @@ export interface LinkStore {
    * Otherwise it replaces the link's edit record (see `LinkEditStore`) with what the write
    * replaced and wrote, and returns that record's new id. Null when absent or foreign; then
    * nothing is written. `update`, `updateIf` and `fillWhyIfMissing` never write a receipt.
+   * `events` are applied whenever the link write happened, with or without a receipt.
    */
   updateWithReceipt(
     owner: OwnerId,
@@ -67,6 +69,7 @@ export interface LinkStore {
     patch: LinkPatch,
     at: Date,
     extend?: string,
+    events?: EventWrite[],
   ): Promise<{ link: Link; editId: string | null } | null>;
 
   /**
@@ -173,13 +176,14 @@ export interface LinkStore {
    * Conditional write, in one atomic step: apply `patch` as `update` does, but only while the
    * link still matches every field `expected` names. Returns the link as it is afterwards, with
    * `applied` saying whether the patch was written, or null when absent or foreign; then nothing
-   * is written.
+   * is written. `events` are applied in the same step, only when the patch is.
    */
   updateIf(
     owner: OwnerId,
     id: string,
     expected: LinkExpectation,
     patch: LinkPatch,
+    events?: EventWrite[],
   ): Promise<{ link: Link; applied: boolean } | null>;
 }
 
@@ -209,6 +213,17 @@ export type LinkExpectation = {
   summary?: string | null;
   summarySource?: (SummarySource | null)[];
 };
+
+/**
+ * What a write does to the link's event log (#161), in the write's own transaction and only when
+ * the write is applied to a live link of the owner's. `record` adds an event; with `unlessBefore`
+ * it adds it only when the row before the write does not match that expectation, decided inside
+ * the write. `unrecord` removes one event of that kind at exactly `at` (an Undo), if there is one.
+ * An event that cannot be written fails the whole write.
+ */
+export type EventWrite =
+  | { record: LinkEventKind; at: Date; unlessBefore?: LinkExpectation }
+  | { unrecord: LinkEventKind; at: Date };
 
 export type SurfacedClaim = { link: Link; previousSurfacedAt: Date | null };
 

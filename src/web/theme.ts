@@ -345,7 +345,8 @@ main:not([data-view=pictures]) .link-row .card-menu-dot{background:none;-webkit-
 [data-view=pictures] .row-pic{width:100%;height:140px;border-radius:18px 18px 0 0;--icon:80px;--initials:40px}
 [data-view=pictures] .row-pic .site-icon{padding:calc(var(--icon) / 9);box-shadow:0 1px 4px rgb(0 0 0 / .12)}
 [data-view=pictures] .row-body{padding:14px 18px 18px}
-[data-view=pictures] .row-why,[data-view=pictures] .row-body .row-about{white-space:normal}
+[data-view=pictures] .row-why{white-space:normal}
+[data-view=pictures] .row-body .row-about{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 [data-view=pictures] .link-row .card-menu{top:2px;right:2px;margin-top:0}
 .show-older{display:inline-flex;align-items:center;min-height:44px;padding:0 26px;border-radius:999px;background:var(--ink);color:var(--surface);font-size:15.5px;font-weight:600;text-decoration:none}
 .all-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px}

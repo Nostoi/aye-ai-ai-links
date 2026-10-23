@@ -878,15 +878,17 @@ describe("the quiet list and the Pictures view (#194)", () => {
     }
   });
 
-  it("draws a summary in --about at the why's size: one line on desktop, two on a phone, whole on a picture card", () => {
+  it("draws a summary in --about at the why's size: one line on desktop, two on a phone, three on a picture card", () => {
     const about = (view: "list" | "pictures") => inView(view, ".row-about");
     expect(computed(about("list"), "color", "desktop")).toBe("var(--about)");
     expect(computed(about("list"), "font-size", "desktop")).toBe("15px");
     expect(computed(about("list"), "white-space", "desktop")).toBe("nowrap");
     expect(computed(about("list"), "text-overflow", "desktop")).toBe("ellipsis");
     expect(computed(about("list"), "-webkit-line-clamp", "phone")).toBe("2");
-    expect(computed(about("pictures"), "white-space", "desktop")).toBe("normal");
-    expect(computed(about("pictures"), "-webkit-line-clamp", "desktop")).toBeUndefined();
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(about("pictures"), "white-space", w), w).toBe("normal");
+      expect(computed(about("pictures"), "-webkit-line-clamp", w), w).toBe("3");
+    }
   });
 
   it("draws a search result's summary in --about, whole", () => {

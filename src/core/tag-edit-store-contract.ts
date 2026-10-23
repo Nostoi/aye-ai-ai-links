@@ -366,9 +366,22 @@ export function describeTagEditStoreContract(
         const id = await save(A, [mention("x")]);
         const { changeId } = await remove("x");
         const other = await save(A, [mention("x")]);
-        await refused(changeId, [id, other], () =>
-          h.links.update(A, other, { tags: [] }).then(() => remove("x")),
-        );
+        await refused(changeId, [id, other]);
+        await h.links.update(A, other, { tags: [] });
+        await remove("x");
+        await refused(changeId, [id, other]);
+      });
+
+      it("a newer change that removed the same key stays undoable", async () => {
+        const one = await save(A, [mention("a")]);
+        await save(A, [mention("c")]);
+        const first = await merge("a", "c");
+        const fresh = await save(A, [mention("a")]);
+        const freshTag = await tag(A, "a");
+        const second = await remove("a");
+        await refused(first.changeId, [one, fresh]);
+        expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
+        expect(await marks(A, fresh)).toEqual([["a", "stated"]]);
       });
 
       it("the kept tag is missing", async () => {

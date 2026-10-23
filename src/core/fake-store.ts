@@ -774,9 +774,10 @@ export class FakeStore
     if (catalog.has(r.removed.key)) return "conflict";
     const waiting = [...(this.tagChanges.get(owner) ?? [])].map(([id, c]) => ({ id, ...c }));
     const newer = waiting.slice(waiting.findIndex((c) => c.id === changeId) + 1);
-    const keptKey = r.kept?.key;
-    if (keptKey && newer.some((c) => c.at.getTime() >= since.getTime() && c.kept?.key === keptKey))
-      return "conflict";
+    const keys = [r.removed.key, r.kept?.key];
+    const names = (c: TagChange) =>
+      [c.removed.key, c.kept?.key].some((k) => k !== undefined && keys.includes(k));
+    if (newer.some((c) => c.at.getTime() >= since.getTime() && names(c))) return "conflict";
     if (!r.kept && (mine.get(r.removed.key) ?? null) !== (r.address ?? null)) return "conflict";
     const kept = r.kept && catalog.get(r.kept.key);
     const linkOf = (id: string) =>

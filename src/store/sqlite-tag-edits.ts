@@ -186,7 +186,7 @@ export class SqliteTagEditStore implements TagEditStore {
         if (!found) return null;
         const r = JSON.parse(found.receipt) as Receipt;
         if (this.tagRow(owner, r.removed.key)) return "conflict";
-        if (this.newerMergeInto(owner, changeId, since, r)) return "conflict";
+        if (this.newerReceiptNames(owner, changeId, since, r)) return "conflict";
         if (!r.kept && this.addressOf(owner, r.removed.key) !== (r.address ?? null))
           return "conflict";
         const kept = r.kept && this.tagRow(owner, r.kept.key);
@@ -375,9 +375,9 @@ export class SqliteTagEditStore implements TagEditStore {
     return found ?? null;
   }
 
-  /** Whether a merge written after this one, still in its window, kept the same tag. */
-  private newerMergeInto(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
-    if (!r.kept) return false;
+  /** Whether a receipt written after this one, still in its window, names a key this one names. */
+  private newerReceiptNames(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
+    const mine = [r.removed.key, r.kept?.key];
     const newer = this.db
       .prepare(
         `SELECT receipt FROM tag_changes WHERE owner_id = ? AND at >= ?
@@ -385,7 +385,10 @@ export class SqliteTagEditStore implements TagEditStore {
       )
       .pluck()
       .all(owner, since.getTime(), owner, changeId) as string[];
-    return newer.some((json) => (JSON.parse(json) as Receipt).kept?.key === r.kept?.key);
+    return newer.some((json) => {
+      const n = JSON.parse(json) as Receipt;
+      return [n.removed.key, n.kept?.key].some((k) => k !== undefined && mine.includes(k));
+    });
   }
 
   private setAlias(owner: OwnerId, key: string, tagId: number): void {

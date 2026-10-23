@@ -46,6 +46,10 @@ describe("get_stats guidance", () => {
   it("tells agents to present the reading as a guess", () => {
     expect(GET_STATS).toMatch(/reading.*guess.*never as a fact/s);
   });
+
+  it("says the reading is null when the server has no AI connection", () => {
+    expect(GET_STATS).toMatch(/null.*no AI connection/s);
+  });
 });
 
 describe("guidance on a tag's kindSource", () => {

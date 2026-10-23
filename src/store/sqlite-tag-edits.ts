@@ -185,25 +185,10 @@ export class SqliteTagEditStore implements TagEditStore {
           .get(owner, changeId, since.getTime()) as { receipt: string } | undefined;
         if (!found) return null;
         const r = JSON.parse(found.receipt) as Receipt;
-        if (this.tagRow(owner, r.removed.key)) return "conflict";
+        if (!this.unchangedSince(owner, r)) return "conflict";
         if (this.newerReceiptMeets(owner, changeId, since, r)) return "conflict";
-        if (!r.kept && this.addressOf(owner, r.removed.key) !== (r.address ?? null))
-          return "conflict";
-        const kept = r.kept && this.tagRow(owner, r.kept.key);
-        if (r.kept) {
-          if (!kept || !sameSettings(toTag(kept), r.kept.after)) return "conflict";
-          const recorded = r.kept.links.filter((id) => this.linkExists(owner, id));
-          const now = this.linksWith(owner, kept.id);
-          if (recorded.length !== now.length || recorded.some((id) => !now.includes(id)))
-            return "conflict";
-          if (this.aliasOf(owner, r.removed.key) !== kept.id) return "conflict";
-        }
+        const kept = r.kept && this.mustTag(owner, r.kept.key);
         const links = r.links.filter((l) => this.linkExists(owner, l.id));
-        if (links.some((l) => !sameMarks(this.marks(owner, l.id), l.after))) return "conflict";
-        for (const key of r.aliases) {
-          if (this.tagRow(owner, key) || this.aliasOf(owner, key) !== (kept ? kept.id : null))
-            return "conflict";
-        }
 
         const t = r.removed;
         const restoredId = Number(
@@ -375,7 +360,26 @@ export class SqliteTagEditStore implements TagEditStore {
     return found ?? null;
   }
 
-  /** Whether a receipt written after this one, still in its window, shares a key or link with it. */
+  /** Whether everything the receipt's Undo would put back is still as the change left it. */
+  private unchangedSince(owner: OwnerId, r: Receipt): boolean {
+    if (this.tagRow(owner, r.removed.key)) return false;
+    if (!r.kept && this.addressOf(owner, r.removed.key) !== (r.address ?? null)) return false;
+    const kept = r.kept && this.tagRow(owner, r.kept.key);
+    if (r.kept) {
+      if (!kept || !sameSettings(toTag(kept), r.kept.after)) return false;
+      const recorded = r.kept.links.filter((id) => this.linkExists(owner, id));
+      const now = this.linksWith(owner, kept.id);
+      if (recorded.length !== now.length || recorded.some((id) => !now.includes(id))) return false;
+      if (this.aliasOf(owner, r.removed.key) !== kept.id) return false;
+    }
+    const links = r.links.filter((l) => this.linkExists(owner, l.id));
+    if (links.some((l) => !sameMarks(this.marks(owner, l.id), l.after))) return false;
+    return r.aliases.every(
+      (key) => !this.tagRow(owner, key) && this.aliasOf(owner, key) === (kept ? kept.id : null),
+    );
+  }
+
+  /** Whether a newer receipt still in its window, and itself unchanged since, shares a key or link with it. */
   private newerReceiptMeets(owner: OwnerId, changeId: string, since: Date, r: Receipt): boolean {
     const newer = this.db
       .prepare(
@@ -384,7 +388,10 @@ export class SqliteTagEditStore implements TagEditStore {
       )
       .pluck()
       .all(owner, since.getTime(), owner, changeId) as string[];
-    return newer.some((json) => receiptsMeet(r, JSON.parse(json) as Receipt));
+    return newer.some((json) => {
+      const n = JSON.parse(json) as Receipt;
+      return receiptsMeet(r, n) && this.unchangedSince(owner, n);
+    });
   }
 
   private setAlias(owner: OwnerId, key: string, tagId: number): void {

@@ -769,36 +769,19 @@ export class FakeStore
   async undoTagChange(owner: OwnerId, changeId: string, since: Date) {
     const r = this.tagChanges.get(owner)?.get(changeId);
     if (!r || r.at.getTime() < since.getTime()) return null;
-    const catalog = this.catalogOf(owner);
-    const mine = this.aliasesOf(owner);
-    if (catalog.has(r.removed.key)) return "conflict";
+    if (!this.unchangedSince(owner, r)) return "conflict";
     const waiting = [...(this.tagChanges.get(owner) ?? [])].map(([id, c]) => ({ id, ...c }));
     const newer = waiting.slice(waiting.findIndex((c) => c.id === changeId) + 1);
-    if (newer.some((c) => c.at.getTime() >= since.getTime() && receiptsMeet(r, c)))
+    const live = (c: TagChange) => c.at.getTime() >= since.getTime();
+    if (newer.some((c) => live(c) && receiptsMeet(r, c) && this.unchangedSince(owner, c)))
       return "conflict";
-    if (!r.kept && (mine.get(r.removed.key) ?? null) !== (r.address ?? null)) return "conflict";
+    const catalog = this.catalogOf(owner);
+    const mine = this.aliasesOf(owner);
     const kept = r.kept && catalog.get(r.kept.key);
-    const linkOf = (id: string) =>
-      this.owned(owner).get(id) ?? this.hidden.get(owner)?.get(id)?.link;
-    if (r.kept) {
-      if (!kept || !sameSettings(kept, r.kept.after)) return "conflict";
-      const recorded = r.kept.links.filter((id) => linkOf(id) !== undefined);
-      const keptKey = kept.key;
-      const now = this.everyLink(owner)
-        .filter((l) => l.tags.some((t) => t.key === keptKey))
-        .map((l) => l.id);
-      if (recorded.length !== now.length || recorded.some((id) => !now.includes(id)))
-        return "conflict";
-      if (mine.get(r.removed.key) !== kept.key) return "conflict";
-    }
     const links = r.links.flatMap((l) => {
-      const link = linkOf(l.id);
+      const link = this.linkOf(owner, l.id);
       return link ? [{ link, ...l }] : [];
     });
-    if (links.some((l) => !sameTags(marksOf(l.link), l.after))) return "conflict";
-    for (const key of r.aliases) {
-      if (catalog.has(key) || mine.get(key) !== (kept ? kept.key : undefined)) return "conflict";
-    }
     const restored = structuredClone(r.removed);
     catalog.set(restored.key, restored);
     for (const key of r.aliases) mine.set(key, restored.key);
@@ -825,6 +808,37 @@ export class FakeStore
   async currentKey(owner: OwnerId, key: string) {
     if (this.catalogOf(owner).has(key)) return key;
     return this.aliases.get(owner)?.get(key) ?? null;
+  }
+
+  /** Whether everything the receipt's Undo would put back is still as the change left it. */
+  private unchangedSince(owner: OwnerId, r: TagChange): boolean {
+    const catalog = this.catalogOf(owner);
+    const mine = this.aliasesOf(owner);
+    if (catalog.has(r.removed.key)) return false;
+    if (!r.kept && (mine.get(r.removed.key) ?? null) !== (r.address ?? null)) return false;
+    const kept = r.kept && catalog.get(r.kept.key);
+    if (r.kept) {
+      if (!kept || !sameSettings(kept, r.kept.after)) return false;
+      const recorded = r.kept.links.filter((id) => this.linkOf(owner, id) !== undefined);
+      const keptKey = kept.key;
+      const now = this.everyLink(owner)
+        .filter((l) => l.tags.some((t) => t.key === keptKey))
+        .map((l) => l.id);
+      if (recorded.length !== now.length || recorded.some((id) => !now.includes(id))) return false;
+      if (mine.get(r.removed.key) !== kept.key) return false;
+    }
+    const changed = r.links.some((l) => {
+      const link = this.linkOf(owner, l.id);
+      return link !== undefined && !sameTags(marksOf(link), l.after);
+    });
+    if (changed) return false;
+    return r.aliases.every(
+      (key) => !catalog.has(key) && mine.get(key) === (kept ? kept.key : undefined),
+    );
+  }
+
+  private linkOf(owner: OwnerId, id: string): Link | undefined {
+    return this.owned(owner).get(id) ?? this.hidden.get(owner)?.get(id)?.link;
   }
 
   /** The owner's links, hidden included: a tag change rewrites both. */

@@ -520,6 +520,63 @@ export function describeTagEditStoreContract(
           expect(await Promise.all(ids.map((id) => marks(A, id)))).toEqual(marksBefore);
         });
       }
+
+      /** An older delete of `p` and a newer merge of `ga` into `g` that meet only through `one`. */
+      const meetingPair = async () => {
+        const one = await save(A, [mention("p"), mention("g")]);
+        const two = await save(A, [mention("ga")]);
+        const tagsBefore = await h.links.listTags(A);
+        const p = await tag(A, "p");
+        const first = await remove("p");
+        const second = await merge("ga", "g");
+        return { one, two, tagsBefore, p, first, second };
+      };
+
+      for (const [label, kill] of [
+        ["a new link saved with its kept tag", () => save(A, [mention("g")])],
+        ["its kept tag pinned", () => h.links.pinTag(A, "g", { pinned: true, color: "blue" })],
+      ] as const) {
+        it(`a newer change that can't be undone (${label}) doesn't block an older one`, async () => {
+          const { one, p, first, second } = await meetingPair();
+          await kill();
+          expect(await undo(second.changeId)).toBe("conflict");
+          expect(await undo(first.changeId)).toEqual({ tags: [{ tag: p, links: 1 }] });
+          expect(await marks(A, one)).toEqual([
+            ["p", "stated"],
+            ["g", "stated"],
+          ]);
+        });
+      }
+
+      it("a newer change that can't be undone doesn't block an older one sharing its address", async () => {
+        await save(A, [mention("a")]);
+        await rename("a", "z");
+        const fresh = await save(A, [mention("a")]);
+        await save(A, [mention("q")]);
+        const a = await tag(A, "a");
+        const first = await remove("a");
+        const second = await merge("q", "z");
+        await save(A, [mention("z")]);
+        expect(await undo(second.changeId)).toBe("conflict");
+        expect(await undo(first.changeId)).toEqual({ tags: [{ tag: a, links: 1 }] });
+        expect(await marks(A, fresh)).toEqual([["a", "stated"]]);
+        expect(await h.tagEdits.currentKey(A, "a")).toBe("a");
+      });
+
+      it("a newer change revived after the older undo still undoes cleanly", async () => {
+        const { one, two, tagsBefore, first, second } = await meetingPair();
+        const added = await save(A, [mention("g")]);
+        expect(await undo(first.changeId)).not.toBe("conflict");
+        await h.links.update(A, added, { tags: [] });
+        expect(await undo(second.changeId)).not.toBe("conflict");
+        expect(await h.links.listTags(A)).toEqual(tagsBefore);
+        expect(await marks(A, one)).toEqual([
+          ["p", "stated"],
+          ["g", "stated"],
+        ]);
+        expect(await marks(A, two)).toEqual([["ga", "stated"]]);
+        expect(await marks(A, added)).toEqual([]);
+      });
     });
 
     describe("undo waits for a newer merge into the same tag and respects a later address", () => {

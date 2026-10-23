@@ -68,6 +68,27 @@ const toolRow = (world: World, id: string) =>
 const toolAnswers = (model: ReturnType<typeof scriptedModel>, request: number) =>
   (model.requests[request]?.messages ?? []).filter((m) => m.role === "tool");
 
+describe("Ask AI's get_stats", () => {
+  it("sees the owner's stored reading, through the app's own chat wiring", async () => {
+    const { world, browser, model } = await chatting([calls(["get_stats", {}]), says("Done.")]);
+    const deps = linkDeps(world);
+    await saveLink(deps, A, { url: "https://ex.com/r", savedBy: "t" });
+    await deps.statsReadings.putReadingIf(A, null, {
+      text: "Ask AI sees this reading.",
+      writtenBy: "Fake",
+      writtenAt: new Date("2026-10-20T08:00:00Z"),
+      inputHash: "h",
+    });
+
+    const res = await browser.send("/ai/chat", ask("How do I use my links?"));
+
+    expect((res.body as Answer).ok).toBe(true);
+    const [answer] = toolAnswers(model, 1);
+    expect(answer?.role === "tool" && answer.isError).toBe(false);
+    expect(answer?.role === "tool" ? answer.text : "").toContain("Ask AI sees this reading.");
+  });
+});
+
 describe("POST /ai/chat", () => {
   it("answers a turn with the reply and the AI's name", async () => {
     const { browser, model } = await chatting([says("Hello from the library.")]);

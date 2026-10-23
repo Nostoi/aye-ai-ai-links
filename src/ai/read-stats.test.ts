@@ -119,6 +119,8 @@ describe("createStatsReader", () => {
     expect(text).not.toContain("x".repeat(61));
     expect(text).toContain("tag19");
     expect(text).not.toMatch(/tag2\d/);
+    expect(text.match(/^- f/gm)).toHaveLength(10);
+    expect(text).toContain("20 more notes left out.");
     expect(text.match(/30 more tags left out/g)).toHaveLength(2);
     expect(text).not.toMatch(/f{201}/);
   });

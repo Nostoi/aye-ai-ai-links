@@ -17,10 +17,11 @@ import { SqliteLinkEditStore } from "./store/sqlite-link-edits.js";
 import { SqliteStatsStore } from "./store/sqlite-stats.js";
 import { SqliteStatsReadingStore } from "./store/sqlite-stats-readings.js";
 import { SqliteStore } from "./store/sqlite-store.js";
+import { SqliteTagEditStore } from "./store/sqlite-tag-edits.js";
 import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
 
 /**
- * Builds the store, search, search log, vector index, image store, edit store, check store, profile, saved-copy store (which owns the folder) and page-text reader from ONE database handle.
+ * Builds the store, search, search log, vector index, image store, edit store, tag edit store, check store, profile, saved-copy store (which owns the folder) and page-text reader from ONE database handle.
  * They must share it: ids ranked or saved in one database and read through another come back as the
  * wrong links, or with another link's page text. The export builds read through these same deps.
  */
@@ -46,6 +47,8 @@ export function createDeps(
     images: new SqliteImageStore(db),
     /** The owner's title, picture and tag edits and their Undo (#145, #239). */
     edits: new SqliteLinkEditStore(db),
+    /** Renaming, merging and deleting tags, and the Undo of a merge or delete (#240). */
+    tagEdits: new SqliteTagEditStore(db),
     profile: new SqliteProfileStore(db),
     pages: store,
     /** Keep handy rows: the digest and the tools rules read them. */

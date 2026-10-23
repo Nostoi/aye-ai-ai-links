@@ -5,7 +5,11 @@ export const isTagKind = (k: string): k is TagKind => (TAG_KINDS as readonly str
 
 const strength: Record<Source, number> = { stated: 3, asked: 2, inferred: 1 };
 
-function cleanName(raw: string): string {
+/** The more certain of two sources, stated over asked over inferred; `a` on a tie. */
+export const strongerSource = (a: Source, b: Source): Source => (strength[b] > strength[a] ? b : a);
+
+/** A tag name trimmed with its whitespace collapsed. Blank names are refused. */
+export function cleanTagName(raw: string): string {
   const name = raw.trim().replace(/\s+/g, " ");
   if (name === "") {
     throw new CoreError(
@@ -17,7 +21,7 @@ function cleanName(raw: string): string {
 }
 
 /** The identity of a tag name: trimmed, whitespace collapsed, lower-cased. Blank names are refused. */
-export const tagKey = (name: string): string => cleanName(name).toLowerCase();
+export const tagKey = (name: string): string => cleanTagName(name).toLowerCase();
 
 /**
  * One tag per key. The winning mention (strongest source, the first on a tie) supplies the
@@ -29,7 +33,7 @@ export function normalizeTags(
 ): LinkTag[] {
   const byKey = new Map<string, LinkTag>();
   for (const { name: raw, source, kind } of input) {
-    const name = cleanName(raw);
+    const name = cleanTagName(raw);
     const key = tagKey(name);
     const mention = {
       source,
@@ -38,7 +42,8 @@ export function normalizeTags(
     } as const;
     const existing = byKey.get(key);
     if (!existing) byKey.set(key, { key, name, ...mention });
-    else if (strength[source] > strength[existing.source]) Object.assign(existing, mention);
+    else if (strongerSource(existing.source, source) !== existing.source)
+      Object.assign(existing, mention);
   }
   return [...byKey.values()];
 }

@@ -73,7 +73,8 @@ type LinkRow = {
 
 type TagRow = Omit<Tag, "pinned"> & { pinned: number };
 
-const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
+/** A catalog row as `Tag` reads it, `pinned` still 0 or 1. */
+export const TAG_COLUMNS = `key, name, kind, kind_source AS kindSource, color, pinned, description,
   project_status AS projectStatus`;
 
 type SnapshotRow = {

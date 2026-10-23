@@ -21,7 +21,7 @@ import type {
  * - Tags: identity is `key`, per owner. A key the owner has not used before is
  *   created with the attached name, kind and kindSource. Attaching an existing tag never
  *   changes its name, kind, kindSource, colour, pin or project fields; only updateTag, pinTag
- *   and colorTag do.
+ *   and colorTag do here, and `TagEditStore` renames, merges and deletes tags.
  *   Every returned LinkTag.name, .kind and .kindSource is the catalog's for its key, not the
  *   one passed in; each LinkTag keeps its own source. Tags come back in the order
  *   they were attached.

@@ -11,6 +11,7 @@ import { searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { olderInvalidPage } from "./show-older.js";
 import { spaceMissingPage, spacePage } from "./space-page.js";
+import { emptyStats } from "./stats-test-kit.js";
 import { tagsPage } from "./tags-page.js";
 
 const NOW = new Date("2026-10-20T12:00:00Z");
@@ -88,7 +89,7 @@ const variants: Record<string, () => string> = {
   "space-missing": () => spaceMissingPage(ASK),
   "older-invalid": () => olderInvalidPage("Open it again.", ASK),
   tags: () => tagsPage({ tags: [KITCHEN], ask: ASK }),
-  profile: () => profilePage({ notes: [], focus: [], now: NOW, ask: ASK }),
+  profile: () => profilePage({ notes: [], focus: [], stats: emptyStats, now: NOW, ask: ASK }),
   connections: () =>
     connectionsPage({
       connections: [],

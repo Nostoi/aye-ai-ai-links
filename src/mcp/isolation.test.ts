@@ -47,6 +47,8 @@ const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
+/** A second tag on A's link, shown by no page but the profile's Stats rows and the exports. */
+const A_STATS_TAG_NAME = "Quokka stats row";
 const A_TOOL_TITLE = "Quokka keeper login";
 const A_TIDY_TITLE = "Quokka relic for Tidy up";
 const A_DONE_URL = "https://a.example/remote-image";
@@ -113,6 +115,7 @@ const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
   "get_digest",
   "get_link",
   "get_profile",
+  "get_stats",
   "list_links",
   "save_link",
   "search_links",
@@ -273,6 +276,26 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
     expect(
       world.links.prepare("SELECT kind, kind_source FROM tags WHERE owner_id = ?").all(B),
     ).toEqual([{ kind: "project", kind_source: "stated" }]);
+    expect(snapA()).toEqual(before);
+  });
+
+  it("T5b: B's stats count only B's links and never name A's tags", async () => {
+    const { world, door, snapA } = await open();
+    await tool(world, door.a, "save_link", {
+      url: "https://a.example/stats",
+      tags: [{ name: "AOnlyTagName", source: "stated" }],
+    });
+    const before = snapA();
+
+    const mine = await tool<{ saved: number; tags: { name: string }[] }>(
+      world,
+      door.b,
+      "get_stats",
+      {},
+    );
+    expect(mine.saved).toBe(1);
+    expect(mine.tags.map((t) => t.name)).toEqual(["Alpha"]);
+    await refused(world, door.b, "get_stats", { owner: A }, /unrecognized|invalid|validation/i);
     expect(snapA()).toEqual(before);
   });
 
@@ -555,7 +578,7 @@ describe("owner isolation coverage", () => {
     },
     "GET /profile": {
       request: "/profile",
-      marker: () => "A private note for the route guard",
+      marker: () => ["A private note for the route guard", A_STATS_TAG_NAME],
     },
     "GET /export.json": {
       request: "/export.json",
@@ -631,7 +654,10 @@ describe("owner isolation coverage", () => {
     ).id;
     await updateLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, aLinkId, {
       title: "Quokka habitat notes",
-      tags: [{ name: A_TAG_NAME, source: "stated" }],
+      tags: [
+        { name: A_TAG_NAME, source: "stated" },
+        { name: A_STATS_TAG_NAME, source: "stated" },
+      ],
     });
     await storeImage(world, aLinkId, A_IMAGE);
     await storeCopyImage(world, String(aLinkId), A_COPY_IMAGE);

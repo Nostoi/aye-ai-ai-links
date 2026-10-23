@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
+import { saveLink } from "../core/links.js";
 import { addProfile, editProfile, NOTE_UNDO_WINDOW_MS } from "../core/profile.js";
 import type { Source } from "../core/types.js";
 import { createDeps } from "../deps.js";
@@ -416,5 +417,35 @@ describe("refused profile writes", () => {
       const res = await (await signedIn(w.world)).send(path, posting(sample(w)));
       expect(res.status).toBe(204);
     });
+  });
+});
+
+describe("the profile stats section on the route", () => {
+  const current = (html: string) =>
+    [...html.matchAll(/<a [^>]*aria-current="page"[^>]*>([^<]*)<\/a>/g)].map((m) => m[1]);
+
+  it("GET /profile?window=bogus shows all time", async () => {
+    const browser = await signedIn(await oauthWorld());
+    for (const path of ["/profile?window=bogus", "/profile"]) {
+      const html = String((await browser.send(path)).body);
+      expect(current(html), path).toEqual(["All time"]);
+      expect(html).toContain("Your library");
+    }
+  });
+
+  it("GET /profile?window=90 marks 3 months", async () => {
+    const browser = await signedIn(await oauthWorld());
+    expect(current(String((await browser.send("/profile?window=90")).body))).toEqual(["3 months"]);
+  });
+
+  it("counts the owner's saved links and tags", async () => {
+    const world = await oauthWorld();
+    const deps = createDeps(world.links, new FakeEmbedder(DIMS));
+    const tags = [{ name: "Wombat housing", source: "stated" as const }];
+    await saveLink(deps, "owner", { url: "https://one.example/", savedBy: "t", tags });
+    await saveLink(deps, "owner", { url: "https://two.example/", savedBy: "t" });
+    const html = String((await (await signedIn(world)).send("/profile?window=all")).body);
+    expect(html).toContain('<p class="stat-count">2</p><p class="stat-label">Saved</p>');
+    expect(html).toContain("Wombat housing");
   });
 });

@@ -110,6 +110,7 @@ const retag = (name: string, kind: string): Step => ({ tool: "update_tag", args:
 const addToProfile = (args: Record<string, unknown>): Step => ({ tool: "add_profile", args });
 const editProfileStep = (args: Record<string, unknown>): Step => ({ tool: "edit_profile", args });
 const getProfileStep: Step = { tool: "get_profile", args: {} };
+const statsStep: Step = { tool: "get_stats", args: { window: 30 } };
 const digestStep: Step = { tool: "get_digest", args: {} };
 
 /** A copy of `value` with one unknown key added to every plain object in it, as a later server version might send. */
@@ -146,6 +147,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       "get_digest",
       "get_link",
       "get_profile",
+      "get_stats",
       "list_links",
       "save_link",
       "search_links",
@@ -252,6 +254,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     );
     await run(editProfileStep({ removeNotes: ["2"] }));
     await run(getProfileStep);
+    await run(statsStep);
     await run(save({ url: "https://example.com/d" })); // its profile holds notes and focus
     // A digest reaching every reason: link 8 matches the inferred focus entry, link 5 is old
     // with no why, and link 7 is new with no why.
@@ -457,6 +460,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       editProfileStep({ editNotes: [{ id: "1", text: "plans a battery", source: "stated" }] }),
     );
     await run(getProfileStep);
+    await run(statsStep);
     const digest = await run(digestStep);
     expect(digest.links[0].reasons[0].focus.addedLater).toBe(1);
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());

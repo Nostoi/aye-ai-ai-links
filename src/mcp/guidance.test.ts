@@ -29,6 +29,24 @@ describe("list_links guidance", () => {
   });
 });
 
+describe("get_stats guidance", () => {
+  const GET_STATS = (guidance as Record<string, string>).GET_STATS ?? "";
+
+  it("says counts are distinct links, opened misses outside openings, and partialCounts names the low ones", () => {
+    expect(GET_STATS).toMatch(/distinct links, not events/);
+    expect(GET_STATS).toMatch(/opened only counts openings made through the app or an AI/);
+    expect(GET_STATS).toMatch(/misses any opening from a browser bookmark/);
+    expect(GET_STATS).toMatch(/trackingSince/);
+    expect(GET_STATS).toMatch(
+      /partialCounts names the counts that may be too low.*for those counts only/,
+    );
+  });
+
+  it("tells agents to present the reading as a guess", () => {
+    expect(GET_STATS).toMatch(/reading.*guess.*never as a fact/s);
+  });
+});
+
 describe("guidance on a tag's kindSource", () => {
   it("tells agents in the shared instructions, save_link and get_profile to present an inferred project as a guess", () => {
     for (const text of [INSTRUCTIONS, SAVE_LINK, GET_PROFILE]) {

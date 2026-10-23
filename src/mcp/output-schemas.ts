@@ -1,5 +1,6 @@
 import type { StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { STATS_WINDOWS } from "../core/stats.js";
 import {
   SNAPSHOT_STATUSES,
   SOURCES,
@@ -139,6 +140,32 @@ export const profileOutput = z.strictObject(profileShape);
 export const getProfileOutput = z.strictObject({
   ...profileShape,
   activeProjects: z.array(tagOutput),
+});
+export const getStatsOutput = z.strictObject({
+  window: z.enum(STATS_WINDOWS),
+  saved: z.number(),
+  opened: z.number(),
+  notOpenedYet: z.number(),
+  setAside: z.number(),
+  notNow: z.number(),
+  tags: z.array(
+    z.strictObject({
+      name: z.string(),
+      kind: z.enum(TAG_KINDS),
+      saved: z.number(),
+      opened: z.number(),
+    }),
+  ),
+  trackingSince: timestamp,
+  partialCounts: z.array(z.enum(["opened", "setAside", "notNow"])),
+  reading: z
+    .strictObject({
+      text: z.string(),
+      writtenBy: z.string(),
+      writtenAt: timestamp,
+      source: z.literal("inferred"),
+    })
+    .nullable(),
 });
 export const addProfileOutput = z.strictObject({
   ...profileShape,

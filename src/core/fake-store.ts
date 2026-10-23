@@ -40,6 +40,7 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
+import type { StatsEvent, StatsStore } from "./stats-store.js";
 import type {
   EventWrite,
   LinkExpectation,
@@ -124,7 +125,8 @@ export class FakeStore
     LinkImageReader,
     LinkEditStore,
     IconBackfillStore,
-    SummaryCandidates
+    SummaryCandidates,
+    StatsStore
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -150,6 +152,11 @@ export class FakeStore
     backfilled: boolean;
   }[] = [];
   private nextId = 1;
+  private readonly since: Date;
+
+  constructor(options: { trackingSince?: Date } = {}) {
+    this.since = options.trackingSince ?? new Date(0);
+  }
 
   private owned(owner: OwnerId): Map<string, Link> {
     let m = this.links.get(owner);
@@ -218,6 +225,7 @@ export class FakeStore
     this.tokens.get(owner)?.delete(id);
     this.toolRows.get(owner)?.delete(id);
     this.checkRows.get(owner)?.delete(id);
+    this.events = this.events.filter((e) => e.owner !== owner || e.linkId !== id);
     for (const perLink of [
       this.imageStates,
       this.storedImages,
@@ -1037,6 +1045,17 @@ export class FakeStore
     return (
       s.status === "ok" && s.imageUrl === null && !this.imageStates.has(imageKey(owner, linkId))
     );
+  }
+
+  async statsEvents(owner: OwnerId): Promise<StatsEvent[]> {
+    return this.events
+      .filter((e) => e.owner === owner && this.owned(owner).has(e.linkId))
+      .map(({ linkId, kind, at }) => ({ linkId, kind, at: new Date(at) }))
+      .sort((a, b) => a.at.getTime() - b.at.getTime());
+  }
+
+  async trackingSince(): Promise<Date> {
+    return new Date(this.since);
   }
 
   /** Test inspection: the owner's log events for one link, in the order they were written. */

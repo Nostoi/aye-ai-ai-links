@@ -302,6 +302,7 @@ describe("the change record", () => {
       ["list_links", {}, false],
       ["get_link", { id: "1" }, false],
       ["get_profile", {}, false],
+      ["get_stats", { window: 30 }, false],
       // The one link was surfaced just now: the digest has nothing to mark.
       ["get_digest", {}, false],
       // A repeat save whose why is already set changes nothing.

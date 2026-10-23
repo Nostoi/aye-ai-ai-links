@@ -25,6 +25,7 @@ import type { ExportBuilds } from "./core/export-builds.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
+import type { StatsStore } from "./core/stats-store.js";
 import type { LinkRemover } from "./core/store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
@@ -142,6 +143,7 @@ export type AppOptions = {
         store: LinkRemover;
         images: LinkImageReader;
         edits: LinkEditStore;
+        stats: StatsStore;
         savedCopies: SavedCopyReader &
           SavedCopyRemover &
           Pick<SavedCopyUsage, "usedBytes" | "lastCheck">;

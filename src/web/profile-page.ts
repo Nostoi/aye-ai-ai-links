@@ -1,7 +1,9 @@
 import { WEB_SAVED_BY } from "../auth/session.js";
+import type { Stats } from "../core/stats.js";
 import type { FocusEntry, ProfileNote } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { escapeHtml, page, savedOn } from "./page.js";
+import { profileStats } from "./profile-stats.js";
 
 /** Who a note came from. A guess says so; a note the owner wrote here is theirs. */
 function sourceLine(n: ProfileNote): string {
@@ -45,9 +47,11 @@ export const profilePage = ({
   focus,
   now,
   ask,
+  stats,
 }: {
   notes: ProfileNote[];
   focus: FocusEntry[];
+  stats: Stats;
   now: Date;
   ask?: Ask | undefined;
 }) =>
@@ -76,6 +80,7 @@ ${notes.map(noteItem).join("\n")}
 ${focus.length === 0 ? "<p>Nothing yet.</p>" : `<ol class="focus-list">\n${focus.map((f) => focusItem(f, now)).join("\n")}\n</ol>`}
 </section>
 </div>
+${profileStats(stats, now)}
 </main>
 <script>
 const list = document.getElementById("notes");

@@ -9,7 +9,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 3. **Color means one thing each** (below).
 4. **Pictures are small accents:** your words lead, and a picture is a small fixed square beside them, never a wide crop (ROADMAP 2026-10-20; #194 and #195 bring All links and Home to it). The one exception is the Pictures view of All links and space pages, which the owner switches to on purpose and which shows each picture across its card (#191, #194). A page's preview shows unless its site makes pictures of words (`isWordPictureHost`, `src/core/word-picture-host.ts`), which shows the site's icon. A link with no picture shows its initials on `--pic`, never in its space's color. The saved copy is a second exception (owner, 2026-10-21, #223): a picture standing alone in its article runs edge to edge across the sheet on a band of `--bg`, keeps its proportions, is centred, isn't cropped, and is no taller than 60% of the screen. A picture inside text or a cell stays inline.
 5. **Ask, don't make you dig:** open on a question; search understands vague memories.
-6. **No guilt counters:** no unread totals; small, finishable nudges.
+6. **No guilt counters:** no unread totals; small, finishable nudges. The profile's Stats section is the exception: it shows a not-opened count, because the owner only sees it when they go looking (owner, 2026-10-22, #161).
 
 ## Color
 

@@ -82,6 +82,13 @@ describe("the profile stats section", () => {
     expect(themeCss).toMatch(/\.stat-windows a\{[^}]*min-height:44px/);
   });
 
+  it("the current window is a filled pill: ink fill, page-colour text, same border", () => {
+    const rule = /\.stat-windows a\[aria-current=page\]\{([^}]*)\}/.exec(themeCss)?.[1] ?? "";
+    expect(rule).toContain("background:var(--ink)");
+    expect(rule).toContain("color:var(--bg)");
+    expect(rule).toContain("border-color:var(--ink)");
+  });
+
   it("only eight tags show, then and N more", () => {
     const tags = Array.from({ length: STATS_TAG_ROWS + 3 }, (_, i) => tag(`topic${i}`, 20 - i));
     const html = profileStats(stats({ tags }), NOW);

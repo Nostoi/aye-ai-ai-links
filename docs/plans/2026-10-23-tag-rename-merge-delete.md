@@ -40,7 +40,7 @@ Each line is pinned by a test in the task named.
 2. **Undo after a later change.** Undo is refused and nothing is written when the kept tag's settings changed, when a link with the tag gained or lost a tag, or when a new tag now uses the old key, for example an AI saving with `banking` again (Task 1). A link deleted and purged meanwhile doesn't block Undo.
 3. **A link in its delete-Undo window.** It is rewritten by the merge. After `unmarkDeleted` it shows the kept tag and is found by the kept name, and it is never counted while hidden (Tasks 1 and 2).
 4. **Another owner** with a tag of the same key keeps its tag, links, aliases and counts. An alias of owner A never resolves for owner B (Tasks 1 and 4).
-5. **An older link-edit Undo** (the edit dialog's or the Ask AI panel's) never brings back a tag that was merged away, renamed or deleted. It answers conflict (Task 2).
+5. **An older link-edit Undo** (the edit dialog's or the Ask AI panel's) never brings back a tag that was merged away, renamed or deleted, even after a new tag reuses the old key. It answers conflict (Tasks 1 and 2).
 
 ---
 
@@ -67,13 +67,14 @@ export interface TagEditStore {
   tagLinkCounts(owner: OwnerId): Promise<Map<string, number>>;
   /** Sets name and key. "taken" when another of the owner's tags has newKey. Adds alias oldKey→this tag when the key changes. Null when no tag has `key`. */
   renameTag(owner: OwnerId, key: string, name: string, newKey: string): Promise<Tag | "taken" | null>;
+  /** `moved`: links the old tag was on. `links`: the kept tag's live count afterwards. */
   mergeTag(owner: OwnerId, m: { from: Tag; into: Tag; set: TagSettings; at: Date; pruneBefore: Date }):
-    Promise<{ tag: Tag; changeId: string; links: number } | "conflict" | null>;
+    Promise<{ tag: Tag; changeId: string; moved: number; links: number } | "conflict" | null>;
   deleteTag(owner: OwnerId, d: { tag: Tag; at: Date; pruneBefore: Date }):
-    Promise<{ changeId: string; links: number } | "conflict" | null>;
-  /** Null when no receipt with this id at or after `since`. On "undone", the receipt is removed. */
+    Promise<{ changeId: string; moved: number } | "conflict" | null>;
+  /** Null when no receipt with this id at or after `since`. On "undone", the receipt is removed. Each tag comes with its live count. */
   undoTagChange(owner: OwnerId, changeId: string, since: Date):
-    Promise<{ tags: Tag[] } | "conflict" | null>;
+    Promise<{ tags: { tag: Tag; links: number }[] } | "conflict" | null>;
   /** The live key an old key now reaches: a live tag with `key` wins, then an alias. Null for neither. */
   currentKey(owner: OwnerId, key: string): Promise<string | null>;
 }
@@ -85,8 +86,10 @@ export interface TagEditStore {
 - `receipt` is JSON holding:
   - the removed tag (every `Tag` field);
   - the old keys that reached it;
-  - for a merge, the kept tag's key and its settings before and after;
+  - for a merge, the kept tag's key, its settings before and after, and the ids of every link (hidden included) that has it afterwards;
   - per affected link: its id, and its ordered `{key, source, position}` before and after.
+- **Aliases are permanent.** Expired receipts stay until the owner's next merge or delete prunes them, and an expired receipt can't be used.
+- **Link-edit receipts are cancelled, not checked** (challenge finding 3). In the same transaction, a rename that changes the key, a merge and a delete each delete the owner's `link_edits` rows with `tags_changed = 1` whose `prior_tags` or `written_tags` holds the old key (use `json_each`). That link's edit Undo then answers as an edit Undo with no record does today. A key-existence check at Undo time isn't enough, because a key can be reused by a new tag.
 
 **Store mechanics** (each action is one `.immediate()` transaction):
 - **Expected values.** `mergeTag` and `deleteTag` first check that the stored rows equal the `from`, `into` or `tag` they were given, every field. Any difference is `"conflict"`, writing nothing. A missing tag is `null`.
@@ -98,7 +101,11 @@ export interface TagEditStore {
 - **Undo** writes nothing and answers `"conflict"` when any of these hold:
   - a live tag now has the removed key;
   - for a merge, the kept tag (by its key at merge time) is missing or its settings differ from "after";
-  - any receipt link that still exists has ordered tags (key, source) that differ from "after".
+  - for a merge, the set of existing links that have the kept tag (hidden included) differs from the recorded set, so a link saved with it since blocks Undo;
+  - any receipt link that still exists has ordered tags (key, source) that differ from "after";
+  - a recorded old key is now in `tag_aliases` pointing elsewhere, or is a live key. For a merge, the `from.key` alias no longer points to the kept tag.
+
+  "Changed since" means different at Undo time. A change made and then reversed doesn't block.
 
   Links gone from `links` are skipped. Otherwise Undo:
   - re-inserts the removed tag with its settings (a new id is fine);
@@ -114,7 +121,7 @@ export interface TagEditStore {
   - `renameTag changes key and name, and the old key reaches it` (`currentKey(owner, "pixel-art") === "pixel art"`);
   - `renameTag of capitals only keeps the key and adds no alias`;
   - `renameTag onto another tag's key is "taken" and writes nothing`;
-  - `renamed links are found by the new name` (through `FtsSearch` in the SQLite suite only, and a changed `indexPage` tags array);
+  - `renamed links are found by the new name`: in the SQLite suite only, through `FtsSearch`, using distinct names such as `xylophonetag`→`coraltag` so the old word can't match by tokens; and a changed `indexPage` tags array, so the next vector sweep re-embeds. Meaning search catches up on that sweep (about 15 s), not instantly; this is accepted below;
   - `mergeTag moves every link, including a hidden one`;
   - `mergeTag on a link with both keeps one, at the kept position, with the stronger source`, Review focus 1;
   - `mergeTag repoints aliases`, so chains resolve: rename a→b, merge b into c, then `currentKey("a") === "c"`;
@@ -122,30 +129,38 @@ export interface TagEditStore {
   - `deleteTag removes it from every link and from the catalog`;
   - `undo restores a merge exactly`: every field of both tags, each link's ordered key, source and position, and the aliases;
   - `undo restores a delete exactly`;
-  - `undo is refused after a later change`, Review focus 2, one case per bullet above;
+  - `undo is refused after a later change`, Review focus 2, one case per bullet above. These include:
+    - a new link saved with the kept tag;
+    - rename `banking`→`finance`, delete `finance`, a new `banking` renamed to `budget`, then undo the delete: conflict, and `currentKey("banking")` is still `budget`;
+  - `merge, rename and delete cancel link-edit receipts naming the old key`, and leave receipts naming other keys;
   - `undo skips a purged link`;
   - `undo after the window is null`;
   - `undo twice: second is null`;
   - `another owner's same-key tag, links and aliases are untouched by every method`, Review focus 4;
   - `currentKey prefers a live tag over an alias`.
 - [ ] **Step 3: Run** `npx vitest run src/store/sqlite-tag-edits.test.ts src/core/tag-edit-store.test.ts src/store/tag-edits-migration.test.ts`. They should FAIL because the module is missing.
-- [ ] **Step 4: Implement** the migration, `SqliteTagEditStore`, the `FakeStore` methods, and the `tags.ts` exports.
+- [ ] **Step 4: Implement** the migration, `SqliteTagEditStore`, the `FakeStore` methods, and the `tags.ts` exports. Update `LinkStore`'s doc comment in `src/core/store.ts`, which says only `updateTag`, `pinTag` and `colorTag` change a tag: `TagEditStore` now renames, merges and deletes tags too.
 - [ ] **Step 5: Run** the same command. It should PASS, and `npx vitest run src/core/tags.test.ts` still passes.
 - [ ] **Step 6: Commit** with `feat: tag aliases and tag change receipts in store (#240)`.
 
-### Task 2: A link-edit Undo never brings back a removed tag
+### Task 2: Older link-edit Undos and the export follow tag changes
+
+Task 1's store cancels link-edit receipts that name a changed key. This task proves it end to end through `LinkEditStore.undoEdit`, and makes the export read links and catalog together.
 
 **Files:**
-- Modify: `src/store/link-edit-receipts.ts` (`restoreCovered`, or its caller in `undoEdit`), the `FakeStore` twin (`undoEdit`), and the receipt path of `updateWithReceipt` if it restores through the same code.
-- Test: `src/core/link-edit-store-contract.ts`.
+- Test: `src/core/link-edit-store-contract.ts`. Its factory gains `tagEdits`, supplied by both suites.
+- Modify: `src/core/store.ts`, adding `listLinksAndTags(owner: OwnerId): Promise<{ links: Link[]; tags: Tag[] }>`, read in one transaction. Implement it in `SqliteStore` and `FakeStore`, with a contract test in `store-contract.ts`.
+- Modify: `src/core/export-format.ts` (`exportManifest` and `ManifestDeps`), so links and catalog come from `listLinksAndTags`. Check `src/core/export.ts` for the ZIP path's own reads, and make the same change there.
 
 - [ ] **Step 1: Write the failing contract tests:**
-  - `undo answers conflict when a prior tag is no longer in the catalog`. Set up: the link has tags A and B, an edit sets the tags to [B], then A is deleted through `tagEdits.deleteTag`. `undoEdit` answers `"conflict"`. The catalog still has no A, and the link's tags are still [B].
+  - `undo answers conflict after the removed tag was deleted`. Set up: the link has tags A and B, an edit sets them to [B], then `tagEdits.deleteTag` deletes A. `undoEdit` answers `"conflict"`. The catalog has no A, and the link's tags are still [B].
   - The same test for A merged into C, and for A renamed to D.
-- [ ] **Step 2: Run** `npx vitest run src/core/link-edit-store.test.ts src/store/sqlite-link-edits.test.ts`. It should FAIL, because A is recreated.
-- [ ] **Step 3: Implement.** Before restoring, if any `prior_tags` key is not a live tag of the owner's, answer `"conflict"` and write nothing. Before this feature no tag ever left the catalog, so no existing Undo changes.
-- [ ] **Step 4: Run** the same command plus `npx vitest run src/web/edit-routes.test.ts`. It should PASS.
-- [ ] **Step 5: Commit** with `fix: link edit Undo never recreates a removed tag (#240)`.
+  - `undo answers conflict when the old key was reused`. Set up: the link has [banking, tax], an edit sets it to [tax], banking is renamed to finance, and a new link is saved with `banking`. `undoEdit` answers `"conflict"`, and the link's tags are still [tax].
+  - `a receipt not naming the changed key still undoes` (counterexample).
+- [ ] **Step 2: Run** `npx vitest run src/core/link-edit-store.test.ts src/store/sqlite-link-edits.test.ts src/core/export-format.test.ts`. It should FAIL. If Task 1's cancelling is already in place, the reuse case passes. In that case, confirm it fails with the cancelling `DELETE` commented out, then restore it.
+- [ ] **Step 3: Implement** `listLinksAndTags` and the export change.
+- [ ] **Step 4: Run** the same command plus `npx vitest run src/web/edit-routes.test.ts src/core/export.test.ts`. It should PASS.
+- [ ] **Step 5: Commit** with `fix: older link-edit Undos and the export follow tag changes (#240)`.
 
 ### Task 3: Core rules in `src/core/tag-edit.ts`
 
@@ -158,9 +173,9 @@ type TagEditDeps = { store: LinkStore; tagEdits: TagEditStore; now: () => Date }
 export function mergedSettings(from: Tag, into: Tag): TagSettings;
 export async function listTagsWithCounts(deps, owner): Promise<{ tag: Tag; links: number }[]>;
 export async function renameTag(deps, owner, i: { name: string; newName: string }): Promise<{ renamed: Tag } | { taken: Tag; links: number }>;
-export async function mergeTags(deps, owner, i: { name: string; into: string }): Promise<{ tag: Tag; changeId: string; links: number }>;
-export async function deleteTag(deps, owner, i: { name: string }): Promise<{ changeId: string; links: number }>;
-export async function undoTagChange(deps, owner, changeId: string): Promise<Tag[]>;
+export async function mergeTags(deps, owner, i: { name: string; into: string }): Promise<{ tag: Tag; changeId: string; moved: number; links: number }>;
+export async function deleteTag(deps, owner, i: { name: string }): Promise<{ changeId: string; moved: number }>;
+export async function undoTagChange(deps, owner, changeId: string): Promise<{ tag: Tag; links: number }[]>;
 export async function tagAddress(deps, owner, name: string): Promise<string | null>; // currentKey of tagKey(name)
 ```
 
@@ -208,13 +223,13 @@ export async function tagAddress(deps, owner, name: string): Promise<string | nu
 
 **Routes** (each POST takes JSON and answers with `NO_STORE`):
 - `POST /tags/rename {key, name}` → 200 `{tag}`, or 409 `{code: "taken", tag, links, message}`.
-- `POST /tags/merge {key, into}` → 200 `{tag, changeId, links}`.
-- `POST /tags/delete {key}` → 200 `{changeId, links}`.
-- `POST /tags/undo {changeId}` → 200 `{tags}`. The page re-draws from it.
+- `POST /tags/merge {key, into}` → 200 `{tag, changeId, moved, links}`. `links` is the kept tag's count afterwards.
+- `POST /tags/delete {key}` → 200 `{changeId, moved}`.
+- `POST /tags/undo {changeId}` → 200 `{tags: [{tag, links}]}`. The page re-draws from it.
 - **Error mapping.** Reuse `tagAction`'s `not_found` and `conflict` mapping. Undo's `not_found` and `conflict` carry core's own words, as `removalAction` does.
 
 **Old addresses:**
-- `GET /spaces` and `/spaces/done` (in `openSpace`'s `not_found` branch): when `tagAddress` finds a current key, answer 303 to `spaceHref(current, …)`, keeping `done`, `order` and `before`.
+- `GET /spaces` and `/spaces/done`: before `openSpace`, when `tagAddress(name)` is a key other than `tagKey(name)`, answer 303 to `spaceHref(current, …)`, keeping `done`, `order` and `before`. A live tag's own address never redirects, so a missing cursor keeps today's recovery and can't loop (challenge finding 7).
 - `GET /search?tag=` does the same, keeping every other query parameter.
 - `backTarget`'s `ownedTag` and `within` resolve through `tagAddress` too.
 - Unknown keys behave as today.
@@ -225,6 +240,8 @@ export async function tagAddress(deps, owner, name: string): Promise<string | nu
   - `undo after a merge puts both rows back`.
   - `old space address redirects to the renamed tag` and `… to the kept tag after a merge`. Owner B's request for A's old key is 404.
   - `old search address keeps its other parameters`.
+  - `a live tag's space address with a purged cursor recovers as today, with no redirect to itself`.
+  - `merge answers the kept tag's resulting count`: links [art], [art, design] and [design], merged, answer `links: 3` and `moved: 2`.
 - [ ] **Step 2: Run** `npx vitest run src/web/tags-routes.test.ts src/mcp/isolation.test.ts` and the space route test. They should FAIL.
 - [ ] **Step 3: Implement** the routes and the redirects.
 - [ ] **Step 4: Run** them again. They should PASS.
@@ -246,16 +263,17 @@ export async function tagAddress(deps, owner, name: string): Promise<string | nu
   - a filter field;
   - the owner's other tags, each a button with its count;
   - **Merge into {picked}** (filled, disabled until a pick) and **Cancel**.
-- **After a merge**, the row is removed and the kept row is drawn from the returned tag and count. `showUndo` says "Merged {from} into {into} ({n} links)."
-- **After a delete**, the row is removed. `showUndo` says "Deleted {name} from {n} links.", or "from 1 link".
+- **After a merge**, the row is removed and the kept row is drawn from the returned tag and count. `showUndo` says "Merged {from} into {into} ({moved} links)."
+- **After a delete**, the row is removed. `showUndo` says "Deleted {name} from {moved} links.", or "from 1 link".
 - **Undo** posts `/tags/undo`. On 200 it re-inserts the removed row where it was and draws both rows from `tags`. On an error the page's alert shows the server's message.
-- **One action at a time per row.** The button is disabled while its request is out, as today.
+- **One action at a time per row**, for every action on the page, including today's pin, colour, kind and status. While a row's request is out, the rest of that row's actions send nothing. A merge holds both its rows, and its Undo holds both too. Today only the clicked button is disabled, so a delayed Pin reply can overwrite a later colour (challenge finding 9).
 
 - [ ] **Step 1: Write failing tests:**
   - The page renders the counts.
   - The Name field and Rename button sit at the top of the Edit panel, and Merge and Delete come after Color.
   - Every control is a button at least 44px tall in the theme.
   - The page script contains no confirmation call. Assert the script source has no `confirm(`.
+  - The row lock, tested in the way the page's other script tests run, if they do: a second action on a busy row sends no request.
 - [ ] **Step 2: Run** `npx vitest run src/web/tags-page.test.ts`. It should FAIL.
 - [ ] **Step 3: Implement**, and update the `__ask_off__` snapshots.
 - [ ] **Step 4: Run** it again. It should PASS. Then run `npm run check`.
@@ -282,15 +300,19 @@ export async function tagAddress(deps, owner, name: string): Promise<string | nu
 **Files:**
 - Modify: `src/mcp/server.ts`, `src/mcp/guidance.ts`, `src/mcp/output-schemas.ts`, `src/mcp/changes.ts` and `src/mcp/isolation.test.ts` (`TOOLS_EXERCISED_ACROSS_TWO_OWNERS`).
 - Modify: `README.md`'s tool list.
+- Modify: `src/web/ask-panel.ts`, `src/ai/tool-session.ts` and `src/ai/chat-turn.ts`, as needed for the Ask AI change below.
 - Test: `src/mcp/tag-tools.test.ts` (new) and `src/mcp/isolation.test.ts`.
 
 **Tools:**
 - `list_tags` (read-only): every tag with `links`. This is how an agent answers "are there tags I should merge?".
-- `update_tag` gains an optional `newName`, which renames through `renameTag`. `kind` becomes optional, and at least one of the two is required. A `taken` result is an error that names the existing tag and tells the agent to ask the owner, then call `merge_tags`.
+- `update_tag` gains an optional `newName`, which renames through `renameTag`. `kind` becomes optional, and exactly one of the two is required; sending both is an input error that says to make two calls. A `taken` result is an error that names the existing tag and tells the agent to ask the owner, then call `merge_tags`.
 - `merge_tags {name, into}` → `{tag, links, undoId}`.
 - `delete_tag {name}` → `{links, undoId}`.
 - `undo_tag_change {undoId}` → `{tags}`. The `undoId` comes back in the tool's own result for every caller. The external door passes no `recorder`, so the link-edit receipt pattern can't be reused.
-- **Changes record.** Each write records `{ kind: "tag", … }`. Extend the `Change` union for merge and delete, so the Ask AI panel's line names what happened and links to `/tags`.
+- **Changes record.** Extend the `Change` union with a rename, merge and delete change. Merge and delete carry the `undoId`. Then update the Ask AI panel (`src/web/ask-panel.ts`):
+  - its line names what happened, since today every tag change renders as "Made {name} a {tagKind}.";
+  - merge and delete get an Undo button that posts `/tags/undo`;
+  - the history sent with the next turn keeps each tag change's `undoId`, so "undo that" in a later turn reaches `undo_tag_change`. Today the history holds only the reply prose (challenge finding 6).
 
 **Guidance** (house style of `guidance.ts`):
 - `MERGE_TAGS`, `DELETE_TAG` and `update_tag`'s rename: use them only when the owner asks, or confirms a merge you proposed, never on your own. Say what changed and that it can be undone for an hour.
@@ -302,12 +324,15 @@ export async function tagAddress(deps, owner, name: string): Promise<string | nu
   - `update_tag` with `newName` onto an existing tag is an error naming it.
   - A `merge_tags` then `undo_tag_change` round trip with the returned `undoId`, in a fresh MCP session (a new `buildMcpServer`), proves the id survives across sessions.
   - `tools/list` matches `TOOLS_EXERCISED_ACROSS_TWO_OWNERS`.
+  - Ask AI: a chat turn whose tool call merges returns a change with the `undoId`. The history built for the next turn contains it, and the panel renders an Undo button for it (the panel's existing tests show how).
 - [ ] **Step 2: Run** `npx vitest run src/mcp/tag-tools.test.ts src/mcp/isolation.test.ts src/readme.test.ts`. They should FAIL.
 - [ ] **Step 3: Implement** the tools, the guidance and the README.
 - [ ] **Step 4: Run** them again, and they should PASS. Then run `npm run check`.
 - [ ] **Step 5: Commit** with `feat: rename, merge, delete and undo tags through MCP (#240)`, then open PR 3.
 
 ## Accepted, not changed
+
+- **Search catches up in two steps.** Keyword search follows a rename at once, through the triggers. Meaning search follows on the vector indexer's next sweep (`pollMs` 15 s), so for a few seconds a link can still match its old tag by meaning. A link whose title, why or summary contains the old word still matches it, as it should. The spec's "stop finding them by the old one" means by the tag.
 
 - **Stats readings.** The AI's stats reading is dated prose and can name an old tag for up to 7 days, until its next pass. Say so in PR 1's body.
 - **Search history.** `search_log` keeps old tag keys, which are history only and never read back.

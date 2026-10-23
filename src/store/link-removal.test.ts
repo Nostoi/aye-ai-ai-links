@@ -194,6 +194,20 @@ describe("hidden links in the digest, Handy and the gone pick", () => {
   });
 });
 
+describe("hidden links in the stats events", () => {
+  it("stats events leave out a hidden link", async () => {
+    const { db, deps, save, hideRowOnly } = setup();
+    const id = await save();
+    await deps.store.update(A, id, {}, [{ record: "opened", at: at(7) }]);
+    expect(await deps.stats.statsEvents(A)).toEqual([{ linkId: id, kind: "opened", at: at(7) }]);
+
+    hideRowOnly(id);
+
+    expect(await deps.stats.statsEvents(A)).toEqual([]);
+    expect(db.prepare("SELECT count(*) FROM link_events").pluck().get()).toBe(1);
+  });
+});
+
 const CHILD_TABLES = ["link_tools", "owner_images", "link_edits", "link_checks", "link_vectors"];
 
 describe("writes on a hidden link", () => {

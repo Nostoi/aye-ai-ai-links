@@ -9,13 +9,14 @@ const DIGEST_AND_HANDY = "digest, Handy and the gone pick leave out a hidden lin
 const HIDDEN_WRITES =
   "tool, edit, check, vector and copy writes refuse a hidden link and change nothing";
 const COPY_PAGE_READS = "copy page reads return nothing for a hidden link";
+const STATS_EVENTS = "stats events leave out a hidden link";
 
-type Coverage = { test: string } | { reason: string };
+type Coverage = { test: string | string[] } | { reason: string };
 
 const HIDDEN_LINK_COVERAGE: Record<string, Coverage> = {
   link_checks: { test: RUNNER_AND_BYTE_READS },
   link_edits: { test: HIDDEN_WRITES },
-  link_events: { test: HIDDEN_WRITES },
+  link_events: { test: [HIDDEN_WRITES, STATS_EVENTS] },
   link_images: { test: RUNNER_AND_BYTE_READS },
   link_tags: {
     reason: "read only for link rows a guarded links read already returned (TAG_SELECT)",
@@ -47,7 +48,9 @@ describe("hidden-link coverage", () => {
   it("every named test exists in link-removal.test.ts", () => {
     for (const [table, coverage] of Object.entries(HIDDEN_LINK_COVERAGE)) {
       if ("reason" in coverage) continue;
-      expect(REMOVAL_TESTS, `${table}: no such test`).toContain(`it("${coverage.test}"`);
+      for (const test of [coverage.test].flat()) {
+        expect(REMOVAL_TESTS, `${table}: no such test`).toContain(`it("${test}"`);
+      }
     }
   });
 });

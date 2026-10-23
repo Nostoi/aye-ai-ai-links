@@ -56,6 +56,9 @@ const spaceClasses = SPACE_COLORS.map((name) => `.space-${name}{--space:var(--${
   "\n",
 );
 
+/** Bar widths for the profile's Stats section, so it needs no inline `style=`. */
+const pctClasses = Array.from({ length: 101 }, (_, n) => `.pct-${n}{width:${n}%}`).join("");
+
 export const themeCss = `:root{${declarations(tokens.light)}}
 @media (prefers-color-scheme: dark){:root{${declarations(tokens.dark)}}}
 *{box-sizing:border-box}
@@ -139,6 +142,25 @@ button.link{background:none;border:0;padding:0 6px;font-weight:400;text-decorati
 .focus-list li{margin:0}
 .focus-list p{margin:0}
 .focus-text{font-weight:600;overflow-wrap:anywhere}
+.profile-stats{margin-top:40px}
+.profile-stats h3{margin:24px 0 10px;font-size:18px}
+.profile-stats p{margin:0 0 8px}
+.stat-windows{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.stat-windows a{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border:1.5px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);text-decoration:none;font-size:15.5px}
+.stat-windows a[aria-current=page]{border-color:var(--ink);font-weight:700}
+.stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.stat-card{min-width:0;background:var(--surface);border-radius:18px;padding:16px 20px;box-shadow:0 2px 10px #0000000b}
+.stat-card p{margin:0}
+.profile-stats .stat-count{font-size:34px;font-weight:700;line-height:1.1;margin:0}
+.stat-label{font-weight:600}
+.stat-tags{list-style:none;padding:0;margin:0 0 8px;display:flex;flex-direction:column;gap:10px}
+.stat-tag{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:center;gap:4px 14px;max-width:none;margin:0}
+.stat-name{min-width:0;overflow-wrap:anywhere}
+.stat-bar{display:flex;min-width:0;height:10px;border-radius:5px;overflow:hidden}
+.stat-opened{background:var(--ink)}
+.stat-unopened{background:var(--field)}
+.stat-counts{white-space:nowrap}
+${pctClasses}
 .undo-bar{position:fixed;left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100% - 32px);display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--surface);border-radius:28px;padding:6px 6px 6px 22px;box-shadow:0 6px 24px #00000026;font-size:15.5px}
 .undo-bar span{min-width:0;overflow-wrap:anywhere}
 .undo-bar button{font-weight:700;padding:0 18px;min-height:44px;border:0}
@@ -500,6 +522,7 @@ ${spaceClasses}
 @media (max-width:600px){.menu-page{display:none}.account-list .menu-phone-only{display:flex}.label-wide,.icon-wide{display:none}.label-phone{display:inline}.icon-phone{display:inline-flex}}
 @media (max-width:600px){.tidy{padding:22px 18px 18px;border-radius:22px}.tidy-title{font-size:20px}.tidy-pic{flex-basis:52px;width:52px;height:52px;--icon:36px;--initials:17px}.tidy-why{font-size:16px}.tidy-facts{font-size:14.5px}.tidy-choices em{position:static;margin-top:2px}.tidy-choices .key{display:none}.tidy-choices button{padding-right:20px}}
 @media (max-width:600px){.copy-article{padding:24px 20px;font-size:17.5px;line-height:1.65}.copy-article h2{font-size:22px}.copy-article>.copy-band{margin-left:-20px;margin-right:-20px}.copy-band-note{padding:18px 20px}}
+@media (max-width:600px){.stat-tag{grid-template-columns:minmax(0,1fr) auto}.stat-bar{grid-column:1/-1;order:3}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .copy-end{margin-top:28px}
 .copy-end-acts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}

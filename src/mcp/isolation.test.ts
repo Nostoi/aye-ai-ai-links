@@ -47,6 +47,8 @@ const A_URL = "https://a.example/secret";
 const B_URL = "https://b.example/mine";
 const A_KEY_NAME = "agent-a route guard";
 const A_TAG_NAME = "Quokka den plans";
+/** A second tag on A's link, shown by no page but the profile's Stats rows and the exports. */
+const A_STATS_TAG_NAME = "Quokka stats row";
 const A_TOOL_TITLE = "Quokka keeper login";
 const A_TIDY_TITLE = "Quokka relic for Tidy up";
 const A_DONE_URL = "https://a.example/remote-image";
@@ -555,7 +557,7 @@ describe("owner isolation coverage", () => {
     },
     "GET /profile": {
       request: "/profile",
-      marker: () => "A private note for the route guard",
+      marker: () => ["A private note for the route guard", A_STATS_TAG_NAME],
     },
     "GET /export.json": {
       request: "/export.json",
@@ -631,7 +633,10 @@ describe("owner isolation coverage", () => {
     ).id;
     await updateLink(createDeps(world.links, new FakeEmbedder(DIMS)), A, aLinkId, {
       title: "Quokka habitat notes",
-      tags: [{ name: A_TAG_NAME, source: "stated" }],
+      tags: [
+        { name: A_TAG_NAME, source: "stated" },
+        { name: A_STATS_TAG_NAME, source: "stated" },
+      ],
     });
     await storeImage(world, aLinkId, A_IMAGE);
     await storeCopyImage(world, String(aLinkId), A_COPY_IMAGE);

@@ -9,6 +9,7 @@ import { profilePage } from "./profile-page.js";
 import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
 import { spaceMissingPage, spacePage } from "./space-page.js";
+import { emptyStats } from "./stats-test-kit.js";
 import { tagsPage } from "./tags-page.js";
 import { tidyPage } from "./tidy-page.js";
 
@@ -122,7 +123,7 @@ const pages: Record<string, () => string> = {
   "search-empty": () => searchPage({ query: "", links: [], now: NOW }),
   "search-with-links": () =>
     searchPage({ query: "kitchen", links: [...ONE, ...NO_WHY], now: NOW, catalog: [KITCHEN] }),
-  "profile-empty": () => profilePage({ notes: [], focus: [], now: NOW }),
+  "profile-empty": () => profilePage({ notes: [], focus: [], stats: emptyStats, now: NOW }),
   "profile-with-notes": () =>
     profilePage({
       notes: [
@@ -143,6 +144,7 @@ const pages: Record<string, () => string> = {
           createdAt: NOW,
         },
       ],
+      stats: emptyStats,
       now: NOW,
     }),
   "tidy-with-links": () =>

@@ -19,6 +19,7 @@ import { profilePage } from "./profile-page.js";
 import { saveForm } from "./save-form.js";
 import { spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
+import { emptyStats } from "./stats-test-kit.js";
 import { tagsPage } from "./tags-page.js";
 
 const ORIGIN = "https://links.example";
@@ -313,7 +314,7 @@ describe("the menu", () => {
         bookmarklet: bookmarkletCode("https://links.example"),
         exportView: { state: "idle" },
       }),
-      profilePage({ notes: [], focus: [], now: new Date(0) }),
+      profilePage({ notes: [], focus: [], stats: emptyStats, now: new Date(0) }),
       spacePage(SPACE),
     ];
     for (const html of withMenu) {

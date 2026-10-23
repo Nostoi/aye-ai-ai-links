@@ -49,6 +49,8 @@ import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/
 import type { LinkOrder } from "../core/search.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
+import { getStats, parseWindow } from "../core/stats.js";
+import type { StatsStore } from "../core/stats-store.js";
 import type { LinkRemover } from "../core/store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
@@ -632,6 +634,7 @@ export function webApp({
       images: LinkImageReader;
       edits: LinkEditStore;
       profile: ProfileStore;
+      stats: StatsStore;
       savedCopies: SavedCopyReader &
         SavedCopyRemover &
         Pick<SavedCopyUsage, "usedBytes" | "lastCheck">;
@@ -1366,8 +1369,15 @@ export function webApp({
   app.get("/profile", session, async (c) => {
     const { owner } = c.get("caller");
     const { notes, recentFocus } = await profileContext(deps, owner);
+    const stats = await getStats(deps, owner, parseWindow(c.req.query("window")));
     return c.html(
-      profilePage({ notes, focus: recentFocus, now: deps.now(), ask: askOn(c, "Profile") }),
+      profilePage({
+        notes,
+        focus: recentFocus,
+        stats,
+        now: deps.now(),
+        ask: askOn(c, "Profile"),
+      }),
       200,
       NO_STORE,
     );

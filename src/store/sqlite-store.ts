@@ -7,7 +7,14 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "../core/snapshot-store.js";
-import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "../core/store.js";
+import type {
+  LinkExpectation,
+  LinkRemover,
+  LinkStore,
+  SummaryCandidate,
+  SummaryCandidates,
+  SurfacedClaim,
+} from "../core/store.js";
 import {
   sameTool,
   type ToolRecord,
@@ -24,6 +31,7 @@ import type {
   OwnerId,
   SnapshotStatus,
   Source,
+  SummarySource,
   Tag,
   TagKind,
   TagPatch,
@@ -49,6 +57,7 @@ type LinkRow = {
   url_key: string;
   title: string | null;
   summary: string | null;
+  summary_source: SummarySource | null;
   why_text: string | null;
   why_source: Labelled["source"] | null;
   saved_at: number;
@@ -74,7 +83,9 @@ type SnapshotRow = {
   image_url: string | null;
 };
 
-export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolStore {
+export class SqliteStore
+  implements LinkStore, LinkRemover, SnapshotStore, SummaryCandidates, ToolStore
+{
   constructor(private readonly db: Database) {}
 
   /** Idempotent. Owners are created here, outside LinkStore. */
@@ -408,6 +419,25 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     return row?.text ?? null;
   }
 
+  async summaryCandidates(
+    afterId: string | null,
+    limit: number,
+    sources: (SummarySource | null)[],
+  ): Promise<SummaryCandidate[]> {
+    const after = afterId === null ? 0 : parseId(afterId);
+    if (after === null) return [];
+    const guard = sourceIn("l.summary_source", sources);
+    const rows = this.db
+      .prepare(
+        `SELECT l.owner_id, l.id FROM links l
+         JOIN snapshots s ON s.owner_id = l.owner_id AND s.link_id = l.id
+         WHERE l.deleted_at IS NULL AND s.fetch_status = 'ok' AND s.text IS NOT NULL AND s.text <> ''
+           AND ${guard.sql} AND l.id > ? ORDER BY l.id LIMIT ?`,
+      )
+      .all(...guard.values, after, limit) as { owner_id: string; id: number }[];
+    return rows.map((r) => ({ owner: r.owner_id, id: String(r.id) }));
+  }
+
   async getTool(owner: OwnerId, linkId: string) {
     const n = parseId(linkId);
     return n === null ? null : this.readTool(owner, n);
@@ -472,9 +502,10 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
     try {
       row = this.db
         .prepare(
-          `INSERT INTO links (owner_id, url, url_key, title, summary, why_text, why_source, saved_at,
-             saved_by, last_opened_at, last_surfaced_at, snoozed_until, put_away_at, tidy_kept_at, state)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO links (owner_id, url, url_key, title, summary, summary_source, why_text,
+             why_source, saved_at, saved_by, last_opened_at, last_surfaced_at, snoozed_until, put_away_at,
+             tidy_kept_at, state)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (owner_id, url_key) DO NOTHING RETURNING id`,
         )
         .get(
@@ -483,6 +514,7 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
           link.urlKey,
           link.title,
           link.summary,
+          link.summarySource,
           link.why?.text ?? null,
           link.why?.source ?? null,
           toMs(link.savedAt),
@@ -532,7 +564,19 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       values.push(value);
     };
     if (patch.title !== undefined) set("title", patch.title);
-    if (patch.summary !== undefined) set("summary", patch.summary);
+    if (patch.summary !== undefined || patch.summarySource !== undefined) {
+      const pair: [string, unknown][] = [];
+      if (patch.summary !== undefined) pair.push(["summary", patch.summary]);
+      pair.push(["summary_source", patch.summarySource ?? null]);
+      for (const [column, value] of pair) {
+        if (patch.summaryOver === undefined) set(column, value);
+        else {
+          const guard = sourceIn("summary_source", patch.summaryOver);
+          sets.push(`${column} = CASE WHEN ${guard.sql} THEN ? ELSE ${column} END`);
+          values.push(...guard.values, value);
+        }
+      }
+    }
     if (patch.state !== undefined) set("state", patch.state);
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));
     if (patch.lastOpenedAt !== undefined) set("last_opened_at", toMs(patch.lastOpenedAt));
@@ -557,12 +601,18 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
       where.push("put_away_at IS ?");
       whereValues.push(toMs(expected.putAwayAt));
     }
-    if (expected.whySource !== undefined) {
-      const sources = expected.whySource.filter((s) => s !== null);
-      const either = sources.map(() => "why_source = ?");
-      if (expected.whySource.includes(null)) either.push("why_source IS NULL");
-      where.push(either.length > 0 ? `(${either.join(" OR ")})` : "0");
-      whereValues.push(...sources);
+    for (const [column, list] of [
+      ["why_source", expected.whySource],
+      ["summary_source", expected.summarySource],
+    ] as const) {
+      if (list === undefined) continue;
+      const guard = sourceIn(column, list);
+      where.push(guard.sql);
+      whereValues.push(...guard.values);
+    }
+    if (expected.summary !== undefined) {
+      where.push("summary IS ?");
+      whereValues.push(expected.summary);
     }
     const matched = this.db
       .prepare(`UPDATE links SET ${sets.join(", ")} WHERE ${where.join(" AND ")} RETURNING id`)
@@ -709,6 +759,14 @@ export class SqliteStore implements LinkStore, LinkRemover, SnapshotStore, ToolS
   }
 }
 
+/** SQL true while `column` holds one of `list`; a null in the list matches NULL. */
+function sourceIn(column: string, list: readonly (string | null)[]) {
+  const sources = list.filter((s) => s !== null);
+  const either = sources.map(() => `${column} = ?`);
+  if (list.includes(null)) either.push(`${column} IS NULL`);
+  return { sql: either.length > 0 ? `(${either.join(" OR ")})` : "0", values: sources };
+}
+
 const SNAPSHOT_SELECT = `SELECT link_id, fetch_status, fetched_at, title, description, image_url
   FROM snapshots`;
 
@@ -748,6 +806,7 @@ function toLink(row: LinkRow, tagRows: LinkTag[], snap: SnapshotRow | undefined)
     urlKey: row.url_key,
     title: row.title,
     summary: row.summary,
+    summarySource: row.summary_source,
     why:
       row.why_text !== null && row.why_source !== null
         ? { text: row.why_text, source: row.why_source }

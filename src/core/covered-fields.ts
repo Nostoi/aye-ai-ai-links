@@ -1,20 +1,27 @@
 import type { Labelled, Link, LinkTag } from "./types.js";
 
-/** The fields an in-app AI edit records so it can be undone: title, summary, why and the ordered tags. */
-export type Covered = Pick<Link, "title" | "summary" | "why" | "tags">;
+/**
+ * The fields an in-app AI edit records so it can be undone: title, summary with its source, why
+ * and the ordered tags.
+ */
+export type Covered = Pick<Link, "title" | "summary" | "summarySource" | "why" | "tags">;
 
-/** Which covered fields an edit changed. */
-export type Changed = { [K in keyof Covered]: boolean };
+/** Which covered fields an edit changed. The summary and its source are one field. */
+export type Changed = { title: boolean; summary: boolean; why: boolean; tags: boolean };
 
 export const coveredOf = (l: Covered): Covered => ({
   title: l.title,
   summary: l.summary,
+  summarySource: l.summarySource,
   why: l.why && { ...l.why },
   tags: l.tags.map((t) => ({ ...t })),
 });
 
 const sameWhy = (a: Labelled | null, b: Labelled | null) =>
   a?.text === b?.text && a?.source === b?.source;
+
+const sameSummary = (a: Covered, b: Covered) =>
+  a.summary === b.summary && a.summarySource === b.summarySource;
 
 type TagMark = Pick<LinkTag, "key" | "source">;
 
@@ -24,7 +31,7 @@ export const sameTags = (a: TagMark[], b: TagMark[]) =>
 
 export const changedFields = (before: Covered, after: Covered): Changed => ({
   title: before.title !== after.title,
-  summary: before.summary !== after.summary,
+  summary: !sameSummary(before, after),
   why: !sameWhy(before.why, after.why),
   tags: !sameTags(before.tags, after.tags),
 });
@@ -34,7 +41,7 @@ export const anyChanged = (c: Changed) => c.title || c.summary || c.why || c.tag
 /** True while `current` still holds `written` for every field `changed` names. */
 export const holdsWritten = (changed: Changed, written: Covered, current: Covered): boolean =>
   (!changed.title || current.title === written.title) &&
-  (!changed.summary || current.summary === written.summary) &&
+  (!changed.summary || sameSummary(current, written)) &&
   (!changed.why || sameWhy(current.why, written.why)) &&
   (!changed.tags || sameTags(current.tags, written.tags));
 
@@ -43,8 +50,8 @@ export function extendedPrior(
   changed: Changed,
   before: Covered,
 ): { changed: Changed; prior: Covered } {
-  const pick = <K extends keyof Covered>(k: K): Covered[K] =>
-    old.changed[k] ? old.prior[k] : before[k];
+  const from = (field: keyof Changed): Covered => (old.changed[field] ? old.prior : before);
+  const summary = from("summary");
   return {
     changed: {
       title: old.changed.title || changed.title,
@@ -52,6 +59,12 @@ export function extendedPrior(
       why: old.changed.why || changed.why,
       tags: old.changed.tags || changed.tags,
     },
-    prior: { title: pick("title"), summary: pick("summary"), why: pick("why"), tags: pick("tags") },
+    prior: {
+      title: from("title").title,
+      summary: summary.summary,
+      summarySource: summary.summarySource,
+      why: from("why").why,
+      tags: from("tags").tags,
+    },
   };
 }

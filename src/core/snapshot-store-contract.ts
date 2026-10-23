@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
-import type { LinkRemover, LinkStore } from "./store.js";
-import type { Link, NewLink } from "./types.js";
+import type { LinkRemover, LinkStore, SummaryCandidates } from "./store.js";
+import type { Link, NewLink, SummarySource } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. */
 export type SnapshotHarness = {
-  store: LinkStore & LinkRemover & SnapshotStore;
+  store: LinkStore & LinkRemover & SnapshotStore & SummaryCandidates;
   /** Make the owner exist, for stores that require it. */
   addOwner(owner: string): MaybeAsync<void>;
 };
@@ -23,6 +23,7 @@ export const newLink = (n: number, savedAt: Date): NewLink => ({
   urlKey: `ex.com/${n}`,
   title: null,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt,
@@ -54,7 +55,7 @@ export function describeSnapshotStoreContract(
   makeHarness: () => SnapshotHarness | Promise<SnapshotHarness>,
 ): void {
   describe(name, () => {
-    let store: LinkStore & LinkRemover & SnapshotStore;
+    let store: LinkStore & LinkRemover & SnapshotStore & SummaryCandidates;
     let n: number;
 
     const save = async (owner: string, savedAt: Date): Promise<Link> =>
@@ -400,6 +401,62 @@ export function describeSnapshotStoreContract(
         await store.recordSnapshot(A, other.id, o.claim, record());
         expect(await store.getSnapshotText(B, other.id)).toBeNull();
         expect(await store.getSnapshotText(A, "no-such-id")).toBeNull();
+      });
+    });
+
+    describe("summaryCandidates", () => {
+      const REPLACEABLE: (SummarySource | null)[] = [null, "inferred"];
+
+      /** A link holding the summary pair given, whose snapshot finished with `over` (or is still pending). */
+      async function saved(
+        owner: string,
+        summary: [string, SummarySource] | null,
+        over: Partial<SnapshotRecord> | "pending" = {},
+      ): Promise<Link> {
+        const link = await save(owner, at(0));
+        if (over !== "pending") {
+          const l = await lease(owner, link, at(1), at(100));
+          await store.recordSnapshot(owner, link.id, l.claim, record(over));
+        }
+        if (summary) {
+          await store.update(owner, link.id, { summary: summary[0], summarySource: summary[1] });
+        }
+        return link;
+      }
+
+      it("lists only links the server may summarise, across owners, each once when paged", async () => {
+        const unlabelled = await saved(A, null);
+        const inferred = await saved(A, ["AI", "inferred"]);
+        await saved(A, ["Srv", "server"]);
+        await saved(A, ["Mine", "stated"]);
+        await saved(A, ["Asked", "asked"]);
+        await saved(A, null, "pending");
+        await saved(A, null, { text: null });
+        const gone = await saved(A, null);
+        expect(await store.markDeleted(A, gone.id, at(5))).toBe(true);
+        const theirs = await saved(B, ["AI", "inferred"]);
+
+        expect(await store.summaryCandidates(null, 100, REPLACEABLE)).toEqual([
+          { owner: A, id: unlabelled.id },
+          { owner: A, id: inferred.id },
+          { owner: B, id: theirs.id },
+        ]);
+        const first = await store.summaryCandidates(null, 2, REPLACEABLE);
+        const rest = await store.summaryCandidates(first[1]?.id ?? null, 2, REPLACEABLE);
+        expect([...first, ...rest].map((c) => c.id)).toEqual([
+          unlabelled.id,
+          inferred.id,
+          theirs.id,
+        ]);
+      });
+
+      it("lists by the labels it is given", async () => {
+        await saved(A, null);
+        const server = await saved(A, ["Srv", "server"]);
+        expect((await store.summaryCandidates(null, 100, ["server"])).map((c) => c.id)).toEqual([
+          server.id,
+        ]);
+        expect(await store.summaryCandidates(null, 100, [])).toEqual([]);
       });
     });
   });

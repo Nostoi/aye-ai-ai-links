@@ -17,6 +17,7 @@ const link = (over: Partial<Link> = {}): Link => {
     urlKey: `tool${n}.example/login`,
     title: `Tool ${n}`,
     summary: null,
+    summarySource: null,
     why: null,
     tags: [],
     savedAt: new Date("2026-09-01T00:00:00Z"),

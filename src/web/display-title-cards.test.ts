@@ -30,6 +30,7 @@ const link = (over: Partial<Link> = {}): Link => ({
   urlKey: "x.com/alice/status/2105819303471976479",
   title: null,
   summary: null,
+  summarySource: null,
   why: { text: "to read", source: "stated" },
   tags: [],
   savedAt: new Date("2026-03-12T10:00:00Z"),

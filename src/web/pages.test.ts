@@ -370,6 +370,7 @@ const link = (over: Partial<Link> = {}): Link => ({
   urlKey: "example.com/a",
   title: "A title",
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: new Date("2026-03-12T10:00:00Z"),

@@ -40,7 +40,14 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
-import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "./store.js";
+import type {
+  LinkExpectation,
+  LinkRemover,
+  LinkStore,
+  SummaryCandidate,
+  SummaryCandidates,
+  SurfacedClaim,
+} from "./store.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
@@ -49,6 +56,7 @@ import type {
   NewLink,
   OwnerId,
   SnapshotStatus,
+  SummarySource,
   Tag,
   TagKind,
   TagPatch,
@@ -96,7 +104,8 @@ export class FakeStore
     ImageStore,
     LinkImageReader,
     LinkEditStore,
-    IconBackfillStore
+    IconBackfillStore,
+    SummaryCandidates
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -421,7 +430,13 @@ export class FakeStore
   async update(owner: OwnerId, id: string, patch: LinkPatch) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    const fields = structuredClone(patch);
+    const { summaryOver, ...fields } = structuredClone(patch);
+    if (summaryOver && !summaryOver.includes(found.summarySource)) {
+      delete fields.summary;
+      delete fields.summarySource;
+    } else if (fields.summary !== undefined && fields.summarySource === undefined) {
+      fields.summarySource = null;
+    }
     for (const [k, v] of Object.entries(fields)) {
       if (v !== undefined) (found as Record<string, unknown>)[k] = v;
     }
@@ -517,7 +532,11 @@ export class FakeStore
         (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
       (expected.putAwayAt === undefined ||
         (found.putAwayAt?.getTime() ?? null) === (expected.putAwayAt?.getTime() ?? null)) &&
-      (expected.whySource === undefined || expected.whySource.includes(found.why?.source ?? null));
+      (expected.whySource === undefined ||
+        expected.whySource.includes(found.why?.source ?? null)) &&
+      (expected.summary === undefined || found.summary === expected.summary) &&
+      (expected.summarySource === undefined ||
+        expected.summarySource.includes(found.summarySource));
     if (!matches) return { link: this.view(owner, found), applied: false };
     return { link: (await this.update(owner, id, patch)) as Link, applied: true };
   }
@@ -812,7 +831,10 @@ export class FakeStore
     }
     const { changed, prior } = row;
     if (changed.title) link.title = prior.title;
-    if (changed.summary) link.summary = prior.summary;
+    if (changed.summary) {
+      link.summary = prior.summary;
+      link.summarySource = prior.summarySource;
+    }
     if (changed.why) link.why = prior.why && { ...prior.why };
     if (changed.tags) {
       link.tags = prior.tags.map((t) => ({ ...t }));
@@ -854,6 +876,26 @@ export class FakeStore
   /** Test inspection: the snapshot's image status, as SQLite's `image_status` would read. */
   imageStatusOf(owner: OwnerId, linkId: string): string | null {
     return this.imageStates.get(imageKey(owner, linkId))?.status ?? null;
+  }
+
+  async summaryCandidates(
+    afterId: string | null,
+    limit: number,
+    sources: (SummarySource | null)[],
+  ): Promise<SummaryCandidate[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const found: SummaryCandidate[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [id, s] of mine) {
+        const link = this.owned(owner).get(id);
+        if (!link || this.isHidden(owner, id)) continue;
+        if (s.status !== "ok" || !s.text) continue;
+        if (!sources.includes(link.summarySource)) continue;
+        if (afterId !== null && order(id) <= order(afterId)) continue;
+        found.push({ owner, id });
+      }
+    }
+    return found.sort((a, b) => order(a.id) - order(b.id)).slice(0, limit);
   }
 
   async iconCandidates(afterId: string | null, limit: number): Promise<IconCandidate[]> {

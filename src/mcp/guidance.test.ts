@@ -51,6 +51,21 @@ describe("guidance on a tag's kindSource", () => {
   });
 });
 
+describe("summary guidance", () => {
+  it("tells agents on save_link and update_link that the server may replace their summary and how to send the owner's", () => {
+    for (const text of [SAVE_LINK, UPDATE_LINK]) {
+      expect(text).toContain("The server may replace a summary you wrote yourself");
+      expect(text).toContain('{text, source} with "stated" or "asked"');
+    }
+  });
+
+  it("tells update_link that plain text never replaces the server's or the owner's summary", () => {
+    expect(UPDATE_LINK).toContain(
+      'Plain text never replaces the server\'s or the owner\'s summary: to change one at the owner\'s request, send {text, source: "stated"} (or "asked").',
+    );
+  });
+});
+
 describe("get_digest guidance", () => {
   it("names every reason, and the cautions that go with focus words and openings", () => {
     for (const kind of [

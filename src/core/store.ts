@@ -6,6 +6,7 @@ import type {
   NewLink,
   OwnerId,
   Source,
+  SummarySource,
   Tag,
   TagKind,
   TagPatch,
@@ -196,14 +197,34 @@ export interface LinkRemover {
 }
 
 /**
- * What a conditional write expects of a link. `snoozedUntil` and `putAwayAt` match to the millisecond, and
- * `whySource` lists the accepted sources of its why, with null for no why.
+ * What a conditional write expects of a link. `snoozedUntil` and `putAwayAt` match to the millisecond,
+ * `whySource` lists the accepted sources of its why, with null for no why, and `summary` matches the
+ * summary text while `summarySource` lists the accepted sources of its label, with null for none.
  */
 export type LinkExpectation = {
   state?: LinkState;
   snoozedUntil?: Date | null;
   putAwayAt?: Date | null;
   whySource?: (Source | null)[];
+  summary?: string | null;
+  summarySource?: (SummarySource | null)[];
 };
 
 export type SurfacedClaim = { link: Link; previousSurfacedAt: Date | null };
+
+/** A link the server may summarise. */
+export type SummaryCandidate = { owner: OwnerId; id: string };
+
+/** Cross-owner maintenance for the summary pass. A deleted link is never listed. */
+export interface SummaryCandidates {
+  /**
+   * Links after `afterId` (null: from the start), ascending by id, at most `limit`, across all
+   * owners. A link is listed when its snapshot is `ok` with text and its summary label is one of
+   * `sources`, with null for none. Which labels the server may replace is a core rule.
+   */
+  summaryCandidates(
+    afterId: string | null,
+    limit: number,
+    sources: (SummarySource | null)[],
+  ): Promise<SummaryCandidate[]>;
+}

@@ -78,6 +78,7 @@ const baseLink = (): NewLink => ({
   urlKey: "ex.com/a",
   title: null,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [{ key: "t", name: "t", source: "stated", kind: "topic", kindSource: "inferred" }],
   savedAt: NOW,

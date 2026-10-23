@@ -14,6 +14,7 @@ const link = (url = "https://ex.com/7"): Link => ({
   urlKey: "ex.com/7",
   title: "Seven",
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: new Date("2026-10-01T00:00:00Z"),

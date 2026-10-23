@@ -34,6 +34,7 @@ const linkWith = (over: Partial<Link> = {}): Link => ({
   urlKey: "ex.com/1",
   title: null,
   summary: null,
+  summarySource: null,
   why: null,
   tags: [],
   savedAt: day(-100),

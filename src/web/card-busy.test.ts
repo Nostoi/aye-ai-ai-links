@@ -28,6 +28,7 @@ const link = (id: string, savedAt = NOW): Link => ({
   urlKey: `ex.com/${id}`,
   title: `Link ${id}`,
   summary: null,
+  summarySource: null,
   why: { text: `because ${id}`, source: "stated" },
   tags: [
     { key: "kitchen", name: "Kitchen", source: "stated", kind: "topic", kindSource: "stated" },

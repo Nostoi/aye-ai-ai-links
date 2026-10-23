@@ -141,6 +141,12 @@ export interface LinkStore {
   listLinks(owner: OwnerId): Promise<Link[]>;
 
   /**
+   * `listLinks` and `listTags` read as one snapshot, so a tag change cannot fall between the two
+   * reads and leave the links naming a key the catalog no longer holds.
+   */
+  listLinksAndTags(owner: OwnerId): Promise<{ links: Link[]; tags: Tag[] }>;
+
+  /**
    * Conditional write, in one atomic step: for each id in input order that is the owner's, active,
    * not snoozed at `now` (snoozedUntil null or <= now) and has lastSurfacedAt null or <=
    * `notSurfacedAfter`, set lastSurfacedAt to `at` and return the link as read inside that step,

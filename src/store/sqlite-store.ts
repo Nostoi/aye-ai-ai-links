@@ -216,6 +216,10 @@ export class SqliteStore
   }
 
   async listTags(owner: OwnerId) {
+    return this.readTags(owner);
+  }
+
+  private readTags(owner: OwnerId): Tag[] {
     const rows = this.db
       .prepare(`SELECT ${TAG_COLUMNS} FROM tags WHERE owner_id = ? ORDER BY key`)
       .all(owner) as TagRow[];
@@ -297,6 +301,13 @@ export class SqliteStore
 
   async listLinks(owner: OwnerId) {
     return this.db.transaction(() => this.readAll(owner))();
+  }
+
+  async listLinksAndTags(owner: OwnerId) {
+    return this.db.transaction(() => ({
+      links: this.readAll(owner),
+      tags: this.readTags(owner),
+    }))();
   }
 
   async claimSurfaced(

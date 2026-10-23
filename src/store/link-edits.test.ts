@@ -8,6 +8,7 @@ import { MIGRATIONS, migrate } from "./migrations.js";
 import { SqliteImageStore } from "./sqlite-image-store.js";
 import { SqliteLinkEditStore } from "./sqlite-link-edits.js";
 import { SqliteStore } from "./sqlite-store.js";
+import { SqliteTagEditStore } from "./sqlite-tag-edits.js";
 
 type Db = Database.Database;
 const open: Db[] = [];
@@ -23,6 +24,7 @@ describeLinkEditStoreContract("SqliteLinkEditStore", () => {
     links,
     images: new SqliteImageStore(db),
     edits: new SqliteLinkEditStore(db),
+    tagEdits: new SqliteTagEditStore(db),
     addOwner: (o) => links.ensureUser(o, o),
   };
 });

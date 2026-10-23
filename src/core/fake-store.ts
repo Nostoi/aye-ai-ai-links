@@ -884,6 +884,13 @@ export class FakeStore
     return [...this.owned(owner).values()].map((l) => this.view(owner, l));
   }
 
+  /** Both reads start before either is awaited, so no other call runs between them. */
+  async listLinksAndTags(owner: OwnerId) {
+    const links = this.listLinks(owner);
+    const tags = this.listTags(owner);
+    return { links: await links, tags: await tags };
+  }
+
   async dueChecks(cutoffs: CheckCutoffs, limit: number): Promise<DueCheck[]> {
     const order = (id: string) => Number(id.replace(/^link-/, ""));
     const due: (DueCheck & { last: number })[] = [];

@@ -57,6 +57,7 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     pinTag: (owner, key, pin) => inner.pinTag(owner, key, pin),
     colorTag: (owner, key, color) => inner.colorTag(owner, key, color),
     listLinks: (owner) => inner.listLinks(owner),
+    listLinksAndTags: (owner) => inner.listLinksAndTags(owner),
     claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
     unclaimSurfaced: (owner, id, claim) => inner.unclaimSurfaced(owner, id, claim),
     updateIf: (owner, id, expected, patch, events) =>
@@ -1262,6 +1263,31 @@ export function describeStoreContract(
         expect(await h.store.listLinks(A)).toEqual([]);
         expect(await h.store.listLinks("nobody")).toEqual([]);
         expect((await h.store.listLinks(B)).map((l) => l.url)).toEqual(["https://ex.com/b"]);
+      });
+    });
+
+    describe("listLinksAndTags", () => {
+      it("returns what listLinks and listTags return, for this owner only", async () => {
+        await saveLink(deps(), A, {
+          url: "https://ex.com/1",
+          savedBy: "a",
+          tags: [{ name: "Wind", source: "stated" }],
+        });
+        await saveLink(deps(), A, { url: "https://ex.com/2", savedBy: "a" });
+        await saveLink(deps(), B, {
+          url: "https://ex.com/b",
+          savedBy: "b",
+          tags: [{ name: "Only B", source: "stated" }],
+        });
+        const both = await h.store.listLinksAndTags(A);
+        expect(both.links).toEqual(await h.store.listLinks(A));
+        expect(both.tags).toEqual(await h.store.listTags(A));
+        expect(both.links).toHaveLength(2);
+        expect(both.tags.map((t) => t.key)).toEqual(["wind"]);
+      });
+
+      it("gives empty lists for an owner with nothing", async () => {
+        expect(await h.store.listLinksAndTags("nobody")).toEqual({ links: [], tags: [] });
       });
     });
 

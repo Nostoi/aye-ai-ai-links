@@ -146,6 +146,53 @@ describe("the stats reading pass", () => {
     expect((await t.store.getReading(OWNER))?.text).toBe("recovered");
   });
 
+  it("doubles the backoff after each failure in a row", async () => {
+    const t = setup(() => {
+      throw new Error("down");
+    });
+    await t.seed(1);
+    await t.pass.sweep();
+    expect(t.calls()).toBe(1);
+    t.advance(MINUTE);
+    await t.pass.sweep(); // first failure: retried at +60 s
+    expect(t.calls()).toBe(2);
+    t.advance(MINUTE);
+    await t.pass.sweep(); // second failure: not yet at +60 s
+    expect(t.calls()).toBe(2);
+    t.advance(MINUTE);
+    await t.pass.sweep(); // retried at +120 s
+    expect(t.calls()).toBe(3);
+  });
+
+  it("a failed write keeps the old reading, backs off, and writes after the backoff", async () => {
+    const t = setup();
+    await t.seed(1);
+    await t.pass.sweep();
+    const first = await t.store.getReading(OWNER);
+    await t.seed(2);
+    t.advance(READING_EVERY_MS + DAY);
+    const put = t.store.putReadingIf.bind(t.store);
+    let throwOnce = true;
+    t.store.putReadingIf = async (...args) => {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new Error("disk full");
+      }
+      return put(...args);
+    };
+    const before = t.calls();
+    await t.pass.sweep();
+    expect(t.logged).toHaveLength(1);
+    expect(await t.store.getReading(OWNER)).toEqual(first);
+    t.advance(MINUTE - 1);
+    await t.pass.sweep();
+    expect(t.calls()).toBe(before + 1);
+    t.advance(1);
+    await t.pass.sweep();
+    expect(t.calls()).toBe(before + 2);
+    expect((await t.store.getReading(OWNER))?.inputHash).not.toBe(first?.inputHash);
+  });
+
   it("stop aborts the call and writes nothing", async () => {
     const late = deferred<string>();
     let signal: AbortSignal | undefined;

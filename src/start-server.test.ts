@@ -1467,6 +1467,141 @@ describe("startServer", () => {
     });
   });
 
+  describe("the summary pass", () => {
+    const PAGE_URL = "https://example.com/cats";
+    /** A link whose page the server has read, holding a summary an AI wrote on its own. */
+    const seedRead = async () => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        const { link } = await saveLink(deps, "owner", {
+          url: PAGE_URL,
+          savedBy: "seed",
+          summary: "Old words",
+        });
+        const now = deps.now();
+        const lease = await deps.store.leaseSnapshot(
+          "owner",
+          link.id,
+          now,
+          new Date(now.getTime() + 100_000),
+        );
+        await deps.store.recordSnapshot(
+          "owner",
+          link.id,
+          lease?.claim ?? -1,
+          record({ imageUrl: null, text: "Cats live in Rome." }),
+        );
+      } finally {
+        db.close();
+      }
+    };
+    const held = () =>
+      read<{ summary: string | null; source: string | null }>(
+        "SELECT summary, summary_source AS source FROM links",
+      );
+
+    /** An OpenAI-style AI that records each request body, and answers `reply` or never. */
+    const fakeAi = async (reply: string | null) => {
+      const bodies: string[] = [];
+      let closed = 0;
+      const server = http.createServer((req, res) => {
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk;
+        });
+        req.on("end", () => {
+          bodies.push(body);
+          if (reply === null) return;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: reply }, finish_reason: "stop" }],
+            }),
+          );
+        });
+        res.on("close", () => {
+          closed++;
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const port = (server.address() as net.AddressInfo).port;
+      const ai = {
+        api: "openai" as const,
+        url: `http://127.0.0.1:${port}/v1`,
+        key: undefined,
+        model: "m",
+        name: "Fake",
+      };
+      return {
+        ai,
+        bodies,
+        closed: () => closed,
+        close: async () => {
+          server.closeAllConnections();
+          await new Promise((resolve) => server.close(resolve));
+        },
+      };
+    };
+
+    const startWith = async (ai: ServerConfig["ai"]) => {
+      const s = await startServer(
+        { ...cfg(dbPath, 0), ...(ai && { ai }) },
+        {
+          ...fakePipeline(),
+          settleMs: 200,
+          requestLog: (line) => logged.push(line),
+          summaryPollMs: 20,
+          summaryGapMs: 0,
+        },
+      );
+      started.push(s);
+      return s;
+    };
+
+    it("writes the AI's summary of a read page, labelled as the server's", async () => {
+      await seedRead();
+      const fake = await fakeAi("A page about the cats of Rome");
+      try {
+        await startWith(fake.ai);
+        await vi.waitFor(
+          () =>
+            expect(held()).toEqual([
+              { summary: "A page about the cats of Rome", source: "server" },
+            ]),
+          { timeout: 3_000 },
+        );
+        expect(fake.bodies.join("\n")).toContain("Cats live in Rome.");
+      } finally {
+        await fake.close();
+      }
+    });
+
+    it("on stop, aborts the call in flight and writes nothing", async () => {
+      await seedRead();
+      const fake = await fakeAi(null);
+      try {
+        const s = await startWith(fake.ai);
+        await vi.waitFor(() => expect(fake.bodies).toHaveLength(1), { timeout: 3_000 });
+        const stopAt = Date.now();
+        await s.stop();
+        expect(Date.now() - stopAt).toBeLessThan(2_000);
+        await vi.waitFor(() => expect(fake.closed()).toBe(1), { timeout: 3_000 });
+        expect(held()).toEqual([{ summary: "Old words", source: "inferred" }]);
+        expect(fake.bodies).toHaveLength(1);
+      } finally {
+        await fake.close();
+      }
+    });
+
+    it("with no AI set up, summarises nothing", async () => {
+      await seedRead();
+      await startWith(undefined);
+      await sleep(300);
+      expect(held()).toEqual([{ summary: "Old words", source: "inferred" }]);
+    });
+  });
+
   describe("the icon backfill", () => {
     const OLD = "https://example.com/old";
     const OLD_ICON = "https://example.com/old-icon.png";

@@ -40,7 +40,14 @@ import {
   type SnapshotRecord,
   type SnapshotStore,
 } from "./snapshot-store.js";
-import type { LinkExpectation, LinkRemover, LinkStore, SurfacedClaim } from "./store.js";
+import type {
+  LinkExpectation,
+  LinkRemover,
+  LinkStore,
+  SummaryCandidate,
+  SummaryCandidates,
+  SurfacedClaim,
+} from "./store.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
   Labelled,
@@ -49,6 +56,7 @@ import type {
   NewLink,
   OwnerId,
   SnapshotStatus,
+  SummarySource,
   Tag,
   TagKind,
   TagPatch,
@@ -96,7 +104,8 @@ export class FakeStore
     ImageStore,
     LinkImageReader,
     LinkEditStore,
-    IconBackfillStore
+    IconBackfillStore,
+    SummaryCandidates
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -867,6 +876,26 @@ export class FakeStore
   /** Test inspection: the snapshot's image status, as SQLite's `image_status` would read. */
   imageStatusOf(owner: OwnerId, linkId: string): string | null {
     return this.imageStates.get(imageKey(owner, linkId))?.status ?? null;
+  }
+
+  async summaryCandidates(
+    afterId: string | null,
+    limit: number,
+    sources: (SummarySource | null)[],
+  ): Promise<SummaryCandidate[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const found: SummaryCandidate[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [id, s] of mine) {
+        const link = this.owned(owner).get(id);
+        if (!link || this.isHidden(owner, id)) continue;
+        if (s.status !== "ok" || !s.text) continue;
+        if (!sources.includes(link.summarySource)) continue;
+        if (afterId !== null && order(id) <= order(afterId)) continue;
+        found.push({ owner, id });
+      }
+    }
+    return found.sort((a, b) => order(a.id) - order(b.id)).slice(0, limit);
   }
 
   async iconCandidates(afterId: string | null, limit: number): Promise<IconCandidate[]> {

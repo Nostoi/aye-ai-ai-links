@@ -65,10 +65,10 @@ Index on `(owner_id, at)`. Several rows per link are expected.
 
 **Core names the event; the store doesn't guess it** (controller's call, after the builder check). The store can't tell a forward write from an Undo by the write's shape. Undoing It's stale on a put-away link restores a non-null `put_away_at`, and undoing Put it away on a snoozed link restores a future `snoozed_until`. Both look like fresh actions. So `update`, `updateIf` and `updateToolIf` take an optional event argument:
 
-- `{record: kind}`: a forward action;
-- `{unrecord: …}`: an Undo, which removes its action's event.
+- `{record: kind, at}`: a forward action;
+- `{unrecord: kind, at}`: an Undo, which removes exactly the event its action wrote, matched by kind and timestamp. Each Undo receipt carries its action's time: Put it away's stamp, Not now's `until − SNOOZE_MS`, the declined row's `since`, and a new `at` on It's stale's `StateChange`. Removing "the latest of a kind" instead would delete another action's event when two tabs act on one link, or when the clock moves back.
 
-The core use case for each action passes it. Writes without the argument record nothing. That covers `reactivate`, Bring it back and Keep handy. The fakes and store contract tests follow the interface. A write the store refuses records nothing. A conditional write whose state is already what it writes records nothing either: stale on a stale link, or `notHandy` on a declined row, which `moveTo` keeps. MCP `update_link {state:'archived'}` on an already archived link is one of these.
+The core use case for each action passes it. Writes without the argument record nothing. That covers `reactivate`, Bring it back and Keep handy. The fakes and store contract tests follow the interface. A write the store refuses records nothing. A conditional write whose state is already what it writes records nothing either: stale on a link that is already stale, or `notHandy` on a declined row, which `moveTo` keeps. MCP `update_link {state:'archived'}` is an unconditional write, so whether it was already stale is decided inside the write. Core passes the condition with the event (`unlessBefore`), never from an earlier read. A put-away link that MCP makes stale does record `stale`.
 
 The actions that record each kind:
 
@@ -80,7 +80,7 @@ The actions that record each kind:
 
 The full list of writers is in the 2026-10-22 code survey. The builder should confirm it against `SqliteLinkStore.update`/`updateIf` and `updateToolIf`, and give the store contract tests one case per kind.
 
-**Undo removes what its action wrote.** An Undo that restores a link's prior state (`undoStateChange`, `unsnoozeLink`, `restoreTool`) deletes, in the same write and through `{unrecord}`, the event that the undone action wrote. So an undone Put it away leaves no `put_away` row. "Bring it back" is not an Undo, and it deletes nothing: the counts below look at current state, so a link brought back simply stops counting as set aside. Openings have no Undo. Matching the event to its action is the builder's call; the action's own timestamp is one way.
+**Undo removes what its action wrote.** An Undo that restores a link's prior state (`undoStateChange`, `unsnoozeLink`, `restoreTool`) deletes, in the same write and through `{unrecord}`, the event that the undone action wrote. So an undone Put it away leaves no `put_away` row. "Bring it back" is not an Undo, and it deletes nothing: the counts below look at current state, so a link brought back simply stops counting as set aside. Openings have no Undo.
 
 **Deleted links:** the cascade removes their rows on purge, and reads join `links` with `deleted_at IS NULL`. The table registers in `src/store/hidden-link-coverage.test.ts`, with a case in `link-removal.test.ts`.
 
@@ -89,9 +89,9 @@ The full list of writers is in the 2026-10-22 code survey. The builder should co
 - one `opened` row per non-null `last_opened_at`;
 - one `put_away` row per non-null `put_away_at`;
 - one `not_handy` row per `declined` `link_tools` row, at its `since` (a status change resets `since`, so it is when the link was declined);
-- one `not_now` row per non-null `snoozed_until`, at `snoozed_until − SNOOZE_MS`.
+All are marked `backfilled = 1`. A stale link has no date, so it gets no row; it counts only in "All time" (below).
 
-All are marked `backfilled = 1`. A stale link has no date, so it gets no row; it counts only in "All time" (below). The migration file holds its own copy of `SNOOZE_MS`'s value, because migrations call no app code.
+**Not now isn't backfilled** (controller's call, after the solution-choice challenge on 2026-10-22). An MCP agent can set any `snoozedUntil`, so `snoozed_until − SNOOZE_MS` can invent a date, even one after tracking began. Past Not nows count only once they happen again; the "before tracking began" note covers the gap.
 
 **Tracking start** is the migration's run time, stored in the migration. It is a one-row value or similar; where it lives is the builder's call. It is always set, including on a fresh database. The page needs it for the "before tracking began" note, which shows whenever a window starts before it (controller's call). On a fresh install, that is only All time, which is harmless.
 
@@ -167,7 +167,6 @@ The owner waived the ~400-line PR ceiling. Each PR is still one outcome.
 
 ## Left to the builder
 
-- How an Undo finds the event its action wrote.
 - Where the tracking start is stored.
 - The exact wording of the notes and the reading prompt, and the reading's length cap.
 - The stats store interface's shape.

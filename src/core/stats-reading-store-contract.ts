@@ -32,6 +32,17 @@ export function describeStatsReadingStoreContract(
     const save = async (owner: string): Promise<string> =>
       (await h.links.insertIfAbsent(owner, newLink(++n, at(0)))).link.id;
 
+    const saveAt = async (owner: string, s: number): Promise<string> =>
+      (await h.links.insertIfAbsent(owner, newLink(++n, at(s)))).link.id;
+
+    /** A reading written at 10 beside a link saved at 0, then that link deleted and a new one saved at 20. */
+    const hide = async (): Promise<void> => {
+      const old = await saveAt(A, 0);
+      await h.readings.putReadingIf(A, null, reading(10));
+      await h.remover.markDeleted(A, old, at(15));
+      await saveAt(A, 20);
+    };
+
     beforeEach(async () => {
       h = await makeHarness();
       n = 0;
@@ -93,6 +104,36 @@ export function describeStatsReadingStoreContract(
       expect(await h.readings.getReading(A)).toBeNull();
 
       await h.remover.unmarkDeleted(A, id, at(20));
+      expect(await h.readings.getReading(A)).toEqual(reading(10));
+    });
+
+    it("a reading is hidden once every live link was saved after it", async () => {
+      await hide();
+      expect(await h.readings.getReading(A)).toBeNull();
+    });
+
+    it("a reading stays visible while one live link was saved before it", async () => {
+      await saveAt(A, 0);
+      await hide();
+      expect(await h.readings.getReading(A)).toEqual(reading(10));
+    });
+
+    it("readingCandidates lists an owner whose reading is hidden, even when it is recent", async () => {
+      await hide();
+      expect(await h.readings.readingCandidates(at(5))).toEqual([A]);
+    });
+
+    it("putReadingIf with no expectation replaces a hidden reading", async () => {
+      await hide();
+      expect(await h.readings.putReadingIf(A, null, reading(30))).toBe(true);
+      expect(await h.readings.getReading(A)).toEqual(reading(30));
+    });
+
+    it("putReadingIf with no expectation still refuses over a visible reading", async () => {
+      await saveAt(A, 0);
+      await h.readings.putReadingIf(A, null, reading(10));
+      await saveAt(A, 20);
+      expect(await h.readings.putReadingIf(A, null, reading(30))).toBe(false);
       expect(await h.readings.getReading(A)).toEqual(reading(10));
     });
 

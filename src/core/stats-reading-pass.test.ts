@@ -75,6 +75,19 @@ describe("the stats reading pass", () => {
     expect(reading?.inputHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("dates the reading when its stats were read, not when the reply came", async () => {
+    // A link saved during a slow call must count as newer than the reading.
+    let advance = (_ms: number) => {};
+    const t = setup(() => {
+      advance(MINUTE);
+      return "You saved a little.";
+    });
+    advance = t.advance;
+    await t.seed(1);
+    await t.pass.sweep();
+    expect((await t.store.getReading(OWNER))?.writtenAt).toEqual(at(1000));
+  });
+
   it("writes nothing when the stats are unchanged", async () => {
     const t = setup();
     await t.seed(1);
@@ -100,6 +113,21 @@ describe("the stats reading pass", () => {
     expect(next?.text).toBe("second");
     expect(next?.inputHash).not.toBe(first?.inputHash);
     expect(next?.writtenAt).toEqual(new Date(at(1000).getTime() + READING_EVERY_MS + DAY));
+  });
+
+  it("a hidden reading is rewritten on the next sweep, within 7 days", async () => {
+    let text = "games";
+    const t = setup(() => text);
+    const old = await t.seed(1);
+    await t.pass.sweep();
+    await t.store.markDeleted(OWNER, old.link.id, at(1001));
+    // Saved after the reading was written, so the old reading is about links now gone.
+    await t.store.insertIfAbsent(OWNER, newLink(2, at(1002)));
+    expect(await t.store.getReading(OWNER)).toBeNull();
+    text = "cooking";
+    t.advance(MINUTE);
+    await t.pass.sweep();
+    expect((await t.store.getReading(OWNER))?.text).toBe("cooking");
   });
 
   it("does not rewrite within 7 days even if the stats changed", async () => {

@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-23:** The stats reading shows only beside links saved before it (#161, owner in session). It is hidden while every live link was saved after it, and it is dated when its stats were read. A hidden reading is rewritten on the next hourly check rather than after 7 days. With no AI connection, no reading shows.
 - **2026-10-22:** Stats (#161; design: `docs/specs/2026-10-22-stats-design.md`, approved by the owner in session). A Stats section on the profile page, a `link_events` history log from now on, a read-only `get_stats` MCP tool, and a weekly AI reading through the one AI connection. It lands in three PRs: the log, the counts, the reading.
   - **Owner decisions:**
     - **An exception to `src/web/AGENTS.md` rule 6, "No guilt counters".** The profile's Stats section shows a "not opened yet" count, because the owner sees it only when they go looking. The rule still governs Home and the lists. This settles the open conflict in the 2026-10-18 entry below.

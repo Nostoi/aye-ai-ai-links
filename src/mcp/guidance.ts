@@ -83,7 +83,7 @@ Every count is distinct links, not events, and leaves out deleted links. saved i
 
 opened only counts openings made through the app or an AI (the owner opening a link on the web page, or an agent sending opened: true); it misses any opening from a browser bookmark or elsewhere, so never tell the owner they have not read something because of it. Counts are kept from trackingSince. partialCounts names the counts that may be too low because the window starts before trackingSince; say so for those counts; the others don't depend on when tracking began.
 
-reading, when it is not null, is a short guess about the owner's habits, written by an AI. Present it as a guess, never as a fact. It is null when none has been written.`;
+reading, when it is not null, is a short guess about the owner's habits, written by an AI. Present it as a guess, never as a fact. It is null when none has been written for the current library, or when the server has no AI connection.`;
 
 export const ADD_PROFILE = `Record something about the owner: a note about them, or a focus entry for what they are working on now. Adds only; it never changes or removes anything.
 

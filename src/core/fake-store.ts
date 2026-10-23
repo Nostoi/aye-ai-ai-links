@@ -1061,8 +1061,18 @@ export class FakeStore
     return new Date(this.since);
   }
 
+  /** The stored reading, only while the owner has a live link saved at or before it. */
+  private visibleReading(owner: OwnerId): StatsReading | undefined {
+    const r = this.readings.get(owner);
+    if (!r) return undefined;
+    for (const l of this.owned(owner).values()) {
+      if (l.savedAt.getTime() <= r.writtenAt.getTime()) return r;
+    }
+    return undefined;
+  }
+
   async getReading(owner: OwnerId): Promise<StatsReading | null> {
-    const r = this.owned(owner).size > 0 ? this.readings.get(owner) : undefined;
+    const r = this.visibleReading(owner);
     return r ? { ...r, writtenAt: new Date(r.writtenAt) } : null;
   }
 
@@ -1073,7 +1083,9 @@ export class FakeStore
   ): Promise<boolean> {
     if (this.owned(owner).size === 0) return false;
     const held = this.readings.get(owner)?.writtenAt.getTime() ?? null;
-    if (held !== (expectedWrittenAt?.getTime() ?? null)) return false;
+    const replacesHidden =
+      expectedWrittenAt === null && held !== null && !this.visibleReading(owner);
+    if (held !== (expectedWrittenAt?.getTime() ?? null) && !replacesHidden) return false;
     this.readings.set(owner, { ...reading, writtenAt: new Date(reading.writtenAt) });
     return true;
   }
@@ -1082,7 +1094,10 @@ export class FakeStore
     return [...this.links]
       .filter(([owner, mine]) => {
         const r = this.readings.get(owner);
-        return mine.size > 0 && (!r || r.writtenAt.getTime() <= dueBefore.getTime());
+        return (
+          mine.size > 0 &&
+          (!r || r.writtenAt.getTime() <= dueBefore.getTime() || !this.visibleReading(owner))
+        );
       })
       .map(([owner]) => owner)
       .sort();

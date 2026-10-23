@@ -10,7 +10,8 @@ import { DIMS } from "../search/model.js";
 const A = "owner";
 const B = SECOND_USER.id;
 const TEXT = "You save far more than you open.";
-const WRITTEN_AT = new Date("2026-10-20T08:00:00Z");
+// After the links these tests save (stamped with the clock), so the reading is visible.
+const WRITTEN_AT = new Date(Date.now() + 86_400_000);
 
 async function getStats(world: World, key: string) {
   const res = await world.app.fetch(

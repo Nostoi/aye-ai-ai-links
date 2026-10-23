@@ -15,7 +15,7 @@ async function seeded(ai?: ReturnType<typeof scriptedModel>) {
   const wrote = await deps.statsReadings.putReadingIf("owner", null, {
     text: TEXT,
     writtenBy: "Fake",
-    writtenAt: new Date("2026-10-20T08:00:00Z"),
+    writtenAt: new Date(Date.now() + 86_400_000), // after the link saved above
     inputHash: "h",
   });
   expect(wrote).toBe(true);

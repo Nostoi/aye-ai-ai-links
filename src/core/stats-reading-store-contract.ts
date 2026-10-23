@@ -105,5 +105,28 @@ export function describeStatsReadingStoreContract(
       await h.remover.unmarkDeleted(A, id, at(20));
       expect(await h.readings.getReading(A)).toBeNull();
     });
+
+    it("putReadingIf replacing a reading writes nothing when the owner has no live link", async () => {
+      const id = await save(A);
+      await h.readings.putReadingIf(A, null, reading(10));
+      await h.remover.markDeleted(A, id, at(20));
+
+      expect(await h.readings.putReadingIf(A, at(10), reading(30))).toBe(false);
+
+      await h.remover.unmarkDeleted(A, id, at(20));
+      expect(await h.readings.getReading(A)).toEqual(reading(10));
+    });
+
+    it("putReadingIf replacing a reading changes only that owner's", async () => {
+      await save(A);
+      await save(B);
+      await h.readings.putReadingIf(A, null, reading(10, "a-old"));
+      await h.readings.putReadingIf(B, null, reading(10, "b-old"));
+
+      expect(await h.readings.putReadingIf(B, at(10), reading(30, "b-new"))).toBe(true);
+
+      expect(await h.readings.getReading(B)).toEqual(reading(30, "b-new"));
+      expect(await h.readings.getReading(A)).toEqual(reading(10, "a-old"));
+    });
   });
 }

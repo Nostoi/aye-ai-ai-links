@@ -35,7 +35,7 @@ export const whyText = (why: NonNullable<Link["why"]>) =>
 
 /**
  * One link as a row of the list, which the Pictures view draws as a card: `tile()`'s picture, the
- * title, the why when there is one, the grey line and the ⋯ menu. `space` colors the row;
+ * title, the why when there is one (else the summary), the grey line and the ⋯ menu. `space` colors the row;
  * `lineSpace` is the space its grey line names (a space page leaves its own out). With `ask`, a
  * link with no why asks Tell me why, with the slot `tellWhyScript` puts the answer in.
  */
@@ -66,6 +66,8 @@ export function linkRow(
     from?: string | undefined;
   },
 ): string {
+  const about =
+    !link.why && link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : "";
   const why = link.why
     ? `<p class="row-why">${whyText(link.why)}</p>\n`
     : ask
@@ -75,7 +77,7 @@ export function linkRow(
 ${tile(link, picture, "row-pic")}
 <div class="row-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from })}${goneLine(link, gone)}</div>
+${about}${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from })}${goneLine(link, gone)}</div>
 ${editMenu(link, { copy, handy })}
 </li>`;
 }

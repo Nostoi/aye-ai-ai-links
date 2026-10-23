@@ -26,9 +26,15 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
     ["soft", "bg"],
     ["soft", "surface"],
     ["ink", "fill"],
+    ["about", "surface"],
     ["amber-ink", "amber-bg"],
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
+  });
+  it("keeps the summary's ink strictly between the why's and the grey line's", () => {
+    const against = (name: "ink" | "about" | "soft") => contrast(t[name], t.surface);
+    expect(against("ink")).toBeGreaterThan(against("about"));
+    expect(against("about")).toBeGreaterThan(against("soft"));
   });
   it.each([
     ["field", "bg"],
@@ -821,7 +827,7 @@ describe("the quiet list and the Pictures view (#194)", () => {
   /** A row's picture box (or `pick`) on a page in `view`, done (`faded`) or not. */
   const inView = (view: "list" | "pictures", pick = ".row-pic", faded = false) =>
     el(
-      `<main data-view="${view}"><ul class="link-rows"><li class="link-row${faded ? " faded" : ""}"><div class="row-pic initials-box"></div><div class="row-body"><p class="row-why"></p></div></li></ul></main>`,
+      `<main data-view="${view}"><ul class="link-rows"><li class="link-row${faded ? " faded" : ""}"><div class="row-pic initials-box"></div><div class="row-body"><p class="row-about"></p><p class="row-why"></p></div></li></ul></main>`,
       pick,
     );
 
@@ -870,6 +876,31 @@ describe("the quiet list and the Pictures view (#194)", () => {
       expect(computed(inView(view, ".row-why", true), "opacity", "desktop"), view).toBeUndefined();
       expect(computed(inView(view, ".row-pic", false), "opacity", "desktop"), view).toBeUndefined();
     }
+  });
+
+  it("draws a summary in --about at the why's size: one line on desktop, two on a phone, three on a picture card", () => {
+    const about = (view: "list" | "pictures") => inView(view, ".row-about");
+    expect(computed(about("list"), "color", "desktop")).toBe("var(--about)");
+    expect(computed(about("list"), "font-size", "desktop")).toBe("15px");
+    expect(computed(about("list"), "white-space", "desktop")).toBe("nowrap");
+    expect(computed(about("list"), "text-overflow", "desktop")).toBe("ellipsis");
+    expect(computed(about("list"), "-webkit-line-clamp", "phone")).toBe("2");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(about("pictures"), "white-space", w), w).toBe("normal");
+      expect(computed(about("pictures"), "-webkit-line-clamp", w), w).toBe("3");
+    }
+  });
+
+  it("draws a search result's summary in --about, whole", () => {
+    const node = el(
+      '<ul><li class="result"><div class="result-body"><p class="row-about"></p></div></li></ul>',
+      ".row-about",
+    );
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(node, "color", w), w).toBe("var(--about)");
+      expect(computed(node, "-webkit-line-clamp", w), w).toBeUndefined();
+    }
+    expect(computed(node, "white-space", "desktop")).toBeUndefined();
   });
 
   it("keeps a why to one line on a desktop row, two on a phone, and whole on a picture card", () => {

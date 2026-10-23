@@ -170,7 +170,7 @@ ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}
 <h2 data-card-title>${linkTitle(link)}</h2>
-${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from })}${link.summary ? `<p>${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
+${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from })}${link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
 ${goneLine(link, gone)}${keep ? handyControl(link, view) : ""}</div>
 </li>`;
 }

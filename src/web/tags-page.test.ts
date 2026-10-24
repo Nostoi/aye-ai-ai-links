@@ -905,6 +905,23 @@ describe("pickers, offers and color notes follow the other rows", () => {
     expect(page.sent.map((s) => s.url)).toEqual(["/tags/rename", "/tags/delete"]);
   });
 
+  it("a taken name whose tag has no row on the page offers a reload, worded from the server's answer", async () => {
+    const NEW = { ...HOME, key: "pixel-art", name: "pixel art" };
+    const page = load(() => ({
+      status: 409,
+      body: { code: "taken", tag: NEW, links: 1, message: "You already have it." },
+    }));
+    page.click(tagged(page, "baking", "Rename"));
+    await page.settle();
+    const box = page.inRow("baking", ".taken");
+    expect(box.hidden).toBe(false);
+    expect(box.querySelector("p")?.textContent).toBe(
+      "You already have a tag called pixel art (1 link). Reload this page to merge Baking into it.",
+    );
+    expect(box.textContent).not.toContain("not there any more");
+    expect((page.inRow("baking", '[data-action="merge-taken"]') as HTMLElement).hidden).toBe(true);
+  });
+
   it("Delete takes the deleted tag out of the other tags' shared-color notes", async () => {
     const PANTRY = tag({ key: "pantry", name: "Pantry", color: "clay", pinned: true });
     const page = load(() => DELETED, [KITCHEN, PANTRY]);

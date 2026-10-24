@@ -731,10 +731,17 @@ export function webApp({
    * tags, and its space (the color of the card, and the name its grey line shows) as the list the
    * card is on reads it (`view`).
    */
-  const cardState = async (owner: OwnerId, id: string, view: View) => {
+  const cardState = async (owner: OwnerId, id: string, asked: View) => {
     const link = await getLink(deps, owner, id);
     const shown = (await deps.images.imageVersions(owner, [id])).get(id);
     const info = (await deps.images.pictureInfo(owner, [id])).get(id);
+    const view: View =
+      asked.within === undefined
+        ? asked
+        : {
+            ...asked,
+            within: (await addressOf(owner, asked.within).catch(() => null)) ?? asked.within,
+          };
     const space = linkSpace(
       link,
       await deps.store.listTags(owner),

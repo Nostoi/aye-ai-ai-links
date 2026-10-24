@@ -209,15 +209,21 @@ const hideTaken = (row) => {
 /** The tag each row's taken offer would merge into. */
 const offered = new WeakMap();
 
-/** Words the offer from the tag it names now, or says that tag is gone. */
+/** What the server said about the tag it named, for an offer whose tag has no row on this page. */
+const told = new WeakMap();
+
+/** Words the offer from the tag it names now, or says that tag is gone, or sends the owner to reload for a tag this page never drew. */
 const showTaken = (row) => {
   const box = row.querySelector(".taken");
   const into = offered.get(row);
   const live = Boolean(into) && list.contains(into);
+  const unseen = !into && told.get(row);
   const go = box.querySelector('[data-action="merge-taken"]');
   box.querySelector("p").textContent = live
     ? "You already have a tag called " + nameOf(into) + " (" + linksText(Number(into.dataset.links)) + "). Merge " + nameOf(row) + " into it?"
-    : "That tag is not there any more.";
+    : unseen
+      ? "You already have a tag called " + unseen.name + " (" + linksText(unseen.links) + "). Reload this page to merge " + nameOf(row) + " into it."
+      : "That tag is not there any more.";
   go.hidden = !live;
   go.textContent = live ? "Merge into " + nameOf(into) : "";
   box.querySelector('[data-action="keep"]').textContent = "Keep " + nameOf(row);
@@ -234,6 +240,7 @@ const rename = async (row) => {
   if (res && res.status === 409 && answer && answer.code === "taken" && answer.tag) {
     const into = rowFor(answer.tag.key);
     offered.set(row, into);
+    told.set(row, { name: answer.tag.name, links: answer.links });
     if (into) setLinks(into, answer.links);
     showTaken(row);
     row.querySelector(".taken").hidden = false;

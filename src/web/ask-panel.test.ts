@@ -1705,6 +1705,57 @@ describe("undoing a tag merge from the panel", () => {
     expect(events).toEqual(["changed", "changed"]);
   });
 
+  describe("when the AI undoes it in chat", () => {
+    const undid = { kind: "tag-undo", undoId: "u1", tags: ["Art", "Design"] };
+    const twoTurns = () => {
+      const answers = [okAnswer({ changes: [merge] }), okAnswer({ changes: [undid] })];
+      const t = talk(() => answers.shift() ?? okAnswer());
+      const events: string[] = [];
+      t.document.addEventListener("aye-tags-changed", () => events.push("changed"));
+      return { t, events };
+    };
+
+    it("draws a line for it with no Undo, and marks the merge's line Undone", async () => {
+      const { t } = twoTurns();
+      await t.say("go");
+      expect(t.messages().querySelectorAll("button.ask-undo")).toHaveLength(1);
+      await t.say("undo that");
+      expect(t.messages().querySelectorAll("button.ask-undo")).toHaveLength(0);
+      expect(t.lines()[0]).toBe(`${LINE}Undone.`);
+      expect(t.lines()[1]).toBe("Undid the tag change: put back Art, Design.Tags");
+      const entries = t.stateNow().entries;
+      expect(entries[2].lines[0].undo.done).toBe(true);
+      expect(entries[5].lines[0].undo).toBeUndefined();
+    });
+
+    it("keeps the merge's line Undone after a reload", async () => {
+      const { t } = twoTurns();
+      await t.say("go");
+      await t.say("undo that");
+      const reloaded = load({ stored: t.stateNow() }).panel().messages;
+      expect(reloaded.querySelectorAll("button.ask-undo")).toHaveLength(0);
+    });
+
+    it("tells the page its tags changed", async () => {
+      const { t, events } = twoTurns();
+      await t.say("go");
+      await t.say("undo that");
+      expect(events).toEqual(["changed", "changed"]);
+    });
+
+    it("leaves the line of a different change alone", async () => {
+      const answers = [
+        okAnswer({ changes: [merge] }),
+        okAnswer({ changes: [{ ...undid, undoId: "other" }] }),
+      ];
+      const t = talk(() => answers.shift() ?? okAnswer());
+      await t.say("go");
+      await t.say("undo that");
+      expect(t.messages().querySelectorAll("button.ask-undo")).toHaveLength(1);
+      expect(t.stateNow().entries[2].lines[0].undo.done).toBeUndefined();
+    });
+  });
+
   it("does not tell the page after a reply with no tag change", async () => {
     const t = talk(() => okAnswer({ changes: [link("5")] }));
     const events: string[] = [];

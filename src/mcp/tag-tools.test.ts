@@ -139,7 +139,21 @@ describe("tag tools", () => {
     expect((await tags()).sort()).toEqual(["banking:2", "keep:1"]);
   });
 
-  it("an undo blocked by a later undoable change says to undo that one first", async () => {
+  it("an undo that no longer works says it may already have been undone and to check list_tags", async () => {
+    const { world, key, save } = await open();
+    await save("https://example.com/1", "a", "b");
+    const { undoId } = (await call(world, key, "merge_tags", { name: "a", into: "b" })).data as {
+      undoId: string;
+    };
+    await call(world, key, "undo_tag_change", { undoId });
+    const again = await call(world, key, "undo_tag_change", { undoId });
+    expect(again.isError).toBe(true);
+    expect(again.text).toMatch(/too late/);
+    expect(again.text).toMatch(/already have been undone/);
+    expect(again.text).toContain("list_tags");
+  });
+
+  it("an undo blocked by a later undoable change does not promise undoing that one helps", async () => {
     const { world, key, save } = await open();
     await save("https://example.com/1", "a", "b");
     await save("https://example.com/2", "b", "c");
@@ -149,7 +163,8 @@ describe("tag tools", () => {
       undoId: (first.data as { undoId: string }).undoId,
     });
     expect(res.isError).toBe(true);
-    expect(res.text).toMatch(/Undo the later change first/);
+    expect(res.text).toMatch(/later change to the same tags is in the way/);
+    expect(res.text).not.toMatch(/can still be undone|undo the later change first/i);
   });
 
   it("names a tag that is missing", async () => {

@@ -442,7 +442,7 @@ describe("rename, merge, delete and undo from the Tags page", () => {
     expect(late.status).toBe(404);
     expect(late.body).toEqual({
       code: "not_found",
-      message: "It's too late to undo: that change can no longer be undone.",
+      message: "It's too late to undo: that change was already undone, or can no longer be undone.",
     });
     expect(everything(world)).toEqual(before);
   });

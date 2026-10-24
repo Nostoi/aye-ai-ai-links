@@ -260,7 +260,7 @@ export const ASK_SCRIPT = `<script>
   };
   const TAGS_LINK = { href: "/tags", label: "Tags" };
   // The Tags page answers this by reloading; the panel's own state is saved before it can.
-  const TAG_CHANGES = ["tag", "tag-rename", "tag-merge", "tag-delete"];
+  const TAG_CHANGES = ["tag", "tag-rename", "tag-merge", "tag-delete", "tag-undo"];
   const tagsChanged = () => document.dispatchEvent(new CustomEvent("aye-tags-changed"));
   const changeLine = (c) => {
     if (c.kind === "link") {
@@ -296,6 +296,9 @@ export const ASK_SCRIPT = `<script>
       // The page's route calls it changeId; the tool's own name for it is undoId.
       const undo = { kind: "tag", url: "/tags/undo", body: { changeId: c.undoId } };
       return [{ text, link: TAGS_LINK, undo }];
+    }
+    if (c.kind === "tag-undo") {
+      return [{ text: "Undid the tag change: put back " + c.tags.join(", ") + ".", link: TAGS_LINK }];
     }
     if (c.kind === "profile") {
       const link = { href: "/profile", label: "Profile" };
@@ -384,6 +387,22 @@ export const ASK_SCRIPT = `<script>
     (u.kind === "tag"
       ? typeof u.body.changeId === "string"
       : ["save", "edit", "handy"].includes(u.kind) && typeof u.body.id === "string");
+  // An AI undid a tag change: the lines carrying its id are done, drawn or stored, with no Undo to press.
+  const markTagUndone = (undoId) => {
+    for (const entry of state.entries) {
+      if (!isObj(entry) || !Array.isArray(entry.lines)) continue;
+      for (const line of entry.lines) {
+        if (isObj(line) && undoable(line.undo) && line.undo.kind === "tag" && line.undo.body.changeId === undoId) {
+          line.undo.done = true;
+        }
+      }
+    }
+    for (const button of [...messages.querySelectorAll("button.ask-undo")]) {
+      if (button.getAttribute("data-undo-id") !== undoId) continue;
+      if (button === document.activeElement) text.focus();
+      button.replaceWith(make("span", "ask-undone", "Undone."));
+    }
+  };
   const OWN_ANSWERS = [400, 404, 409];
   const runUndo = async (u, button, note) => {
     button.disabled = true;
@@ -565,6 +584,7 @@ export const ASK_SCRIPT = `<script>
         } else {
           const button = make("button", "ask-undo", "Undo");
           button.setAttribute("type", "button");
+          if (u.kind === "tag") button.setAttribute("data-undo-id", u.body.changeId);
           if (typeof u.title === "string") button.setAttribute("title", u.title);
           button.addEventListener("click", () => runUndo(u, button, note));
           row.appendChild(button);
@@ -767,6 +787,7 @@ export const ASK_SCRIPT = `<script>
       again.box.remove();
     }
     const changes = Array.isArray(answer.changes) ? answer.changes : [];
+    for (const c of changes) if (isObj(c) && c.kind === "tag-undo") markTagUndone(c.undoId);
     const lines = changeLines(changes);
     const cards = isObj(answer.cards) ? answer.cards : {};
     if (answer.ok) {

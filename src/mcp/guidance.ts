@@ -67,9 +67,9 @@ export const DELETE_TAG = `Take a tag off every link and remove it. The links st
 
 The result has links (how many links had the tag) and undoId. Tell the owner what changed and that it can be undone for an hour: if they ask, send undoId to undo_tag_change.`;
 
-export const UNDO_TAG_CHANGE = `Put back what merge_tags or delete_tag changed, using the undoId it returned. Use it when the owner asks to undo that. It works for one hour; after that it is too late, so offer to reverse it by hand instead: rename the tag back with update_tag, or add the tag again to the links the owner names with update_link.
+export const UNDO_TAG_CHANGE = `Put back what merge_tags or delete_tag changed, using the undoId it returned. Use it when the owner asks to undo that. It works for one hour; after that it is too late. A refusal that says it is too late may also mean it may already have been undone (the owner can press Undo too, and each undoId works once): call list_tags before anything else. If the tags are still changed, offer to reverse it by hand: rename the tag back with update_tag, or add the tag again to the links the owner names with update_link. Do not offer that if list_tags shows the change already undone.
 
-If the tags changed since, nothing is undone and you are told so. If a later change to the same tags can still be undone, undo that one first. The result has the tags that came back, each with its links.`;
+If the tags changed since, nothing is undone and you are told so. If a later change to the same tags is in the way, nothing is undone either; undoing that one may not be enough, so tell the owner and ask the owner before undoing any other change. The result has the tags that came back, each with its links.`;
 
 export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to mark it stale (update_link state "archived") if the owner says it's stale.`;
 

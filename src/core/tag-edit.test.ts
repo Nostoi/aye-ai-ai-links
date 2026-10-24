@@ -245,7 +245,9 @@ describe("undoTagChange", () => {
     });
     const e = await failure(undoTagChange(deps, "o", "x"));
     expect(e.code).toBe("not_found");
-    expect(e.message).toBe("It's too late to undo: that change can no longer be undone.");
+    expect(e.message).toBe(
+      "It's too late to undo: that change was already undone, or can no longer be undone.",
+    );
     expect(since).toEqual(new Date(NOW.getTime() - TAG_UNDO_WINDOW_MS));
   });
 
@@ -254,7 +256,7 @@ describe("undoTagChange", () => {
     const e = await failure(undoTagChange(deps, "o", "x"));
     expect(e.code).toBe("conflict");
     expect(e.message).toBe(
-      "A later change to the same tags can still be undone, so nothing was undone. Undo the later change first.",
+      "A later change to the same tags is in the way, so nothing was undone. Undoing that one first may not be enough.",
     );
   });
 

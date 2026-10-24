@@ -79,6 +79,48 @@ describe("Ask AI and tag merges and deletes", () => {
     expect(sent).toContain("undo_tag_change");
   });
 
+  it("records an AI undo as a change naming the tags it put back", async () => {
+    const { deps, session } = await world();
+    const merge = await runChatTurn({
+      model: scriptedModel("Fake", [
+        calling("merge_tags", { name: "Art", into: "Design" }),
+        { text: "Merged.", toolCalls: [] },
+      ]),
+      session,
+      history: [],
+      text: "merge art into design",
+    });
+    const merged = await chatAnswer(deps, CALLER.owner, "Fake", merge);
+    const undoId = (merged.changes[0] as { undoId: string }).undoId;
+
+    const undo = await runChatTurn({
+      model: scriptedModel("Fake", [
+        calling("undo_tag_change", { undoId }),
+        { text: "Undone.", toolCalls: [] },
+      ]),
+      session,
+      history: [],
+      text: "undo that",
+    });
+    const undone = await chatAnswer(deps, CALLER.owner, "Fake", undo);
+    // One session serves every turn here, so it still lists the earlier merge.
+    const undos = (changes: unknown[]) =>
+      changes.filter((c) => (c as { kind: string }).kind === "tag-undo");
+    expect(undos(undone.changes)).toEqual([{ kind: "tag-undo", undoId, tags: ["Art", "Design"] }]);
+
+    // A second try is refused, and records nothing.
+    const again = await runChatTurn({
+      model: scriptedModel("Fake", [
+        calling("undo_tag_change", { undoId }),
+        { text: "It was already undone.", toolCalls: [] },
+      ]),
+      session,
+      history: [],
+      text: "undo that again",
+    });
+    expect(undos((await chatAnswer(deps, CALLER.owner, "Fake", again)).changes)).toHaveLength(1);
+  });
+
   it("keeps the undoId in the history of a turn that then failed", async () => {
     const { deps, session } = await world();
     const model = scriptedModel("Fake", [

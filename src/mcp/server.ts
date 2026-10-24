@@ -536,14 +536,25 @@ export function buildMcpServer(
       outputSchema: tagsOutput,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: false,
       },
     },
-    async ({ undoId }) => ({
-      tags: (await undoTagChange(deps, owner, undoId)).map(({ tag, links }) => ({ ...tag, links })),
-    }),
+    async ({ undoId }) => {
+      const back = await undoTagChange(deps, owner, undoId).catch((error) => {
+        // Core's text is shared with the Tags page; list_tags is the agent's way to check.
+        if (error instanceof CoreError && error.code === "not_found") {
+          throw new CoreError(
+            error.code,
+            `${error.message} It may already have been undone, so check list_tags before offering to reverse it by hand.`,
+          );
+        }
+        throw error;
+      });
+      record({ kind: "tag-undo", undoId, tags: back.map(({ tag }) => tag.name) });
+      return { tags: back.map(({ tag, links }) => ({ ...tag, links })) };
+    },
   );
 
   register(

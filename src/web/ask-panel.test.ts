@@ -641,6 +641,30 @@ describe("the change lines", () => {
     expect(t.messages().querySelector("button")).toBeNull();
   });
 
+  it.each([
+    [{ kind: "tag-rename", from: "Art", name: "Arts" }, "Renamed Art to Arts.Tags", false],
+    [
+      { kind: "tag-merge", name: "Art", into: "Design", links: 3, undoId: "u1" },
+      "Merged Art into Design (3 links moved).TagsUndo",
+      true,
+    ],
+    [
+      { kind: "tag-merge", name: "Art", into: "Design", links: 1, undoId: "u1" },
+      "Merged Art into Design (1 link moved).TagsUndo",
+      true,
+    ],
+    [
+      { kind: "tag-delete", name: "Art", links: 2, undoId: "u2" },
+      "Deleted the tag Art (it was on 2 links).TagsUndo",
+      true,
+    ],
+  ])("says what happened for %j", async (change, words, undo) => {
+    const t = await lineFor(change);
+    expect(t.lines()).toEqual([words]);
+    expect(t.messages().querySelector(".ask-line a")?.getAttribute("href")).toBe("/tags");
+    expect(t.messages().querySelectorAll("button.ask-undo")).toHaveLength(undo ? 1 : 0);
+  });
+
   const entry = (kind: string, text: string, source: string) => ({
     entry: kind,
     id: "1",
@@ -1630,5 +1654,73 @@ describe("the Earlier line", () => {
     p.click("ask-restart");
     expect(earlier(p)).toBeNull();
     expect(p.panel().messages.children).toHaveLength(0);
+  });
+});
+
+describe("undoing a tag merge from the panel", () => {
+  const merge = { kind: "tag-merge", name: "Art", into: "Design", links: 2, undoId: "u1" };
+  const LINE = "Merged Art into Design (2 links moved).Tags";
+  const tagTalk = (undo: Reply) => {
+    const t = talk((call) => (call.url === "/ai/chat" ? okAnswer({ changes: [merge] }) : undo));
+    const events: string[] = [];
+    t.document.addEventListener("aye-tags-changed", () => events.push("changed"));
+    return { t, events };
+  };
+  const undoButton = (t: ReturnType<typeof talk>) =>
+    t.messages().querySelector("button.ask-undo") as HTMLButtonElement;
+
+  it("posts the undoId to /tags/undo as changeId and shows Undone.", async () => {
+    const { t } = tagTalk({ status: 200, body: { tags: [] } });
+    await t.say("go");
+    await t.clickEl(undoButton(t));
+    expect(t.net.calls.at(-1)).toEqual({
+      url: "/tags/undo",
+      method: "POST",
+      body: { changeId: "u1" },
+    });
+    expect(t.lines()[0]).toBe(`${LINE}Undone.`);
+    expect(t.net.calls.some((c) => c.url.startsWith("/ai/card/"))).toBe(false);
+    expect(t.stateNow().entries[2].lines[0].undo.done).toBe(true);
+  });
+
+  it("shows core's refusal and leaves Undo to try again", async () => {
+    const { t, events } = tagTalk({
+      status: 409,
+      body: { code: "conflict", message: "Those tags changed since." },
+    });
+    await t.say("go");
+    const button = undoButton(t);
+    await t.clickEl(button);
+    expect(t.lines()[0]).toBe(`${LINE}UndoThose tags changed since.`);
+    expect(button.disabled).toBe(false);
+    expect(t.stateNow().entries[2].lines[0].undo.done).toBeUndefined();
+    expect(events).toEqual(["changed"]);
+  });
+
+  it("tells the page its tags changed after the merge and after the Undo", async () => {
+    const { t, events } = tagTalk({ status: 200, body: { tags: [] } });
+    await t.say("go");
+    expect(events).toEqual(["changed"]);
+    await t.clickEl(undoButton(t));
+    expect(events).toEqual(["changed", "changed"]);
+  });
+
+  it("does not tell the page after a reply with no tag change", async () => {
+    const t = talk(() => okAnswer({ changes: [link("5")] }));
+    const events: string[] = [];
+    t.document.addEventListener("aye-tags-changed", () => events.push("changed"));
+    await t.say("go");
+    expect(events).toEqual([]);
+  });
+
+  it("keeps the Undo after a reload, and drops one stored without a changeId", async () => {
+    const { t } = tagTalk({ status: 200, body: { tags: [] } });
+    await t.say("go");
+    const stored = t.stateNow();
+    const undos = (s: unknown) =>
+      load({ stored: s }).panel().messages.querySelectorAll("button.ask-undo").length;
+    expect(undos(stored)).toBe(1);
+    stored.entries[2].lines[0].undo.body = {};
+    expect(undos(stored)).toBe(0);
   });
 });

@@ -31,6 +31,7 @@ You talk to your AI; it uses the library for you.
   - **What it can do.** Paste a link to save it, ask about your links, or ask it to change one. It uses the same tools as your other AIs, as you, and it can't delete links.
   - **Its answers.** Each answer is a sentence or two in plain text, with up to five of the links it means as picture cards; any more are named in the text. Its guesses are marked "(a guess)". Under the answer is a list of every change it made.
     - A new save, an edit to a link's title, summary, why or tags, and a Keep handy change each have **Undo**.
+    - A tag it merged into another or deleted has **Undo** too, for an hour, and a renamed tag is listed without one. Say "undo that" in your next message and it can undo the merge or delete. If the Tags page is open, it reloads to show the change.
     - A saved or changed link's card also has **Edit**, which opens the same edit dialog as a card's **⋯** menu, on any page; it isn't offered after a save is undone. Opened from the panel, the dialog has no **Delete link**.
     - Undo of an edit works only while the link still holds what the AI wrote.
   - **It knows the page you are on.** Say "these" or "here" and it means the links the page shows. When an answer names links on that page, the page's other cards dim on a wide screen until your next message, **Start over** or closing the panel.

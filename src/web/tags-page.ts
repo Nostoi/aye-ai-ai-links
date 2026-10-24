@@ -494,6 +494,8 @@ if (list) {
     return activate(row.querySelector('[data-action="rename"]'), row);
   });
 }
+// The Ask AI panel changed a tag: the rows, counts and offers here are stale, so draw them again.
+document.addEventListener("aye-tags-changed", () => location.reload());
 </script>`,
     { menu: true, undo: true, ask },
   );

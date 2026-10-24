@@ -22,6 +22,10 @@ export type Change =
     }
   | { kind: "handy"; linkId: string; change: ToolChange }
   | { kind: "tag"; name: string; tagKind: TagKind }
+  | { kind: "tag-rename"; from: string; name: string }
+  /** `links`: the links the tag was moved or removed from. `undoId` is the tool's own, for `undo_tag_change`. */
+  | { kind: "tag-merge"; name: string; into: string; links: number; undoId: string }
+  | { kind: "tag-delete"; name: string; links: number; undoId: string }
   | { kind: "profile"; added: ProfileEntry[]; edited: ProfileEntry[]; removed: ProfileEntry[] }
   | { kind: "surfaced"; linkIds: string[] };
 

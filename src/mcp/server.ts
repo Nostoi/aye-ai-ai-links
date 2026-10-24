@@ -452,7 +452,10 @@ export function buildMcpServer(
         return { tag };
       }
       const done = await renameTag(deps, owner, { name, newName: newName as string });
-      if ("renamed" in done) return { tag: done.renamed };
+      if ("renamed" in done) {
+        record({ kind: "tag-rename", from: name, name: done.renamed.name });
+        return { tag: done.renamed };
+      }
       const { taken, links } = done;
       throw new CoreError(
         "conflict",
@@ -493,7 +496,14 @@ export function buildMcpServer(
       },
     },
     async (args) => {
-      const { tag, links, changeId } = await mergeTags(deps, owner, args);
+      const { tag, links, changeId, moved } = await mergeTags(deps, owner, args);
+      record({
+        kind: "tag-merge",
+        name: args.name,
+        into: tag.name,
+        links: moved,
+        undoId: changeId,
+      });
       return { tag, links, undoId: changeId };
     },
   );
@@ -513,6 +523,7 @@ export function buildMcpServer(
     },
     async (args) => {
       const { moved, changeId } = await deleteTag(deps, owner, args);
+      record({ kind: "tag-delete", name: args.name, links: moved, undoId: changeId });
       return { links: moved, undoId: changeId };
     },
   );

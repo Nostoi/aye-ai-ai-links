@@ -64,6 +64,20 @@ const wroteSomething = (change: Change) =>
     return value(change.change.tool[key]) !== value(change.change.previous?.[key]);
   });
 
+/**
+ * The panel remembers only the reply's text, so a merge or delete's undoId is written into it
+ * for the next turn's `undo_tag_change` (the model need not print it). Core checks the owner.
+ */
+const undoWords = (change: Extract<Change, { undoId: string }>) =>
+  ` (undo_tag_change undoId ${change.undoId})`;
+const withUndoIds = (remembered: string, changes: Change[]) => {
+  const undoable = changes.filter((c) => c.kind === "tag-merge" || c.kind === "tag-delete");
+  if (undoable.length === 0) return remembered;
+  const lines = undoable.map((c) => `\n- ${c.kind}${changeSubject(c)}`).join("");
+  // At the front: the panel cuts a long reply at its end.
+  return `[Tag changes this turn:${lines}]\n${remembered}`;
+};
+
 /** The id (or name) a change line names. */
 const changeSubject = (change: Change): string => {
   switch (change.kind) {
@@ -72,6 +86,12 @@ const changeSubject = (change: Change): string => {
       return ` ${change.linkId}`;
     case "tag":
       return ` ${change.name}`;
+    case "tag-rename":
+      return ` ${change.from} to ${change.name}`;
+    case "tag-merge":
+      return ` ${change.name} into ${change.into}${undoWords(change)}`;
+    case "tag-delete":
+      return ` ${change.name}${undoWords(change)}`;
     default:
       return "";
   }
@@ -143,7 +163,7 @@ export async function chatAnswer(
     if (loaded) cards[id] = loaded.html;
   }
   if (result.ok) {
-    const remember = parts.remembered.trim() || `${ai} gave no answer.`;
+    const remember = withUndoIds(parts.remembered.trim() || `${ai} gave no answer.`, changes);
     return { ok: true, ai, segments: parts.segments, remember, cards, changes };
   }
   const message = `${ai} ${changes.length === 0 ? "didn't answer" : "stopped before it finished"}: ${result.reason}.`;

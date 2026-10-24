@@ -8,31 +8,34 @@ const SUMMARY_RULE = `The server may replace a summary you wrote yourself. Send 
 
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 
-The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline, or it is a bad moment, infer it from the conversation and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
+The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline or it is a bad moment, infer it and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
 
 Saving:
-- If you already know the summary, why and tags, send them all in one save_link call. Otherwise save first, then call update_link.
-- Saving a URL that is already saved returns the existing link (created: false). It only fills in a missing why. It also discards any tags you sent. Use update_link for anything else, with the full tag set if you want tags changed.
+- If you know the summary, why and tags, send them in one save_link call; otherwise save first, then update_link.
+- A URL already saved returns the existing link (created: false). It only fills in a missing why and discards any tags you sent. Use update_link for anything else, with the full tag set to change tags.
+- After saving, if a tag you used or one in filingContext nearly duplicates another (same meaning, different spelling or plural), offer merge_tags once. Not for topic overlap.
 
 Tag kinds: ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
 
-Dates are full ISO-8601 timestamps with an offset or Z, such as 2026-10-01T09:30:00Z.
+Dates are ISO-8601 with an offset or Z, such as 2026-10-01T09:30:00Z.
 
-Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link, because links are also matched by meaning. Results are ranked, not filtered, so check that each one fits; when none does, try other words or a filter before saying it isn't saved. To list or count all, use list_links.
+Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). Links are also matched by meaning. Results are ranked, not filtered, so check that each one fits; when none does, try other words or a filter before saying it isn't saved. To list or count all, use list_links.
 
-Profile: get_profile (or save_link's profile) has notes about the owner and what they are working on. Read it before you infer a why or tags. Label what you add with the same stated, asked or inferred rule, and present inferred notes to the owner as guesses. When the owner says what they are working on, add a focus entry with add_profile. Change or remove a note with edit_profile only when the owner asks or confirms.`;
+Profile: get_profile (or save_link's profile) has notes about the owner and what they are working on. Read it before you infer a why or tags. Label what you add the same way, and present inferred notes as guesses. When the owner says what they are working on, add a focus entry with add_profile. Change or remove a note with edit_profile only when the owner asks or confirms.`;
 
 export const SAVE_LINK = `Save a link to the owner's library.
 
-Send summary, why and tags in the same call when you know them. Give the why as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context. ${SUMMARY_RULE}
+Send summary, why and tags in one call when you know them. Give the why as {text, source}: "stated" if the owner said it, "asked" if they answered your question, "inferred" if you worked it out. ${SUMMARY_RULE}
 
-If the URL is already saved you get the existing link back with created: false. Only a missing why is filled in, and the tags you sent (a requested project too) are discarded; use update_link to change anything else, with the full tag set to file it.
+A URL already saved returns the existing link with created: false. Only a missing why is filled in, and the tags you sent (a requested project too) are discarded; use update_link to change anything else, with the full tag set.
 
-Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. If the returned tag's kind differs from what you asked for, the tag already existed: call update_tag if the owner wants it changed, never a near-duplicate name.
+Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. If the returned kind differs from your request, the tag already existed: call update_tag if the owner wants it changed.
 
 ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
 
-Saving a new link fetches its page. If that is done within a few seconds, link.snapshot shows the page's status, title, description and image, and snapshotText its opening text ({text, truncated}, or null when there is none). A snapshot status of "pending" means the page has not been fetched yet: call get_link later to see it.
+Saving a new link fetches its page. Within a few seconds link.snapshot shows its status, title, description and image, and snapshotText its opening text ({text, truncated}, or null). A "pending" status means the page has not been fetched yet: call get_link later.
+
+After saving, if a tag you used or one in filingContext nearly duplicates another (same meaning, different spelling or plural), offer merge_tags once. Not for topic overlap.
 
 Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" at most once, only after a save returns created: true: send "keep" or "not_handy" with "asked" through update_link. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.`;
 
@@ -44,11 +47,29 @@ handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and n
 
 Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
 
-export const UPDATE_TAG = `Change a tag between topic and project. Use this only when the owner tells you to, for example "make home batteries a project"; never on your own guess.
+export const UPDATE_TAG = `Change a tag: its kind between topic and project, or its name. Send kind or newName, not both; to change both, make two calls. Use this only when the owner tells you to, for example "make home batteries a project" or "rename it to X"; never on your own guess.
 
 name matches the existing tag ignoring case and extra spaces. kind is "topic" or "project". Calls that start after this one returns see the new kind: every link with the tag, search_links' project filter and save_link's filingContext.
 
-The result's kindSource becomes "stated". Asking for the kind a tag already has confirms it the same way and leaves everything else as it is, including a done status. Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again. A name with no tag is an error: tags are created by tagging a link.`;
+The result's kindSource becomes "stated". Asking for the kind a tag already has confirms it the same way and leaves everything else as it is, including a done status. Changing the kind clears a project's done status, so turning a project into a topic and back makes it active again.
+
+newName renames the tag on every link, keeping its kind, colour and links. Rename only when the owner asks, or confirms a merge you proposed. Say what changed; to reverse it, rename it back. If another tag already has that name, nothing changes and you get an error naming it: ask the owner, then call merge_tags if they want the two joined. A name with no tag is an error: tags are created by tagging a link.`;
+
+export const LIST_TAGS = `List every tag the owner has, each with its kind, kindSource and links, the number of links that have it. Use it to answer "are there tags I should merge?" or to find the exact name for update_tag, merge_tags or delete_tag. Look for near-duplicates: the same meaning with different spelling, hyphens, case or plural. Tags that only overlap in topic are not duplicates.`;
+
+export const MERGE_TAGS = `Move every link with the tag name onto the tag into, and remove name. Use this only when the owner asks, or confirms a merge you proposed; never on your own. Both names match existing tags ignoring case and extra spaces. A link that has both ends up with into once.
+
+into keeps its own colour, description and kind, taking name's colour or description only if it had none. It is pinned if either tag was. It takes name's project kind only when name was a project the owner marked and into was a topic.
+
+The result has the kept tag, links (how many links have it now) and undoId. Tell the owner what changed and that it can be undone for an hour: if they ask, send undoId to undo_tag_change.`;
+
+export const DELETE_TAG = `Take a tag off every link and remove it. The links stay; only the tag goes. Use this only when the owner asks; never on your own. name matches the existing tag ignoring case and extra spaces.
+
+The result has links (how many links had the tag) and undoId. Tell the owner what changed and that it can be undone for an hour: if they ask, send undoId to undo_tag_change.`;
+
+export const UNDO_TAG_CHANGE = `Put back what merge_tags or delete_tag changed, using the undoId it returned. Use it when the owner asks to undo that. It works for one hour; after that it is too late. A refusal that says it is too late may also mean it may already have been undone (the owner can press Undo too, and each undoId works once): call list_tags before anything else. A tag with the old name may be back for other reasons (saving a link with that name makes a new tag), so do not conclude from list_tags that it was undone. Tell the owner what list_tags shows; the owner decides whether to reverse it by hand, which means adding the old tag again with update_link to the links the owner names.
+
+If the tags changed since, nothing is undone and you are told so. If a later change to the same tags is in the way, nothing is undone either; undoing that one may not be enough, so tell the owner and ask the owner before undoing any other change. The result has the tags that came back, each with its links.`;
 
 export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to mark it stale (update_link state "archived") if the owner says it's stale.`;
 

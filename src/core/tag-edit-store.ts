@@ -76,7 +76,7 @@ export interface TagEditStore {
   /**
    * Puts back exactly what the merge or delete changed: the removed tag, its old keys, the kept
    * tag's settings and each remaining link's tags with their sources and positions. "conflict",
-   * writing nothing, when any of that has changed since. Null when no receipt with this id at or
+   * writing nothing, when any of that has changed since; "blocked", writing nothing, when it hasn't but a newer receipt that can itself still be undone shares its ground. Null when no receipt with this id at or
    * after `since`. On "undone", the receipt is removed. Each tag comes with its live count:
    * `[removed, kept]` for a merge, `[removed]` for a delete.
    */
@@ -84,7 +84,7 @@ export interface TagEditStore {
     owner: OwnerId,
     changeId: string,
     since: Date,
-  ): Promise<{ tags: { tag: Tag; links: number }[] } | "conflict" | null>;
+  ): Promise<{ tags: { tag: Tag; links: number }[] } | "conflict" | "blocked" | null>;
   /** The live key an old key now reaches: a live tag with `key` wins, then an alias. Null for neither. */
   currentKey(owner: OwnerId, key: string): Promise<string | null>;
 }

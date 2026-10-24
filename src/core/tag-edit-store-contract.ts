@@ -351,10 +351,15 @@ export function describeTagEditStoreContract(
     });
 
     describe("undo is refused after a later change", () => {
-      /** Undo answers "conflict" and writes nothing; once `revert` puts the change back, it is undone. */
-      const refused = async (changeId: string, ids: string[], revert?: () => Promise<unknown>) => {
+      /** Undo answers `refusal` and writes nothing: "blocked" when a newer undoable change shares its ground, else "conflict". Once `revert` puts the change back, it is undone. */
+      const refused = async (
+        changeId: string,
+        ids: string[],
+        revert?: () => Promise<unknown>,
+        refusal: "conflict" | "blocked" = "conflict",
+      ) => {
         const before = await world(A, ids);
-        expect(await undo(changeId)).toBe("conflict");
+        expect(await undo(changeId)).toBe(refusal);
         expect(await world(A, ids)).toEqual(before);
         if (revert) {
           await revert();
@@ -369,7 +374,7 @@ export function describeTagEditStoreContract(
         await refused(changeId, [id, other]);
         await h.links.update(A, other, { tags: [] });
         await remove("x");
-        await refused(changeId, [id, other]);
+        await refused(changeId, [id, other], undefined, "blocked");
       });
 
       it("a newer change that removed the same key stays undoable", async () => {
@@ -379,7 +384,7 @@ export function describeTagEditStoreContract(
         const fresh = await save(A, [mention("a")]);
         const freshTag = await tag(A, "a");
         const second = await remove("a");
-        await refused(first.changeId, [one, fresh]);
+        await refused(first.changeId, [one, fresh], undefined, "blocked");
         expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
         expect(await marks(A, fresh)).toEqual([["a", "stated"]]);
       });
@@ -453,7 +458,7 @@ export function describeTagEditStoreContract(
         await refused(changeId, [id, other]);
         await h.links.update(A, other, { tags: [] });
         await remove("w");
-        await refused(changeId, [id, other]);
+        await refused(changeId, [id, other], undefined, "blocked");
       });
 
       it("a newer change that removed a tag with a recorded old key stays undoable", async () => {
@@ -463,7 +468,7 @@ export function describeTagEditStoreContract(
         await rename("a", "b");
         const freshTag = await tag(A, "b");
         const second = await remove("b");
-        await refused(first.changeId, [one, fresh]);
+        await refused(first.changeId, [one, fresh], undefined, "blocked");
         expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
         expect(await marks(A, fresh)).toEqual([["b", "stated"]]);
       });
@@ -476,7 +481,7 @@ export function describeTagEditStoreContract(
         await rename("k", "m");
         const freshTag = await tag(A, "m");
         const second = await remove("m");
-        await refused(first.changeId, [one, fresh]);
+        await refused(first.changeId, [one, fresh], undefined, "blocked");
         expect(await undo(second.changeId)).toEqual({ tags: [{ tag: freshTag, links: 1 }] });
         expect(await marks(A, fresh)).toEqual([["m", "stated"]]);
       });
@@ -497,7 +502,7 @@ export function describeTagEditStoreContract(
           const marksBefore = await Promise.all(ids.map((id) => marks(A, id)));
           const x = await tag(A, "x");
           const second = await remove("x");
-          await refused(first.changeId, ids);
+          await refused(first.changeId, ids, undefined, "blocked");
           expect(await undo(second.changeId)).toEqual({ tags: [{ tag: x, links: 3 }] });
           expect(x).toMatchObject({ pinned: true, color: "blue" });
           expect(await h.links.listTags(A)).toEqual(tagsBefore);
@@ -592,7 +597,7 @@ export function describeTagEditStoreContract(
         const second = await merge("b", "c", teal);
         const merged = await world(A, [one, two]);
 
-        expect(await undo(first.changeId)).toBe("conflict");
+        expect(await undo(first.changeId)).toBe("blocked");
         expect(await world(A, [one, two])).toEqual(merged);
 
         expect(await undo(second.changeId)).not.toBe("conflict");

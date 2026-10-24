@@ -36,6 +36,14 @@ import { getStats, parseWindow, STATS_WINDOWS, statsReading } from "../core/stat
 import type { StatsReadingStore } from "../core/stats-reading-store.js";
 import type { StatsStore } from "../core/stats-store.js";
 import type { LinkStore } from "../core/store.js";
+import {
+  deleteTag,
+  listTagsWithCounts,
+  mergeTags,
+  renameTag,
+  undoTagChange,
+} from "../core/tag-edit.js";
+import type { TagEditStore } from "../core/tag-edit-store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
@@ -54,20 +62,24 @@ import {
 import {
   addProfileOutput,
   advertisedOpen,
+  deleteTagOutput,
   getDigestOutput,
   getLinkOutput,
   getProfileOutput,
   getStatsOutput,
   linkResultOutput,
   listLinksOutput,
+  mergeTagsOutput,
   profileOutput,
   saveLinkOutput,
   searchLinksOutput,
+  tagsOutput,
   updateTagOutput,
 } from "./output-schemas.js";
 
 export type McpDeps = {
   store: LinkStore;
+  tagEdits: TagEditStore;
   tools: ToolStore;
   /** Dead-link checks: core leaves gone links out of the digest (#128). */
   checks: LinkCheckStore;
@@ -174,7 +186,15 @@ const listLinksInput = z.object({
   cursor: z.string().optional(),
   limit: z.number().optional(),
 });
-const updateTagInput = z.object({ name: z.string(), kind: z.enum(TAG_KINDS) });
+const updateTagInput = z.object({
+  name: z.string(),
+  kind: z.enum(TAG_KINDS).optional(),
+  newName: z.string().optional(),
+});
+const listTagsInput = z.strictObject({});
+const mergeTagsInput = z.object({ name: z.string(), into: z.string() });
+const deleteTagInput = z.object({ name: z.string() });
+const undoTagChangeInput = z.object({ undoId: z.string() });
 const getLinkInput = z.object({ id: z.string() });
 // A strict empty object advertises additionalProperties: false, the schema MCP recommends for a tool with no parameters.
 const getProfileInput = z.strictObject({});
@@ -417,10 +437,123 @@ export function buildMcpServer(
         openWorldHint: false,
       },
     },
-    async ({ name, kind }) => {
-      const tag = await changeTagKind(deps, owner, { name, kind });
-      record({ kind: "tag", name: tag.name, tagKind: tag.kind });
-      return { tag };
+    async ({ name, kind, newName }) => {
+      if ((kind === undefined) === (newName === undefined)) {
+        throw new CoreError(
+          "invalid_input",
+          kind === undefined
+            ? "Send kind or newName. update_tag changes one thing per call."
+            : "Send kind or newName, not both. To change the kind and the name, make two calls.",
+        );
+      }
+      if (kind !== undefined) {
+        const tag = await changeTagKind(deps, owner, { name, kind });
+        record({ kind: "tag", name: tag.name, tagKind: tag.kind });
+        return { tag };
+      }
+      const done = await renameTag(deps, owner, { name, newName: newName as string });
+      if ("renamed" in done) {
+        record({ kind: "tag-rename", from: name, name: done.renamed.name });
+        return { tag: done.renamed };
+      }
+      const { taken, links } = done;
+      throw new CoreError(
+        "conflict",
+        `A tag called "${taken.name}" already exists (${links === 1 ? "1 link" : `${links} links`}), so nothing was renamed. Ask the owner whether to merge "${name}" into it; if they say yes, call merge_tags.`,
+      );
+    },
+  );
+
+  register(
+    "list_tags",
+    {
+      description: guidance.LIST_TAGS,
+      inputSchema: listTagsInput,
+      outputSchema: tagsOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => ({
+      tags: (await listTagsWithCounts(deps, owner)).map(({ tag, links }) => ({ ...tag, links })),
+    }),
+  );
+
+  register(
+    "merge_tags",
+    {
+      description: guidance.MERGE_TAGS,
+      inputSchema: mergeTagsInput,
+      outputSchema: mergeTagsOutput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      const { tag, links, changeId, moved } = await mergeTags(deps, owner, args);
+      record({
+        kind: "tag-merge",
+        name: args.name,
+        into: tag.name,
+        links: moved,
+        undoId: changeId,
+      });
+      return { tag, links, undoId: changeId };
+    },
+  );
+
+  register(
+    "delete_tag",
+    {
+      description: guidance.DELETE_TAG,
+      inputSchema: deleteTagInput,
+      outputSchema: deleteTagOutput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      const { moved, changeId } = await deleteTag(deps, owner, args);
+      record({ kind: "tag-delete", name: args.name, links: moved, undoId: changeId });
+      return { links: moved, undoId: changeId };
+    },
+  );
+
+  register(
+    "undo_tag_change",
+    {
+      description: guidance.UNDO_TAG_CHANGE,
+      inputSchema: undoTagChangeInput,
+      outputSchema: tagsOutput,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ undoId }) => {
+      const back = await undoTagChange(deps, owner, undoId).catch((error) => {
+        // Core's text is shared with the Tags page; list_tags is the agent's way to check.
+        if (error instanceof CoreError && error.code === "not_found") {
+          throw new CoreError(
+            error.code,
+            `${error.message} It may already have been undone: check list_tags and tell the owner what it shows.`,
+          );
+        }
+        throw error;
+      });
+      record({ kind: "tag-undo", undoId, tags: back.map(({ tag }) => tag.name) });
+      return { tags: back.map(({ tag, links }) => ({ ...tag, links })) };
     },
   );
 

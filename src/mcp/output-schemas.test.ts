@@ -112,6 +112,8 @@ const editProfileStep = (args: Record<string, unknown>): Step => ({ tool: "edit_
 const getProfileStep: Step = { tool: "get_profile", args: {} };
 const statsStep: Step = { tool: "get_stats", args: { window: 30 } };
 const digestStep: Step = { tool: "get_digest", args: {} };
+const listTagsStep: Step = { tool: "list_tags", args: {} };
+const tagStep = (tool: string, args: Record<string, unknown>): Step => ({ tool, args });
 
 /** A copy of `value` with one unknown key added to every plain object in it, as a later server version might send. */
 function withAddedField(value: Json): { value: Json; added: number } {
@@ -143,14 +145,18 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     const tools = await listTools(app, era);
     expect(tools.map((t) => t.name).sort()).toEqual([
       "add_profile",
+      "delete_tag",
       "edit_profile",
       "get_digest",
       "get_link",
       "get_profile",
       "get_stats",
       "list_links",
+      "list_tags",
+      "merge_tags",
       "save_link",
       "search_links",
+      "undo_tag_change",
       "update_link",
       "update_tag",
     ]);
@@ -282,6 +288,11 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     const digest = await run(digestStep); // the reading picks, then one check
     const secondDigest = await run(digestStep); // only the other due tool's check
     const emptyDigest = await run(digestStep); // everything due was just surfaced
+    await run(listTagsStep);
+    await run(tagStep("update_tag", { name: "Side", newName: "Sideline" }));
+    const merged = await run(tagStep("merge_tags", { name: "Sideline", into: "Reading" }));
+    await run(tagStep("undo_tag_change", { undoId: merged.undoId }));
+    await run(tagStep("delete_tag", { name: "Sideline" }));
 
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
@@ -302,7 +313,10 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     expect(digest.links[0].reasons[0].focus).toMatchObject({ text: "quokka", source: "inferred" });
 
     const links: Json[] = outputs
-      .flatMap((o) => [o.link, ...(o.links ?? []).map((x: Json) => x.link ?? x)])
+      .flatMap((o) => [
+        o.link,
+        ...(Array.isArray(o.links) ? o.links : []).map((x: Json) => x.link ?? x),
+      ])
       .filter(Boolean);
     const tagsSeen: Json[] = outputs
       .flatMap((o) => [
@@ -428,7 +442,10 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       const res = (await callTool(app, era, tool, args)).result;
       expect(res.isError, `${tool}: ${JSON.stringify(res)}`).toBeUndefined();
       const { value, added } = withAddedField(res.structuredContent);
-      expect(added, `${tool} has nested objects to widen`).toBeGreaterThan(1);
+      // delete_tag answers a flat object, so it has the one level to widen.
+      expect(added, `${tool} has nested objects to widen`).toBeGreaterThan(
+        tool === "delete_tag" ? 0 : 1,
+      );
       const check = cached[tool];
       expect(check?.(value), `${tool}: ${ajv.errorsText(check?.errors)}`).toBe(true);
       sampled.add(tool);
@@ -463,6 +480,12 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(statsStep);
     const digest = await run(digestStep);
     expect(digest.links[0].reasons[0].focus.addedLater).toBe(1);
+    await run(save({ url: "https://example.com/b", tags: [{ name: "Side", source: "stated" }] }));
+    await run(listTagsStep);
+    await run(tagStep("update_tag", { name: "Side", newName: "Sideline" }));
+    const merged = await run(tagStep("merge_tags", { name: "Sideline", into: "Aye Launch" }));
+    await run(tagStep("undo_tag_change", { undoId: merged.undoId }));
+    await run(tagStep("delete_tag", { name: "Sideline" }));
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
     // Enums stay closed: a new enum value is still a contract change.

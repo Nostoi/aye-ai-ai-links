@@ -9,8 +9,12 @@ export const TAG_UNDO_WINDOW_MS = 3_600_000;
 
 type TagEditDeps = { store: LinkStore; tagEdits: TagEditStore; now: () => Date };
 
-const TOO_LATE = "It's too late to undo: that change can no longer be undone.";
+// Also what the Tags page shows: it may already have been undone, from there or from an AI.
+const TOO_LATE =
+  "It's too late to undo: that change was already undone, or can no longer be undone.";
 const UNDO_CONFLICT = "The tags changed since, so nothing was undone.";
+const UNDO_BLOCKED =
+  "A later change to the same tags is in the way, so nothing was undone. Undoing that one first may not be enough.";
 
 const notFound = (name: string) =>
   new CoreError(
@@ -143,6 +147,7 @@ export async function undoTagChange(
   const done = await tagEdits.undoTagChange(owner, changeId, cutoff(now()));
   if (done === null) throw new CoreError("not_found", TOO_LATE);
   if (done === "conflict") throw new CoreError("conflict", UNDO_CONFLICT);
+  if (done === "blocked") throw new CoreError("conflict", UNDO_BLOCKED);
   return done.tags;
 }
 

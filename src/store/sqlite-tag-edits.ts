@@ -177,7 +177,7 @@ export class SqliteTagEditStore implements TagEditStore {
 
   async undoTagChange(owner: OwnerId, changeId: string, since: Date) {
     return this.db
-      .transaction((): { tags: { tag: Tag; links: number }[] } | "conflict" | null => {
+      .transaction((): { tags: { tag: Tag; links: number }[] } | "conflict" | "blocked" | null => {
         const found = this.db
           .prepare(
             "SELECT receipt FROM tag_changes WHERE owner_id = ? AND change_id = ? AND at >= ?",
@@ -186,7 +186,7 @@ export class SqliteTagEditStore implements TagEditStore {
         if (!found) return null;
         const r = JSON.parse(found.receipt) as Receipt;
         if (!this.unchangedSince(owner, r)) return "conflict";
-        if (this.newerReceiptMeets(owner, changeId, since, r)) return "conflict";
+        if (this.newerReceiptMeets(owner, changeId, since, r)) return "blocked";
         const kept = r.kept && this.mustTag(owner, r.kept.key);
         const links = r.links.filter((l) => this.linkExists(owner, l.id));
 

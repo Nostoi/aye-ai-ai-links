@@ -208,22 +208,38 @@ describe("MCP door over HTTP", () => {
     );
   });
 
-  it("lists the eleven tools with their annotations and string dates", async () => {
+  it("lists the fifteen tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
       "add_profile",
+      "delete_tag",
       "edit_profile",
       "get_digest",
       "get_link",
       "get_profile",
       "get_stats",
       "list_links",
+      "list_tags",
+      "merge_tags",
       "save_link",
       "search_links",
+      "undo_tag_change",
       "update_link",
       "update_tag",
     ]);
+    expect(tools.list_tags.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(tools.merge_tags.description.slice(0, 512)).toContain("only when the owner asks");
+    expect(tools.delete_tag.description).toContain("undone for an hour");
+    expect(tools.undo_tag_change.description).toContain("too late");
+    expect(tools.undo_tag_change.description).toContain("already have been undone");
+    expect(tools.undo_tag_change.description).toContain("list_tags");
+    expect(tools.undo_tag_change.description).toMatch(/ask the owner before undoing/);
     const hints = (
       readOnlyHint: boolean,
       destructiveHint: boolean,
@@ -243,6 +259,8 @@ describe("MCP door over HTTP", () => {
     expect(tools.save_link.annotations).toEqual(hints(false, false, true, true));
     expect(tools.update_link.annotations).toEqual(hints(false, true, false));
     expect(tools.update_tag.annotations).toEqual(hints(false, true, true));
+    // Undoing a merge removes the kept tag from links and resets its settings.
+    expect(tools.undo_tag_change.annotations).toEqual(hints(false, true, false));
     expect(tools.update_tag.description.slice(0, 512)).toContain("only when the owner");
     expect(tools.update_tag.description).toContain("done");
     expect(tools.save_link.description).toContain("update_tag");

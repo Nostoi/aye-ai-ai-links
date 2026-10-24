@@ -969,6 +969,8 @@ if (list) {
     return activate(row.querySelector('[data-action="rename"]'), row);
   });
 }
+// The Ask AI panel changed a tag: the rows, counts and offers here are stale, so draw them again.
+document.addEventListener("aye-tags-changed", () => location.reload());
 </script>
 </div>
 <div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>

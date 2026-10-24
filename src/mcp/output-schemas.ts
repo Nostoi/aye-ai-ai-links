@@ -197,6 +197,14 @@ export const listLinksOutput = z.strictObject({
   nextCursor: z.string().nullable(),
 });
 export const updateTagOutput = z.strictObject({ tag: tagOutput });
+const tagWithLinksOutput = tagOutput.extend({ links: z.number().int() });
+export const tagsOutput = z.strictObject({ tags: z.array(tagWithLinksOutput) });
+export const mergeTagsOutput = z.strictObject({
+  tag: tagOutput,
+  links: z.number().int(),
+  undoId: z.string(),
+});
+export const deleteTagOutput = z.strictObject({ links: z.number().int(), undoId: z.string() });
 
 // Adding a reason is a breaking change for a client holding an earlier tools/list (ROADMAP #39).
 const digestReasonOutput = z.discriminatedUnion("kind", [

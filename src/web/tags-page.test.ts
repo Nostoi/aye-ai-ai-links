@@ -86,12 +86,13 @@ function load(
       scrolled.push(el);
     };
   }
+  const reloads: number[] = [];
   new Function("document", "fetch", "setTimeout", "clearTimeout", "location", code)(
     document,
     fetch,
     () => 0,
     () => {},
-    { hash },
+    { hash, reload: () => void reloads.push(1) },
   );
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
   const row = (key: string) => $(`li[data-key="${key}"]`);
@@ -102,8 +103,39 @@ function load(
     (el as HTMLInputElement).value = text;
     el.dispatchEvent(Object.assign(new window.Event(event, { bubbles: true }), { key: "Enter" }));
   };
-  return { $, row, inRow, click, type, settle, sent, document, scrolled, focused: () => focused };
+  return {
+    $,
+    row,
+    inRow,
+    click,
+    type,
+    settle,
+    sent,
+    document,
+    window,
+    reloads,
+    scrolled,
+    focused: () => focused,
+  };
 }
+
+describe("the Tags page when the Ask AI panel changes a tag", () => {
+  const changed = (t: ReturnType<typeof load>) =>
+    t.document.dispatchEvent(new t.window.CustomEvent("aye-tags-changed"));
+
+  it("reloads, so the rows show the tags as they now are", () => {
+    const t = load(() => ({ status: 500 }));
+    expect(t.reloads).toEqual([]);
+    changed(t);
+    expect(t.reloads).toHaveLength(1);
+  });
+
+  it("reloads a page with no tags too, since an Undo can bring one back", () => {
+    const t = load(() => ({ status: 500 }), []);
+    changed(t);
+    expect(t.reloads).toHaveLength(1);
+  });
+});
 
 const pressedOf = (el: HTMLElement) => el.getAttribute("aria-pressed");
 

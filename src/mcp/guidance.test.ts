@@ -191,3 +191,21 @@ describe("Keep handy guidance", () => {
     expect(INSTRUCTIONS).not.toContain("handy");
   });
 });
+
+describe("undo_tag_change guidance", () => {
+  it("after a too-late refusal has the agent show the owner what list_tags shows and let them decide, never judging it already undone", () => {
+    const text = guidance.UNDO_TAG_CHANGE;
+    expect(text).toMatch(/tell the owner what list_tags shows/i);
+    expect(text).toMatch(/owner decides/i);
+    expect(text).not.toMatch(/do not offer/i);
+    expect(text).not.toMatch(/shows the change already undone/i);
+    expect(text.length).toBeLessThanOrEqual(2048);
+  });
+
+  it("reverses a merge or delete by hand only by re-adding the tag with update_link, never by renaming back", () => {
+    const text = guidance.UNDO_TAG_CHANGE;
+    expect(text).toMatch(/update_link/);
+    expect(text).not.toMatch(/update_tag/);
+    expect(text).not.toMatch(/rename/i);
+  });
+});

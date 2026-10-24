@@ -27,6 +27,7 @@ import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
 import type { StatsStore } from "./core/stats-store.js";
 import type { LinkRemover } from "./core/store.js";
+import type { TagEditStore } from "./core/tag-edit-store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { createCallTracker } from "./mcp/call-tracker.js";
@@ -102,6 +103,10 @@ const CHECKED_PAGES = [
   "/tags/color",
   "/tags/kind",
   "/tags/status",
+  "/tags/rename",
+  "/tags/merge",
+  "/tags/delete",
+  "/tags/undo",
   "/profile",
   "/profile/notes/add",
   "/profile/notes/edit",
@@ -146,6 +151,7 @@ export type AppOptions = {
         store: LinkRemover;
         images: LinkImageReader;
         edits: LinkEditStore;
+        tagEdits: TagEditStore;
         stats: StatsStore;
         savedCopies: SavedCopyReader &
           SavedCopyRemover &

@@ -19,6 +19,7 @@ function ownedTag(catalog: Tag[], name: string | null): Tag | null {
 }
 
 const BASE = "http://site.invalid";
+const LISTS_BY_TAG = new Set(["/spaces", "/spaces/done", "/search"]);
 
 /** The URL of a value that is a path on this site, else null: another origin (`//host`, a scheme, `/\host`) is refused. */
 function parse(from: string | undefined): URL | null {
@@ -29,6 +30,20 @@ function parse(from: string | undefined): URL | null {
   } catch {
     return null;
   }
+}
+
+/** `from` with the tag of a space or search address replaced by the live key an old one reaches; anything else comes back as it was. */
+export async function liveFrom(
+  from: string,
+  addressOf: (name: string) => Promise<string | null>,
+): Promise<string> {
+  const url = parse(from);
+  const name = url?.searchParams.get("tag");
+  if (!url || !name || !LISTS_BY_TAG.has(url.pathname)) return from;
+  const current = await addressOf(name).catch(() => null);
+  if (current === null) return from;
+  url.searchParams.set("tag", current);
+  return `${url.pathname}${url.search}`;
 }
 
 /**

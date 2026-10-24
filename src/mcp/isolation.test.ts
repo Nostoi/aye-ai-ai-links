@@ -843,6 +843,14 @@ describe("owner isolation coverage", () => {
     "POST /tags/color": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/kind": "the two-owner tag actions test in web/tags-routes.test.ts",
     "POST /tags/status": "the two-owner tag actions test in web/tags-routes.test.ts",
+    "POST /tags/rename":
+      "the two-owner rename, merge, delete and undo test in web/tags-routes.test.ts",
+    "POST /tags/merge":
+      "the two-owner rename, merge, delete and undo test in web/tags-routes.test.ts",
+    "POST /tags/delete":
+      "the two-owner rename, merge, delete and undo test in web/tags-routes.test.ts",
+    "POST /tags/undo":
+      "the two-owner rename, merge, delete and undo test in web/tags-routes.test.ts",
     "POST /profile/notes/add": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/edit": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/confirm": "the two-owner profile tests in web/profile-page.test.ts",

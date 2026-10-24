@@ -8,6 +8,7 @@ import { addSecondUser, oauthWorld } from "../auth/oauth-test-kit.js";
 import { png } from "../core/image-test-kit.js";
 import { getLinkWithText, saveLink } from "../core/links.js";
 import { copyLimits, finishedMarkdown, imageRef } from "../core/saved-copy.js";
+import { renameTag } from "../core/tag-edit.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -395,6 +396,24 @@ describe("the copy page's Back line", () => {
     const html = await get(owner, id, from);
     expect(backOf(html)).toEqual(["Back to All links", "/all"]);
     for (const trace of ["zzm", "evil.example"]) expect(html).not.toContain(trace);
+  });
+
+  it("follows a renamed tag to its live name, and never one only another owner renamed", async () => {
+    const { id, owner, w } = await tagged();
+    const deps = { ...createDeps(w.links, new FakeEmbedder(DIMS)), now: () => new Date() };
+    await renameTag(deps, "owner", { name: "Kitchen", newName: "Scullery" });
+    await renameTag(deps, "owner-b", { name: "Secret zzm8", newName: "Hidden zzm9" });
+    expect(backOf(await get(owner, id, "/spaces?tag=kitchen"))).toEqual([
+      "Back to Scullery",
+      "/spaces?tag=scullery",
+    ]);
+    expect(backOf(await get(owner, id, "/search?q=x&tag=kitchen"))).toEqual([
+      "Back to your search",
+      "/search?q=x&tag=scullery",
+    ]);
+    const html = await get(owner, id, "/spaces?tag=secret%20zzm8");
+    expect(backOf(html)).toEqual(["Back to All links", "/all"]);
+    expect(html).not.toContain("zzm");
   });
 });
 

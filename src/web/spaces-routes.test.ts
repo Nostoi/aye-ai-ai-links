@@ -2,6 +2,7 @@ import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
+import { mergeTags, renameTag } from "../core/tag-edit.js";
 import { setTagColor, setTagPinned } from "../core/tag-space.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -535,5 +536,78 @@ describe("the List / Pictures choice on All links and space pages", () => {
     const older = parseHTML(first).document.getElementById("older")?.getAttribute("href");
     expect(older).toContain("before=");
     expect(await viewOn(browser, older as string)).toBe("pictures");
+  });
+});
+
+describe("old tag addresses", () => {
+  async function renamed() {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/one", ["pixel-art"], "Sprite sheet");
+    await renameTag(depsOf(world), A, { name: "pixel-art", newName: "pixel art" });
+    return { world, browser: await signedIn(world) };
+  }
+
+  it.each(["/spaces", "/spaces/done"])(
+    "%s redirects the old address of a renamed tag, keeping order and before",
+    async (path) => {
+      const { browser } = await renamed();
+      const plain = await browser.send(`${path}?tag=pixel-art`);
+      expect(plain.status).toBe(303);
+      expect(plain.headers.get("location")).toBe(`${path}?tag=pixel+art`);
+      const kept = await browser.send(`${path}?tag=pixel-art&order=opened&before=o1.5`);
+      expect(kept.headers.get("location")).toBe(`${path}?tag=pixel+art&order=opened&before=o1.5`);
+      expect((await browser.send(`${path}?tag=pixel%20art`)).status).toBe(200);
+    },
+  );
+
+  it("redirects a merged-away tag's address to the kept tag", async () => {
+    const world = await oauthWorld();
+    await save(world, A, "https://a.example/one", ["game art"]);
+    await save(world, A, "https://a.example/two", ["game assets"]);
+    await mergeTags(depsOf(world), A, { name: "game assets", into: "game art" });
+    const res = await (await signedIn(world)).send("/spaces?tag=game%20assets");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/spaces?tag=game+art");
+  });
+
+  it("answers 404 to owner B for owner A's old address, and A's aliases stay", async () => {
+    const { world } = await renamed();
+    const bBrowser = await addSecondUser(world);
+    const rows = () => world.links.prepare("SELECT * FROM tag_aliases ORDER BY old_key").all();
+    const before = rows();
+    for (const path of [
+      "/spaces?tag=pixel-art",
+      "/spaces/done?tag=pixel-art",
+      "/search?q=x&tag=pixel-art",
+    ]) {
+      const res = await bBrowser.send(path);
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get("location"), path).toBeNull();
+    }
+    expect(rows()).toEqual(before);
+  });
+
+  it("redirects an old search address, keeping every other parameter", async () => {
+    const { browser } = await renamed();
+    const res = await browser.send("/search?q=sprites&keep=1&tag=pixel-art");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/search?q=sprites&keep=1&tag=pixel+art");
+    expect((await browser.send("/search?q=sprites&keep=1&tag=pixel%20art")).status).toBe(200);
+  });
+
+  it("recovers a live tag's purged cursor as before, with no redirect to itself", async () => {
+    const { browser } = await renamed();
+    const res = await browser.send("/spaces?tag=pixel%20art&before=1.999999");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/spaces?tag=pixel%20art");
+    expect((await browser.send("/spaces?tag=pixel%20art")).status).toBe(200);
+  });
+
+  it("a live tag wins over an old address with the same key", async () => {
+    const { world, browser } = await renamed();
+    await save(world, A, "https://a.example/two", ["pixel-art"], "Fresh pixel-art");
+    const res = await browser.send("/spaces?tag=pixel-art");
+    expect(res.status).toBe(200);
+    expect(html(res)).toContain("Fresh pixel-art");
   });
 });

@@ -53,8 +53,18 @@ import { getStats, parseWindow, statsReading } from "../core/stats.js";
 import type { StatsReadingStore } from "../core/stats-reading-store.js";
 import type { StatsStore } from "../core/stats-store.js";
 import type { LinkRemover } from "../core/store.js";
+import {
+  deleteTag,
+  listTagsWithCounts,
+  mergeTags,
+  renameTag,
+  tagAddress,
+  undoTagChange,
+} from "../core/tag-edit.js";
+import type { TagEditStore } from "../core/tag-edit-store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
+import { tagKey } from "../core/tags.js";
 import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue, tidyReady } from "../core/tidy-up.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
@@ -101,7 +111,7 @@ import { ALL_RESTART, allHref, allPage } from "./all-page.js";
 import type { Ask } from "./ask-panel.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { type ConnectionRow, connectionsPage } from "./connections-page.js";
-import { backTarget } from "./copy-from.js";
+import { backTarget, liveFrom } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
 import { shownTags } from "./edit-link.js";
@@ -598,8 +608,14 @@ function keyAction(c: Context, act: () => Response): Response {
  * is gone or changed meanwhile. Anything else is thrown on.
  */
 async function tagAction(c: Context, invalid: string, act: () => Promise<Tag>) {
+  return tagReply(c, invalid, async () => ({ tag: await act() }));
+}
+
+/** `tagAction` for an answer of more than the tag; `act` may return its own Response for an outcome that is not a refusal. */
+async function tagReply(c: Context, invalid: string, act: () => Promise<object | Response>) {
   try {
-    return c.json({ tag: await act() }, 200, NO_STORE);
+    const answer = await act();
+    return answer instanceof Response ? answer : c.json(answer, 200, NO_STORE);
   } catch (error) {
     if (!(error instanceof CoreError)) throw error;
     if (error.code === "not_found") {
@@ -611,6 +627,20 @@ async function tagAction(c: Context, invalid: string, act: () => Promise<Tag>) {
       return c.json({ code: error.code, message }, 409, NO_STORE);
     }
     return c.json({ code: error.code, message: invalid }, 400, NO_STORE);
+  }
+}
+
+/** Undo of a merge or delete: a refusal is core's own wording, 404 when too late and 409 when the tags moved. */
+async function undoAction(c: Context, act: () => Promise<object>) {
+  try {
+    return c.json({ tags: await act() }, 200, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError)) throw error;
+    if (error.code === "not_found" || error.code === "conflict") {
+      const status = error.code === "not_found" ? 404 : 409;
+      return c.json({ code: error.code, message: error.message }, status, NO_STORE);
+    }
+    throw error;
   }
 }
 
@@ -634,6 +664,7 @@ export function webApp({
       store: LinkRemover;
       images: LinkImageReader;
       edits: LinkEditStore;
+      tagEdits: TagEditStore;
       profile: ProfileStore;
       stats: StatsStore;
       /** The stored stats reading, shown on the profile only while `readingOn`. */
@@ -683,15 +714,34 @@ export function webApp({
   const askOn = (c: Context<SessionEnv>, place: string): Ask | undefined =>
     ai ? { ai: ai.model.name, place, owner: c.get("caller").owner } : undefined;
 
+  const tagDeps = { ...deps, now: deps.now ?? (() => new Date()) };
+  const addressOf = (owner: OwnerId, name: string) => tagAddress(tagDeps, owner, name);
+
+  /** A renamed or merged tag's old address: 303 to the same page at the tag's live key, or null when `name` is not one. */
+  const oldAddress = async (c: Context<SessionEnv>, name: string): Promise<Response | null> => {
+    const current = await addressOf(c.get("caller").owner, name);
+    if (current === null || current === tagKey(name)) return null;
+    const url = new URL(c.req.url);
+    url.searchParams.set("tag", current);
+    return c.redirect(`${url.pathname}${url.search}`, 303);
+  };
+
   /**
    * What a card shows after an edit or its Undo, read after the write: its title and picture, its
    * tags, and its space (the color of the card, and the name its grey line shows) as the list the
    * card is on reads it (`view`).
    */
-  const cardState = async (owner: OwnerId, id: string, view: View) => {
+  const cardState = async (owner: OwnerId, id: string, asked: View) => {
     const link = await getLink(deps, owner, id);
     const shown = (await deps.images.imageVersions(owner, [id])).get(id);
     const info = (await deps.images.pictureInfo(owner, [id])).get(id);
+    const view: View =
+      asked.within === undefined
+        ? asked
+        : {
+            ...asked,
+            within: (await addressOf(owner, asked.within).catch(() => null)) ?? asked.within,
+          };
     const space = linkSpace(
       link,
       await deps.store.listTags(owner),
@@ -783,6 +833,8 @@ export function webApp({
     let space: Tag | undefined;
     if (tagName.trim() !== "") {
       try {
+        const moved = await oldAddress(c, tagName);
+        if (moved) return moved;
         space = findSpaceTag(catalog, tagName);
       } catch (error) {
         if (error instanceof CoreError && error.code === "not_found") {
@@ -844,6 +896,8 @@ export function webApp({
     let order: LinkOrder = "newest";
     try {
       if (!done) order = checkedOrder(c.req.query("order"));
+      const moved = await oldAddress(c, name);
+      if (moved) return moved;
       const { tag, catalog, page } = await openSpace(deps, owner, {
         name,
         state,
@@ -980,7 +1034,10 @@ export function webApp({
     const view = await copies.view(owner, c.req.param("id"));
     if (view === null) return c.html(copyNotFoundPage(), 404, COPY_HEADERS);
     const from = c.req.query("from");
-    const back = backTarget(from, from === undefined ? [] : await deps.store.listTags(owner));
+    const back = backTarget(
+      from === undefined ? from : await liveFrom(from, (name) => addressOf(owner, name)),
+      from === undefined ? [] : await deps.store.listTags(owner),
+    );
     const handy = await handyOf(deps, owner, view.link);
     const html = copyPage(view, (deps.now ?? (() => new Date()))(), back, handy);
     return c.html(html, view.copy === "unreadable" ? 503 : 200, COPY_HEADERS);
@@ -1324,7 +1381,10 @@ export function webApp({
 
   app.get("/tags", session, async (c) =>
     c.html(
-      tagsPage({ tags: await deps.store.listTags(c.get("caller").owner), ask: askOn(c, "Tags") }),
+      tagsPage({
+        tags: await listTagsWithCounts(tagDeps, c.get("caller").owner),
+        ask: askOn(c, "Tags"),
+      }),
       200,
       NO_STORE,
     ),
@@ -1368,6 +1428,38 @@ export function webApp({
         status: c.get("body").status as "active" | "done",
       }),
     ),
+  );
+
+  app.post("/tags/rename", tagBody({ name: isString }), session, (c) =>
+    tagReply(c, "Type a new name for the tag.", async () => {
+      const done = await renameTag(tagDeps, c.get("caller").owner, {
+        name: c.get("body").key,
+        newName: c.get("body").name,
+      });
+      if ("renamed" in done) return { tag: done.renamed };
+      const { taken: tag, links } = done;
+      const message = `You already have a tag called ${tag.name} (${links === 1 ? "1 link" : `${links} links`}).`;
+      return c.json({ code: "taken", tag, links, message }, 409, NO_STORE);
+    }),
+  );
+
+  app.post("/tags/merge", tagBody({ into: isString }), session, (c) =>
+    tagReply(c, "Pick a different tag to merge into.", () =>
+      mergeTags(tagDeps, c.get("caller").owner, {
+        name: c.get("body").key,
+        into: c.get("body").into,
+      }),
+    ),
+  );
+
+  app.post("/tags/delete", tagBody({}), session, (c) =>
+    tagReply(c, "That did not work. Reload the page and try again.", () =>
+      deleteTag(tagDeps, c.get("caller").owner, { name: c.get("body").key }),
+    ),
+  );
+
+  app.post("/tags/undo", jsonBody({ changeId: isString }), session, (c) =>
+    undoAction(c, () => undoTagChange(tagDeps, c.get("caller").owner, c.get("body").changeId)),
   );
 
   app.get("/profile", session, async (c) => {

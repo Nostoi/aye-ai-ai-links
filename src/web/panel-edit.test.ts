@@ -88,7 +88,7 @@ const variants: Record<string, () => string> = {
   "space-done": () => spacePage({ ...space, links: ONE, done: true }),
   "space-missing": () => spaceMissingPage(ASK),
   "older-invalid": () => olderInvalidPage("Open it again.", ASK),
-  tags: () => tagsPage({ tags: [KITCHEN], ask: ASK }),
+  tags: () => tagsPage({ tags: [{ tag: KITCHEN, links: 1 }], ask: ASK }),
   profile: () => profilePage({ notes: [], focus: [], stats: emptyStats, now: NOW, ask: ASK }),
   connections: () =>
     connectionsPage({

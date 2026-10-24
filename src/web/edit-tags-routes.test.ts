@@ -81,6 +81,31 @@ describe("tags in POST /links/edit and its Undo", () => {
     expect((again.body as Answer).lineSpace).toEqual({ name: "Garden" });
   });
 
+  it("follows the list's space across a rename: an old within answers as the renamed space", async () => {
+    const { world, browser, id } = await tagged();
+    const deps = linkDeps(world);
+    await updateLink(deps, A, id, {
+      tags: [
+        { name: "Garden", source: "stated" },
+        { name: "Kitchen", source: "stated" },
+      ],
+    });
+    await deps.store.pinTag(A, "garden", { pinned: true, color: "green" });
+    const renamed = await browser.send("/tags/rename", {
+      method: "POST",
+      json: { key: "kitchen", name: "Pantry Shelf" },
+    });
+    expect(renamed.status).toBe(200);
+    const saved = (await edit(browser, { id, title: "Retitled", within: "kitchen" }))
+      .body as Answer;
+    expect(saved.space).toEqual({ color: "clay" });
+    expect(saved.lineSpace).toEqual({ name: "Pantry Shelf" });
+    const back = (await undo(browser, { id, editId: saved.editId, within: "kitchen" }))
+      .body as Answer;
+    expect(back.space).toEqual({ color: "clay" });
+    expect(back.lineSpace).toEqual({ name: "Pantry Shelf" });
+  });
+
   it("leaves the grey line's space out only on the space page's own list (own)", async () => {
     const { browser, id } = await tagged();
     const send = (extra: Record<string, string>) =>

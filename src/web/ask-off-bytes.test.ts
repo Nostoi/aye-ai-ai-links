@@ -170,7 +170,7 @@ const pages: Record<string, () => string> = {
   "tidy-empty": () =>
     tidyPage({ queue: [], hasFocus: false, images: new Map(), catalog: [], now: NOW }),
   "tags-empty": () => tagsPage({ tags: [] }),
-  "tags-with-tags": () => tagsPage({ tags: [KITCHEN, BAKING] }),
+  "tags-with-tags": () => tagsPage({ tags: [KITCHEN, BAKING].map((t) => ({ tag: t, links: 3 })) }),
   "connections-empty": () => connections(),
   "connections-with-rows": () =>
     connections({

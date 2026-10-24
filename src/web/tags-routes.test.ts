@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
+import { saveLink } from "../core/links.js";
 import type { Tag } from "../core/types.js";
+import { createDeps } from "../deps.js";
+import { FakeEmbedder } from "../search/embedder.js";
+import { DIMS } from "../search/model.js";
 
 const B = SECOND_USER.id;
 
@@ -298,5 +302,231 @@ describe("tag actions from the Tags page", () => {
       expect(res.status).toBe(200);
       expect(tagRows(world)).not.toEqual(before);
     });
+  });
+});
+
+describe("rename, merge, delete and undo from the Tags page", () => {
+  let clock = 1_000;
+  const depsOf = (world: World) => ({
+    ...createDeps(world.links, new FakeEmbedder(DIMS)),
+    now: () => new Date(clock++),
+  });
+  const save = (world: World, owner: string, url: string, tags: string[]) =>
+    saveLink(depsOf(world), owner, {
+      url,
+      title: url,
+      savedBy: "seed",
+      tags: tags.map((name) => ({ name, source: "stated" as const })),
+    });
+  /** Every tag, link-tag, alias and receipt row of every owner, so a refusal can be shown to have changed none. */
+  const everything = (world: World) => ({
+    tags: tagRows(world),
+    linkTags: world.links
+      .prepare("SELECT * FROM link_tags ORDER BY owner_id, link_id, tag_id")
+      .all(),
+    aliases: world.links.prepare("SELECT * FROM tag_aliases ORDER BY owner_id, old_key").all(),
+    changes: world.links.prepare("SELECT * FROM tag_changes ORDER BY owner_id, change_id").all(),
+  });
+  const aRows = (world: World) =>
+    world.links
+      .prepare(
+        `SELECT t.key, lt.link_id, lt.source, lt.position FROM tags t
+         LEFT JOIN link_tags lt ON lt.tag_id = t.id
+         WHERE t.owner_id = 'owner' ORDER BY t.key, lt.link_id`,
+      )
+      .all();
+
+  async function twoOwners() {
+    const world = await oauthWorld();
+    const bBrowser = await addSecondUser(world);
+    await save(world, "owner", "https://a.example/1", ["art"]);
+    await save(world, "owner", "https://a.example/2", ["art", "design"]);
+    await save(world, "owner", "https://a.example/3", ["design"]);
+    await save(world, B, "https://b.example/1", ["art"]);
+    return { world, bBrowser, browser: await signedIn(world) };
+  }
+
+  it("rename answers the tag and writes it", async () => {
+    const { world, browser } = await twoOwners();
+    const res = await browser.send("/tags/rename", posting({ key: "art", name: "Art Work" }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.body).toEqual({
+      tag: expect.objectContaining({ key: "art work", name: "Art Work" }),
+    });
+    expect(rowOf(world, "owner", "art work")).toBeDefined();
+    expect(rowOf(world, "owner", "art")).toBeUndefined();
+  });
+
+  it("rename onto an existing name is 409 taken and nothing changes", async () => {
+    const { world, browser } = await twoOwners();
+    const before = everything(world);
+    const res = await browser.send("/tags/rename", posting({ key: "art", name: "Design" }));
+    expect(res.status).toBe(409);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.body).toEqual({
+      code: "taken",
+      tag: expect.objectContaining({ key: "design" }),
+      links: 2,
+      message: expect.any(String),
+    });
+    expect(everything(world)).toEqual(before);
+  });
+
+  it("merge answers the kept tag's resulting count", async () => {
+    const { world, browser } = await twoOwners();
+    const res = await browser.send("/tags/merge", posting({ key: "art", into: "design" }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.body).toEqual({
+      tag: expect.objectContaining({ key: "design" }),
+      changeId: expect.any(String),
+      moved: 2,
+      links: 3,
+    });
+    expect(rowOf(world, "owner", "art")).toBeUndefined();
+  });
+
+  it("delete answers how many links lost the tag, and leaves B's tag", async () => {
+    const { world, browser } = await twoOwners();
+    const res = await browser.send("/tags/delete", posting({ key: "art" }));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ changeId: expect.any(String), moved: 2 });
+    expect(rowOf(world, "owner", "art")).toBeUndefined();
+    expect(rowOf(world, B, "art")).toBeDefined();
+  });
+
+  it("undo after a merge puts both rows back", async () => {
+    const { world, browser } = await twoOwners();
+    const before = aRows(world);
+    const merged = (await browser.send("/tags/merge", posting({ key: "art", into: "design" })))
+      .body as { changeId: string };
+    expect(aRows(world)).not.toEqual(before);
+    const res = await browser.send("/tags/undo", posting({ changeId: merged.changeId }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.body).toEqual({
+      tags: expect.arrayContaining([
+        { tag: expect.objectContaining({ key: "art" }), links: 2 },
+        { tag: expect.objectContaining({ key: "design" }), links: 2 },
+      ]),
+    });
+    expect(aRows(world)).toEqual(before);
+  });
+
+  it("undo after a delete puts the tag back", async () => {
+    const { world, browser } = await twoOwners();
+    const before = aRows(world);
+    const gone = (await browser.send("/tags/delete", posting({ key: "art" }))).body as {
+      changeId: string;
+    };
+    expect((await browser.send("/tags/undo", posting({ changeId: gone.changeId }))).status).toBe(
+      200,
+    );
+    expect(aRows(world)).toEqual(before);
+  });
+
+  it("answers 404, 400 and a too-late undo in the owner's words, writing nothing", async () => {
+    const { world, browser } = await twoOwners();
+    const before = everything(world);
+    const missing = await browser.send("/tags/merge", posting({ key: "nope", into: "design" }));
+    expect(missing.status).toBe(404);
+    expect(missing.body).toEqual({
+      code: "not_found",
+      message: "That tag is not there any more. Reload the page.",
+    });
+    const same = await browser.send("/tags/merge", posting({ key: "art", into: "art" }));
+    expect(same.status).toBe(400);
+    expect(String(same.bytes)).not.toMatch(AGENT_WORDS);
+    const late = await browser.send("/tags/undo", posting({ changeId: "no-such-change" }));
+    expect(late.status).toBe(404);
+    expect(late.body).toEqual({
+      code: "not_found",
+      message: "It's too late to undo: that change can no longer be undone.",
+    });
+    expect(everything(world)).toEqual(before);
+  });
+
+  it("undo is 409 with core's words and writes nothing once the tags moved", async () => {
+    const { world, browser } = await twoOwners();
+    const merged = (await browser.send("/tags/merge", posting({ key: "art", into: "design" })))
+      .body as { changeId: string };
+    await save(world, "owner", "https://a.example/4", ["art"]);
+    const before = everything(world);
+    const res = await browser.send("/tags/undo", posting({ changeId: merged.changeId }));
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      code: "conflict",
+      message: "The tags changed since, so nothing was undone.",
+    });
+    expect(everything(world)).toEqual(before);
+  });
+
+  it("acts for the signed-in user: B's requests for A's tags are 404 and every row stays", async () => {
+    const { world, bBrowser, browser } = await twoOwners();
+    const merged = (await browser.send("/tags/merge", posting({ key: "art", into: "design" })))
+      .body as { changeId: string };
+    await save(world, B, "https://b.example/2", ["b-only"]);
+    const before = everything(world);
+    const none = await bBrowser.send("/tags/delete", posting({ key: "never" }));
+    const attempts = [
+      await bBrowser.send("/tags/rename", posting({ key: "design", name: "ui design" })),
+      await bBrowser.send("/tags/merge", posting({ key: "design", into: "b-only" })),
+      await bBrowser.send("/tags/merge", posting({ key: "b-only", into: "design" })),
+      await bBrowser.send("/tags/delete", posting({ key: "design" })),
+    ];
+    for (const res of attempts) {
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(none.body);
+    }
+    const undo = await bBrowser.send("/tags/undo", posting({ changeId: merged.changeId }));
+    expect(undo.status).toBe(404);
+    expect(everything(world)).toEqual(before);
+  });
+
+  describe.each([
+    ["/tags/rename", { key: "art", name: "Art Work" }],
+    ["/tags/merge", { key: "art", into: "design" }],
+    ["/tags/delete", { key: "art" }],
+  ] as const)("POST %s", (path, body) => {
+    const refusals: [string, () => object, number][] = [
+      ["without an Origin", () => ({ json: body, origin: false }), 403],
+      [
+        "with a foreign Origin",
+        () => ({ json: body, headers: { origin: "https://evil.example" } }),
+        403,
+      ],
+      ["without a session", () => ({ json: body, anonymous: true }), 302],
+      ["with a body that is not JSON", () => ({ rawForm: "key=art" }), 400],
+      ["with the key as a number", () => ({ json: { ...body, key: 7 } }), 400],
+      ["without the key", () => ({ json: { ...body, key: undefined } }), 400],
+    ];
+    it.each(refusals)("refuses a request %s, and nothing changes", async (_, how, status) => {
+      const world = await oauthWorld();
+      seed(world, "owner", { key: "art" });
+      seed(world, "owner", { key: "design" });
+      const before = everything(world);
+      const { anonymous, ...options } = how() as { anonymous?: true };
+      const browser = anonymous ? world.agent() : await signedIn(world);
+      const res = await browser.send(path, { method: "POST", ...options });
+      expect(res.status).toBe(status);
+      expect(everything(world)).toEqual(before);
+    });
+  });
+
+  it("refuses an undo with a foreign Origin or no changeId", async () => {
+    const world = await oauthWorld();
+    seed(world, "owner", { key: "art" });
+    seed(world, "owner", { key: "design" });
+    const before = everything(world);
+    const browser = await signedIn(world);
+    const foreign = await browser.send("/tags/undo", {
+      method: "POST",
+      json: { changeId: "x" },
+      headers: { origin: "https://evil.example" },
+    });
+    expect(foreign.status).toBe(403);
+    expect((await browser.send("/tags/undo", posting({}))).status).toBe(400);
+    expect(everything(world)).toEqual(before);
   });
 });

@@ -61,7 +61,11 @@ The tools your AI uses:
 |---|---|
 | `save_link` | Saves a link (a title is at most 200 characters). Saving one that's already saved returns the existing link. A new link can also be kept handy, or suggested. |
 | `update_link` | Changes a link's title (at most 200 characters), summary (labelled stated or asked when it is the owner's own words), why, tags, state or snooze date, or whether it is kept handy. |
-| `update_tag` | Switches a tag between topic and project, or confirms its kind as yours. |
+| `update_tag` | Switches a tag between topic and project, confirms its kind as yours, or renames it, when you ask. A name another tag already has is refused, and your AI asks before merging. |
+| `list_tags` | Lists every tag with its kind and how many links have it, so your AI can spot near-duplicates. |
+| `merge_tags` | Moves one tag's links onto another and removes it, when you ask or confirm. Returns an undo id. |
+| `delete_tag` | Takes a tag off every link and removes it, when you ask. Returns an undo id. |
+| `undo_tag_change` | Puts back a merge or delete for an hour, unless those tags or links changed since. |
 | `search_links` | Finds links, best match first. A blank search lists the newest. |
 | `list_links` | Lists every link, newest first, oldest first or most recently opened, a page at a time, with a total. |
 | `get_link` | Opens one link by its id, with its page's text (up to 20,000 characters) and whether a saved copy of its page exists. |

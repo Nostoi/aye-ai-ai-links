@@ -249,6 +249,15 @@ describe("undoTagChange", () => {
     expect(since).toEqual(new Date(NOW.getTime() - TAG_UNDO_WINDOW_MS));
   });
 
+  it("tells a later undoable change apart from a changed tag", async () => {
+    const { deps } = setup([], { undoTagChange: async () => "blocked" });
+    const e = await failure(undoTagChange(deps, "o", "x"));
+    expect(e.code).toBe("conflict");
+    expect(e.message).toBe(
+      "A later change to the same tags can still be undone, so nothing was undone. Undo the later change first.",
+    );
+  });
+
   it("refuses a conflict once, without retrying", async () => {
     let calls = 0;
     const { deps } = setup([], {

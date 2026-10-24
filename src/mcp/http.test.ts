@@ -208,22 +208,35 @@ describe("MCP door over HTTP", () => {
     );
   });
 
-  it("lists the eleven tools with their annotations and string dates", async () => {
+  it("lists the fifteen tools with their annotations and string dates", async () => {
     const res = await post(app, "key-a", { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = Object.fromEntries(res.body.result.tools.map((t: Json) => [t.name, t]));
     expect(Object.keys(tools).sort()).toEqual([
       "add_profile",
+      "delete_tag",
       "edit_profile",
       "get_digest",
       "get_link",
       "get_profile",
       "get_stats",
       "list_links",
+      "list_tags",
+      "merge_tags",
       "save_link",
       "search_links",
+      "undo_tag_change",
       "update_link",
       "update_tag",
     ]);
+    expect(tools.list_tags.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(tools.merge_tags.description.slice(0, 512)).toContain("only when the owner asks");
+    expect(tools.delete_tag.description).toContain("undone for an hour");
+    expect(tools.undo_tag_change.description).toContain("too late");
     const hints = (
       readOnlyHint: boolean,
       destructiveHint: boolean,

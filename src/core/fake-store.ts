@@ -774,7 +774,7 @@ export class FakeStore
     const newer = waiting.slice(waiting.findIndex((c) => c.id === changeId) + 1);
     const live = (c: TagChange) => c.at.getTime() >= since.getTime();
     if (newer.some((c) => live(c) && receiptsMeet(r, c) && this.unchangedSince(owner, c)))
-      return "conflict";
+      return "blocked";
     const catalog = this.catalogOf(owner);
     const mine = this.aliasesOf(owner);
     const kept = r.kept && catalog.get(r.kept.key);

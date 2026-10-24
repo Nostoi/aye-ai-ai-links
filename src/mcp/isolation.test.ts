@@ -114,14 +114,18 @@ const NO_NOTE = /No profile note with id/;
 
 const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
   "add_profile",
+  "delete_tag",
   "edit_profile",
   "get_digest",
   "get_link",
   "get_profile",
   "get_stats",
   "list_links",
+  "list_tags",
+  "merge_tags",
   "save_link",
   "search_links",
+  "undo_tag_change",
   "update_link",
   "update_tag",
 ];
@@ -287,6 +291,60 @@ describe.each(Object.keys(doors))("owner isolation through the %s door", (doorNa
       world.links.prepare("SELECT kind, kind_source FROM tags WHERE owner_id = ?").all(B),
     ).toEqual([{ kind: "project", kind_source: "stated" }]);
     expect(snapA()).toEqual(before);
+  });
+
+  it("T4b: B's list_tags, rename, merge and delete reach only B's tags, and A's rows stay as they were", async () => {
+    const { world, door, snapA } = await open();
+    await tool(world, door.a, "save_link", {
+      url: "https://a.example/only",
+      tags: [{ name: "AOnly", source: "stated" }],
+    });
+    await tool(world, door.b, "save_link", {
+      url: "https://b.example/beta",
+      tags: [{ name: "Beta", source: "stated" }],
+    });
+    const before = snapA();
+    const listed = await tool<{ tags: { key: string; links: number }[] }>(
+      world,
+      door.b,
+      "list_tags",
+      {},
+    );
+    expect(listed.tags.map((t) => `${t.key}:${t.links}`).sort()).toEqual(["alpha:1", "beta:1"]);
+
+    const NO_TAG = /No tag named/;
+    await refused(world, door.b, "update_tag", { name: "AOnly", newName: "mine" }, NO_TAG);
+    await refused(world, door.b, "merge_tags", { name: "AOnly", into: "Alpha" }, NO_TAG);
+    await refused(world, door.b, "merge_tags", { name: "Beta", into: "AOnly" }, NO_TAG);
+    await refused(world, door.b, "delete_tag", { name: "AOnly" }, NO_TAG);
+    expect(snapA()).toEqual(before);
+
+    // The same calls work on B's own tags, so the refusals above were about ownership.
+    await tool(world, door.b, "update_tag", { name: "Beta", newName: "Gamma" });
+    await tool(world, door.b, "merge_tags", { name: "Gamma", into: "Alpha" });
+    await tool(world, door.b, "delete_tag", { name: "Alpha" });
+    expect(snapA()).toEqual(before);
+  });
+
+  it("T4c: B cannot undo A's tag change with its undoId, and A still can", async () => {
+    const { world, door, snapA } = await open();
+    await tool(world, door.a, "save_link", {
+      url: "https://a.example/two",
+      tags: [{ name: "AOnly", source: "stated" }],
+    });
+    const { undoId } = await tool<{ undoId: string }>(world, door.a, "merge_tags", {
+      name: "AOnly",
+      into: "Alpha",
+    });
+    const merged = snapA();
+
+    await refused(world, door.b, "undo_tag_change", { undoId }, /too late/);
+    expect(snapA()).toEqual(merged);
+
+    const back = await tool<{ tags: { key: string }[] }>(world, door.a, "undo_tag_change", {
+      undoId,
+    });
+    expect(back.tags.map((t) => t.key).sort()).toEqual(["alpha", "aonly"]);
   });
 
   it("T5b: B's stats count only B's links and never name A's tags", async () => {

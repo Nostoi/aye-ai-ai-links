@@ -717,7 +717,9 @@ describe("the search page's space line", () => {
 
 describe("the Tags page's links to spaces", () => {
   it("links each tag's name to its space page, whatever the key", () => {
-    const html = tagsPage({ tags: [tag({ key: ODD_KEY, name: "C++ & Ü" }), HOME] });
+    const html = tagsPage({
+      tags: [tag({ key: ODD_KEY, name: "C++ & Ü" }), HOME].map((t) => ({ tag: t, links: 0 })),
+    });
     const names = [...dom(html).querySelectorAll("a.tag-name")];
     expect(names.map((a) => a.textContent)).toEqual(["C++ & Ü", "Home batteries"]);
     expect(names.map((a) => tagOf(a.getAttribute("href") as string))).toEqual([

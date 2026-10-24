@@ -219,14 +219,17 @@ const PAGES: [string, string][] = [
     tagsPage({
       tags: [
         {
-          key: "kitchen",
-          name: "Kitchen",
-          kind: "project",
-          kindSource: "inferred",
-          color: "clay",
-          pinned: true,
-          description: null,
-          projectStatus: "active",
+          tag: {
+            key: "kitchen",
+            name: "Kitchen",
+            kind: "project",
+            kindSource: "inferred",
+            color: "clay",
+            pinned: true,
+            description: null,
+            projectStatus: "active",
+          },
+          links: 2,
         },
       ],
     }),

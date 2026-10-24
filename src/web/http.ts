@@ -53,7 +53,14 @@ import { getStats, parseWindow, statsReading } from "../core/stats.js";
 import type { StatsReadingStore } from "../core/stats-reading-store.js";
 import type { StatsStore } from "../core/stats-store.js";
 import type { LinkRemover } from "../core/store.js";
-import { deleteTag, mergeTags, renameTag, tagAddress, undoTagChange } from "../core/tag-edit.js";
+import {
+  deleteTag,
+  listTagsWithCounts,
+  mergeTags,
+  renameTag,
+  tagAddress,
+  undoTagChange,
+} from "../core/tag-edit.js";
 import type { TagEditStore } from "../core/tag-edit-store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
@@ -1367,7 +1374,10 @@ export function webApp({
 
   app.get("/tags", session, async (c) =>
     c.html(
-      tagsPage({ tags: await deps.store.listTags(c.get("caller").owner), ask: askOn(c, "Tags") }),
+      tagsPage({
+        tags: await listTagsWithCounts(tagDeps, c.get("caller").owner),
+        ask: askOn(c, "Tags"),
+      }),
       200,
       NO_STORE,
     ),

@@ -615,6 +615,11 @@ const markShared = () => {
   }
 };
 
+const setLinks = (row, links) => {
+  row.dataset.links = String(links);
+  row.querySelector(".count").textContent = "· " + linksText(links);
+};
+
 /** Draws a row from the tag the server returned, and its link count when the answer had one. */
 const draw = (row, tag, links) => {
   row.dataset.key = tag.key;
@@ -622,10 +627,7 @@ const draw = (row, tag, links) => {
   name.textContent = tag.name;
   name.setAttribute("href", "/spaces?tag=" + encodeURIComponent(tag.key));
   row.querySelector('input[name="name"]').value = tag.name;
-  if (links !== undefined) {
-    row.dataset.links = String(links);
-    row.querySelector(".count").textContent = "· " + linksText(links);
-  }
+  if (links !== undefined) setLinks(row, links);
   const guess = tag.kind === "project" && tag.kindSource === "inferred";
   const project = tag.kind === "project";
   const done = tag.projectStatus === "done";
@@ -652,7 +654,7 @@ const draw = (row, tag, links) => {
   for (const swatch of row.querySelectorAll(".swatch")) {
     setPressed(swatch, swatch.dataset.color === color);
   }
-  markShared();
+  sync();
 };
 
 /** Posts a request and reads its answer; `data` is set only for a 200. */
@@ -679,23 +681,37 @@ const hideTaken = (row) => {
   row.querySelector(".taken").hidden = true;
 };
 
+/** The tag each row's taken offer would merge into. */
+const offered = new WeakMap();
+
+/** Words the offer from the tag it names now, or says that tag is gone. */
+const showTaken = (row) => {
+  const box = row.querySelector(".taken");
+  const into = offered.get(row);
+  const live = Boolean(into) && list.contains(into);
+  const go = box.querySelector('[data-action="merge-taken"]');
+  box.querySelector("p").textContent = live
+    ? "You already have a tag called " + nameOf(into) + " (" + linksText(Number(into.dataset.links)) + "). Merge " + nameOf(row) + " into it?"
+    : "That tag is not there any more.";
+  go.hidden = !live;
+  go.textContent = live ? "Merge into " + nameOf(into) : "";
+  box.querySelector('[data-action="keep"]').textContent = "Keep " + nameOf(row);
+};
+
 /** Rename is the one action that may change the row's key; a name another tag has offers a merge. */
 const rename = async (row) => {
   hideTaken(row);
-  const old = nameOf(row);
   const { res, answer, data } = await send("/tags/rename", {
     key: row.dataset.key,
     name: row.querySelector('input[name="name"]').value,
   });
   if (data && data.tag) return draw(row, data.tag);
   if (res && res.status === 409 && answer && answer.code === "taken" && answer.tag) {
-    const box = row.querySelector(".taken");
-    row.dataset.into = answer.tag.key;
-    box.querySelector("p").textContent =
-      "You already have a tag called " + answer.tag.name + " (" + linksText(answer.links) + "). Merge " + old + " into it?";
-    box.querySelector('[data-action="merge-taken"]').textContent = "Merge into " + answer.tag.name;
-    box.querySelector('[data-action="keep"]').textContent = "Keep " + old;
-    box.hidden = false;
+    const into = rowFor(answer.tag.key);
+    offered.set(row, into);
+    if (into) setLinks(into, answer.links);
+    showTaken(row);
+    row.querySelector(".taken").hidden = false;
     return;
   }
   tagsError.textContent = failure(res, answer);
@@ -706,6 +722,7 @@ const putBack = (row, before) => {
   hideTaken(row);
   closeMerge(row);
   list.insertBefore(row, before && before.parentNode === list ? before : null);
+  sync();
 };
 
 /** Runs an Undo once its rows are free, holding them until it is answered. */
@@ -760,20 +777,23 @@ const remove = async (row) => {
   }
   const before = row.nextElementSibling;
   row.remove();
+  sync();
   return [
     "Deleted " + name + " from " + linksText(data.moved) + ".",
     () => undoChange(data.changeId, [row], () => putBack(row, before)),
   ];
 };
 
-/** Opens the picker with the other tags as they are now, each with its count. */
-const openMerge = (row) => {
+/** The tag each row's picker has chosen. */
+const chosen = new WeakMap();
+
+/** Words the open panel and its picker from the rows as they are now: names, counts, and the pick if it is still there. */
+const fillMerge = (row) => {
   const panel = row.querySelector(".merge");
   const n = Number(row.dataset.links);
   panel.querySelector("h3").textContent = "Merge " + nameOf(row) + " into…";
   panel.querySelector("p").textContent =
     (n === 1 ? "Its 1 link moves" : "Its " + n + " links move") + " to the tag you pick, and " + nameOf(row) + " goes away.";
-  panel.querySelector('input[name="filter"]').value = "";
   const picker = panel.querySelector(".picker");
   picker.replaceChildren();
   for (const other of rowsOf()) {
@@ -782,7 +802,6 @@ const openMerge = (row) => {
     pick.setAttribute("type", "button");
     pick.setAttribute("class", "pick");
     pick.setAttribute("data-pick", other.dataset.key);
-    pick.setAttribute("aria-pressed", "false");
     const label = document.createElement("span");
     label.textContent = nameOf(other);
     const count = document.createElement("span");
@@ -791,25 +810,46 @@ const openMerge = (row) => {
     pick.append(label, count);
     picker.append(pick);
   }
-  setPick(row, null);
+  filterPicks(row, panel.querySelector('input[name="filter"]'));
+  markPick(row);
+};
+
+/** Brings everything drawn from other rows up to date: shared-color notes, open pickers and taken offers. */
+const sync = () => {
+  markShared();
+  for (const row of rowsOf()) {
+    if (!row.querySelector(".merge").hidden) fillMerge(row);
+    if (!row.querySelector(".taken").hidden) showTaken(row);
+  }
+};
+
+/** Opens the picker with the other tags as they are now, each with its count. */
+const openMerge = (row) => {
+  const panel = row.querySelector(".merge");
+  panel.querySelector('input[name="filter"]').value = "";
+  chosen.delete(row);
   panel.hidden = false;
+  fillMerge(row);
   row.querySelector('[data-action="merge-open"]').setAttribute("aria-expanded", "true");
   panel.querySelector('input[name="filter"]').focus();
 };
 
 const closeMerge = (row) => {
   row.querySelector(".merge").hidden = true;
-  setPick(row, null);
+  chosen.delete(row);
+  markPick(row);
   row.querySelector('[data-action="merge-open"]').setAttribute("aria-expanded", "false");
 };
 
-/** Marks the picked tag (a pick button, or none) and names it on the Merge button. */
-const setPick = (row, picked) => {
-  row.dataset.pick = picked ? picked.dataset.pick : "";
-  for (const pick of row.querySelectorAll(".pick")) setPressed(pick, pick === picked);
+/** Shows the chosen tag, if it is still on the page, on its pick and on the Merge button. */
+const markPick = (row) => {
+  const target = chosen.get(row);
+  const live = Boolean(target) && list.contains(target);
+  row.dataset.pick = live ? target.dataset.key : "";
+  for (const pick of row.querySelectorAll(".pick")) setPressed(pick, live && pick.dataset.pick === target.dataset.key);
   const go = row.querySelector('[data-action="merge-go"]');
-  go.textContent = picked ? "Merge into " + picked.firstChild.textContent : "Merge into…";
-  go.disabled = !picked;
+  go.textContent = live ? "Merge into " + nameOf(target) : "Merge into…";
+  go.disabled = !live;
 };
 
 const filterPicks = (row, input) => {
@@ -880,9 +920,16 @@ if (list) {
       row.querySelector('input[name="name"]').value = nameOf(row);
       return hideTaken(row);
     }
-    if (button.dataset.pick) return setPick(row, button);
-    const into = action === "merge-go" ? rowFor(row.dataset.pick) : action === "merge-taken" ? rowFor(row.dataset.into) : null;
-    if ((action === "merge-go" || action === "merge-taken") && !into) return;
+    if (button.dataset.pick) {
+      chosen.set(row, rowFor(button.dataset.pick));
+      return markPick(row);
+    }
+    const target = action === "merge-go" ? chosen.get(row) : action === "merge-taken" ? offered.get(row) : null;
+    const into = target && list.contains(target) ? target : null;
+    if ((action === "merge-go" || action === "merge-taken") && !into) {
+      tagsError.textContent = "That tag is not there any more.";
+      return;
+    }
     // A row takes one action at a time; a merge holds the kept row as well.
     const rows = into ? [row, into] : [row];
     if (isHeld(rows)) return;

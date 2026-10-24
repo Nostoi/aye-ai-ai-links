@@ -804,3 +804,115 @@ describe("one action at a time on a row", () => {
     expect(ids(page)).toEqual(["kitchen", "baking", "home"]);
   });
 });
+
+describe("pickers, offers and color notes follow the other rows", () => {
+  const POWER = { ...HOME, key: "power", name: "Power" };
+  const renameHome = async (page: Page) => {
+    page.type(page.inRow("home", 'input[name="name"]'), "Power");
+    page.click(tagged(page, "home", "Rename"));
+    await page.settle();
+  };
+  const TAKEN: Answer = {
+    status: 409,
+    body: { code: "taken", tag: HOME, links: 2, message: "You already have it." },
+  };
+  const DELETED: Answer = { status: 200, body: { changeId: "d1", moved: 2 } };
+  const names = (page: Page, key: string) => picks(page, key).map((b) => b.textContent);
+
+  it("a renamed tag in an open picker keeps its pick and is the one merged into", async () => {
+    const page = load((sent) => (sent.url === "/tags/rename" ? ok(POWER) : MERGED));
+    page.click(tagged(page, "baking", "Merge into another tag…"));
+    page.click(picks(page, "baking")[1] as HTMLElement);
+    await renameHome(page);
+    expect(names(page, "baking")).toEqual(["Kitchen5 links", "Power2 links"]);
+    expect(page.inRow("baking", '[data-action="merge-go"]').textContent).toBe("Merge into Power");
+    page.click(tagged(page, "baking", "Merge into Power"));
+    await page.settle();
+    expect(page.sent[1]).toEqual({
+      url: "/tags/merge",
+      body: { key: "baking", into: "power" },
+      redirect: "manual",
+    });
+  });
+
+  it("a deleted tag leaves the open picker and its pick is cleared", async () => {
+    const page = load(() => DELETED);
+    page.click(tagged(page, "baking", "Merge into another tag…"));
+    page.click(picks(page, "baking")[1] as HTMLElement);
+    page.click(tagged(page, "home", "Delete tag"));
+    await page.settle();
+    expect(names(page, "baking")).toEqual(["Kitchen5 links"]);
+    const go = page.inRow("baking", '[data-action="merge-go"]') as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    expect(go.textContent).toBe("Merge into…");
+  });
+
+  it("a picker follows a merge into it, and a restored tag comes back", async () => {
+    const page = load((s) => (s.url === "/tags/undo" ? BACK : MERGED));
+    page.click(tagged(page, "kitchen", "Merge into another tag…"));
+    page.click(tagged(page, "baking", "Merge into another tag…"));
+    page.click(picks(page, "baking")[1] as HTMLElement);
+    page.click(tagged(page, "baking", "Merge into Home batteries"));
+    await page.settle();
+    expect(names(page, "kitchen")).toEqual(["Home batteries3 links"]);
+    page.click(page.$("#undo-bar button"));
+    await page.settle();
+    expect(names(page, "kitchen")).toEqual(["Baking1 link", "Home batteries2 links"]);
+  });
+
+  it("the heading and the count in an open panel follow its own tag's rename", async () => {
+    const page = load(() => ok({ ...BAKING, key: "bread", name: "Bread" }));
+    page.click(tagged(page, "baking", "Merge into another tag…"));
+    page.type(page.inRow("baking", 'input[name="name"]'), "Bread");
+    page.click(tagged(page, "baking", "Rename"));
+    await page.settle();
+    const panel = page.inRow("bread", ".merge");
+    expect(panel.textContent).toContain("Merge Bread into…");
+    expect(panel.textContent).toContain("and Bread goes away.");
+    expect(panel.textContent).not.toContain("Baking");
+  });
+
+  it("a taken offer follows a rename of the tag it names", async () => {
+    const page = load((s) => {
+      if (s.url !== "/tags/rename") return MERGED;
+      return (s.body as { key: string }).key === "baking" ? TAKEN : ok(POWER);
+    });
+    page.click(tagged(page, "baking", "Rename"));
+    await page.settle();
+    await renameHome(page);
+    expect(page.inRow("baking", ".taken p").textContent).toBe(
+      "You already have a tag called Power (2 links). Merge Baking into it?",
+    );
+    page.click(tagged(page, "baking", "Merge into Power"));
+    await page.settle();
+    expect(page.sent[2]).toEqual({
+      url: "/tags/merge",
+      body: { key: "baking", into: "power" },
+      redirect: "manual",
+    });
+  });
+
+  it("a taken offer whose tag is deleted says so, and its merge says so rather than doing nothing", async () => {
+    const page = load((s) => (s.url === "/tags/rename" ? TAKEN : DELETED));
+    page.click(tagged(page, "baking", "Rename"));
+    await page.settle();
+    page.click(tagged(page, "home", "Delete tag"));
+    await page.settle();
+    expect(page.inRow("baking", ".taken p").textContent).toContain("not there any more");
+    page.click(page.inRow("baking", '[data-action="merge-taken"]'));
+    await page.settle();
+    expect(page.$("#tags-error").textContent).toBe("That tag is not there any more.");
+    expect(page.sent.map((s) => s.url)).toEqual(["/tags/rename", "/tags/delete"]);
+  });
+
+  it("Delete takes the deleted tag out of the other tags' shared-color notes", async () => {
+    const PANTRY = tag({ key: "pantry", name: "Pantry", color: "clay", pinned: true });
+    const page = load(() => DELETED, [KITCHEN, PANTRY]);
+    expect(page.inRow("kitchen", ".shared").textContent).toBe("Pantry also uses this color.");
+    page.click(tagged(page, "pantry", "Delete tag"));
+    await page.settle();
+    expect(page.inRow("kitchen", ".shared").hidden).toBe(true);
+    expect(page.inRow("kitchen", ".shared").textContent).toBe("");
+    expect(page.inRow("kitchen", '[data-color="clay"]').getAttribute("aria-label")).toBe("clay");
+  });
+});

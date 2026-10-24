@@ -401,7 +401,10 @@ if (list) {
     if (action === "edit") return toggleEdit(button, row);
     if (action === "merge-open") return openMerge(row);
     if (action === "merge-cancel") return closeMerge(row);
-    if (action === "keep") return hideTaken(row);
+    if (action === "keep") {
+      row.querySelector('input[name="name"]').value = nameOf(row);
+      return hideTaken(row);
+    }
     if (button.dataset.pick) return setPick(row, button);
     const into = action === "merge-go" ? rowFor(row.dataset.pick) : action === "merge-taken" ? rowFor(row.dataset.into) : null;
     if ((action === "merge-go" || action === "merge-taken") && !into) return;

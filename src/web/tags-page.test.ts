@@ -563,6 +563,7 @@ describe("renaming a tag", () => {
     await page.settle();
     expect(box.hidden).toBe(true);
     expect(page.sent).toHaveLength(1);
+    expect((page.inRow("baking", 'input[name="name"]') as HTMLInputElement).value).toBe("Baking");
     expect(ids(page)).toEqual(["kitchen", "baking", "home"]);
   });
 

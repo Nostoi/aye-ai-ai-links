@@ -151,6 +151,8 @@ describe("tag tools", () => {
     expect(again.text).toMatch(/too late/);
     expect(again.text).toMatch(/already have been undone/);
     expect(again.text).toContain("list_tags");
+    expect(again.text).toMatch(/tell the owner what it shows/);
+    expect(again.text).not.toMatch(/check list_tags before offering to reverse/);
   });
 
   it("an undo blocked by a later undoable change does not promise undoing that one helps", async () => {

@@ -547,7 +547,7 @@ export function buildMcpServer(
         if (error instanceof CoreError && error.code === "not_found") {
           throw new CoreError(
             error.code,
-            `${error.message} It may already have been undone, so check list_tags before offering to reverse it by hand.`,
+            `${error.message} It may already have been undone: check list_tags and tell the owner what it shows.`,
           );
         }
         throw error;

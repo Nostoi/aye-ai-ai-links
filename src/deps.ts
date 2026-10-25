@@ -6,6 +6,7 @@ import type { Embedder } from "./search/embedder.js";
 import { FtsSearch } from "./search/fts-search.js";
 import { HybridSearch } from "./search/hybrid-search.js";
 import { DIMS, MODEL_KEY } from "./search/model.js";
+import { createNameVectors } from "./search/name-vectors.js";
 import { loadVectorFunctions, VectorSearch } from "./search/vector-search.js";
 import { ExportFolder } from "./store/export-folder.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
@@ -18,10 +19,11 @@ import { SqliteStatsStore } from "./store/sqlite-stats.js";
 import { SqliteStatsReadingStore } from "./store/sqlite-stats-readings.js";
 import { SqliteStore } from "./store/sqlite-store.js";
 import { SqliteTagEditStore } from "./store/sqlite-tag-edits.js";
+import { SqliteTagSuggestStore } from "./store/sqlite-tag-suggest.js";
 import { SqliteVectorIndex } from "./store/sqlite-vector-index.js";
 
 /**
- * Builds the store, search, search log, vector index, image store, edit store, tag edit store, check store, profile, saved-copy store (which owns the folder) and page-text reader from ONE database handle.
+ * Builds the store, search, search log, vector index, image store, edit store, tag edit store, tag suggest store, check store, profile, saved-copy store (which owns the folder) and page-text reader from ONE database handle.
  * They must share it: ids ranked or saved in one database and read through another come back as the
  * wrong links, or with another link's page text. The export builds read through these same deps.
  */
@@ -49,6 +51,10 @@ export function createDeps(
     edits: new SqliteLinkEditStore(db),
     /** Renaming, merging and deleting tags, and the Undo of a merge or delete (#240). */
     tagEdits: new SqliteTagEditStore(db),
+    /** The pairs of tags that share a link, and the pairs the owner turned down (#251). */
+    tagSuggest: new SqliteTagSuggestStore(db),
+    /** Tag-name vectors from the same embedder as search, for the same suggestions. */
+    names: createNameVectors(embedder),
     profile: new SqliteProfileStore(db),
     pages: store,
     /** Keep handy rows: the digest and the tools rules read them. */

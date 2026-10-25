@@ -271,6 +271,16 @@ img.handy-image{background:#fff}
 .tags{max-width:760px}
 .tags h1{margin-bottom:8px}
 .tags .lead{margin-bottom:28px}
+.suggest{margin:0 0 20px;padding:16px 22px 8px;background:var(--surface);border-radius:18px;box-shadow:0 2px 10px #0000000b}
+.suggest h2{font-size:18px;margin:0 0 4px}
+.suggest-list{list-style:none;padding:0;margin:0}
+.suggestion{padding:12px 0;border-top:1.5px solid var(--line)}
+.suggestion:first-child{border-top:0}
+.suggestion .pair{margin:0 0 10px;overflow-wrap:anywhere}
+.suggestion .count{font-size:14px;color:var(--soft);white-space:nowrap}
+.suggestion button{min-height:44px;padding:0 18px}
+.suggestion .quiet{border-color:transparent;background:none;color:var(--soft)}
+.suggest[hidden]{display:none}
 .tag-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
 .tag{max-width:none;margin:0;background:var(--surface);border-radius:18px;padding:12px 14px 12px 22px;box-shadow:0 2px 10px #0000000b}
 .tag-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}

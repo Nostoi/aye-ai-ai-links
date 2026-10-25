@@ -22,6 +22,11 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-24:** The Tags page suggests tags to combine (#251; design: `docs/specs/2026-10-24-tag-merge-suggestions-design.md`). The builder chose the design after the owner said "You can just start".
+  - **The rule** (`src/core/tag-suggest.ts`): tags on live links are paired when their names are spelling twins, or when the names' meaning similarity is at least 0.75 and no live link carries both; pairs turned down with **Not these** are left out; twins rank first, then by similarity; at most five.
+  - **Tags page only.** The section sits above the list; **Keep** either tag uses the page's merge and its Undo. No MCP or Ask AI change. The page waits at most 1.5 s for the suggestions and shows without them past that or on failure.
+  - **Grouping the Tags page**, which the 2026-10-23 entry put with #251, is left for its own issue; #251 asks only for suggestions.
+
 - **2026-10-23:** Rename, merge and delete a tag, with Undo (#240; design: `docs/specs/2026-10-23-tag-rename-merge-delete-design.md`). The Tags page and the AI tools get all three. The rules live in `src/core/tag-edit.ts`; the order against #161 is in the 2026-10-22 entry below.
   - **Owner decisions:** merge and delete can be undone for one hour, from the page or an AI (longer than a link delete's 60 seconds, so "undo that" still works in a chat); nothing asks "Are you sure?" first; an agent changes tags only when the owner asks or confirms, and its merge or delete is covered by Undo; renaming onto an existing tag offers a merge into it ("Merge into game art" or "Keep pixel-art"); old addresses keep reaching the renamed or kept tag.
   - **Merge settings:** pinned if either was; the kept tag's own colour, description, kind and status, falling back to the old tag's colour and description; a topic that absorbs a stated or asked project becomes that project.

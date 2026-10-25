@@ -64,6 +64,14 @@ import {
 import type { TagEditStore } from "../core/tag-edit-store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { type SpaceColor, setTagColor, setTagPinned } from "../core/tag-space.js";
+import {
+  dismissTagPair,
+  type NameVectors,
+  suggestTagMerges,
+  type TagMergeSuggestion,
+  undismissTagPair,
+} from "../core/tag-suggest.js";
+import type { TagSuggestStore } from "../core/tag-suggest-store.js";
 import { tagKey } from "../core/tags.js";
 import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue, tidyReady } from "../core/tidy-up.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
@@ -592,6 +600,48 @@ async function removalAction(c: Context, act: () => Promise<void>): Promise<Resp
   }
 }
 
+/** How long the Tags page waits for its suggestions before it shows without them. */
+const TAG_SUGGEST_WAIT_MS = 1500;
+
+/**
+ * The suggestions, or none when they take longer than `ms` or fail; one line says why. A late
+ * embedding is not cancelled: it fills the name cache for the next view.
+ */
+async function suggestionsWithin(
+  ms: number,
+  find: () => Promise<TagMergeSuggestion[]>,
+): Promise<TagMergeSuggestion[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeUp = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms);
+  });
+  try {
+    return await Promise.race([find(), timeUp]);
+  } catch (error) {
+    console.error(
+      `[tags] suggestions skipped: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Runs a suggestion dismissal or its Undo and answers 204; a blank key is a 400 in the owner's words. */
+async function pairAction(c: Context, act: () => Promise<void>): Promise<Response> {
+  try {
+    await act();
+    return c.body(null, 204, NO_STORE);
+  } catch (error) {
+    if (!(error instanceof CoreError)) throw error;
+    return c.json(
+      { code: error.code, message: "That did not work. Reload the page." },
+      400,
+      NO_STORE,
+    );
+  }
+}
+
 /** A refused key action answers 400 with the rule's own message; anything else is thrown on. */
 function keyAction(c: Context, act: () => Response): Response {
   try {
@@ -665,6 +715,10 @@ export function webApp({
       images: LinkImageReader;
       edits: LinkEditStore;
       tagEdits: TagEditStore;
+      tagSuggest: TagSuggestStore;
+      names: NameVectors;
+      /** How long the Tags page waits for its suggestions; `TAG_SUGGEST_WAIT_MS` when left out. */
+      tagSuggestWaitMs?: number | undefined;
       profile: ProfileStore;
       stats: StatsStore;
       /** The stored stats reading, shown on the profile only while `readingOn`. */
@@ -1379,14 +1433,27 @@ export function webApp({
     }),
   );
 
-  app.get("/tags", session, async (c) =>
-    c.html(
-      tagsPage({
-        tags: await listTagsWithCounts(tagDeps, c.get("caller").owner),
-        ask: askOn(c, "Tags"),
-      }),
-      200,
-      NO_STORE,
+  app.get("/tags", session, async (c) => {
+    const { owner } = c.get("caller");
+    const [tags, suggestions] = await Promise.all([
+      listTagsWithCounts(tagDeps, owner),
+      suggestionsWithin(deps.tagSuggestWaitMs ?? TAG_SUGGEST_WAIT_MS, () =>
+        suggestTagMerges(tagDeps, owner),
+      ),
+    ]);
+    return c.html(tagsPage({ tags, suggestions, ask: askOn(c, "Tags") }), 200, NO_STORE);
+  });
+
+  // Not these, and its Undo: the keys of the two tags. Both answer 204.
+  const pairBody = jsonBody({ a: isString, b: isString });
+  app.post("/tags/suggestions/dismiss", pairBody, session, (c) =>
+    pairAction(c, () =>
+      dismissTagPair(tagDeps, c.get("caller").owner, c.get("body").a, c.get("body").b),
+    ),
+  );
+  app.post("/tags/suggestions/undismiss", pairBody, session, (c) =>
+    pairAction(c, () =>
+      undismissTagPair(tagDeps, c.get("caller").owner, c.get("body").a, c.get("body").b),
     ),
   );
 

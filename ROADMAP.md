@@ -22,6 +22,8 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-10-25:** All links and its Out of your lists show the order choices as a select on a phone, as space pages do (#218). This ends the phone sort dropdown deferral in the 2026-10-20 #194 entry; desktop is unchanged.
+
 - **2026-10-24:** The Tags page suggests tags to combine (#251; design: `docs/specs/2026-10-24-tag-merge-suggestions-design.md`). The builder chose the design after the owner said "You can just start".
   - **The rule** (`src/core/tag-suggest.ts`): tags on live links are paired when their names are spelling twins, or when the names' meaning similarity is at least 0.75 and no live link carries both; pairs turned down with **Not these** are left out; twins rank first, then by similarity; at most five.
   - **Tags page only.** The section sits above the list; **Keep** either tag uses the page's merge and its Undo. No MCP or Ask AI change. The page waits at most 1.5 s for the suggestions and shows without them past that or on failure.

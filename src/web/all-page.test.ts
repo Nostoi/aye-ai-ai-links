@@ -202,6 +202,32 @@ describe("the All links page", () => {
     ).toEqual(["/all/done", "/all/done?order=oldest", "/all/done?order=opened"]);
   });
 
+  it.each([
+    ["/all", false],
+    ["/all/done", true],
+  ] as const)("gives the phone a select to %s in each order (#218)", (action, done) => {
+    for (const order of ["newest", "oldest", "opened"] as const) {
+      const html = all({ done, order, links: [link("1")] });
+      const form = dom(html).querySelector("form.order-select");
+      expect(form?.getAttribute("action")).toBe(action);
+      expect(form?.querySelectorAll("input")).toHaveLength(0);
+      const options = [...(form?.querySelectorAll("option") ?? [])];
+      expect(options.map((o) => o.getAttribute("value"))).toEqual(["", "oldest", "opened"]);
+      expect(options.filter((o) => o.hasAttribute("selected")).map((o) => o.textContent)).toEqual([
+        { newest: "Newest first", oldest: "Oldest first", opened: "Recently opened" }[order],
+      ]);
+      expect(html).toContain('querySelector("form.order-select")');
+    }
+  });
+
+  it("shows the phone the select in place of the text choices (#218)", () => {
+    const phone = themeCss.slice(themeCss.indexOf("@media (max-width:600px)"));
+    expect(phone).toMatch(/\.all>\.orders\{display:none\}/);
+    expect(phone).toMatch(/\.order-select\{display:block\}/);
+    expect(phone).toMatch(/\.all-tools\{display:grid;/);
+    expect(phone).toMatch(/\.all-tools \.search-instead\{grid-column:1\/-1;/);
+  });
+
   it("offers Search instead, and puts All links first in the menu", () => {
     const html = all();
     expect(dom(html).querySelector("a.search-instead")?.getAttribute("href")).toBe("/search");

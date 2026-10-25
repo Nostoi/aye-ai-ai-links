@@ -392,6 +392,18 @@ export const MIGRATIONS: Migration[] = [
     PRIMARY KEY (owner_id, change_id)
   );
   `,
+  // Suggested tag merges (#251): the pairs of tag keys the owner turned down. Keys, not ids, so a
+  // dismissal outlives the Undo of a merge or delete. Additive.
+  `
+  CREATE TABLE tag_merge_dismissals (
+    owner_id TEXT NOT NULL REFERENCES users(id),
+    key_a TEXT NOT NULL,
+    key_b TEXT NOT NULL,
+    dismissed_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, key_a, key_b),
+    CHECK (key_a < key_b)
+  );
+  `,
 ];
 
 /**

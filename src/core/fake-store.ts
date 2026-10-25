@@ -53,6 +53,7 @@ import type {
 } from "./store.js";
 import type { LoggedEvent } from "./store-contract.js";
 import { receiptsMeet, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
+import type { TagSuggestStore } from "./tag-suggest-store.js";
 import { strongerSource } from "./tags.js";
 import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
 import type {
@@ -140,6 +141,10 @@ function matchesExpectation(found: Link, expected: LinkExpectation): boolean {
   );
 }
 
+/** A tag pair as one string, the keys sorted so either order gives the same one. */
+const pairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
+const pairOf = (p: string): [string, string] => p.split("\0") as [string, string];
+
 /** In-memory LinkStore for tests; honours the same contracts as the real store. */
 export class FakeStore
   implements
@@ -155,7 +160,8 @@ export class FakeStore
     SummaryCandidates,
     StatsStore,
     StatsReadingStore,
-    TagEditStore
+    TagEditStore,
+    TagSuggestStore
 {
   private snapshots = new Map<OwnerId, Map<string, SnapshotRecord>>();
   /** The lease token of each snapshot, by owner then link id; absent means 0. */
@@ -166,6 +172,8 @@ export class FakeStore
   /** Old key to the live key it reaches, by owner. Every value is a live key: actions keep it so. */
   private aliases = new Map<OwnerId, Map<string, string>>();
   private tagChanges = new Map<OwnerId, Map<string, TagChange>>();
+  /** Dismissed tag pairs as `pairKey`, by owner. */
+  private dismissals = new Map<OwnerId, Set<string>>();
   /** Each link's image status, and its stored image, by `imageKey`. */
   private imageStates = new Map<string, { status: ImageStatus }>();
   private storedImages = new Map<string, StoredImage & { role: ImageRole }>();
@@ -671,6 +679,28 @@ export class FakeStore
       for (const t of link.tags) counts.set(t.key, (counts.get(t.key) ?? 0) + 1);
     }
     return counts;
+  }
+
+  async sharedPairs(owner: OwnerId): Promise<[string, string][]> {
+    const seen = new Set<string>();
+    for (const link of this.owned(owner).values()) {
+      const keys = link.tags.map((t) => t.key);
+      for (const a of keys) for (const b of keys) if (a < b) seen.add(pairKey(a, b));
+    }
+    return [...seen].map(pairOf);
+  }
+
+  async dismissedPairs(owner: OwnerId): Promise<[string, string][]> {
+    return [...(this.dismissals.get(owner) ?? [])].map(pairOf);
+  }
+
+  async dismissPair(owner: OwnerId, a: string, b: string, _at: Date): Promise<void> {
+    const set = this.dismissals.get(owner) ?? new Set<string>();
+    this.dismissals.set(owner, set.add(pairKey(a, b)));
+  }
+
+  async undismissPair(owner: OwnerId, a: string, b: string): Promise<void> {
+    this.dismissals.get(owner)?.delete(pairKey(a, b));
   }
 
   async renameTag(owner: OwnerId, key: string, name: string, newKey: string) {

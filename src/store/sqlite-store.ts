@@ -640,7 +640,13 @@ export class SqliteStore
     }
     if (patch.state !== undefined) set("state", patch.state);
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));
-    if (patch.lastOpenedAt !== undefined) set("last_opened_at", toMs(patch.lastOpenedAt));
+    if (patch.lastOpenedAt === null) set("last_opened_at", null);
+    else if (patch.lastOpenedAt !== undefined) {
+      // An opening never moves the last one back (#260).
+      const at = toMs(patch.lastOpenedAt);
+      sets.push("last_opened_at = MAX(COALESCE(last_opened_at, ?), ?)");
+      values.push(at, at);
+    }
     if (patch.putAwayAt !== undefined) set("put_away_at", toMs(patch.putAwayAt));
     if (patch.tidyKeptAt !== undefined) set("tidy_kept_at", toMs(patch.tidyKeptAt));
     if (patch.why !== undefined) {

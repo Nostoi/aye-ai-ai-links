@@ -2250,6 +2250,35 @@ export function describeStoreContract(
         expect(await log(A, id)).toEqual([row("opened", T1)]);
       });
 
+      it("never moves lastOpenedAt back, while the rest of the patch and its event still apply (#260)", async () => {
+        const later = new Date("2026-05-02T10:00:00.000Z");
+        const earlier = new Date("2026-05-02T09:00:00.000Z");
+        const id = await seed(A, 1);
+        await h.store.update(A, id, { lastOpenedAt: later });
+        const viaUpdate = await h.store.update(A, id, { lastOpenedAt: earlier, title: "one" }, [
+          { record: "opened", at: earlier },
+        ]);
+        expect([viaUpdate?.lastOpenedAt, viaUpdate?.title]).toEqual([later, "one"]);
+        const viaReceipt = await h.store.updateWithReceipt(
+          A,
+          id,
+          { lastOpenedAt: earlier, title: "two" },
+          earlier,
+        );
+        expect([viaReceipt?.link.lastOpenedAt, viaReceipt?.link.title]).toEqual([later, "two"]);
+        const viaIf = await h.store.updateIf(A, id, {}, { lastOpenedAt: earlier, title: "three" });
+        expect([viaIf?.link.lastOpenedAt, viaIf?.link.title]).toEqual([later, "three"]);
+        expect((await h.store.get(A, id))?.lastOpenedAt).toEqual(later);
+        expect(await log(A, id)).toEqual([row("opened", earlier)]);
+        const newer = new Date("2026-05-02T11:00:00.000Z");
+        expect((await h.store.update(A, id, { lastOpenedAt: newer }))?.lastOpenedAt).toEqual(newer);
+        expect((await h.store.update(A, id, { lastOpenedAt: newer }))?.lastOpenedAt).toEqual(newer);
+        expect((await h.store.update(A, id, { lastOpenedAt: null }))?.lastOpenedAt).toBeNull();
+        expect((await h.store.update(A, id, { lastOpenedAt: earlier }))?.lastOpenedAt).toEqual(
+          earlier,
+        );
+      });
+
       it("a write without events leaves the log alone", async () => {
         const id = await seed(A, 1);
         await h.store.update(A, id, {}, [{ record: "opened", at: T1 }]);

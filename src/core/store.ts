@@ -51,6 +51,9 @@ export interface LinkStore {
    * rewrite). A `tags` field replaces the link's whole tag set. Returns the
    * updated link, or null when absent or foreign; then nothing is written,
    * including tags and catalog rows. `events` are applied in the same step (see `EventWrite`).
+   * A `lastOpenedAt` earlier than the stored one is left out, so an opening never moves the
+   * last one back, whatever order two openings land in (#260); a null one still clears it. The
+   * same holds for `updateWithReceipt` and `updateIf`.
    */
   update(owner: OwnerId, id: string, patch: LinkPatch, events?: EventWrite[]): Promise<Link | null>;
 

@@ -518,6 +518,9 @@ export class FakeStore
     } else if (fields.summary !== undefined && fields.summarySource === undefined) {
       fields.summarySource = null;
     }
+    if (fields.lastOpenedAt && found.lastOpenedAt && fields.lastOpenedAt < found.lastOpenedAt) {
+      delete fields.lastOpenedAt;
+    }
     for (const [k, v] of Object.entries(fields)) {
       if (v !== undefined) (found as Record<string, unknown>)[k] = v;
     }

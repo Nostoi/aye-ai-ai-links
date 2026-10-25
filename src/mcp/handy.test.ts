@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import type { Caller } from "../auth/caller.js";
+import { recordOpening } from "../core/links.js";
 import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -491,5 +492,47 @@ describe("update_link's putAway", () => {
     await call("update_link", { id: "1", putAway: true });
     await call("update_link", { id: "1", opened: true });
     expect(await stored()).toMatchObject({ state: "active", putAwayAt: null });
+  });
+});
+
+describe("an AI's opening sent with a handy change (#260)", () => {
+  it("never moves the last opening back when the owner opens the link during the handy write", async () => {
+    await call("save_link", { url: "https://example.com/t" });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reach = () => {};
+    const reached = new Promise<void>((resolve) => {
+      reach = resolve;
+    });
+    const tools = new Proxy(deps.tools, {
+      get(target, key) {
+        const value = Reflect.get(target, key);
+        if (typeof value !== "function") return value;
+        return async (...args: unknown[]) => {
+          reach();
+          await held;
+          return value.apply(target, args);
+        };
+      },
+    });
+    app = createApp({
+      deps: { ...deps, tools },
+      identify: async () => ({ ...A, rateKey: "a" }),
+    }).app;
+
+    const ai = call("update_link", {
+      id: "1",
+      opened: true,
+      handy: { action: "keep", source: "stated" },
+    });
+    await reached;
+    clock = at(60_000);
+    await recordOpening(deps, A.owner, "1");
+    release();
+
+    expect((await ai).isError).toBe(false);
+    expect((await deps.store.get(A.owner, "1"))?.lastOpenedAt).toEqual(at(60_000));
   });
 });

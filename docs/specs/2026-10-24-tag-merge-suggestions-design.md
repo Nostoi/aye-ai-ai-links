@@ -26,7 +26,7 @@ A suggestion leaves the section as soon as either of its tags is merged, deleted
 
 Only tags on at least one live link take part (merging an empty tag is just deleting it). A pair is suggested when either holds, and the owner hasn't said **Not these** to it:
 
-1. **Spelling twins.** The names are equal once capitals and everything but letters and digits are dropped, or once a final `s` is dropped from one of them (`Java Script` · `JavaScript`, `pixel art` · `pixel-art`, `game asset` · `Game Assets`). Twins are suggested even when they share links, since an AI may put both on one link. They rank above every meaning pair.
+1. **Spelling twins.** The names are equal once capitals, spaces and the joining marks `- _ . /` are dropped, or once a final `s` is dropped from one of them (`Java Script` · `JavaScript`, `pixel art` · `pixel-art`, `game asset` · `Game Assets`). Other symbols stay, so `C#` and `C++` are not twins. Twins are suggested even when they share links, since an AI may put both on one link. They rank above every meaning pair.
 2. **Close meaning, used apart.** The names' meaning similarity is at least **0.75**, and no live link carries both. A link that carries both was given both, so they are being used for different things.
 
 Meaning similarity is the cosine of the two names' vectors from the app's meaning model (the one search uses, `bge-small-en-v1.5`), each name embedded **on its own** as a document (no query prefix). Embedding names together shifts the scores enough to move a pair across the line (`performance` · `Browser Performance`: 0.759 alone, 0.734 in a batch of 35), so the rule is defined on one name per embedding.
@@ -54,7 +54,7 @@ Related-but-different names can pass the bar (an independent probe found `Java` 
   - the pairs of tag keys that share a live link;
   - the owner's dismissed pairs, adding one, and removing one (for Undo).
 - Dismissals are stored by tag **key**, the two keys sorted, in a new table `tag_merge_dismissals (owner_id, key_a, key_b, dismissed_at)`, primary key `(owner_id, key_a, key_b)`. Keys rather than ids because Undo of a merge or delete puts a tag back with a new id, and a key survives that. A renamed tag gets a new key and may be suggested again, which is right: its name changed. Accepted consequence: a dismissal follows the names, so a new tag that reuses a dismissed name inherits the dismissal. A row whose tags are gone stays and does no harm.
-- Name vectors: a small cache over the `Embedder`, keyed by name and the model key, in memory for the life of the process. A Tags page view embeds only names it hasn't seen, and two views at once share one embedding of a name. It lives with the embedder in `src/search/` and is built in `createDeps`.
+- Name vectors: a small cache over the `Embedder`, keyed by name, in memory for the life of the process (the process has one model). A Tags page view embeds only names it hasn't seen, and two views at once share one embedding of a name. It lives with the embedder in `src/search/` and is built in `createDeps`.
 - **The page never waits long for it.** The Tags route waits at most 1.5 s for the suggestions; past that, or if embedding fails, the page shows without the section and the failure is logged. The embedding carries on and fills the cache, so the next view has it. The embedder is shared with search, one job at a time; a cold cache of N names is N small jobs queued once per process, and a search behind them already falls back to keyword results after its own wait.
 
 ## Doors

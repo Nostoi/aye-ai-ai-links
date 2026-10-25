@@ -18,6 +18,8 @@ describe("spellingTwins", () => {
     ["Game Assets", "game asset"],
     ["Café", "cafés"],
     ["ai", "AI"],
+    ["node.js", "Node JS"],
+    ["UI/UX", "ui ux"],
   ])("%s and %s are twins", (a, b) => {
     expect(spellingTwins(a, b)).toBe(true);
   });
@@ -28,6 +30,8 @@ describe("spellingTwins", () => {
     ["java", "javascript"],
     ["!!", "??"],
     ["", ""],
+    ["C#", "C++"],
+    ["C#", "C"],
   ])("%s and %s are not twins", (a, b) => {
     expect(spellingTwins(a, b)).toBe(false);
   });

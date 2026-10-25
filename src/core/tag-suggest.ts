@@ -20,9 +20,10 @@ export type TagMergeSuggestion = {
   b: { tag: Tag; links: number };
 };
 
-const spelled = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+// Symbols such as # and + stay: C# and C++ are different tags.
+const spelled = (name: string): string => name.toLowerCase().replace(/[\s\-_./]/gu, "");
 
-/** True when the names are equal once capitals and all but letters and digits are dropped, or once a final `s` is dropped from one. */
+/** True when the names are equal once capitals, spaces and `- _ . /` are dropped, or once a final `s` is dropped from one. */
 export function spellingTwins(a: string, b: string): boolean {
   const x = spelled(a);
   const y = spelled(b);

@@ -13,7 +13,7 @@ import { doneLinkScript, OUT_OF_LISTS, PUT_AWAY_MARKER } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
-import { orderNav } from "./link-orders.js";
+import { orderNav, orderSelect, orderSelectScript } from "./link-orders.js";
 import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
 import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -145,7 +145,7 @@ export function allPage(input: Input): string {
     `<main class="all" data-view="${view}">
 <div class="all-head">
 <h1>${done ? OUT_OF_LISTS : "All links"}</h1>
-<div class="all-tools">${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
+<div class="all-tools">${orderSelect(order, { action: done ? "/all/done" : "/all", hidden: {} })}${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
 </div>
 ${orderNav(order, (o) => allHref(o, { done }))}
 <p id="all-error" role="alert"></p>
@@ -155,6 +155,7 @@ ${list}
 ${input.ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
 ${viewScript}
+${orderSelectScript}
 ${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
 ${doneLinkScript("all-links", "all-error")}

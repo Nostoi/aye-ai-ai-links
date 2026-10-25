@@ -56,6 +56,18 @@ export interface LinkCount {
   count(owner: OwnerId, filters: Omit<SearchFilters, "before">): Promise<number>;
 }
 
+/** A link's place in a blank listing: its id and the time the order sorted it by. */
+export type ListedLink = { id: string; at: Date };
+
+/**
+ * A blank query's listing as `LinkSearch` describes it, owner-scoped and without deleted links,
+ * each link with the time the same read sorted it by, so a page's cursor names the place it was
+ * listed at even if the link changes before it is read (#215).
+ */
+export interface LinkListing {
+  list(owner: OwnerId, filters: SearchFilters, limit: number): Promise<ListedLink[]>;
+}
+
 /** A returned link's 1-based place in each list that found it. */
 export type ListRanks = { field?: number; page?: number; meaning?: number };
 

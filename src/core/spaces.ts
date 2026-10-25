@@ -1,7 +1,7 @@
 import { CoreError } from "./errors.js";
 import { type LinkPage, linkPage } from "./link-pages.js";
 import { spaceColor } from "./link-space.js";
-import type { LinkOrder, LinkSearch } from "./search.js";
+import type { LinkListing, LinkOrder } from "./search.js";
 import type { LinkStore } from "./store.js";
 import type { SpaceColor } from "./tag-space.js";
 import { tagKey } from "./tags.js";
@@ -21,7 +21,7 @@ export type HomeSpace = {
 
 type Deps = {
   store: LinkStore;
-  search: LinkSearch;
+  listing: LinkListing;
 };
 
 /**

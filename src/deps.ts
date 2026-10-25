@@ -43,6 +43,8 @@ export function createDeps(
     keywordSearch,
     /** Counts what a blank listing pages through; blank listings are keyword search's alone. */
     count: keywordSearch,
+    /** The blank listing, with each link's sort time from the same read, for paging (#215). */
+    listing: keywordSearch,
     searchLog: new SqliteSearchLog(db),
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     /** Preview images: the image pass writes them, the web door reads them. */

@@ -9,6 +9,7 @@ import {
 import type Database from "better-sqlite3";
 import type { ChatModel } from "../ai/model.js";
 import { createApp } from "../app.js";
+import type { NameVectors } from "../core/tag-suggest.js";
 import { createDeps } from "../deps.js";
 import type { RateLimitOptions } from "../http/rate-limit.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -232,6 +233,8 @@ export async function oauthWorld({
   copyLimitBytes = 0,
   exportDir,
   ai,
+  names,
+  tagSuggestWaitMs,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -248,6 +251,10 @@ export async function oauthWorld({
   exportDir?: string;
   /** The in-app AI; without it, `POST /ai/chat` answers NO_AI. */
   ai?: ChatModel;
+  /** Replaces the tag-name vectors the Tags page suggests from. */
+  names?: NameVectors;
+  /** Shortens the Tags page's wait for its suggestions. */
+  tagSuggestWaitMs?: number;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -266,7 +273,7 @@ export async function oauthWorld({
   if (exportDir !== undefined) await deps.exportFolder.reset();
   deps.store.ensureUser("owner", "Owner");
   const { app } = createApp({
-    deps: { ...deps, copyLimitBytes, ai },
+    deps: { ...deps, copyLimitBytes, ai, ...(names && { names }), tagSuggestWaitMs },
     identify: auth.identify,
     auth: { ...auth, keys: keyStore, limits },
     allowedHosts: ["links.example"],

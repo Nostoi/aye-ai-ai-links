@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import type { TagMergeSuggestion } from "../core/tag-suggest.js";
 import type { Tag } from "../core/types.js";
 import { PAGE_STYLE } from "./page.js";
 import { tagsPage } from "./tags-page.js";
@@ -28,8 +29,9 @@ const BAKING = tag({ key: "baking", name: "Baking" });
 const HOME = tag({ key: "home", name: "Home batteries", color: "teal", pinned: true });
 
 const LINKS: Record<string, number> = { kitchen: 5, baking: 1, home: 2 };
-const render = (tags: Tag[]) =>
-  tagsPage({ tags: tags.map((t) => ({ tag: t, links: LINKS[t.key] ?? 0 })) });
+const entry = (t: Tag) => ({ tag: t, links: LINKS[t.key] ?? 0 });
+const render = (tags: Tag[], suggestions: TagMergeSuggestion[] = []) =>
+  tagsPage({ tags: tags.map(entry), suggestions });
 
 type Answer = { status: number; type?: string; body?: unknown };
 type Sent = { url: string; body: unknown; redirect: unknown };
@@ -42,8 +44,9 @@ function load(
   answer: (sent: Sent) => Answer | Promise<Answer>,
   tags: Tag[] = [KITCHEN, BAKING, HOME],
   hash = "",
+  suggestions: TagMergeSuggestion[] = [],
 ) {
-  const html = render(tags);
+  const html = render(tags, suggestions);
   const { document, window } = parseHTML(html);
   const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     .map((m) => m[1] ?? "")
@@ -963,5 +966,260 @@ describe("pickers, offers and color notes follow the other rows", () => {
     expect(page.inRow("kitchen", ".shared").hidden).toBe(true);
     expect(page.inRow("kitchen", ".shared").textContent).toBe("");
     expect(page.inRow("kitchen", '[data-color="clay"]').getAttribute("aria-label")).toBe("clay");
+  });
+});
+
+describe("suggested merges on the Tags page", () => {
+  const GARDEN = tag({ key: "garden", name: "Garden" });
+  const POND = tag({ key: "pond", name: "Pond" });
+  LINKS.garden = 3;
+  LINKS.pond = 1;
+  const TAGS = [KITCHEN, BAKING, HOME, GARDEN, POND];
+  const pair = (a: Tag, b: Tag): TagMergeSuggestion => ({ a: entry(a), b: entry(b) });
+  const KB = pair(KITCHEN, BAKING);
+  const HB = pair(HOME, BAKING);
+  const GP = pair(GARDEN, POND);
+  const SUGGESTIONS = [KB, GP, HB];
+  const NO_CONTENT: Answer = { status: 204 };
+  const open = (answer: (sent: Sent) => Answer | Promise<Answer>, suggestions = SUGGESTIONS) =>
+    load(answer, TAGS, "", suggestions);
+  const item = (page: Page, keys: string) => {
+    const [a, b] = keys.split("|");
+    return page.$(`#suggest li[data-a="${a}"][data-b="${b}"]`);
+  };
+  const shown = (page: Page) =>
+    [...page.document.querySelectorAll("#suggest li.suggestion")].map(
+      (li) => `${li.getAttribute("data-a")}|${li.getAttribute("data-b")}`,
+    );
+  const button = (page: Page, keys: string, name: string) =>
+    [...item(page, keys).querySelectorAll("button")].find(
+      (b) => b.textContent === name,
+    ) as HTMLElement;
+  const merged = (kept: Tag, moved = 1): Answer => ({
+    status: 200,
+    body: { tag: kept, changeId: "c1", moved, links: 6 },
+  });
+  const ALL = ["kitchen|baking", "garden|pond", "home|baking"];
+
+  describe("as served", () => {
+    it("shows nothing without suggestions", () => {
+      const page = load(() => NO_CONTENT, TAGS);
+      expect(page.document.getElementById("suggest")).toBeNull();
+      expect(page.document.body.innerHTML).not.toContain("Tags you might combine");
+    });
+
+    it("puts the section above the list, naming both tags with their counts and three buttons", () => {
+      const page = open(() => NO_CONTENT);
+      const section = page.$("#suggest");
+      expect(section.querySelector("h2")?.textContent).toBe("Tags you might combine");
+      expect(page.document.documentElement.outerHTML.indexOf('id="suggest"')).toBeLessThan(
+        page.document.documentElement.outerHTML.indexOf('id="tags"'),
+      );
+      expect(shown(page)).toEqual(ALL);
+      const first = item(page, "kitchen|baking");
+      expect(first.querySelector(".pair")?.textContent).toBe(
+        "Kitchen · 5 links and Baking · 1 link",
+      );
+      expect([...first.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+        "Keep Kitchen",
+        "Keep Baking",
+        "Not these",
+      ]);
+    });
+
+    it("escapes hostile names", () => {
+      const evil = tag({ key: "x", name: "<img src=x onerror=alert(1)>" });
+      const page = load(() => NO_CONTENT, [evil, BAKING], "", [pair(evil, BAKING)]);
+      expect(page.document.querySelector("#suggest img")).toBeNull();
+      expect(page.$("#suggest .pair").textContent).toContain("<img src=x onerror=alert(1)>");
+    });
+
+    it("sizes its buttons to at least 44px and uses no amber", () => {
+      expect(PAGE_STYLE).toContain(".suggestion button{min-height:44px");
+      expect(PAGE_STYLE.match(/\.suggest[^{]*\{[^}]*\}/g)?.join("")).not.toContain("amber");
+    });
+  });
+
+  describe("Keep", () => {
+    it("merges the other tag into the one kept, offers Undo, and drops every suggestion naming either", async () => {
+      const page = open(() => merged(KITCHEN));
+      page.click(button(page, "kitchen|baking", "Keep Kitchen"));
+      await page.settle();
+      expect(page.sent).toEqual([
+        { url: "/tags/merge", body: { key: "baking", into: "kitchen" }, redirect: "manual" },
+      ]);
+      expect(ids(page)).toEqual(["kitchen", "home", "garden", "pond"]);
+      expect(page.$("#undo-bar span").textContent).toBe("Merged Baking into Kitchen (1 link).");
+      expect(shown(page)).toEqual(["garden|pond"]);
+      expect(page.$("#suggest").hidden).toBe(false);
+    });
+
+    it("Keep on the second tag merges the first into it", async () => {
+      const page = open(() => merged(BAKING));
+      page.click(button(page, "kitchen|baking", "Keep Baking"));
+      await page.settle();
+      expect(page.sent[0]?.body).toEqual({ key: "kitchen", into: "baking" });
+    });
+
+    it("hides the section once its last suggestion has gone", async () => {
+      const page = open(() => merged(GARDEN), [GP]);
+      page.click(button(page, "garden|pond", "Keep Garden"));
+      await page.settle();
+      expect(shown(page)).toEqual([]);
+      expect(page.$("#suggest").hidden).toBe(true);
+    });
+
+    it("Undo puts the rows back but not the suggestions", async () => {
+      const back = {
+        tags: [
+          { tag: BAKING, links: 1 },
+          { tag: KITCHEN, links: 5 },
+        ],
+      };
+      const page = open((sent) =>
+        sent.url === "/tags/undo" ? { status: 200, body: back } : merged(KITCHEN),
+      );
+      page.click(button(page, "kitchen|baking", "Keep Kitchen"));
+      await page.settle();
+      page.click(page.$("#undo-bar button"));
+      await page.settle();
+      expect(ids(page)).toEqual(["kitchen", "baking", "home", "garden", "pond"]);
+      expect(shown(page)).toEqual(["garden|pond"]);
+    });
+
+    it("keeps the suggestion and says why when the merge is refused", async () => {
+      const page = open(() => ({
+        status: 404,
+        body: { message: "That tag is not there any more." },
+      }));
+      page.click(button(page, "kitchen|baking", "Keep Kitchen"));
+      await page.settle();
+      expect(shown(page)).toEqual(ALL);
+      expect(page.$("#tags-error").textContent).toBe("That tag is not there any more.");
+      expect(page.$("#undo-bar").hidden).toBe(true);
+    });
+
+    it("sends nothing while one of its rows has a request out", async () => {
+      const g = gate({ status: 200, body: { tag: BAKING } });
+      const page = open(() => g.held);
+      page.click(page.inRow("baking", '[data-action="pin"]'));
+      page.click(button(page, "kitchen|baking", "Keep Kitchen"));
+      await page.settle();
+      expect(page.sent).toHaveLength(1);
+      g.release();
+    });
+  });
+
+  describe("Not these", () => {
+    it("posts the pair, removes only that suggestion, and offers an Undo that says so", async () => {
+      const page = open(() => NO_CONTENT);
+      page.click(button(page, "kitchen|baking", "Not these"));
+      await page.settle();
+      expect(page.sent).toEqual([
+        {
+          url: "/tags/suggestions/dismiss",
+          body: { a: "kitchen", b: "baking" },
+          redirect: "manual",
+        },
+      ]);
+      expect(shown(page)).toEqual(["garden|pond", "home|baking"]);
+      expect(ids(page)).toEqual(["kitchen", "baking", "home", "garden", "pond"]);
+      expect(page.$("#undo-bar").hidden).toBe(false);
+      expect(page.$("#undo-bar span").textContent).toBe("Won't suggest Kitchen and Baking again.");
+    });
+
+    it("Undo posts the undismissal and puts the suggestion back in its place", async () => {
+      const page = open(() => NO_CONTENT);
+      page.click(button(page, "garden|pond", "Not these"));
+      await page.settle();
+      page.click(page.$("#undo-bar button"));
+      await page.settle();
+      expect(page.sent[1]).toEqual({
+        url: "/tags/suggestions/undismiss",
+        body: { a: "garden", b: "pond" },
+        redirect: "manual",
+      });
+      expect(shown(page)).toEqual(ALL);
+      expect(page.$("#undo-bar").hidden).toBe(true);
+    });
+
+    it("Undo shows the section again after its last suggestion was dismissed", async () => {
+      const page = open(() => NO_CONTENT, [GP]);
+      page.click(button(page, "garden|pond", "Not these"));
+      await page.settle();
+      expect(page.$("#suggest").hidden).toBe(true);
+      page.click(page.$("#undo-bar button"));
+      await page.settle();
+      expect(page.$("#suggest").hidden).toBe(false);
+      expect(shown(page)).toEqual(["garden|pond"]);
+    });
+
+    it("keeps the suggestion, shows the error and offers no Undo when the dismissal is refused", async () => {
+      const page = open(() => ({ status: 400, body: { message: "No." } }));
+      page.click(button(page, "kitchen|baking", "Not these"));
+      await page.settle();
+      expect(shown(page)).toEqual(ALL);
+      expect(page.$("#tags-error").textContent).toBe("No.");
+      expect(page.$("#undo-bar").hidden).toBe(true);
+    });
+
+    it("does not bring the suggestion back when its Undo is refused, and says so", async () => {
+      const page = open((sent) =>
+        sent.url.endsWith("/undismiss") ? { status: 400, body: { message: "No." } } : NO_CONTENT,
+      );
+      page.click(button(page, "garden|pond", "Not these"));
+      await page.settle();
+      page.click(page.$("#undo-bar button"));
+      await page.settle();
+      expect(shown(page)).toEqual(["kitchen|baking", "home|baking"]);
+      expect(page.$("#tags-error").textContent).toBe("No.");
+    });
+  });
+
+  describe("a change from the Edit panel", () => {
+    it("a merge drops the suggestions naming the tag merged away or the tag merged into", async () => {
+      const page = open(() => MERGED);
+      await mergeBakingIntoHome(page);
+      expect(shown(page)).toEqual(["garden|pond"]);
+    });
+
+    it("a merge into a tag drops the suggestions that name it, though it stays on the page", async () => {
+      const page = open(() => merged(GARDEN));
+      page.click(tagged(page, "pond", "Merge into another tag…"));
+      page.click(picks(page, "pond").find((b) => b.dataset.pick === "garden") as HTMLElement);
+      page.click(tagged(page, "pond", "Merge into Garden"));
+      await page.settle();
+      expect(shown(page)).toEqual(["kitchen|baking", "home|baking"]);
+    });
+
+    it("a delete drops the suggestions naming the tag", async () => {
+      const page = open(() => ({ status: 200, body: { changeId: "d1", moved: 1 } }));
+      page.click(tagged(page, "baking", "Delete tag"));
+      await page.settle();
+      expect(shown(page)).toEqual(["garden|pond"]);
+    });
+
+    it("a rename to a new key drops the suggestions naming the old one", async () => {
+      const page = open(() => ok({ ...BAKING, key: "bread", name: "Bread" }));
+      page.type(page.inRow("baking", 'input[name="name"]'), "Bread");
+      page.click(tagged(page, "baking", "Rename"));
+      await page.settle();
+      expect(shown(page)).toEqual(["garden|pond"]);
+    });
+
+    it("a rename that keeps the key drops them too, since their wording is stale", async () => {
+      const page = open(() => ok({ ...BAKING, name: "BAKING" }));
+      page.type(page.inRow("baking", 'input[name="name"]'), "BAKING");
+      page.click(tagged(page, "baking", "Rename"));
+      await page.settle();
+      expect(shown(page)).toEqual(["garden|pond"]);
+    });
+
+    it("a pin leaves the suggestions alone", async () => {
+      const page = open(() => ok({ ...BAKING, pinned: true, color: "teal" }));
+      page.click(page.inRow("baking", '[data-action="pin"]'));
+      await page.settle();
+      expect(shown(page)).toEqual(ALL);
+    });
   });
 });

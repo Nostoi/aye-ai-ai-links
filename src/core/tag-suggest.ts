@@ -2,6 +2,7 @@ import type { LinkStore } from "./store.js";
 import { listTagsWithCounts } from "./tag-edit.js";
 import type { TagEditStore } from "./tag-edit-store.js";
 import type { TagSuggestStore } from "./tag-suggest-store.js";
+import { tagKey } from "./tags.js";
 import type { OwnerId, Tag } from "./types.js";
 
 /** The meaning of a tag's name as a unit vector, each name embedded on its own. */
@@ -95,3 +96,19 @@ export async function suggestTagMerges(
 
 const sortedByName = <T extends { tag: Tag }>(x: T, y: T): [T, T] =>
   byName(x.tag.name, y.tag.name) <= 0 ? [x, y] : [y, x];
+
+/** Remembers that the owner doesn't want these two tags suggested together. */
+export const dismissTagPair = (
+  deps: { tagSuggest: TagSuggestStore; now: () => Date },
+  owner: OwnerId,
+  a: string,
+  b: string,
+): Promise<void> => deps.tagSuggest.dismissPair(owner, tagKey(a), tagKey(b), deps.now());
+
+/** Takes a dismissal back (the Undo of `dismissTagPair`). */
+export const undismissTagPair = (
+  deps: { tagSuggest: TagSuggestStore },
+  owner: OwnerId,
+  a: string,
+  b: string,
+): Promise<void> => deps.tagSuggest.undismissPair(owner, tagKey(a), tagKey(b));

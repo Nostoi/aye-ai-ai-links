@@ -909,6 +909,10 @@ describe("owner isolation coverage", () => {
       "the two-owner rename, merge, delete and undo test in web/tags-routes.test.ts",
     "POST /tags/undo":
       "the two-owner rename, merge, delete and undo test in web/tags-routes.test.ts",
+    "POST /tags/suggestions/dismiss":
+      "the two-owner suggested merges test in web/tags-routes.test.ts",
+    "POST /tags/suggestions/undismiss":
+      "the two-owner suggested merges test in web/tags-routes.test.ts",
     "POST /profile/notes/add": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/edit": "the two-owner profile tests in web/profile-page.test.ts",
     "POST /profile/notes/confirm": "the two-owner profile tests in web/profile-page.test.ts",

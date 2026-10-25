@@ -3,11 +3,13 @@ import { FakeStore } from "./fake-store.js";
 import { A, at, B, newLink } from "./snapshot-store-contract.js";
 import { mention } from "./tag-edit-store-contract.js";
 import {
+  dismissTagPair,
   MERGE_SUGGEST_MAX,
   MERGE_SUGGEST_MIN,
   type NameVectors,
   spellingTwins,
   suggestTagMerges,
+  undismissTagPair,
 } from "./tag-suggest.js";
 
 describe("spellingTwins", () => {
@@ -193,5 +195,17 @@ describe("suggestTagMerges", () => {
     expect(await pairs(store, names, A)).toEqual([]);
     expect(await pairs(store, names, B)).toEqual([]);
     expect(names.asked).toEqual(["a-tag", "b-tag"]);
+  });
+});
+
+describe("dismissTagPair and undismissTagPair", () => {
+  it("record and remove the pair under the tags' keys, either order, for that owner only", async () => {
+    const store = new FakeStore();
+    const when = new Date(5);
+    await dismissTagPair({ tagSuggest: store, now: () => when }, A, "Game  Art", "game assets");
+    expect(await store.dismissedPairs(A)).toEqual([["game art", "game assets"]]);
+    expect(await store.dismissedPairs(B)).toEqual([]);
+    await undismissTagPair({ tagSuggest: store }, A, "Game Assets", "GAME ART");
+    expect(await store.dismissedPairs(A)).toEqual([]);
   });
 });

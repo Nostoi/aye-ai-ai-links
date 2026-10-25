@@ -1,4 +1,5 @@
 import { SPACE_COLORS } from "../core/tag-space.js";
+import type { TagMergeSuggestion } from "../core/tag-suggest.js";
 import type { Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { escapeHtml, page } from "./page.js";
@@ -49,6 +50,26 @@ function tagItem({ tag: t, links }: TagEntry, i: number): string {
 </li>`;
 }
 
+function suggestionItem({ a, b }: TagMergeSuggestion): string {
+  const name = (e: TagEntry) =>
+    `<span class="s-name">${escapeHtml(e.tag.name)}</span> <span class="count">· ${linkCount(e.links)}</span>`;
+  return `<li class="suggestion" data-a="${escapeHtml(a.tag.key)}" data-b="${escapeHtml(b.tag.key)}">
+<p class="pair">${name(a)} and ${name(b)}</p>
+<div class="choices"><button type="button" data-suggest="keep-a">Keep ${escapeHtml(a.tag.name)}</button><button type="button" data-suggest="keep-b">Keep ${escapeHtml(b.tag.name)}</button><button type="button" class="quiet" data-suggest="dismiss">Not these</button></div>
+</li>`;
+}
+
+const suggestionsSection = (suggestions: TagMergeSuggestion[]) =>
+  suggestions.length === 0
+    ? ""
+    : `<section class="suggest" id="suggest" aria-labelledby="suggest-heading">
+<h2 id="suggest-heading">Tags you might combine</h2>
+<ul class="suggest-list">
+${suggestions.map(suggestionItem).join("\n")}
+</ul>
+</section>
+`;
+
 /**
  * The owner's tags: pin one to make it a space, and set its kind, status and color.
  *
@@ -62,15 +83,28 @@ function tagItem({ tag: t, links }: TagEntry, i: number): string {
  * Each row shows its link count. The Edit panel also renames the tag, merges it into another, and
  * deletes it. Merge and Delete show the Undo bar; Undo posts the change id the answer gave. A row
  * takes one action at a time, and a merge and its Undo hold both rows.
+ *
+ * Above the list, "Tags you might combine" (#251) offers each suggested pair: Keep either tag runs
+ * the page's own merge, and Not these posts the pair and shows an Undo that posts it back. A
+ * suggestion leaves the section when either of its tags is merged, merged into, deleted or
+ * renamed here, and an Undo does not bring it back.
  */
-export const tagsPage = ({ tags, ask }: { tags: TagEntry[]; ask?: Ask | undefined }) =>
+export const tagsPage = ({
+  tags,
+  suggestions = [],
+  ask,
+}: {
+  tags: TagEntry[];
+  suggestions?: TagMergeSuggestion[];
+  ask?: Ask | undefined;
+}) =>
   page(
     "Tags · Aye-AI-AI Links",
     `<main class="tags">
 <h1>Tags</h1>
 <p class="lead">Pinned tags are your spaces on the home page. Each one keeps its color everywhere.</p>
 <p id="tags-error" role="alert"></p>
-${tags.length === 0 ? "<p>No tags yet. Your AI adds tags when it saves a link.</p>" : `<ul class="tag-list" id="tags">\n${tags.map(tagItem).join("\n")}\n</ul>`}
+${suggestionsSection(suggestions)}${tags.length === 0 ? "<p>No tags yet. Your AI adds tags when it saves a link.</p>" : `<ul class="tag-list" id="tags">\n${tags.map(tagItem).join("\n")}\n</ul>`}
 </main>
 <script>
 const list = document.getElementById("tags");
@@ -232,11 +266,15 @@ const showTaken = (row) => {
 /** Rename is the one action that may change the row's key; a name another tag has offers a merge. */
 const rename = async (row) => {
   hideTaken(row);
+  const was = row.dataset.key;
   const { res, answer, data } = await send("/tags/rename", {
     key: row.dataset.key,
     name: row.querySelector('input[name="name"]').value,
   });
-  if (data && data.tag) return draw(row, data.tag);
+  if (data && data.tag) {
+    dropSuggestions(was, data.tag.key);
+    return draw(row, data.tag);
+  }
   if (res && res.status === 409 && answer && answer.code === "taken" && answer.tag) {
     const into = rowFor(answer.tag.key);
     offered.set(row, into);
@@ -292,6 +330,7 @@ const merge = async (row, into) => {
     return null;
   }
   const before = row.nextElementSibling;
+  dropSuggestions(row.dataset.key, into.dataset.key);
   row.remove();
   draw(into, data.tag, data.links);
   return [
@@ -308,6 +347,7 @@ const remove = async (row) => {
     return null;
   }
   const before = row.nextElementSibling;
+  dropSuggestions(row.dataset.key);
   row.remove();
   sync();
   return [
@@ -344,6 +384,17 @@ const fillMerge = (row) => {
   }
   filterPicks(row, panel.querySelector('input[name="filter"]'));
   markPick(row);
+};
+
+const suggest = document.getElementById("suggest");
+const suggested = () => (suggest ? [...suggest.querySelectorAll("li.suggestion")] : []);
+
+/** Takes out every suggestion naming one of these tag keys; the section hides when none is left. */
+const dropSuggestions = (...keys) => {
+  for (const li of suggested()) {
+    if (keys.includes(li.dataset.a) || keys.includes(li.dataset.b)) li.remove();
+  }
+  if (suggest) suggest.hidden = suggested().length === 0;
 };
 
 /** Brings everything drawn from other rows up to date: shared-color notes, open pickers and taken offers. */
@@ -434,6 +485,70 @@ const run = async (button, row, into) => {
   return null;
 };
 
+/** Runs \`fn\` with \`rows\` held and \`button\` disabled; shows the Undo it resolves to, if any. */
+const working = async (button, rows, fn) => {
+  if (isHeld(rows)) return;
+  hold(rows);
+  // Disabling the focused button drops focus to the page, so it is given back after.
+  const hadFocus = document.activeElement === button;
+  button.disabled = true;
+  let undo = null;
+  try {
+    undo = await fn();
+  } finally {
+    button.disabled = false;
+    release(rows);
+  }
+  if (hadFocus) button.focus();
+  if (undo) showUndo(undo[0], undo[1]);
+};
+
+/** Not these: posts the pair and takes the suggestion out; its Undo posts it back and puts it where it was. */
+const dismiss = async (li) => {
+  const a = li.dataset.a;
+  const b = li.dataset.b;
+  const names = [...li.querySelectorAll(".s-name")].map((n) => n.textContent);
+  const { res, answer } = await send("/tags/suggestions/dismiss", { a, b });
+  if (!res || res.status !== 204) {
+    tagsError.textContent = failure(res, answer);
+    return null;
+  }
+  const before = li.nextElementSibling;
+  li.remove();
+  suggest.hidden = suggested().length === 0;
+  return [
+    "Won't suggest " + names[0] + " and " + names[1] + " again.",
+    async () => {
+      const back = await send("/tags/suggestions/undismiss", { a, b });
+      if (!back.res || back.res.status !== 204) {
+        tagsError.textContent = failure(back.res, back.answer);
+        return;
+      }
+      const ul = suggest.querySelector("ul");
+      ul.insertBefore(li, before && before.parentNode === ul ? before : null);
+      suggest.hidden = false;
+    },
+  ];
+};
+
+if (suggest) {
+  suggest.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    const li = button && button.closest("li.suggestion");
+    if (!li || button.disabled) return;
+    if (button.dataset.suggest === "dismiss") return working(button, [], () => dismiss(li));
+    const [keep, away] =
+      button.dataset.suggest === "keep-a" ? [li.dataset.a, li.dataset.b] : [li.dataset.b, li.dataset.a];
+    const into = rowFor(keep);
+    const from = rowFor(away);
+    if (!into || !from) {
+      tagsError.textContent = "That tag is not there any more.";
+      return dropSuggestions(keep, away);
+    }
+    return working(button, [from, into], () => merge(from, into));
+  });
+}
+
 if (list) {
   markShared();
   // A space page's Change link comes as #tag=<key>: open that tag's panel. An unknown key opens none.
@@ -463,21 +578,7 @@ if (list) {
       return;
     }
     // A row takes one action at a time; a merge holds the kept row as well.
-    const rows = into ? [row, into] : [row];
-    if (isHeld(rows)) return;
-    hold(rows);
-    // Disabling the focused button drops focus to the page, so it is given back after.
-    const hadFocus = document.activeElement === button;
-    button.disabled = true;
-    let undo = null;
-    try {
-      undo = await run(button, row, into);
-    } finally {
-      button.disabled = false;
-      release(rows);
-    }
-    if (hadFocus) button.focus();
-    if (undo) showUndo(undo[0], undo[1]);
+    return working(button, into ? [row, into] : [row], () => run(button, row, into));
   };
   list.addEventListener("click", (event) => {
     const button = event.target.closest("button");

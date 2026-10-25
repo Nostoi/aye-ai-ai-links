@@ -28,6 +28,8 @@ import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/s
 import type { StatsStore } from "./core/stats-store.js";
 import type { LinkRemover } from "./core/store.js";
 import type { TagEditStore } from "./core/tag-edit-store.js";
+import type { NameVectors } from "./core/tag-suggest.js";
+import type { TagSuggestStore } from "./core/tag-suggest-store.js";
 import type { RateLimitOptions } from "./http/rate-limit.js";
 import { requestLog } from "./http/request-log.js";
 import { createCallTracker } from "./mcp/call-tracker.js";
@@ -107,6 +109,8 @@ const CHECKED_PAGES = [
   "/tags/merge",
   "/tags/delete",
   "/tags/undo",
+  "/tags/suggestions/dismiss",
+  "/tags/suggestions/undismiss",
   "/profile",
   "/profile/notes/add",
   "/profile/notes/edit",
@@ -152,6 +156,10 @@ export type AppOptions = {
         images: LinkImageReader;
         edits: LinkEditStore;
         tagEdits: TagEditStore;
+        tagSuggest: TagSuggestStore;
+        names: NameVectors;
+        /** Shortens the Tags page's wait for its suggestions. */
+        tagSuggestWaitMs?: number | undefined;
         stats: StatsStore;
         savedCopies: SavedCopyReader &
           SavedCopyRemover &

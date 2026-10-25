@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
+import type { NameVectors } from "../core/tag-suggest.js";
 import type { Tag } from "../core/types.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -482,6 +483,146 @@ describe("rename, merge, delete and undo from the Tags page", () => {
     const undo = await bBrowser.send("/tags/undo", posting({ changeId: merged.changeId }));
     expect(undo.status).toBe(404);
     expect(everything(world)).toEqual(before);
+  });
+
+  describe("suggested merges", () => {
+    /** Every name its own direction, so only spelling twins are suggested. */
+    const apartNames = (): NameVectors => {
+      const seen = new Map<string, number>();
+      return {
+        async vectorOf(name) {
+          const i = seen.get(name) ?? seen.size;
+          seen.set(name, i);
+          const v = new Float32Array(32);
+          v[i] = 1;
+          return v;
+        },
+      };
+    };
+    const SECTION = "Tags you might combine";
+    const dismissals = (world: World) =>
+      world.links
+        .prepare("SELECT owner_id AS o, key_a AS a, key_b AS b FROM tag_merge_dismissals")
+        .all();
+
+    async function twinWorld(extra: { names?: NameVectors; tagSuggestWaitMs?: number } = {}) {
+      const world = await oauthWorld({ names: apartNames(), ...extra });
+      const bBrowser = await addSecondUser(world);
+      await save(world, "owner", "https://a.example/1", ["pixel art"]);
+      await save(world, "owner", "https://a.example/2", ["pixel-art"]);
+      await save(world, B, "https://b.example/1", ["pixel art"]);
+      await save(world, B, "https://b.example/2", ["pixel-art"]);
+      return { world, bBrowser, browser: await signedIn(world) };
+    }
+
+    it("shows the section above the list when the owner has a suggestion", async () => {
+      const { browser } = await twinWorld();
+      const html = String((await browser.send("/tags")).body);
+      expect(html).toContain(SECTION);
+      expect(html).toContain("Keep pixel-art");
+      expect(html).toContain("Keep pixel art");
+      expect(html.indexOf(SECTION)).toBeLessThan(html.indexOf('id="tags"'));
+    });
+
+    it("shows no section when there is no suggestion", async () => {
+      const world = await oauthWorld({ names: apartNames() });
+      await save(world, "owner", "https://a.example/1", ["art"]);
+      const html = String((await (await signedIn(world)).send("/tags")).body);
+      expect(html).not.toContain(SECTION);
+    });
+
+    it("renders the page without the section when the names never embed, within the wait", async () => {
+      const never: NameVectors = { vectorOf: () => new Promise<Float32Array>(() => {}) };
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const { browser } = await twinWorld({ names: never, tagSuggestWaitMs: 20 });
+        const res = await browser.send("/tags");
+        expect(res.status).toBe(200);
+        const html = String(res.body);
+        expect(html).not.toContain(SECTION);
+        expect(html).toContain("pixel art");
+        expect(errors).toHaveBeenCalledTimes(1);
+        expect(String(errors.mock.calls[0]?.[0])).toMatch(/^\[tags\] suggestions skipped: /);
+      } finally {
+        errors.mockRestore();
+      }
+    });
+
+    it("renders the page without the section when embedding fails", async () => {
+      const broken: NameVectors = {
+        vectorOf: () => Promise.reject(new Error("model not loaded")),
+      };
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const { browser } = await twinWorld({ names: broken });
+        const res = await browser.send("/tags");
+        expect(res.status).toBe(200);
+        expect(String(res.body)).not.toContain(SECTION);
+        expect(String(errors.mock.calls[0]?.[0])).toContain("model not loaded");
+      } finally {
+        errors.mockRestore();
+      }
+    });
+
+    it("dismiss records the pair for the signed-in owner, answers 204, and undismiss removes it", async () => {
+      const { world, browser } = await twinWorld();
+      const gone = await browser.send(
+        "/tags/suggestions/dismiss",
+        posting({ a: "pixel-art", b: "pixel art" }),
+      );
+      expect(gone.status).toBe(204);
+      expect(gone.headers.get("cache-control")).toBe("no-store");
+      expect(dismissals(world)).toEqual([{ o: "owner", a: "pixel art", b: "pixel-art" }]);
+      expect(String((await browser.send("/tags")).body)).not.toContain(SECTION);
+      const back = await browser.send(
+        "/tags/suggestions/undismiss",
+        posting({ a: "pixel art", b: "pixel-art" }),
+      );
+      expect(back.status).toBe(204);
+      expect(dismissals(world)).toEqual([]);
+      expect(String((await browser.send("/tags")).body)).toContain(SECTION);
+    });
+
+    it("B's dismissal and undismissal of the same keys leave A's suggestion and dismissal alone", async () => {
+      const { world, bBrowser, browser } = await twinWorld();
+      const body = posting({ a: "pixel art", b: "pixel-art" });
+      expect((await bBrowser.send("/tags/suggestions/dismiss", body)).status).toBe(204);
+      expect(dismissals(world)).toEqual([{ o: B, a: "pixel art", b: "pixel-art" }]);
+      expect(String((await browser.send("/tags")).body)).toContain(SECTION);
+      await browser.send("/tags/suggestions/dismiss", body);
+      expect(dismissals(world)).toHaveLength(2);
+      await bBrowser.send("/tags/suggestions/undismiss", body);
+      expect(dismissals(world)).toEqual([{ o: "owner", a: "pixel art", b: "pixel-art" }]);
+      expect(String((await browser.send("/tags")).body)).not.toContain(SECTION);
+    });
+
+    describe.each(["/tags/suggestions/dismiss", "/tags/suggestions/undismiss"])(
+      "POST %s",
+      (path) => {
+        const body = { a: "pixel art", b: "pixel-art" };
+        const refusals: [string, () => object, number][] = [
+          ["without an Origin", () => ({ json: body, origin: false }), 403],
+          [
+            "with a foreign Origin",
+            () => ({ json: body, headers: { origin: "https://evil.example" } }),
+            403,
+          ],
+          ["without a session", () => ({ json: body, anonymous: true }), 302],
+          ["with a body that is not JSON", () => ({ rawForm: "a=x" }), 400],
+          ["with a number for a key", () => ({ json: { ...body, a: 7 } }), 400],
+          ["without the second key", () => ({ json: { a: "x" } }), 400],
+          ["with a blank key", () => ({ json: { a: " ", b: "x" } }), 400],
+        ];
+        it.each(refusals)("refuses a request %s, and records nothing", async (_, how, status) => {
+          const { world } = await twinWorld();
+          const { anonymous, ...options } = how() as { anonymous?: true };
+          const browser = anonymous ? world.agent() : await signedIn(world);
+          const res = await browser.send(path, { method: "POST", ...options });
+          expect(res.status).toBe(status);
+          expect(dismissals(world)).toEqual([]);
+        });
+      },
+    );
   });
 
   describe.each([

@@ -74,7 +74,7 @@ describe("SqliteTagSuggestStore, beyond the contract", () => {
     expect(await s.tagSuggest.dismissedPairs(A)).toEqual([["x", "y"]]);
   });
 
-  it("a rename to a new key ends the dismissal for that tag's new name", async () => {
+  it("a rename leaves the dismissal on the old keys, so the new name is a different pair", async () => {
     const s = setup();
     await s.links.insertIfAbsent(A, { ...newLink(1, at(0)), tags: [mention("x")] });
     await s.tagSuggest.dismissPair(A, "x", "y", at(1));

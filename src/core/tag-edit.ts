@@ -52,7 +52,7 @@ export function mergedSettings(from: Tag, into: Tag): TagSettings {
 }
 
 export async function listTagsWithCounts(
-  { store, tagEdits }: TagEditDeps,
+  { store, tagEdits }: Pick<TagEditDeps, "store" | "tagEdits">,
   owner: OwnerId,
 ): Promise<{ tag: Tag; links: number }[]> {
   const [tags, counts] = await Promise.all([store.listTags(owner), tagEdits.tagLinkCounts(owner)]);

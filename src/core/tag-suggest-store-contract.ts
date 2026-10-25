@@ -87,6 +87,13 @@ export function describeTagSuggestStoreContract(
       expect(await h.tagSuggest.dismissedPairs(A)).toEqual([["p", "q"]]);
     });
 
+    it("stores a dismissal whichever way the keys sort as UTF-8 bytes, and undismiss removes it", async () => {
+      await h.tagSuggest.dismissPair(A, "\u{1F600} art", "ａ art", at(1));
+      expect(await h.tagSuggest.dismissedPairs(A)).toEqual([["\u{1F600} art", "ａ art"]]);
+      await h.tagSuggest.undismissPair(A, "ａ art", "\u{1F600} art");
+      expect(await h.tagSuggest.dismissedPairs(A)).toEqual([]);
+    });
+
     it("dismissals are per owner", async () => {
       await h.tagSuggest.dismissPair(B, "x", "y", at(1));
       expect(await h.tagSuggest.dismissedPairs(A)).toEqual([]);

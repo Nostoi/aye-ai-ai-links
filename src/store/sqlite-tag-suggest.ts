@@ -32,7 +32,7 @@ export class SqliteTagSuggestStore implements TagSuggestStore {
   async dismissPair(owner: OwnerId, a: string, b: string, at: Date): Promise<void> {
     this.db
       .prepare(
-        "INSERT OR IGNORE INTO tag_merge_dismissals (owner_id, key_a, key_b, dismissed_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO tag_merge_dismissals (owner_id, key_a, key_b, dismissed_at) VALUES (?, ?, ?, ?) ON CONFLICT (owner_id, key_a, key_b) DO NOTHING",
       )
       .run(owner, ...sorted(a, b), at.getTime());
   }

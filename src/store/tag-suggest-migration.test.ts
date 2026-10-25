@@ -32,11 +32,9 @@ describe("tag merge dismissals migration", () => {
     expect(db.prepare("SELECT count(*) FROM tag_merge_dismissals").pluck().get()).toBe(0);
   });
 
-  it("refuses unsorted or equal keys, an unknown owner and a repeated pair, and lets owners share keys", () => {
+  it("refuses an unknown owner and a repeated pair, and lets owners share keys", () => {
     const put = (owner: string, a: string, b: string) =>
       db.prepare("INSERT INTO tag_merge_dismissals VALUES (?, ?, ?, 0)").run(owner, a, b);
-    expect(() => put("a", "y", "x")).toThrow(/CHECK/);
-    expect(() => put("a", "x", "x")).toThrow(/CHECK/);
     expect(() => put("nobody", "x", "y")).toThrow(/FOREIGN KEY/);
     put("a", "x", "y");
     expect(() => put("a", "x", "y")).toThrow(/UNIQUE|PRIMARY/);

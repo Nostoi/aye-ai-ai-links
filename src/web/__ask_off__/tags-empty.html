@@ -806,7 +806,9 @@ const suggest = document.getElementById("suggest");
 const suggested = () => (suggest ? [...suggest.querySelectorAll("li.suggestion")] : []);
 
 /** Takes out every suggestion naming one of these tag keys; the section hides when none is left. */
+const droppedKeys = new Set();
 const dropSuggestions = (...keys) => {
+  for (const key of keys) droppedKeys.add(key);
   for (const li of suggested()) {
     if (keys.includes(li.dataset.a) || keys.includes(li.dataset.b)) li.remove();
   }
@@ -941,6 +943,7 @@ const dismiss = async (li) => {
         return;
       }
       const ul = suggest.querySelector("ul");
+      if (droppedKeys.has(a) || droppedKeys.has(b) || !rowFor(a) || !rowFor(b)) return;
       ul.insertBefore(li, before && before.parentNode === ul ? before : null);
       suggest.hidden = false;
     },
@@ -952,7 +955,7 @@ if (suggest) {
     const button = event.target.closest("button");
     const li = button && button.closest("li.suggestion");
     if (!li || button.disabled) return;
-    if (button.dataset.suggest === "dismiss") return working(button, [], () => dismiss(li));
+    if (button.dataset.suggest === "dismiss") return working(button, [rowFor(li.dataset.a), rowFor(li.dataset.b)].filter(Boolean), () => dismiss(li));
     const [keep, away] =
       button.dataset.suggest === "keep-a" ? [li.dataset.a, li.dataset.b] : [li.dataset.b, li.dataset.a];
     const into = rowFor(keep);

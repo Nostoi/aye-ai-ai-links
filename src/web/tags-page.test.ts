@@ -1154,6 +1154,44 @@ describe("suggested merges on the Tags page", () => {
       expect(shown(page)).toEqual(["garden|pond"]);
     });
 
+    const renameGarden = (sent: Sent): Answer =>
+      sent.url === "/tags/rename" ? ok({ ...GARDEN, key: "yard", name: "Yard" }) : NO_CONTENT;
+    const dismissThenRenameGarden = async (page: Page) => {
+      page.click(button(page, "garden|pond", "Not these"));
+      await page.settle();
+      page.type(page.inRow("garden", 'input[name="name"]'), "Yard");
+      page.click(tagged(page, "garden", "Rename"));
+      await page.settle();
+      page.click(page.$("#undo-bar button"));
+      await page.settle();
+    };
+
+    it("Undo after one of the pair was renamed posts the undismissal but does not bring the suggestion back", async () => {
+      const page = open(renameGarden);
+      await dismissThenRenameGarden(page);
+      expect(page.sent.at(-1)?.url).toBe("/tags/suggestions/undismiss");
+      expect(shown(page)).toEqual(["kitchen|baking", "home|baking"]);
+    });
+
+    it("Undo after a rename keeps the section hidden when it held only that suggestion", async () => {
+      const page = open(renameGarden, [GP]);
+      await dismissThenRenameGarden(page);
+      expect(page.sent.at(-1)?.url).toBe("/tags/suggestions/undismiss");
+      expect(shown(page)).toEqual([]);
+      expect(page.$("#suggest").hidden).toBe(true);
+    });
+
+    it("holds both rows while the dismissal is out", async () => {
+      const g = gate(NO_CONTENT);
+      const page = open(() => g.held);
+      page.click(button(page, "kitchen|baking", "Not these"));
+      page.click(page.inRow("kitchen", '[data-action="pin"]'));
+      page.click(button(page, "home|baking", "Keep Baking"));
+      await page.settle();
+      expect(page.sent.map((s) => s.url)).toEqual(["/tags/suggestions/dismiss"]);
+      g.release();
+    });
+
     it("keeps the suggestion, shows the error and offers no Undo when the dismissal is refused", async () => {
       const page = open(() => ({ status: 400, body: { message: "No." } }));
       page.click(button(page, "kitchen|baking", "Not these"));

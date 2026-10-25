@@ -400,8 +400,7 @@ export const MIGRATIONS: Migration[] = [
     key_a TEXT NOT NULL,
     key_b TEXT NOT NULL,
     dismissed_at INTEGER NOT NULL,
-    PRIMARY KEY (owner_id, key_a, key_b),
-    CHECK (key_a < key_b)
+    PRIMARY KEY (owner_id, key_a, key_b)
   );
   `,
 ];

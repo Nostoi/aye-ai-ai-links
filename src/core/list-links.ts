@@ -1,5 +1,5 @@
 import { type LinkPage, linkPage } from "./link-pages.js";
-import type { LinkCount, LinkOrder, LinkSearch } from "./search.js";
+import type { LinkCount, LinkListing, LinkOrder } from "./search.js";
 import { checkedFilters, checkedLimit } from "./search-links.js";
 import type { LinkStore } from "./store.js";
 import type { LinkState, OwnerId } from "./types.js";
@@ -22,7 +22,7 @@ export type ListLinksInput = {
  * separate reads, so a save in between can make them differ by that link.
  */
 export async function listLinks(
-  deps: { store: LinkStore; search: LinkSearch; count: LinkCount },
+  deps: { store: LinkStore; listing: LinkListing; count: LinkCount },
   owner: OwnerId,
   input: ListLinksInput,
 ): Promise<LinkPage & { total: number }> {

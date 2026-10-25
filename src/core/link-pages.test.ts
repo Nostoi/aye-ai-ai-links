@@ -8,7 +8,7 @@ import { FakeStore } from "./fake-store.js";
 import { checkedOrder, linkPage } from "./link-pages.js";
 import { saveLink } from "./links.js";
 import { listLinks } from "./list-links.js";
-import { LINK_ORDERS, type LinkCount, type LinkOrder, type LinkSearch } from "./search.js";
+import { LINK_ORDERS, type LinkCount, type LinkListing, type LinkOrder } from "./search.js";
 import type { LinkRemover, LinkStore } from "./store.js";
 import type { TagKind } from "./types.js";
 
@@ -17,7 +17,7 @@ afterEach(() => {
   for (const close of closers.splice(0)) close();
 });
 
-type World = { store: LinkStore & LinkRemover; search: LinkSearch; count: LinkCount };
+type World = { store: LinkStore & LinkRemover; listing: LinkListing; count: LinkCount };
 
 const ENGINES: [string, () => World][] = [
   [
@@ -25,7 +25,7 @@ const ENGINES: [string, () => World][] = [
     () => {
       const store = new FakeStore();
       const search = new FakeSearch(store);
-      return { store, search, count: search };
+      return { store, listing: search, count: search };
     },
   ],
   [
@@ -36,7 +36,7 @@ const ENGINES: [string, () => World][] = [
       const store = new SqliteStore(db);
       for (const o of ["a", "b"]) store.ensureUser(o, o);
       const search = new FtsSearch(db);
-      return { store, search, count: search };
+      return { store, listing: search, count: search };
     },
   ],
 ];
@@ -262,6 +262,43 @@ describe.each(ENGINES)("linkPage on %s", (_, make) => {
       before: first.older as string,
     });
     expect(second.links.map((l) => l.id)).toEqual([ids[2], ids[1]]);
+  });
+
+  it("takes an opened page's cursor from its ranking when its last link is opened again during the read (#215)", async () => {
+    const w = setup(make);
+    const ids: string[] = [];
+    for (const at of [20_000, 19_000, 18_000, 17_000]) {
+      const id = await w.save("a", 1_000);
+      await w.open("a", id, at);
+      ids.push(id);
+    }
+    let reopened = false;
+    const racing: World = {
+      ...w,
+      listing: {
+        list: async (...args: Parameters<LinkListing["list"]>) => {
+          const listed = await w.listing.list(...args);
+          if (!reopened) {
+            reopened = true;
+            await w.open("a", ids[1] as string, 21_000);
+          }
+          return listed;
+        },
+      },
+    };
+    const first = await linkPage(racing, "a", { order: "opened", limit: 2 });
+    expect(reopened).toBe(true);
+    expect(first.links.map((l) => [l.id, l.lastOpenedAt?.getTime()])).toEqual([
+      [ids[0], 20_000],
+      [ids[1], 21_000],
+    ]);
+    expect(first.older).toBe(`r19000.${ids[1]}`);
+    const second = await linkPage(w, "a", {
+      order: "opened",
+      limit: 2,
+      before: first.older as string,
+    });
+    expect(second.links.map((l) => l.id)).toEqual([ids[2], ids[3]]);
   });
 
   it("misses a link first opened during an opened walk, as list_links says, while the total counts it", async () => {

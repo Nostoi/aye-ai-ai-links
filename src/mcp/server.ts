@@ -28,7 +28,7 @@ import {
 } from "../core/profile.js";
 import type { ProfileStore } from "../core/profile-store.js";
 import type { SavedCopyReader } from "../core/saved-copy.js";
-import { LINK_ORDERS, type LinkCount, type LinkSearch } from "../core/search.js";
+import { LINK_ORDERS, type LinkCount, type LinkListing, type LinkSearch } from "../core/search.js";
 import { searchLinks } from "../core/search-links.js";
 import type { SnapshotRunner } from "../core/snapshot-runner.js";
 import type { PageTextReader } from "../core/snapshot-text.js";
@@ -86,6 +86,7 @@ export type McpDeps = {
   search: LinkSearch;
   keywordSearch: LinkSearch;
   count: LinkCount;
+  listing: LinkListing;
   profile: ProfileStore;
   stats: StatsStore;
   /** The AI's stored reading of each owner's stats, shown by `get_stats` only when `readingOn`. */

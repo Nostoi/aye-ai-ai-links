@@ -12,7 +12,7 @@ let clock: number;
 /** Images stand in for stored ones: each link in `withImage` has version `v-<id>`. */
 const deps = () => ({
   store,
-  search: new FakeSearch(store),
+  listing: new FakeSearch(store),
   images: {
     imageVersions: async (_owner: string, ids: string[]) =>
       new Map(

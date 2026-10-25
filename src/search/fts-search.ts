@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type {
   LinkCount,
+  LinkListing,
   LinkOrder,
   LinkSearch,
   SearchFilters,
@@ -14,21 +15,28 @@ import { STOP_WORDS } from "./stop-words.js";
 const withoutControls = (s: string): string => s.replace(/\p{Cc}/gu, " ");
 
 /**
- * Each order of a blank listing: its sort, the condition keeping rows after a `before` position
- * (bound to its time twice, then its id), and the condition for being in the list at all.
+ * Each order of a blank listing: the column it sorts by, its sort, the condition keeping rows
+ * after a `before` position (bound to its time twice, then its id), and the condition for being
+ * in the list at all.
  */
-const ORDERS: Record<LinkOrder, { sort: string; after: string; listed: string | null }> = {
+const ORDERS: Record<
+  LinkOrder,
+  { column: string; sort: string; after: string; listed: string | null }
+> = {
   newest: {
+    column: "l.saved_at",
     sort: "l.saved_at DESC, l.id DESC",
     after: "(l.saved_at < ? OR (l.saved_at = ? AND l.id < ?))",
     listed: null,
   },
   oldest: {
+    column: "l.saved_at",
     sort: "l.saved_at ASC, l.id ASC",
     after: "(l.saved_at > ? OR (l.saved_at = ? AND l.id > ?))",
     listed: null,
   },
   opened: {
+    column: "l.last_opened_at",
     sort: "l.last_opened_at DESC, l.id DESC",
     after: "(l.last_opened_at < ? OR (l.last_opened_at = ? AND l.id < ?))",
     listed: "l.last_opened_at IS NOT NULL",
@@ -88,7 +96,7 @@ function listing(owner: OwnerId, filters: SearchFilters) {
 }
 
 /** Keyword search over the `link_search` and `snapshot_search` tables that the store's triggers keep current. */
-export class FtsSearch implements LinkSearch, LinkCount {
+export class FtsSearch implements LinkSearch, LinkCount, LinkListing {
   constructor(private readonly db: Database) {}
 
   async search(
@@ -100,18 +108,7 @@ export class FtsSearch implements LinkSearch, LinkCount {
   ) {
     const kind = checkedKind(query, filters);
     if (kind === "no_words") return [];
-    if (kind === "blank") {
-      const { order, where, params } = listing(owner, filters);
-      const { before } = filters;
-      const after = before ? ` AND ${order.after}` : "";
-      const at = before?.at.getTime() ?? 0;
-      return this.ids(
-        `SELECT l.id FROM links l WHERE ${where}${after} ORDER BY ${order.sort} LIMIT ?`,
-        ...params,
-        ...(before ? [at, at, Number(before.id)] : []),
-        limit,
-      );
-    }
+    if (kind === "blank") return (await this.list(owner, filters, limit)).map((l) => l.id);
     const { fields, pageOnly } = this.parts(owner, query, filters, limit, limit);
     const ids = [...fields, ...pageOnly].slice(0, limit);
     trace?.({
@@ -123,6 +120,23 @@ export class FtsSearch implements LinkSearch, LinkCount {
       ranks: listRanks(ids, { field: fields, page: pageOnly }),
     });
     return ids;
+  }
+
+  /** `LinkListing`: the blank listing, each id with its sort time from the same row. */
+  async list(owner: OwnerId, filters: SearchFilters, limit: number) {
+    const { order, where, params } = listing(owner, filters);
+    const { before } = filters;
+    const after = before ? ` AND ${order.after}` : "";
+    const at = before?.at.getTime() ?? 0;
+    const rows = this.db
+      .prepare(
+        `SELECT l.id, ${order.column} AS at FROM links l WHERE ${where}${after} ORDER BY ${order.sort} LIMIT ?`,
+      )
+      .all(...params, ...(before ? [at, at, Number(before.id)] : []), limit) as {
+      id: number;
+      at: number;
+    }[];
+    return rows.map((r) => ({ id: String(r.id), at: new Date(r.at) }));
   }
 
   /** `LinkCount`: the rows a blank listing in that order pages through. */

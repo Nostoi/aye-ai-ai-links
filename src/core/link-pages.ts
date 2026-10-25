@@ -1,5 +1,5 @@
 import { CoreError } from "./errors.js";
-import { LINK_ORDERS, type LinkOrder, type LinkSearch, type SearchFilters } from "./search.js";
+import { LINK_ORDERS, type LinkListing, type LinkOrder, type SearchFilters } from "./search.js";
 import type { LinkStore } from "./store.js";
 import type { Link, OwnerId } from "./types.js";
 
@@ -70,7 +70,7 @@ async function decode(store: LinkStore, owner: OwnerId, order: LinkOrder, cursor
  * `invalid_input`, and one naming no live link of this owner with `not_found`.
  */
 export async function linkPage(
-  { store, search }: { store: LinkStore; search: LinkSearch },
+  { store, listing }: { store: LinkStore; listing: LinkListing },
   owner: OwnerId,
   input: Omit<SearchFilters, "before"> & { before?: string; limit: number },
 ): Promise<LinkPage> {
@@ -80,14 +80,15 @@ export async function linkPage(
     ...filters,
     ...(before === undefined ? {} : { before: await decode(store, owner, order, before) }),
   };
-  const ids = await search.search(owner, "", query, limit + 1);
-  const links = (await Promise.all(ids.map((id) => store.get(owner, id)))).filter(
+  const listed = await listing.list(owner, query, limit + 1);
+  const links = (await Promise.all(listed.map(({ id }) => store.get(owner, id)))).filter(
     (l): l is Link => l !== null,
   );
   const shown = links.slice(0, limit);
   const last = shown.at(-1);
-  const at = last && CURSORS[order].key(last);
-  const more = ids.length > limit && last && at;
+  // The listed time, not the read link's: an opening between the two moves the read one (#215).
+  const at = last && listed.find((p) => p.id === last.id)?.at;
+  const more = listed.length > limit && last && at;
   return {
     links: shown,
     older: more ? `${CURSORS[order].prefix}${at.getTime()}.${last.id}` : null,

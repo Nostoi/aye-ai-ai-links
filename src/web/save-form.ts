@@ -45,7 +45,6 @@ ${hostLine(url)}
 <button type="button" id="bring-back" hidden>Bring it back</button>
 <button class="primary" type="button" id="close">Close</button>
 </div>
-<p id="close-note" hidden>You can close this tab.</p>
 <p id="result-error" role="alert"></p>
 </section>
 </main>`;
@@ -61,7 +60,7 @@ const longBody = `<main class="save">
  * `openedScript`), its why, and Bring it back when it is archived. Once there is an answer the
  * address bar is cleaned to `/save`, so a reload shows an empty form; before that the query stays,
  * so a reload after a sign-out refills the form. A refusal is shown under its field. Close closes
- * the tab, or says it can be closed when the browser keeps it open. Needs `CARD_FETCH`.
+ * the tab, or goes to Home when the browser keeps it open. Needs `CARD_FETCH`.
  */
 const SAVE_SCRIPT = `<script>
 ${CARD_FETCH}
@@ -83,7 +82,6 @@ const whyKept = document.getElementById("why-kept");
 const savedState = document.getElementById("saved-state");
 const bringBack = document.getElementById("bring-back");
 const closeButton = document.getElementById("close");
-const closeNote = document.getElementById("close-note");
 const resultError = document.getElementById("result-error");
 
 urlField.addEventListener("input", () => {
@@ -167,8 +165,7 @@ bringBack.addEventListener("click", () =>
 closeButton.addEventListener("click", () => {
   window.close();
   if (window.closed) return;
-  closeButton.hidden = true;
-  closeNote.hidden = false;
+  window.location.assign("/");
 });
 }
 </script>`;

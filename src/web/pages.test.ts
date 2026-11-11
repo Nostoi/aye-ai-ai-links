@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import type { Link } from "../core/types.js";
+import { ALL_RESTART } from "./all-page.js";
 import { bookmarkletCode } from "./bookmarklet.js";
 import { connectionsPage } from "./connections-page.js";
 import { handyShelf } from "./handy-shelf.js";
@@ -17,7 +18,8 @@ import {
 } from "./pages.js";
 import { profilePage } from "./profile-page.js";
 import { saveForm } from "./save-form.js";
-import { spacePage } from "./space-page.js";
+import { olderInvalidPage } from "./show-older.js";
+import { SPACE_RESTART, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { emptyStats } from "./stats-test-kit.js";
 import { tagsPage } from "./tags-page.js";
@@ -321,8 +323,8 @@ describe("the menu", () => {
       spacePage(SPACE),
     ];
     for (const html of withMenu) {
-      expect(html).toContain(
-        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><details class="account-menu" name="menu">',
+      expect(html.replaceAll(' aria-current="page"', "")).toContain(
+        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><a class="menu-page" href="/save">+ Save</a><details class="account-menu" name="menu">',
       );
       expect(html).toContain(
         '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out"',
@@ -615,5 +617,40 @@ describe("search results fade only stale links", () => {
     const faded = (id: string) =>
       parseHTML(html).document.querySelector(`[data-id="${id}"]`)?.classList.contains("faded");
     expect([faded("1"), faded("2"), faded("3")]).toEqual([false, true, false]);
+  });
+});
+
+describe("which section each menu page marks as current", () => {
+  const marked = (html: string) =>
+    [...parseHTML(html).document.querySelectorAll('nav.menu [aria-current="page"]')].map((a) => [
+      a.className,
+      a.getAttribute("href"),
+    ]);
+  const bothCopies = (href: string) => [
+    ["menu-page", href],
+    ["menu-phone-only", href],
+  ];
+
+  it("Home marks Home in the phone menu only", () => {
+    expect(marked(homePage(EMPTY_HOME))).toEqual([["menu-phone-only", "/"]]);
+  });
+
+  it("Spaces and tags marks /tags on the Tags page and on space pages, live and done", () => {
+    expect(marked(tagsPage({ tags: [] }))).toEqual(bothCopies("/tags"));
+    expect(marked(spacePage(SPACE))).toEqual(bothCopies("/tags"));
+    expect(marked(spacePage({ ...SPACE, done: true }))).toEqual(bothCopies("/tags"));
+    expect(marked(spaceMissingPage())).toEqual(bothCopies("/tags"));
+  });
+
+  it("the invalid page of older links marks the section it was asked in", () => {
+    expect(marked(olderInvalidPage(SPACE_RESTART, undefined, "tags"))).toEqual(bothCopies("/tags"));
+    expect(marked(olderInvalidPage(ALL_RESTART, undefined, "all"))).toEqual(bothCopies("/all"));
+  });
+
+  it("Search and Profile mark nothing", () => {
+    expect(marked(searchPage({ query: "", links: [], now: new Date(0) }))).toEqual([]);
+    expect(
+      marked(profilePage({ notes: [], focus: [], stats: emptyStats, now: new Date(0) })),
+    ).toEqual([]);
   });
 });

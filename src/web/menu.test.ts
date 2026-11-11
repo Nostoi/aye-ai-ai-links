@@ -18,14 +18,15 @@ const nav = (html: string) => parseHTML(html).document.querySelector("nav") as H
 const own = (html: string, selector: string) => [...nav(html).querySelectorAll(selector)];
 
 describe("the navigation bar", () => {
-  it("holds two page links and an account menu, not the old flat list of six", () => {
+  it("holds three page links and an account menu, not the old flat list of six", () => {
     const bar = nav(plain());
     expect(bar.getAttribute("aria-label")).toBe("Main");
     const top = [...bar.children];
-    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "DETAILS"]);
-    expect(top.slice(0, 2).map((a) => [text(a), a.getAttribute("href")])).toEqual([
+    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "A", "DETAILS"]);
+    expect(top.slice(0, 3).map((a) => [text(a), a.getAttribute("href")])).toEqual([
       ["All links", "/all"],
       ["Spaces and tags", "/tags"],
+      ["+ Save", "/save"],
     ]);
     expect(own(plain(), "nav > button")).toEqual([]);
     expect(text(bar)).not.toContain("Tags");
@@ -48,16 +49,43 @@ describe("the navigation bar", () => {
     expect(nav(html).querySelector("details #sign-out")).not.toBeNull();
   });
 
-  it("repeats the two page links inside the menu for the phone, hidden at desktop width", () => {
+  it("repeats Home and the page links inside the menu for the phone, hidden at desktop width", () => {
     const html = plain();
     const phoneOnly = own(html, "details .menu-phone-only");
     expect(phoneOnly.map((a) => [text(a), a.getAttribute("href")])).toEqual([
+      ["Home", "/"],
       ["All links", "/all"],
       ["Spaces and tags", "/tags"],
+      ["+ Save", "/save"],
     ]);
     expect(themeCss).toMatch(/\.menu-phone-only\{display:none\}/);
     expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.menu-page\{display:none\}/);
     expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.menu-phone-only\{display:flex\}/);
+  });
+
+  it("marks no page link as current without a section", () => {
+    expect(own(plain(), "[aria-current]")).toEqual([]);
+  });
+
+  it.each([
+    ["home", "/", false, true],
+    ["all", "/all", true, true],
+    ["tags", "/tags", true, true],
+  ] as const)(
+    "marks the %s section on its bar link and its phone-menu copy",
+    (here, href, inBar, inMenu) => {
+      const html = page("t", "<main>body</main>", { menu: true, here });
+      const bar = own(html, 'nav > [aria-current="page"]');
+      const menu = own(html, '.menu-phone-only[aria-current="page"]');
+      expect(bar.map((a) => a.getAttribute("href"))).toEqual(inBar ? [href] : []);
+      expect(menu.map((a) => a.getAttribute("href"))).toEqual(inMenu ? [href] : []);
+      expect(own(html, "[aria-current]")).toHaveLength(Number(inBar) + Number(inMenu));
+    },
+  );
+
+  it("styles the current page link as a quiet underline, like the sort choices", () => {
+    expect(themeCss).toMatch(/\.menu-page\[aria-current=page\]/);
+    expect(themeCss).toMatch(/\.menu-phone-only\[aria-current=page\]/);
   });
 
   it("names its one summary Account at desktop width and Menu on the phone", () => {
@@ -89,6 +117,7 @@ describe("the navigation bar", () => {
     expect([...withAI.children].map((e) => text(e) ?? "")).toEqual([
       "All links",
       "Spaces and tags",
+      "+ Save",
       "Ask AI",
       expect.stringContaining("Account"),
     ]);

@@ -1001,7 +1001,7 @@ export function webApp({
       }
       if (error.code === "not_found")
         return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);
-      return c.html(olderInvalidPage(SPACE_RESTART, askOn(c, "this page")), 400, NO_STORE);
+      return c.html(olderInvalidPage(SPACE_RESTART, askOn(c, "this page"), "tags"), 400, NO_STORE);
     }
   };
   app.get("/spaces", session, space("active"));
@@ -1062,7 +1062,7 @@ export function webApp({
     } catch (error) {
       if (!(error instanceof CoreError)) throw error;
       if (error.code === "not_found") return c.redirect(allHref(order, { done }), 303);
-      return c.html(olderInvalidPage(ALL_RESTART, askOn(c, "this page")), 400, NO_STORE);
+      return c.html(olderInvalidPage(ALL_RESTART, askOn(c, "this page"), "all"), 400, NO_STORE);
     }
   };
   app.get("/all", session, all("active"));

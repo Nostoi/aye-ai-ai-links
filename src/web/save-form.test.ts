@@ -61,7 +61,6 @@ describe("the Save page as served", () => {
       "saved-state",
       "bring-back",
       "close",
-      "close-note",
       "result-error",
     ];
     for (const o of [
@@ -156,11 +155,13 @@ function load(answer: (sent: Sent) => Answer, { closes = false, url = NEWS } = {
   };
   const replaced: unknown[][] = [];
   const history = { replaceState: (...args: unknown[]) => replaced.push(args) };
+  const assigned: string[] = [];
   const tab = {
     closed: false,
     close: () => {
       if (closes) tab.closed = true;
     },
+    location: { assigned, assign: (to: string) => assigned.push(to) },
   };
   new Function("document", "fetch", "history", "window", code)(document, fetch, history, tab);
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
@@ -436,17 +437,26 @@ describe("Save on the page", () => {
     await page.settle();
     page.fire("#close", "click");
     expect(page.tab.closed).toBe(true);
-    expect(visible(page.$("#close-note"))).toBe(false);
   });
 
-  it("when the tab stays open, Close is replaced by You can close this tab.", async () => {
+  it("Close does not leave the page when it closed the tab", async () => {
+    const page = load(answering({ ...ANSWER, created: true }), { closes: true });
+    page.fire("#save-form", "submit");
+    await page.settle();
+    page.fire("#close", "click");
+    expect(page.tab.location.assigned).toEqual([]);
+  });
+
+  it("when the tab stays open, Close goes Home", async () => {
     const page = load(answering({ ...ANSWER, created: true }));
     page.fire("#save-form", "submit");
     await page.settle();
     page.fire("#close", "click");
-    expect(visible(page.$("#close"))).toBe(false);
-    expect(visible(page.$("#close-note"))).toBe(true);
-    expect(page.$("#close-note").textContent).toBe("You can close this tab.");
+    expect(page.tab.location.assigned).toEqual(["/"]);
+  });
+
+  it("has no You can close this tab note", () => {
+    expect(saveForm({ url: NEWS, title: "A story", long: false })).not.toContain("close-note");
   });
 
   it("editing the address updates the host line, and hides it for an address that does not parse", () => {

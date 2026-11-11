@@ -1,4 +1,4 @@
-import { MAX_PAGE_IDS } from "../ai/chat-turn.js";
+import { MAX_PAGE_IDS, MAX_TEXT_CHARS } from "../ai/chat-turn.js";
 import { escapeHtml } from "../core/escape-html.js";
 
 /** What `page()` needs to add the Ask AI panel (#159): the AI's name, the page's name, and the owner's id. */
@@ -27,7 +27,7 @@ export const askPanel = ({
 <div id="ask-messages" class="ask-messages"></div>
 <form id="ask-form" class="ask-form">
 <label class="ask-label" for="ask-text">Message your AI</label>
-<div class="ask-row"><textarea id="ask-text" rows="2" maxlength="4000" placeholder="Ask, or paste a link to save"></textarea><button class="primary" type="submit">Send</button></div>
+<div class="ask-row"><textarea id="ask-text" rows="2" maxlength="${MAX_TEXT_CHARS}" placeholder="Ask, or paste a link to save"></textarea><button class="primary" type="submit">Send</button></div>
 </form>
 </aside>`;
 
@@ -115,6 +115,8 @@ export const ASK_SCRIPT = `<script>
     panel.hidden = !open;
     openButton.setAttribute("aria-pressed", open ? "true" : "false");
     document.body.classList.toggle("ask-open", open);
+    if (open) document.body.setAttribute("data-panel", "");
+    else document.body.removeAttribute("data-panel");
     behind();
     save();
   };
@@ -129,6 +131,14 @@ export const ASK_SCRIPT = `<script>
   };
 
   openButton.addEventListener("click", () => (state.open ? close() : open()));
+  // A button carrying data-ask-text (the search page's Ask AI about it) opens the panel with that
+  // text in the message box when the box is empty. A draft is left as it is, and nothing is sent.
+  document.addEventListener("click", (event) => {
+    const source = event.target.closest ? event.target.closest("[data-ask-text]") : null;
+    if (!source) return;
+    if (text.value === "") text.value = source.getAttribute("data-ask-text");
+    open();
+  });
   document.getElementById("ask-close").addEventListener("click", close);
   document.getElementById("ask-back").addEventListener("click", close);
   panel.addEventListener("keydown", (event) => {

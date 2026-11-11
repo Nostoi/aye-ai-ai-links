@@ -15,6 +15,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded, "SF 
 .site{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 24px;padding-top:24px;padding-bottom:8px}
 .menu{display:flex;align-items:center;gap:4px 22px;margin-left:auto;font-size:15.5px}
 .menu-page{display:inline-flex;align-items:center;min-height:44px;text-decoration:none}
+.menu-search{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;color:var(--ink)}
+.menu-search svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .menu-page[aria-current=page],.account-list .menu-phone-only[aria-current=page]{font-weight:600;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
 .account-menu{position:relative}
 .account-menu summary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;cursor:pointer;list-style:none}
@@ -116,6 +118,8 @@ button.link{background:none;border:0;padding:0 6px;font-weight:400;text-decorati
 .undo-bar button{font-weight:700;padding:0 18px;min-height:44px;border:0}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .search-box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--field);border-radius:999px;box-shadow:0 2px 10px #0000000d;padding:6px 8px 6px 24px}
+.search-box input::placeholder{color:var(--soft)}
+@media (hover:none){.search-box kbd{display:none}}
 .search-box input{flex:1;min-width:0;width:auto;margin:0;padding:10px 0;background:transparent;border:0;border-radius:0}
 kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);border-radius:6px;padding:2px 8px}
 .home{padding-top:48px}
@@ -538,15 +542,6 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <a href="/tidy">Start</a>
 </section>
 </main>
-<script>
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "/") return;
-  const active = document.activeElement;
-  if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
-  event.preventDefault();
-  document.getElementById("q").focus();
-});
-</script>
 <script>
 const post = (url, body, extra) =>
   fetch(url, {
@@ -1098,6 +1093,16 @@ const showUndo = (() => {
 document.getElementById("sign-out").addEventListener("click", async () => {
   await fetch("/api/auth/sign-out", { method: "POST" });
   location.href = "/login";
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+  const typing = event.target;
+  if (typing && (typing.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(typing.tagName))) return;
+  if (document.querySelector("dialog[open], body[data-panel]")) return;
+  event.preventDefault();
+  const field = document.getElementById("q");
+  if (field) field.focus();
+  else location.href = "/search";
 });
 {
   const bar = document.querySelector("nav.menu");

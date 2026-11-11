@@ -22,7 +22,7 @@ describe("the navigation bar", () => {
     const bar = nav(plain());
     expect(bar.getAttribute("aria-label")).toBe("Main");
     const top = [...bar.children];
-    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "A", "DETAILS"]);
+    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "A", "A", "DETAILS"]);
     expect(top.slice(0, 3).map((a) => [text(a), a.getAttribute("href")])).toEqual([
       ["All links", "/all"],
       ["Spaces and tags", "/tags"],
@@ -118,6 +118,7 @@ describe("the navigation bar", () => {
       "All links",
       "Spaces and tags",
       "+ Save",
+      "",
       "Ask AI",
       expect.stringContaining("Account"),
     ]);

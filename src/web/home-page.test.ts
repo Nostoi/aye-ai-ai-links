@@ -484,9 +484,6 @@ it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", 
     "worth",
     "spaces",
   ]);
-  expect(html.indexOf("<script>")).toBe(
-    html.indexOf(`<script>\ndocument.addEventListener("keydown"`),
-  );
 });
 
 const SNOOZE = {

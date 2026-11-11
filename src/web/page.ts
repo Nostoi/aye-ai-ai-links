@@ -26,6 +26,8 @@ const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</sp
 const PERSON = `<span class="icon-wide"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/></svg></span>`;
 const BARS = `<span class="icon-phone"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>`;
 
+const MAGNIFIER = `<a class="menu-search" href="/search" aria-label="Search"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></a>`;
+
 /** The menu section a page belongs to: it marks that section's link as the current page. */
 export type Here = "home" | "all" | "tags";
 
@@ -38,7 +40,8 @@ const PAGE_LINKS: { here?: Here; href: string; label: string }[] = [
 ];
 
 /**
- * Three page links (All links, Spaces and tags, + Save), then Ask AI when the AI is set up (#159),
+ * Three page links (All links, Spaces and tags, + Save), then the Search magnifier (#264; not on
+ * Home, which has the field), which stays in the bar on the phone, then Ask AI when the AI is set up (#159),
  * then one `<details>` (#196): the Account circle at desktop width, the Menu button on the phone,
  * where it also holds Home and the page links (`menu-phone-only`; the inline ones hide there).
  * `here` marks the link of the page's section with `aria-current="page"`, in the bar and in the
@@ -49,11 +52,14 @@ const menuHtml = (withAsk: boolean, here: Here | undefined) => {
     `<a class="${cls}" href="${href}"${section !== undefined && section === here ? ' aria-current="page"' : ""}>${label}</a>`;
   const bar = PAGE_LINKS.filter((l) => l.href !== "/").map((l) => link(l, "menu-page"));
   const phone = PAGE_LINKS.map((l) => link(l, "menu-phone-only"));
-  return `<nav class="menu" aria-label="Main">${bar.join("")}${withAsk ? ASK_BUTTON : ""}<details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list">${phone.join("")}<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
+  return `<nav class="menu" aria-label="Main">${bar.join("")}${here === "home" ? "" : MAGNIFIER}${withAsk ? ASK_BUTTON : ""}<details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list">${phone.join("")}<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
 };
 
 /**
- * Ends the session, then goes to the sign-in page. It also closes the page's ⋯ menus, the account
+ * Ends the session, then goes to the sign-in page. The / key focuses the page's search field, else
+ * goes to /search, unless a modifier is held, the key is typed into a field or editable element, a
+ * dialog is open or a side panel is open (#264: the Ask AI panel marks the body `data-panel`,
+ * since a page with no AI carries no mention of that panel). It also closes the page's ⋯ menus, the account
  * menu and every card menu, through document-level handlers, so a card added later is covered.
  * A menu closes on a click outside it, on focus moving out of it, and on Escape pressed inside it
  * (focus goes back to its button) unless another handler took that Escape. The account menu's
@@ -65,6 +71,16 @@ const MENU_JS = `
 document.getElementById("sign-out").addEventListener("click", async () => {
   await fetch("/api/auth/sign-out", { method: "POST" });
   location.href = "/login";
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+  const typing = event.target;
+  if (typing && (typing.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(typing.tagName))) return;
+  if (document.querySelector("dialog[open], body[data-panel]")) return;
+  event.preventDefault();
+  const field = document.getElementById("q");
+  if (field) field.focus();
+  else location.href = "/search";
 });
 {
   const bar = document.querySelector("nav.menu");

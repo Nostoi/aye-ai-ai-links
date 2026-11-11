@@ -162,7 +162,9 @@ describe("web door", () => {
     expect(html).toContain(
       '<p class="small hint">Find the link you use regularly, then press <strong>Keep handy</strong>.</p>',
     );
-    expect(html).toContain('<input id="q" name="q" type="search" value="" autofocus>');
+    expect(html).toContain(
+      '<input id="q" name="q" type="search" value="" placeholder="That article about batteries and the tax credit" autofocus>',
+    );
     expect(html).toContain('<input type="hidden" name="keep" value="1">');
   });
 
@@ -219,7 +221,6 @@ describe("web door", () => {
       const html = await (await t.get(path, cookie)).text();
       expect(html, path).toContain("Your newest links");
       expect(html, path).not.toContain("Find the link you use regularly");
-      expect(html, path).not.toContain("autofocus");
       expect(html, path).not.toContain('name="keep"');
     }
   });

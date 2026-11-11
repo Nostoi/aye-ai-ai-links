@@ -17,7 +17,7 @@ import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { monthName, whyText } from "./link-rows.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { spaceClass, tile } from "./pages.js";
+import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
@@ -163,17 +163,6 @@ ${first ? `${featured(first, cards)}\n` : ""}${also}</div>
 </section>`;
 }
 
-/** Lets `/` jump to the search field unless the owner is typing. */
-const SLASH_SCRIPT = `<script>
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "/") return;
-  const active = document.activeElement;
-  if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
-  event.preventDefault();
-  document.getElementById("q").focus();
-});
-</script>`;
-
 /**
  * Home's own card actions, after the shared ones (`takeOut`, `doneCard`, `refreshShelf`):
  * - The featured card's It's stale is `doneCard`, as the menu's row is (`doneLinkScript`).
@@ -299,7 +288,7 @@ export const homePage = ({
 <form class="home-search" action="/search" method="get" role="search">
 <h1 class="question"><label for="q">What are you trying to remember?</label></h1>
 <div class="search-box">
-<input id="q" name="q" type="search" placeholder="That article about batteries and the tax credit">
+<input id="q" name="q" type="search" placeholder="${SEARCH_PLACEHOLDER}">
 <kbd aria-hidden="true">/</kbd>
 <button class="primary" type="submit">Find it</button>
 </div>
@@ -309,8 +298,7 @@ ${shelf}
 ${section}
 ${spaces}
 ${tidy ? TIDY_START : ""}</main>
-${ownEdit ? `${editDialog()}\n` : ""}${SLASH_SCRIPT}
-<script>
+${ownEdit ? `${editDialog()}\n` : ""}<script>
 ${CARD_FETCH}
 ${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}

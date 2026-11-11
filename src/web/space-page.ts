@@ -208,6 +208,7 @@ ${body}
 ${input.ask ? "" : `${editDialog()}\n`}${(done ? doneScript : cardsScript)(input.ask !== undefined)}${openedScript("space-links", "/links/opened", done ? PUT_AWAY_MARKER : undefined)}${older ? olderScript("space-links") : ""}`,
     {
       menu: true,
+      here: "tags",
       undo: true,
       ask: input.ask,
       edits: { root: "space-links", error: "space-error" },
@@ -226,5 +227,5 @@ export const spaceMissingPage = (ask?: Ask | undefined) =>
 <h1>This space is not here</h1>
 <p>There is no tag with that name. Your tags are on the <a href="/tags">Tags page</a>.</p>
 </main>`,
-    { menu: true, ask },
+    { menu: true, here: "tags", ask },
   );

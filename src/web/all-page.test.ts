@@ -71,6 +71,16 @@ const dom = (html: string) => parseHTML(html).document;
 const texts = (html: string, selector: string) =>
   [...dom(html).querySelectorAll(selector)].map((e) => e.textContent?.trim());
 
+describe("the section All links and Out of your lists mark as current", () => {
+  it.each([false, true])("marks /all in the bar and the phone menu (done: %s)", (done) => {
+    const marked = [...dom(all({ done })).querySelectorAll('nav.menu [aria-current="page"]')];
+    expect(marked.map((a) => [a.className, a.getAttribute("href")])).toEqual([
+      ["menu-page", "/all"],
+      ["menu-phone-only", "/all"],
+    ]);
+  });
+});
+
 describe("allHref", () => {
   it("names the order (newest is the plain address), the done view and a cursor", () => {
     expect(allHref("newest")).toBe("/all");

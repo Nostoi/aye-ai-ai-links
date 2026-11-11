@@ -16,11 +16,16 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 | Phase 2 · Smart | Page snapshots, meaning search, profile, focus log, digests | done, except #68 (waits for search-log data) |
 | Phase 3 · Phone | Web login, OAuth (CIMD, DCR fallback), owner-isolation tests, then the app public on 443 (a Cloudflare Tunnel, after Tailscale Funnel). ChatGPT and Claude apps connect | done |
 | Phase 4 · Calm desk | The web page (layout A). Repo goes public afterwards | done |
-| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), a link's tags in Edit link (#239), stats and what they say about you (#161), renaming, merging and deleting tags (#240), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), a site's icon when a page names no preview image (#149) | current |
+| Later | In the owner's order: openings everywhere (#124), Keep handy (#125), dead-link checks (#128), a saved copy of each saved page (#135), bookmarklet (#129), export (#130), delete with Undo (#126), AI endpoints for a local AI, ChatGPT and Claude (#159), a calmer Home and All links (#191: #192–#197), saved summaries (#160), a link's tags in Edit link (#239), stats and what they say about you (#161), renaming, merging and deleting tags (#240), AI-chat openings through a redirect link (#133), then import (#131) and scheduled digests and notifications (#132). Unordered: web search logging (#134), the top bar's + Save link, current-page mark and Home in the phone menu (#263), a site's icon when a page names no preview image (#149) | current |
 
 ## Decision log
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
+
+- **2026-11-11:** Navigation from the owner's design critique of Home (#263).
+  - **+ Save in the bar.** A **+ Save** link to `/save` sits after Spaces and tags and before Ask AI; on a phone it is in the Menu with the other page links, which now start with **Home**.
+  - **The current page.** `page()` takes `here` ("home", "all" or "tags"), a section and not an address: All links and Out of your lists are "all"; the Tags page, every space page and the done view of a space are "tags"; Home is "home". The matching link, in the bar and in the phone menu, carries `aria-current="page"` and a quiet underline. Home has no bar link, so only its phone-menu copy is marked. Search, Profile, Apps and keys and the saved-copy page mark nothing.
+  - **Close.** On the Save page, **Close** now goes Home when `window.close()` leaves the tab open. This replaces "You can close this tab." in `docs/specs/2026-10-17-bookmarklet-design.md` (§2 and its edge-case table).
 
 - **2026-10-25:** All links and its Out of your lists show the order choices as a select on a phone, as space pages do (#218). This ends the phone sort dropdown deferral in the 2026-10-20 #194 entry; desktop is unchanged.
 

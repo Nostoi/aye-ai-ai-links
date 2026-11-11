@@ -9,7 +9,8 @@
       "!**/data",
       "!**/.superpowers",
       "!**/.remember",
-      "!**/.claude",
+      "!.claude",
+      "!graft",
       "!docs/design",
       "!src/web/__ask_off__"
     ]

@@ -813,6 +813,42 @@ describe("Home's Worth a look cards (#195)", () => {
       }
     },
   );
+
+  it("gives the gone row's buttons the featured card's quiet look, and no other page's", () => {
+    const quiet = feature(
+      '<div class="feature-quiet"><button type="button">Not now</button></div>',
+      "button",
+    );
+    const goneRow = row(
+      '<div class="also-body"><div class="gone-line"><div class="actions small-actions"><button type="button">It still works</button></div></div></div>',
+      "button",
+    );
+    const elsewhere = el(
+      '<div class="gone-line"><div class="actions small-actions"><button type="button">It still works</button></div></div>',
+      "button",
+    );
+    for (const w of ["desktop", "phone"] as const) {
+      for (const prop of ["color", "font-size", "font-weight", "min-height", "background"]) {
+        expect(computed(goneRow, prop, w), `${w} ${prop}`).toBe(computed(quiet, prop, w));
+      }
+      expect(computed(goneRow, "text-decoration", w), w).toBe("none");
+      expect(computed(elsewhere, "text-decoration", w), w).toBe("underline");
+      expect(computed(elsewhere, "font-size", w), w).toBe("14px");
+    }
+  });
+
+  it("drops the grey square from a featured icon and sizes its box to the icon, with no empty column", () => {
+    const icon = feature('<div class="feature-pic icon-box"></div>', ".feature-pic");
+    const grey = feature('<div class="feature-pic initials-box"></div>', ".feature-pic");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(icon, "background", w), w).toBe("none");
+      expect(computed(icon, "width", w), w).toBe("auto");
+      expect(computed(icon, "height", w), w).toBe("auto");
+      expect(computed(grey, "background", w), w).toBe("var(--pic)");
+    }
+    expect(computed(feature("", "article"), "grid-template-columns", "desktop")).toMatch(/ auto$/);
+    expect(computed(feature("", "article"), "grid-template-columns", "phone")).toMatch(/ auto$/);
+  });
 });
 
 describe("the edit dialog's Delete", () => {

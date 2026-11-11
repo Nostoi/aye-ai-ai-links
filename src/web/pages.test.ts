@@ -323,7 +323,9 @@ describe("the menu", () => {
       spacePage(SPACE),
     ];
     for (const html of withMenu) {
-      expect(html.replaceAll(' aria-current="page"', "")).toContain(
+      expect(
+        html.replaceAll(' aria-current="page"', "").replace(/<a class="menu-search".*?<\/a>/, ""),
+      ).toContain(
         '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><a class="menu-page" href="/save">+ Save</a><details class="account-menu" name="menu">',
       );
       expect(html).toContain(
@@ -332,41 +334,6 @@ describe("the menu", () => {
     }
     const without = [loginPage({ next: "/" }), oauthErrorPage("x"), consentExpiredPage()];
     for (const html of without) expect(html).not.toContain('id="sign-out"');
-  });
-});
-
-/** The home page's script, run with a stand-in for the focused element and the field. */
-function pressSlash(active: { tagName: string; isContentEditable?: boolean } | null) {
-  let onKey: ((event: Record<string, unknown>) => void) | undefined;
-  let focused = 0;
-  let prevented = 0;
-  const document = {
-    activeElement: active,
-    getElementById: (id: string) => ({ id, focus: () => focused++ }),
-    addEventListener: (type: string, fn: typeof onKey) => {
-      if (type === "keydown") onKey = fn;
-    },
-  };
-  new Function("document", scriptOf(homePage(EMPTY_HOME)))(document);
-  onKey?.({ key: "/", preventDefault: () => prevented++ });
-  return { focused, prevented };
-}
-
-describe("the home page's / key", () => {
-  it("moves focus to the field when nothing is being typed in", () => {
-    expect(pressSlash({ tagName: "BODY" })).toEqual({ focused: 1, prevented: 1 });
-    expect(pressSlash(null)).toEqual({ focused: 1, prevented: 1 });
-  });
-
-  it.each([["INPUT"], ["TEXTAREA"], ["SELECT"]])("leaves a / typed in a %s alone", (tagName) => {
-    expect(pressSlash({ tagName })).toEqual({ focused: 0, prevented: 0 });
-  });
-
-  it("leaves a / typed in an editable element alone", () => {
-    expect(pressSlash({ tagName: "DIV", isContentEditable: true })).toEqual({
-      focused: 0,
-      prevented: 0,
-    });
   });
 });
 

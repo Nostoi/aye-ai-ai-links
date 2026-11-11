@@ -1,3 +1,4 @@
+import { MAX_TEXT_CHARS } from "../ai/chat-turn.js";
 import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { GoneView } from "../core/link-check.js";
 import { linkSpace, type Space, spaceColor } from "../core/link-space.js";
@@ -196,6 +197,15 @@ function searchEmpty(query: string, keep: boolean, space: Tag | undefined): stri
   return space ? `No links saved${where} yet.` : "No links saved yet.";
 }
 
+/** A search in the Ask AI button's label: its first 60 characters, then "…" when there is more. */
+const askLabel = (query: string) => {
+  const chars = Array.from(query);
+  return chars.length > 60 ? `${chars.slice(0, 60).join("")}…` : query;
+};
+
+/** The example in the search fields on Home and on the results page. */
+export const SEARCH_PLACEHOLDER = "That article about batteries and the tax credit";
+
 /**
  * Search results, as the door got them. A blank query lists the newest links, so it is headed so.
  * `images` holds the image version of each link that has a stored image; `catalog`, the owner's
@@ -239,7 +249,7 @@ export const searchPage = ({
 <form class="search-page" action="/search" method="get" role="search">
 <label class="visually-hidden" for="q">Search your links</label>
 <div class="search-box">
-<input id="q" name="q" type="search" value="${escapeHtml(query)}"${keep ? " autofocus" : ""}>
+<input id="q" name="q" type="search" value="${escapeHtml(query)}" placeholder="${SEARCH_PLACEHOLDER}"${keep || query.trim() === "" ? " autofocus" : ""}>
 <button class="primary" type="submit">Find it</button>
 </div>
 ${keep ? `<input type="hidden" name="keep" value="1">\n` : ""}${space ? `<input type="hidden" name="tag" value="${escapeHtml(space.key)}">\n` : ""}</form>
@@ -249,7 +259,7 @@ ${keep ? `<p class="small hint">Find the link you use regularly, then press <str
 ${links.length === 0 ? `<p>${searchEmpty(query, keep, space)}</p>${space ? `\n<p><a class="search-all" href="${searchHref(query, { keep })}">Search all your links</a></p>` : ""}` : `<ol class="results" id="results"${space ? ` data-within="${escapeHtml(space.key)}"` : ""}>\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog, space ? { within: space.key } : {}), handy.get(l.id), gone.get(l.id), pictures.get(l.id), copies.get(l.id), keep, searchHref(query, { ...(space ? { tag: space.key } : {}), keep }))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
-<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="${searchHref("", { ...(space ? { tag: space.key } : {}), keep })}">your newest links</a>${space ? ` in ${escapeHtml(space.name)}${links.length === 0 ? "" : `, or <a class="search-all" href="${searchHref(query, { keep })}">search all your links</a>`}` : ""}.</p>
+${ask && query.trim() !== "" && query.length <= MAX_TEXT_CHARS ? `<p><button type="button" data-ask-text="${escapeHtml(query)}">Ask AI about “${escapeHtml(askLabel(query))}”</button></p>\n` : ""}<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="${searchHref("", { ...(space ? { tag: space.key } : {}), keep })}">your newest links</a>${space ? ` in ${escapeHtml(space.name)}${links.length === 0 ? "" : `, or <a class="search-all" href="${searchHref(query, { keep })}">search all your links</a>`}` : ""}.</p>
 </div>
 </main>
 ${ask ? "" : `${editDialog()}\n`}<script>

@@ -4,11 +4,24 @@ import { escapeHtml } from "./page.js";
 import { spaceClass } from "./pages.js";
 import { spaceHref } from "./space-page.js";
 
+/**
+ * A link's title as the card under `name` shows it: with `name` and its label break cut from the
+ * front ("Language Arts 8 — Grammar" is "Grammar"). The break is whitespace, a dash and whitespace,
+ * or a colon and whitespace, so "Go-to-market" stays whole in a space called Go. A title with
+ * nothing after the break is left as it is. Display only, like `displayTitle`.
+ */
+function trimmedTitle(title: string, name: string): string {
+  const escaped = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (escaped === "") return title;
+  const rest = title.replace(new RegExp(`^\\s*${escaped}(?:\\s+[—–-]\\s+|:\\s+)`, "iu"), "").trim();
+  return rest === "" ? title : rest;
+}
+
 /** The titles of the space's recent links, one per line; the theme hides them on a phone. */
 const recent = (s: HomeSpace) =>
   s.recent.length === 0
     ? ""
-    : `\n<span class="home-space-recent">${s.recent.map((l) => `<span>${escapeHtml(displayTitle(l))}</span>`).join("")}</span>`;
+    : `\n<span class="home-space-recent">${s.recent.map((l) => `<span>${escapeHtml(trimmedTitle(displayTitle(l), s.name))}</span>`).join("")}</span>`;
 
 const card = (s: HomeSpace) =>
   `<a class="home-space${spaceClass(s.color ? { color: s.color } : null)}" href="${escapeHtml(spaceHref(s.key))}">

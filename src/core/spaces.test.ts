@@ -80,6 +80,45 @@ describe("homeSpaces", () => {
     expect(kitchen?.recent.map((l) => l.id)).toEqual([newest, second, third]);
   });
 
+  it("lets a space whose newest links another card shows show its own other links", async () => {
+    const a1 = await save("a", ["alpha"]);
+    const a2 = await save("a", ["alpha"]);
+    const a3 = await save("a", ["alpha"]);
+    const s1 = await save("a", ["alpha", "beta"]);
+    const s2 = await save("a", ["alpha", "beta"]);
+    const s3 = await save("a", ["alpha", "beta"]);
+    await pin("a", "alpha", "clay");
+    await pin("a", "beta", "teal");
+    const { spaces } = await homeSpaces(deps(), "a");
+    const ids = (key: string) => spaces.find((s) => s.key === key)?.recent.map((l) => l.id);
+    expect(ids("alpha")).toEqual([a3, a2, a1]);
+    expect(ids("beta")).toEqual([s3, s2, s1]);
+  });
+
+  it("fills a card with links another card shows, and lists the card newest first", async () => {
+    const old = await save("a", ["alpha", "beta"]);
+    const mid = await save("a", ["alpha", "beta"]);
+    const own = await save("a", ["beta"]);
+    const newest = await save("a", ["alpha", "beta"]);
+    await pin("a", "alpha", "clay");
+    await pin("a", "beta", "teal");
+    const { spaces } = await homeSpaces(deps(), "a");
+    // alpha has the fewest candidates, so it is served first and takes all three of its links.
+    expect(spaces.find((s) => s.key === "alpha")?.recent.map((l) => l.id)).toEqual([
+      newest,
+      mid,
+      old,
+    ]);
+    // beta takes `own` (nobody shows it), then fills with the newest shown ones, and the card
+    // lists them newest first, not in the order they were picked.
+    expect(spaces.find((s) => s.key === "beta")?.recent.map((l) => l.id)).toEqual([
+      newest,
+      own,
+      mid,
+    ]);
+    expect(spaces.map((s) => s.key)).toEqual(["alpha", "beta"]);
+  });
+
   it("gives a space with no active links no recent links", async () => {
     const done = await save("a", ["kitchen"]);
     await store.update("a", done, { state: "archived" });

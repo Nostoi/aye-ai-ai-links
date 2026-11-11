@@ -197,6 +197,12 @@ function searchEmpty(query: string, keep: boolean, space: Tag | undefined): stri
   return space ? `No links saved${where} yet.` : "No links saved yet.";
 }
 
+/** A search in the Ask AI button's label: its first 60 characters, then "…" when there is more. */
+const askLabel = (query: string) => {
+  const chars = Array.from(query);
+  return chars.length > 60 ? `${chars.slice(0, 60).join("")}…` : query;
+};
+
 /** The example in the search fields on Home and on the results page. */
 export const SEARCH_PLACEHOLDER = "That article about batteries and the tax credit";
 
@@ -253,7 +259,7 @@ ${keep ? `<p class="small hint">Find the link you use regularly, then press <str
 ${links.length === 0 ? `<p>${searchEmpty(query, keep, space)}</p>${space ? `\n<p><a class="search-all" href="${searchHref(query, { keep })}">Search all your links</a></p>` : ""}` : `<ol class="results" id="results"${space ? ` data-within="${escapeHtml(space.key)}"` : ""}>\n${links.map((l) => resultItem(l, now, images.get(l.id), linkSpace(l, catalog, space ? { within: space.key } : {}), handy.get(l.id), gone.get(l.id), pictures.get(l.id), copies.get(l.id), keep, searchHref(query, { ...(space ? { tag: space.key } : {}), keep }))).join("\n")}\n</ol>`}
 <div class="not-it">
 <p><strong>Not it?</strong></p>
-${ask && query.trim() !== "" && query.length <= MAX_TEXT_CHARS ? `<p><button type="button" data-ask-text="${escapeHtml(query)}">Ask AI about “${escapeHtml(query)}”</button></p>\n` : ""}<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="${searchHref("", { ...(space ? { tag: space.key } : {}), keep })}">your newest links</a>${space ? ` in ${escapeHtml(space.name)}${links.length === 0 ? "" : `, or <a class="search-all" href="${searchHref(query, { keep })}">search all your links</a>`}` : ""}.</p>
+${ask && query.trim() !== "" && query.length <= MAX_TEXT_CHARS ? `<p><button type="button" data-ask-text="${escapeHtml(query)}">Ask AI about “${escapeHtml(askLabel(query))}”</button></p>\n` : ""}<p class="small">Try different words: what it was about, why you saved it, or roughly when. Or see <a href="${searchHref("", { ...(space ? { tag: space.key } : {}), keep })}">your newest links</a>${space ? ` in ${escapeHtml(space.name)}${links.length === 0 ? "" : `, or <a class="search-all" href="${searchHref(query, { keep })}">search all your links</a>`}` : ""}.</p>
 </div>
 </main>
 ${ask ? "" : `${editDialog()}\n`}<script>

@@ -84,6 +84,16 @@ describe("the Ask AI button under Not it?", () => {
     expect(b?.textContent).toBe("Ask AI about “tax <credit>”");
   });
 
+  it("shortens a long query in its label, and still carries all of it", () => {
+    const long = `${"😀".repeat(59)}${"b".repeat(200)}`;
+    const b = button(search(long, ASK));
+    expect(b?.getAttribute("data-ask-text")).toBe(long);
+    expect(b?.textContent).toBe(`Ask AI about “${"😀".repeat(59)}b…”`);
+    expect(button(search("a".repeat(60), ASK))?.textContent).toBe(
+      `Ask AI about “${"a".repeat(60)}”`,
+    );
+  });
+
   it("escapes the query", () => {
     expect(search('"><b>x</b>', ASK)).not.toContain("<b>x</b>");
   });

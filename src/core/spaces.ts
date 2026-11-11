@@ -15,7 +15,10 @@ export type HomeSpace = {
   key: string;
   name: string;
   color: SpaceColor | null;
-  /** Up to three of its active links, newest first. */
+  /**
+   * Up to three of its active links, newest first. Best effort: a card prefers links no other
+   * card shows (`homeSpaces`), so these are not always the space's three newest.
+   */
   recent: Link[];
 };
 
@@ -24,9 +27,37 @@ type Deps = {
   listing: LinkListing;
 };
 
+/** The most newest links fetched for any one space, to choose its card's links from. */
+const POOL_MAX = 24;
+
 /**
- * The owner's spaces (pinned tags), by key, each with its newest active links. The owner's
- * catalog comes too, for `linkSpace`.
+ * Picks each card's links from its pool (`pools`, newest first), so cards tell spaces apart. Cards
+ * are served fewest candidates first (ties: card order); each takes up to three links no card
+ * served before it shows, then fills with ones already shown, newest first. A card's picks come
+ * back newest first, and the result keeps the order of `pools`.
+ */
+function pickRecent(pools: Link[][]): Link[][] {
+  const shown = new Set<string>();
+  const picked: Link[][] = pools.map(() => []);
+  const serving = pools
+    .map((_, i) => i)
+    .sort((a, b) => (pools[a]?.length ?? 0) - (pools[b]?.length ?? 0) || a - b);
+  for (const i of serving) {
+    const pool = pools[i] ?? [];
+    const fresh = pool.filter((l) => !shown.has(l.id));
+    const seen = pool.filter((l) => shown.has(l.id));
+    const chosen = new Set([...fresh, ...seen].slice(0, RECENT_SIZE).map((l) => l.id));
+    picked[i] = pool.filter((l) => chosen.has(l.id));
+    for (const l of picked[i] ?? []) shown.add(l.id);
+  }
+  return picked;
+}
+
+/**
+ * The owner's spaces (pinned tags), by key, each with up to three of its active links, newest
+ * first. Best effort: a space whose newest links another card also shows takes its other links
+ * instead (`pickRecent`), chosen by link identity from its newest `min(3 × spaces, 24)`. The
+ * owner's catalog comes too, for `linkSpace`.
  */
 export async function homeSpaces(
   deps: Deps,
@@ -34,14 +65,20 @@ export async function homeSpaces(
 ): Promise<{ spaces: HomeSpace[]; catalog: Tag[] }> {
   const catalog = await deps.store.listTags(owner);
   const pinned = catalog.filter((t) => t.pinned);
-  const spaces = await Promise.all(
-    pinned.map(async (tag): Promise<HomeSpace> => {
-      const { links } = await linkPage(deps, owner, {
-        tagKey: tag.key,
-        state: "active",
-        limit: RECENT_SIZE,
-      });
-      return { key: tag.key, name: tag.name, color: spaceColor(tag), recent: links };
+  const poolSize = Math.min(RECENT_SIZE * pinned.length, POOL_MAX);
+  const pools = await Promise.all(
+    pinned.map(
+      async (tag) =>
+        (await linkPage(deps, owner, { tagKey: tag.key, state: "active", limit: poolSize })).links,
+    ),
+  );
+  const recent = pickRecent(pools);
+  const spaces = pinned.map(
+    (tag, i): HomeSpace => ({
+      key: tag.key,
+      name: tag.name,
+      color: spaceColor(tag),
+      recent: recent[i] ?? [],
     }),
   );
   return { spaces, catalog };

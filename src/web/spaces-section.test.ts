@@ -86,6 +86,22 @@ describe("the Your spaces section", () => {
     expect(outsideRefs(html)).toEqual([]);
   });
 
+  it("drops the space's name from the front of a title only at a clear label break", () => {
+    const shown = (name: string, title: string) =>
+      dom(
+        spacesSection([space({ key: name, name, recent: [link("1", { title })] })]),
+      ).querySelector(".home-space-recent > *")?.textContent;
+    expect(shown("Language Arts 8", "Language Arts 8 — Grammar")).toBe("Grammar");
+    expect(shown("Language Arts 8", "language arts 8 – Grammar")).toBe("Grammar");
+    expect(shown("Language Arts 8", "Language Arts 8 - Grammar")).toBe("Grammar");
+    expect(shown("Language Arts 8", "Language Arts 8: Grammar")).toBe("Grammar");
+    expect(shown("Go", "Go-to-market strategy")).toBe("Go-to-market strategy");
+    expect(shown("Rust", "Rust-based engine")).toBe("Rust-based engine");
+    expect(shown("Rust", "Rust")).toBe("Rust");
+    expect(shown("Rust", "Rust — ")).toBe("Rust — ");
+    expect(shown("Rust", "Rustacean — Grammar")).toBe("Rustacean — Grammar");
+  });
+
   it("keeps a hostile name and title inert and an odd key intact", () => {
     const html = spacesSection([
       space({

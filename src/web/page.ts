@@ -26,13 +26,31 @@ const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</sp
 const PERSON = `<span class="icon-wide"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/></svg></span>`;
 const BARS = `<span class="icon-phone"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>`;
 
+/** The menu section a page belongs to: it marks that section's link as the current page. */
+export type Here = "home" | "all" | "tags";
+
+/** The menu's page links in order; Home shows only in the phone menu, the logo being its link on a wide screen. */
+const PAGE_LINKS: { here?: Here; href: string; label: string }[] = [
+  { here: "home", href: "/", label: "Home" },
+  { here: "all", href: "/all", label: "All links" },
+  { here: "tags", href: "/tags", label: "Spaces and tags" },
+  { href: "/save", label: "+ Save" },
+];
+
 /**
- * Two page links, then Ask AI when the AI is set up (#159), then one `<details>` (#196): the
- * Account circle at desktop width, the Menu button on the phone, where it also holds the two page
- * links (`menu-phone-only`; the inline ones hide there). Sign out is the one `#sign-out`.
+ * Three page links (All links, Spaces and tags, + Save), then Ask AI when the AI is set up (#159),
+ * then one `<details>` (#196): the Account circle at desktop width, the Menu button on the phone,
+ * where it also holds Home and the page links (`menu-phone-only`; the inline ones hide there).
+ * `here` marks the link of the page's section with `aria-current="page"`, in the bar and in the
+ * menu. Sign out is the one `#sign-out`.
  */
-const menuHtml = (withAsk: boolean) =>
-  `<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a>${withAsk ? ASK_BUTTON : ""}<details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list"><a class="menu-phone-only" href="/all">All links</a><a class="menu-phone-only" href="/tags">Spaces and tags</a><a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
+const menuHtml = (withAsk: boolean, here: Here | undefined) => {
+  const link = ({ here: section, href, label }: (typeof PAGE_LINKS)[number], cls: string) =>
+    `<a class="${cls}" href="${href}"${section !== undefined && section === here ? ' aria-current="page"' : ""}>${label}</a>`;
+  const bar = PAGE_LINKS.filter((l) => l.href !== "/").map((l) => link(l, "menu-page"));
+  const phone = PAGE_LINKS.map((l) => link(l, "menu-phone-only"));
+  return `<nav class="menu" aria-label="Main">${bar.join("")}${withAsk ? ASK_BUTTON : ""}<details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list">${phone.join("")}<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
+};
 
 /**
  * Ends the session, then goes to the sign-in page. It also closes the page's ⋯ menus, the account
@@ -219,7 +237,8 @@ export const pageScripts = (options: ScriptOptions): string[] => {
 
 /**
  * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
- * adds the menu (and implies `home`), for the pages the owner browses. `undo` adds the Undo bar
+ * adds the menu (and implies `home`), for the pages the owner browses; `here` names the section
+ * whose link it marks as current. `undo` adds the Undo bar
  * and `showUndo`. `ask`, given only on menu pages and only when the AI is set up, adds the Ask AI
  * button and panel (#159); without it the page is exactly as it was. With `ask` the page also
  * owns the one edit dialog, as a body child the phone sheet leaves usable, and the one edit script,
@@ -229,7 +248,7 @@ export const pageScripts = (options: ScriptOptions): string[] => {
 export const page = (
   title: string,
   body: string,
-  { home = false, ...options }: { home?: boolean } & ScriptOptions = {},
+  { home = false, here, ...options }: { home?: boolean; here?: Here } & ScriptOptions = {},
 ) => {
   const { menu, ask } = options;
   const scripts = scriptsFor(options);
@@ -243,7 +262,7 @@ export const page = (
 <style>${PAGE_STYLE}</style>
 ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <body>
-<header class="column site">${home || menu ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}${menu ? menuHtml(ask !== undefined) : ""}</header>
+<header class="column site">${home || menu ? `<a class="brand" href="/">${brand}</a>` : `<span class="brand">${brand}</span>`}${menu ? menuHtml(ask !== undefined, here) : ""}</header>
 <div class="column">
 ${body}
 </div>

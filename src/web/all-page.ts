@@ -163,6 +163,7 @@ ${doneLinkScript("all-links", "all-error")}
 ${openedScript("all-links", "/links/opened", done ? PUT_AWAY_MARKER : undefined)}${older ? olderScript("all-links") : ""}`,
     {
       menu: true,
+      here: "all",
       undo: true,
       ask: input.ask,
       edits: { root: "all-links", error: "all-error" },

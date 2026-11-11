@@ -601,5 +601,5 @@ if (list) {
 // The Ask AI panel changed a tag: the rows, counts and offers here are stale, so draw them again.
 document.addEventListener("aye-tags-changed", () => location.reload());
 </script>`,
-    { menu: true, undo: true, ask },
+    { menu: true, here: "tags", undo: true, ask },
   );

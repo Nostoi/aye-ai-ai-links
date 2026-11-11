@@ -322,6 +322,12 @@ ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}
 </script>
 ${openedScript("worth-cards", "/home/opened")}
 ${openedScript("handy", "/links/opened")}`,
-    { menu: true, undo: true, ask, edits: { root: "worth-cards", error: "home-error" } },
+    {
+      menu: true,
+      here: "home",
+      undo: true,
+      ask,
+      edits: { root: "worth-cards", error: "home-error" },
+    },
   );
 };

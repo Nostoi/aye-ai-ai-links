@@ -60,7 +60,7 @@ const longBody = `<main class="save">
  * `openedScript`), its why, and Bring it back when it is archived. Once there is an answer the
  * address bar is cleaned to `/save`, so a reload shows an empty form; before that the query stays,
  * so a reload after a sign-out refills the form. A refusal is shown under its field. Close closes
- * the tab, or says it can be closed when the browser keeps it open. Needs `CARD_FETCH`.
+ * the tab, or goes to Home when the browser keeps it open. Needs `CARD_FETCH`.
  */
 const SAVE_SCRIPT = `<script>
 ${CARD_FETCH}

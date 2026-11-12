@@ -48,7 +48,11 @@ async function code(p: Promise<unknown>): Promise<string> {
 
 describe("judgeCheck", () => {
   const ok = (finalUrl = "https://ex.com/"): LinkCheckOutcome => ({ kind: "ok", finalUrl });
-  const http = (status: number): LinkCheckOutcome => ({ kind: "http_error", status });
+  const http = (status: number): LinkCheckOutcome => ({
+    kind: "http_error",
+    status,
+    finalUrl: "https://ex.com/gone",
+  });
   const net = (code: string): LinkCheckOutcome => ({ kind: "network_error", code });
 
   it.each([

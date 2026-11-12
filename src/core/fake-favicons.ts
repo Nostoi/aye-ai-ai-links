@@ -34,6 +34,36 @@ export class FakeFavicons {
     });
   }
 
+  /** Test seeding: sets an existing row's status, discovery version and (when given) generation; `ok` gets bytes. */
+  seed(
+    owner: OwnerId,
+    linkId: string,
+    patch: { status: Row["status"]; discovery: number; generation?: number },
+  ): void {
+    const row = this.rows.get(keyOf(owner, linkId));
+    if (!row) throw new Error("no favicon row to seed");
+    row.status = patch.status;
+    row.discovery = patch.discovery;
+    row.generation = patch.generation ?? row.generation;
+    row.image =
+      patch.status === "ok"
+        ? { contentType: "image/png", bytes: new Uint8Array([1]), version: "seeded" }
+        : null;
+  }
+
+  /**
+   * The claim a favicon check holds for the link: the row's generation when it is `none` or
+   * `refused` below the current discovery version, null with no row, undefined for any other row.
+   */
+  claim(owner: OwnerId, linkId: string): number | null | undefined {
+    const row = this.rows.get(keyOf(owner, linkId));
+    if (!row) return null;
+    const open =
+      (row.status === "none" || row.status === "refused") &&
+      row.discovery < FAVICON_DISCOVERY_VERSION;
+    return open ? row.generation : undefined;
+  }
+
   /** The link is gone for good, as the table's ON DELETE CASCADE does. */
   drop(owner: OwnerId, linkId: string): void {
     this.rows.delete(keyOf(owner, linkId));

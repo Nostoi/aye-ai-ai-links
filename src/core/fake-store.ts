@@ -11,7 +11,12 @@ import {
 } from "./covered-fields.js";
 import { FakeFavicons } from "./fake-favicons.js";
 import type { FaviconReader, FaviconStore, PendingFavicon } from "./favicon-store.js";
-import type { IconBackfillStore, IconCandidate, PreviewLink } from "./icon-backfill-store.js";
+import type {
+  FaviconCandidate,
+  IconBackfillStore,
+  IconCandidate,
+  PreviewLink,
+} from "./icon-backfill-store.js";
 import {
   type ImageBytes,
   type ImageEnd,
@@ -1301,15 +1306,59 @@ export class FakeStore
     return found.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
   }
 
-  async recordIconCheck(owner: OwnerId, linkId: string, iconUrls: string[]): Promise<boolean> {
+  async faviconCandidates(afterId: string | null, limit: number): Promise<FaviconCandidate[]> {
+    const order = (id: string) => Number(id.replace(/^link-/, ""));
+    const found: FaviconCandidate[] = [];
+    for (const [owner, mine] of this.snapshots) {
+      for (const [linkId, s] of mine) {
+        if (this.isHidden(owner, linkId) || s.status === "pending" || s.status === "retrying") {
+          continue;
+        }
+        const generation = this.favicons.claim(owner, linkId);
+        if (generation === undefined) continue;
+        if (afterId !== null && order(linkId) <= order(afterId)) continue;
+        const url = (this.owned(owner).get(linkId) as Link).url;
+        found.push({ owner, linkId, url, generation });
+      }
+    }
+    return found.sort((a, b) => order(a.linkId) - order(b.linkId)).slice(0, limit);
+  }
+
+  async recordFaviconCheck(
+    owner: OwnerId,
+    linkId: string,
+    generation: number | null,
+    urls: string[],
+  ): Promise<boolean> {
     const s = this.snapshots.get(owner)?.get(linkId);
-    if (!s || !this.iconOpen(owner, linkId, s) || iconUrls.length > MAX_ICON_URLS) {
+    if (!s || !this.live(owner, linkId) || s.status === "pending" || s.status === "retrying") {
+      return false;
+    }
+    if (urls.length > MAX_FAVICON_URLS || this.favicons.claim(owner, linkId) !== generation) {
+      return false;
+    }
+    this.favicons.rewrite(owner, linkId, urls);
+    return true;
+  }
+
+  async recordIconCheck(
+    owner: OwnerId,
+    linkId: string,
+    iconUrls: string[],
+    faviconUrls: string[] | null,
+  ): Promise<boolean> {
+    const s = this.snapshots.get(owner)?.get(linkId);
+    if (!s || !this.live(owner, linkId) || !this.iconOpen(owner, linkId, s)) return false;
+    if (iconUrls.length > MAX_ICON_URLS || (faviconUrls?.length ?? 0) > MAX_FAVICON_URLS) {
       return false;
     }
     s.iconUrls = [...iconUrls];
     this.imageStates.set(imageKey(owner, linkId), {
       status: iconUrls.length > 0 ? "pending" : "none",
     });
+    if (faviconUrls !== null && this.favicons.claim(owner, linkId) !== undefined) {
+      this.favicons.rewrite(owner, linkId, faviconUrls);
+    }
     return true;
   }
 
@@ -1368,6 +1417,11 @@ export class FakeStore
 
   async favicon(owner: OwnerId, linkId: string): Promise<StoredImage | null> {
     return this.favicons.read(owner, linkId, this.live);
+  }
+
+  /** Test seeding: see `FakeFavicons.seed`. */
+  seedFavicon(...args: Parameters<FakeFavicons["seed"]>): void {
+    this.favicons.seed(...args);
   }
 
   /** Test inspection: the link's favicon row, as `link_favicons` would hold it. */

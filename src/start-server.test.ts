@@ -1463,7 +1463,7 @@ describe("startServer", () => {
           }),
           fetchFavicon: async (url) => {
             asked.push(url);
-            return { kind: "http_error", status: 404 };
+            return { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" };
           },
         }),
         faviconPollMs: 20,
@@ -2003,7 +2003,7 @@ describe("startServer", () => {
       await seedWeekOld("https://example.com/old");
       const linkChecker: LinkChecker = {
         canResolve: async () => true,
-        check: async () => ({ kind: "http_error", status: 404 }),
+        check: async () => ({ kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }),
         close: async () => {},
       };
       await start({ linkChecker, checkPollMs: 20 });

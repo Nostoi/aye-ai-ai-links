@@ -114,7 +114,7 @@ describe("a check, on SQLite", () => {
   };
 
   it.each([
-    ["a 404", { kind: "http_error", status: 404 }],
+    ["a 404", { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }],
     ["a name that no longer resolves", { kind: "network_error", code: "ENOTFOUND" }],
   ] as [string, LinkCheckOutcome][])(
     "ending in %s records the link dead and leaves its snapshot, page text and stored image byte-identical",

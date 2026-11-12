@@ -4,6 +4,7 @@ import type { FetchOutcome, RefusedReason } from "./fetch.js";
 import {
   type AttemptOutcome,
   MAX_ATTEMPTS,
+  outcomeFavicons,
   pastLastAttempt,
   pastLastAttemptRecord,
   RETRY_DELAYS_MS,
@@ -135,11 +136,31 @@ describe("snapshotRecord", () => {
       fetchOf({ kind: "network_error", code: "ECONNRESET" }),
       "fetch:network:ECONNRESET",
     ],
-    ["http 500", fetchOf({ kind: "http_error", status: 500 }), "fetch:http:500"],
-    ["http 503", fetchOf({ kind: "http_error", status: 503 }), "fetch:http:503"],
-    ["http 599", fetchOf({ kind: "http_error", status: 599 }), "fetch:http:599"],
-    ["http 408", fetchOf({ kind: "http_error", status: 408 }), "fetch:http:408"],
-    ["http 429", fetchOf({ kind: "http_error", status: 429 }), "fetch:http:429"],
+    [
+      "http 500",
+      fetchOf({ kind: "http_error", status: 500, finalUrl: "https://ex.com/gone" }),
+      "fetch:http:500",
+    ],
+    [
+      "http 503",
+      fetchOf({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+      "fetch:http:503",
+    ],
+    [
+      "http 599",
+      fetchOf({ kind: "http_error", status: 599, finalUrl: "https://ex.com/gone" }),
+      "fetch:http:599",
+    ],
+    [
+      "http 408",
+      fetchOf({ kind: "http_error", status: 408, finalUrl: "https://ex.com/gone" }),
+      "fetch:http:408",
+    ],
+    [
+      "http 429",
+      fetchOf({ kind: "http_error", status: 429, finalUrl: "https://ex.com/gone" }),
+      "fetch:http:429",
+    ],
     ["fetch aborted", fetchOf({ kind: "aborted" }), "fetch:aborted"],
     [
       "extract spawn_failed",
@@ -176,9 +197,27 @@ describe("snapshotRecord", () => {
       ["https://x.test/apple-touch-icon.png", "https://x.test/favicon.ico"],
     ],
     ["too_large", fetchOf({ kind: "too_large" }), "failed", "fetch:too_large", []],
-    ["http 404", fetchOf({ kind: "http_error", status: 404 }), "failed", "fetch:http:404", []],
-    ["http 403", fetchOf({ kind: "http_error", status: 403 }), "failed", "fetch:http:403", []],
-    ["http 301", fetchOf({ kind: "http_error", status: 301 }), "failed", "fetch:http:301", []],
+    [
+      "http 404",
+      fetchOf({ kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }),
+      "failed",
+      "fetch:http:404",
+      ["https://ex.com/apple-touch-icon.png", "https://ex.com/favicon.ico"],
+    ],
+    [
+      "http 403",
+      fetchOf({ kind: "http_error", status: 403, finalUrl: "https://ex.com/gone" }),
+      "failed",
+      "fetch:http:403",
+      ["https://ex.com/apple-touch-icon.png", "https://ex.com/favicon.ico"],
+    ],
+    [
+      "http 301",
+      fetchOf({ kind: "http_error", status: 301, finalUrl: "https://ex.com/gone" }),
+      "failed",
+      "fetch:http:301",
+      ["https://ex.com/apple-touch-icon.png", "https://ex.com/favicon.ico"],
+    ],
     ...refusedReasons.map((reason): [string, AttemptOutcome, string, string, string[]] => [
       `refused ${reason}`,
       fetchOf({ kind: "refused", reason }),
@@ -220,20 +259,39 @@ describe("snapshotRecord", () => {
 
   it("★ a fetch that ends with no page records no favicon candidates; a retry leaves them (#272)", () => {
     // [Leaving it null: no favicon row is written, so the link reads as never looked at.]
-    for (const fetch of [
-      { kind: "refused", reason: "address" },
-      { kind: "too_large" },
-      { kind: "http_error", status: 404 },
-    ] as const) {
+    for (const fetch of [{ kind: "refused", reason: "address" }, { kind: "too_large" }] as const) {
       expect(map(fetchOf(fetch)).faviconUrls, fetch.kind).toEqual([]);
     }
-    const transient = fetchOf({ kind: "http_error", status: 503 });
+    const transient = fetchOf({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" });
     expect(map(transient, MAX_ATTEMPTS - 1)).toMatchObject({
       status: "retrying",
       faviconUrls: null,
     });
-    expect(map(transient, MAX_ATTEMPTS)).toMatchObject({ status: "failed", faviconUrls: [] });
     expect(pastLastAttemptRecord(MAX_ATTEMPTS + 1).faviconUrls).toEqual([]);
+    for (const outcome of [
+      fetchOf({ kind: "network_error", code: "ECONNRESET" }),
+      fetchOf({ kind: "timeout" }),
+      extractOf({ kind: "spawn_failed", detail: "EAGAIN" }),
+    ]) {
+      expect(map(outcome, MAX_ATTEMPTS)).toMatchObject({ status: "failed", faviconUrls: [] });
+    }
+  });
+
+  it("★ a short link whose destination keeps answering 503 takes the destination's root favicons once retries run out (#272)", () => {
+    // [Writing an empty list on the last attempt, as the retry branch did.]
+    const blocked = fetchOf({
+      kind: "http_error",
+      status: 503,
+      finalUrl: "https://destination.example/blocked",
+    });
+    expect(map(blocked, MAX_ATTEMPTS, "https://short.example/x")).toMatchObject({
+      status: "failed",
+      lastError: "fetch:http:503",
+      faviconUrls: [
+        "https://destination.example/apple-touch-icon.png",
+        "https://destination.example/favicon.ico",
+      ],
+    });
   });
 
   it("ok keeps metadata and text, stamps fetchedAt, and has no error", () => {
@@ -388,5 +446,39 @@ describe("snapshotRecord", () => {
   it("covers every outcome kind (compile-time guard)", () => {
     expect(assertAllFetchKinds({ kind: "aborted" })).toBe("aborted");
     expect(assertAllExtractKinds({ kind: "aborted" })).toBe("aborted");
+  });
+});
+
+describe("outcomeFavicons", () => {
+  const root = ["https://ex.com/apple-touch-icon.png", "https://ex.com/favicon.ico"];
+  it.each<[string, AttemptOutcome, string[]]>([
+    ["a page read", extractOf({ kind: "ok", metadata: meta, text: "b" }), meta.faviconUrls],
+    ["a timeout with metadata", extractOf({ kind: "timeout", metadata: meta }), meta.faviconUrls],
+    ["a crash without metadata", extractOf({ kind: "crashed", metadata: null, detail: "x" }), []],
+    ["an out-of-memory without metadata", extractOf({ kind: "out_of_memory", metadata: null }), []],
+    ["a timeout without metadata", extractOf({ kind: "timeout", metadata: null }), []],
+    ["a child that could not run", extractOf({ kind: "spawn_failed", detail: "x" }), []],
+    ["an extraction aborted", extractOf({ kind: "aborted" }), []],
+    [
+      "not_html",
+      fetchOf({
+        kind: "not_html",
+        finalUrl: "https://ex.com/a.pdf",
+        contentType: "application/pdf",
+      }),
+      root,
+    ],
+    [
+      "http_error, whatever its status",
+      fetchOf({ kind: "http_error", status: 403, finalUrl: "https://ex.com/a" }),
+      root,
+    ],
+    ["a refusal", fetchOf({ kind: "refused", reason: "address" }), []],
+    ["too_large", fetchOf({ kind: "too_large" }), []],
+    ["a network error", fetchOf({ kind: "network_error", code: "ECONNRESET" }), []],
+    ["a timeout", fetchOf({ kind: "timeout" }), []],
+    ["an abort", fetchOf({ kind: "aborted" }), []],
+  ])("%s", (_n, outcome, want) => {
+    expect(outcomeFavicons(outcome)).toEqual(want);
   });
 });

@@ -9,7 +9,11 @@ import type { LinkState } from "./types.js";
 
 const OWNER = "o";
 const DAY = 86_400_000;
-const NOT_FOUND: LinkCheckOutcome = { kind: "http_error", status: 404 };
+const NOT_FOUND: LinkCheckOutcome = {
+  kind: "http_error",
+  status: 404,
+  finalUrl: "https://ex.com/gone",
+};
 const okFor = (url: string): LinkCheckOutcome => ({ kind: "ok", finalUrl: url });
 
 function gate() {

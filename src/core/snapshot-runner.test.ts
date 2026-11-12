@@ -174,28 +174,33 @@ describe("snapshot runner", () => {
     ]);
   });
 
-  it("★ a fetch that ends with no page writes a none favicon row: looked, found nothing (#272)", async () => {
-    // [Recording null, which writes no row, so the link reads as never looked at.]
+  it("★ a refusal writes a none favicon row, an HTTP error the root guesses of the address that answered (#272)", async () => {
+    // [Recording null, which writes no row, so the link reads as never looked at; or [] for the error.]
     const s = setup();
     const refused = await s.save(A, 1);
     const gone = await s.save(A, 2);
     s.fetch.run = async (url) =>
       url.endsWith("/1")
         ? { kind: "refused", reason: "address" }
-        : { kind: "http_error", status: 404 };
+        : { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" };
     expect(refused.url.endsWith("/1") && gone.url.endsWith("/2")).toBe(true);
     await s.runner.kick(A, refused.id);
     await s.runner.kick(A, gone.id);
-    for (const link of [refused, gone]) {
-      expect(s.store.faviconRow(A, link.id)).toEqual({
-        candidates: [],
-        status: "none",
-        generation: 1,
-        discovery: FAVICON_DISCOVERY_VERSION,
-        stored: false,
-      });
-    }
-    expect(await s.store.pendingFavicons(null, 10)).toEqual([]);
+    expect(s.store.faviconRow(A, refused.id)).toEqual({
+      candidates: [],
+      status: "none",
+      generation: 1,
+      discovery: FAVICON_DISCOVERY_VERSION,
+      stored: false,
+    });
+    // An HTTP error takes the root guesses of the address that answered (#272).
+    expect(s.store.faviconRow(A, gone.id)).toEqual({
+      candidates: ["https://ex.com/apple-touch-icon.png", "https://ex.com/favicon.ico"],
+      status: "pending",
+      generation: 1,
+      discovery: FAVICON_DISCOVERY_VERSION,
+      stored: false,
+    });
   });
 
   it("★ an extraction that fails before its metadata writes a none favicon row (#272)", async () => {

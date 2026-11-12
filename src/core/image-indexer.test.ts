@@ -99,7 +99,7 @@ describe("the image pass", () => {
   it.each([
     ["a non-image", "none", { kind: "not_image", contentType: "text/html" }],
     ["a body too large", "none", { kind: "too_large" }],
-    ["a 404", "none", { kind: "http_error", status: 404 }],
+    ["a 404", "none", { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }],
     ["a refused address", "refused", { kind: "refused", reason: "address" }],
     ["a refused redirect", "refused", { kind: "refused", reason: "too_many_redirects" }],
   ] as [string, string, ImageOutcome][])(
@@ -119,9 +119,9 @@ describe("the image pass", () => {
   );
 
   it.each([
-    ["a 503", { kind: "http_error", status: 503 }],
-    ["a 429", { kind: "http_error", status: 429 }],
-    ["a 408", { kind: "http_error", status: 408 }],
+    ["a 503", { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }],
+    ["a 429", { kind: "http_error", status: 429, finalUrl: "https://ex.com/gone" }],
+    ["a 408", { kind: "http_error", status: 408, finalUrl: "https://ex.com/gone" }],
     ["a network error", { kind: "network_error", code: "ECONNRESET" }],
     ["a timeout", { kind: "timeout" }],
   ] as [string, ImageOutcome][])(
@@ -142,7 +142,11 @@ describe("the image pass", () => {
   );
 
   it(`doubles the backoff per failure up to an hour, and ends as none after ${MAX_IMAGE_ATTEMPTS} failed attempts`, async () => {
-    const t = setup(async () => ({ kind: "http_error", status: 503 }));
+    const t = setup(async () => ({
+      kind: "http_error",
+      status: 503,
+      finalUrl: "https://ex.com/gone",
+    }));
     const ended = vi.spyOn(t.store, "endImage");
     const id = await linkWithImage(t.store, 1);
     const waits: number[] = [];
@@ -330,7 +334,9 @@ describe("icons", () => {
 
   it("★ ends as none when both icons fail, with no further fetch", async () => {
     const t = setup(async (url) =>
-      url === I ? okPng(png(16, 16)) : { kind: "http_error", status: 404 },
+      url === I
+        ? okPng(png(16, 16))
+        : { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" },
     );
     const id = await iconsOnly(t.store, [I, I2]);
     for (let i = 0; i < 4; i++) {
@@ -344,7 +350,11 @@ describe("icons", () => {
   });
 
   it("★ fetches only the preview when a page names both; a preview that ends shows no icon", async () => {
-    const t = setup(async () => ({ kind: "http_error", status: 404 }));
+    const t = setup(async () => ({
+      kind: "http_error",
+      status: 404,
+      finalUrl: "https://ex.com/gone",
+    }));
     const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
     await recordOn(t.store, link.id, at(1), { imageUrl: P, iconUrls: [I] });
     await t.indexer.sweep();
@@ -356,7 +366,7 @@ describe("icons", () => {
   });
 
   it.each([
-    ["a 404", [{ kind: "http_error", status: 404 }]],
+    ["a 404", [{ kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }]],
     ["a refusal", [{ kind: "refused", reason: "address" }]],
     [
       "the retries running out",
@@ -391,7 +401,11 @@ describe("icons", () => {
   );
 
   it("★ keys the backoff by role: X failing as an icon doesn't delay X as the preview", async () => {
-    const t = setup(async () => ({ kind: "http_error", status: 503 }));
+    const t = setup(async () => ({
+      kind: "http_error",
+      status: 503,
+      finalUrl: "https://ex.com/gone",
+    }));
     const { link } = await t.store.insertIfAbsent(OWNER, newLink(1, at(0)));
     await recordOn(t.store, link.id, at(1), {
       status: "retrying",

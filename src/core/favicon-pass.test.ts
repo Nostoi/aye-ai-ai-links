@@ -18,7 +18,11 @@ const okPng = (bytes: Buffer): ImageOutcome => ({
   contentType: "image/png",
   bytes: new Uint8Array(bytes),
 });
-const NOT_FOUND: ImageOutcome = { kind: "http_error", status: 404 };
+const NOT_FOUND: ImageOutcome = {
+  kind: "http_error",
+  status: 404,
+  finalUrl: "https://ex.com/gone",
+};
 
 const running: { stop(): Promise<void> }[] = [];
 afterEach(async () => {

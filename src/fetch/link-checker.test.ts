@@ -150,12 +150,24 @@ describe("a page that answers", () => {
 
 describe("a page that is gone", () => {
   it("reports a 404 and a 410 as http_error with the status", async () => {
-    expect(await check("/missing")).toEqual({ kind: "http_error", status: 404 });
-    expect(await check("/gone")).toEqual({ kind: "http_error", status: 410 });
+    expect(await check("/missing")).toEqual({
+      kind: "http_error",
+      status: 404,
+      finalUrl: siteUrl("/missing"),
+    });
+    expect(await check("/gone")).toEqual({
+      kind: "http_error",
+      status: 410,
+      finalUrl: siteUrl("/gone"),
+    });
   });
 
   it("reports a redirect chain that ends in 404 as that 404", async () => {
-    expect(await check("/r-missing")).toEqual({ kind: "http_error", status: 404 });
+    expect(await check("/r-missing")).toEqual({
+      kind: "http_error",
+      status: 404,
+      finalUrl: siteUrl("/missing"),
+    });
   });
 
   it("reports a name that doesn't resolve, first or after a redirect, as ENOTFOUND (A1)", async () => {

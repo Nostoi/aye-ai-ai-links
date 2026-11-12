@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import type { Database } from "better-sqlite3";
+import { FAVICON_DISCOVERY_VERSION } from "../core/favicon-store.js";
 import type { ImageType } from "../core/fetch.js";
-import type { IconBackfillStore, IconCandidate, PreviewLink } from "../core/icon-backfill-store.js";
+import type {
+  FaviconCandidate,
+  IconBackfillStore,
+  IconCandidate,
+  PreviewLink,
+} from "../core/icon-backfill-store.js";
 import {
   type ImageBytes,
   type ImageEnd,
@@ -19,6 +25,17 @@ import { MAX_FAVICON_URLS, MAX_ICON_URLS } from "../core/snapshot-store.js";
 import type { OwnerId } from "../core/types.js";
 import { parseId } from "./sql-values.js";
 import { rewriteFavicon } from "./sqlite-favicons.js";
+
+/**
+ * What a favicon candidate is (#272), from `snapshots s` on, for the read and the write to share:
+ * a live link with a terminal snapshot and no favicon row, or a `none` or `refused` one below the
+ * current discovery version. One parameter: that version.
+ */
+const FAVICON_CANDIDATE = `FROM snapshots s
+  JOIN links l ON l.owner_id = s.owner_id AND l.id = s.link_id
+  LEFT JOIN link_favicons f ON f.owner_id = l.owner_id AND f.link_id = l.id
+  WHERE l.deleted_at IS NULL AND s.fetch_status NOT IN ('pending', 'retrying')
+    AND (f.link_id IS NULL OR (f.status IN ('none', 'refused') AND f.discovery < ?))`;
 
 /** Fetched pictures, a page's preview or a site's icon (`link_images`, pending in `snapshots.image_status`), the one-time icon check of links snapshotted before icons were looked for, the word-picture check that swaps a preview for the site's icon, and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
 export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfillStore {
@@ -190,23 +207,88 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
     return rows.map((r) => ({ owner: r.owner_id, linkId: String(r.id), url: r.url }));
   }
 
-  async recordIconCheck(owner: OwnerId, linkId: string, iconUrls: string[]): Promise<boolean> {
+  async faviconCandidates(afterId: string | null, limit: number): Promise<FaviconCandidate[]> {
+    const after = afterId === null ? 0 : parseId(afterId);
+    if (after === null) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT l.owner_id, l.id, l.url, f.generation ${FAVICON_CANDIDATE}
+           AND l.id > ? ORDER BY l.id LIMIT ?`,
+      )
+      .all(FAVICON_DISCOVERY_VERSION, after, limit) as {
+      owner_id: string;
+      id: number;
+      url: string;
+      generation: number | null;
+    }[];
+    return rows.map((r) => ({
+      owner: r.owner_id,
+      linkId: String(r.id),
+      url: r.url,
+      generation: r.generation,
+    }));
+  }
+
+  async recordFaviconCheck(
+    owner: OwnerId,
+    linkId: string,
+    generation: number | null,
+    urls: string[],
+  ): Promise<boolean> {
+    const n = parseId(linkId);
+    if (n === null || urls.length > MAX_FAVICON_URLS) return false;
+    return this.db
+      .transaction(() => {
+        const row = this.db
+          .prepare(`SELECT f.generation ${FAVICON_CANDIDATE} AND l.owner_id = ? AND l.id = ?`)
+          .get(FAVICON_DISCOVERY_VERSION, owner, n) as { generation: number | null } | undefined;
+        if (!row || row.generation !== generation) return false;
+        rewriteFavicon(this.db, owner, n, urls);
+        return true;
+      })
+      .immediate();
+  }
+
+  async recordIconCheck(
+    owner: OwnerId,
+    linkId: string,
+    iconUrls: string[],
+    faviconUrls: string[] | null,
+  ): Promise<boolean> {
     const n = parseId(linkId);
     if (n === null || iconUrls.length > MAX_ICON_URLS) return false;
+    if ((faviconUrls?.length ?? 0) > MAX_FAVICON_URLS) return false;
     const first = iconUrls[0] ?? null;
-    const { changes } = this.db
-      .prepare(
-        `UPDATE snapshots SET icon_url = ?, icon_next_url = ?,
-           image_status = CASE WHEN ? IS NULL THEN 'none' ELSE 'pending' END
-         WHERE owner_id = ? AND link_id = ? AND fetch_status = 'ok'
-           AND image_url IS NULL AND image_status IS NULL
-           AND NOT EXISTS (SELECT 1 FROM link_images f
-             WHERE f.owner_id = snapshots.owner_id AND f.link_id = snapshots.link_id)
-           AND NOT EXISTS (SELECT 1 FROM link_checks k WHERE k.owner_id = snapshots.owner_id
-             AND k.link_id = snapshots.link_id AND k.flagged_at IS NOT NULL)`,
-      )
-      .run(first, iconUrls[1] ?? null, first, owner, n);
-    return changes === 1;
+    return this.db
+      .transaction(() => {
+        const { changes } = this.db
+          .prepare(
+            `UPDATE snapshots SET icon_url = ?, icon_next_url = ?,
+               image_status = CASE WHEN ? IS NULL THEN 'none' ELSE 'pending' END
+             WHERE owner_id = ? AND link_id = ? AND fetch_status = 'ok'
+               AND image_url IS NULL AND image_status IS NULL
+               AND EXISTS (SELECT 1 FROM links l WHERE l.owner_id = snapshots.owner_id
+                 AND l.id = snapshots.link_id AND l.deleted_at IS NULL)
+               AND NOT EXISTS (SELECT 1 FROM link_images f
+                 WHERE f.owner_id = snapshots.owner_id AND f.link_id = snapshots.link_id)
+               AND NOT EXISTS (SELECT 1 FROM link_checks k WHERE k.owner_id = snapshots.owner_id
+                 AND k.link_id = snapshots.link_id AND k.flagged_at IS NOT NULL)`,
+          )
+          .run(first, iconUrls[1] ?? null, first, owner, n);
+        if (changes !== 1) return false;
+        if (faviconUrls !== null) {
+          const blocked = this.db
+            .prepare(
+              `SELECT 1 FROM link_favicons f
+               WHERE f.owner_id = ? AND f.link_id = ?
+                 AND NOT (f.status IN ('none', 'refused') AND f.discovery < ?)`,
+            )
+            .get(owner, n, FAVICON_DISCOVERY_VERSION);
+          if (!blocked) rewriteFavicon(this.db, owner, n, faviconUrls);
+        }
+        return true;
+      })
+      .immediate();
   }
 
   async wordPictureCandidates(afterId: string | null, limit: number): Promise<PreviewLink[]> {

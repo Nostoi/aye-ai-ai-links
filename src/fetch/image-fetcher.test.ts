@@ -231,7 +231,11 @@ describe("what is not kept", () => {
   });
 
   it("reports a 503 as an http_error", async () => {
-    expect(await fetchPath("/unavailable")).toEqual({ kind: "http_error", status: 503 });
+    expect(await fetchPath("/unavailable")).toEqual({
+      kind: "http_error",
+      status: 503,
+      finalUrl: `http://site.test:${sitePort}/unavailable`,
+    });
   });
 });
 

@@ -541,7 +541,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <section class="copy-end" id="copy-end" aria-label="Finished with this link?">
 <div class="copy-end-acts" id="copy-end-active">
 <span class="copy-end-label" tabindex="-1">Finished with this link?</span>
-<button type="button" data-act="archive">It&#39;s stale</button>
+<button type="button" data-act="archive">Done with it</button>
 <button type="button" data-act="put-away">Put it away</button>
 <span data-handy><button type="button" data-act="keep">Keep handy</button><span class="handy-on" hidden><button type="button" data-act="not-handy">Not handy anymore</button></span></span>
 </div>
@@ -617,7 +617,7 @@ const takeOut = (listRoot, card, remove, change) => {
     const isOut = !!state && state.state !== "active";
     active.hidden = isOut;
     out.hidden = !isOut;
-    if (isOut) marker.textContent = state.putAwayAt ? "Put away" : "Stale";
+    if (isOut) marker.textContent = state.putAwayAt ? "Put away" : "Done";
     return isOut ? out.querySelector(".copy-end-line") : active.querySelector(".copy-end-label");
   };
   if (change) show(change.after).focus();
@@ -626,7 +626,7 @@ const takeOut = (listRoot, card, remove, change) => {
     if (change) show(change.before).focus();
   };
 };
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Let go.","text":"You won't see it again unless you search for it."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
 const stateCard = (card, act) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("copy-frame");

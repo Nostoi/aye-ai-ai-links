@@ -636,7 +636,7 @@ const show = (data) => {
       whyKept.hidden = false;
     }
     bringBack.hidden = data.state !== "archived";
-    savedState.textContent = data.putAwayAt ? "Put away" : "Stale";
+    savedState.textContent = data.putAwayAt ? "Put away" : "Done";
     savedState.hidden = bringBack.hidden;
   }
   form.hidden = true;

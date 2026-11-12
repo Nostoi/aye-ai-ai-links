@@ -116,9 +116,9 @@ describe("the card menu and the card data", () => {
     );
   const KEPT = { status: "kept", source: "stated", due: false } as const;
 
-  it("puts It's stale first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
+  it("puts Done with it first, then Keep handy, Edit, Remove saved copy and Delete link last", () => {
     expect(labels(editMenu(link("7")))).toEqual([
-      "BUTTON archive It's stale",
+      "BUTTON archive Done with it",
       "BUTTON put-away Put it away",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -129,7 +129,7 @@ describe("the card menu and the card data", () => {
     ]);
     const withCopy = editMenu(link("7"), { copy: { madeAt: new Date(0) } });
     expect(labels(withCopy)).toEqual([
-      "BUTTON archive It's stale",
+      "BUTTON archive Done with it",
       "BUTTON put-away Put it away",
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -149,16 +149,16 @@ describe("the card menu and the card data", () => {
 
   it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
     expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 4)).toEqual([
-      "BUTTON archive It's stale",
+      "BUTTON archive Done with it",
       "BUTTON put-away Put it away",
       "BUTTON keep Keep handy (hidden)",
       "BUTTON not-handy Not handy anymore",
     ]);
   });
 
-  it("adds Not now after It's stale on Home's rows: the one six-row menu (#195)", () => {
+  it("adds Not now after Done with it on Home's rows: the one six-row menu (#195)", () => {
     expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
-      "BUTTON archive It's stale",
+      "BUTTON archive Done with it",
       "BUTTON put-away Put it away",
       "BUTTON snooze Not now",
       "BUTTON keep Keep handy",
@@ -175,7 +175,7 @@ describe("the card menu and the card data", () => {
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("leaves out It's stale and Not now, not Put it away, when the card shows them as buttons (#195)", () => {
+  it("leaves out Done with it and Not now, not Put it away, when the card shows them as buttons (#195)", () => {
     expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
       "BUTTON put-away Put it away",
       "BUTTON keep Keep handy",

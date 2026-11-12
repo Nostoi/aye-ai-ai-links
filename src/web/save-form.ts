@@ -1,5 +1,5 @@
 import { SAVE_PATH } from "../auth/login-return.js";
-import { PUT_AWAY_MARKER, STALE_MARKER } from "./done-link.js";
+import { DONE_MARKER, PUT_AWAY_MARKER } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -106,7 +106,7 @@ const show = (data) => {
       whyKept.hidden = false;
     }
     bringBack.hidden = data.state !== "archived";
-    savedState.textContent = data.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(STALE_MARKER)};
+    savedState.textContent = data.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(DONE_MARKER)};
     savedState.hidden = bringBack.hidden;
   }
   form.hidden = true;

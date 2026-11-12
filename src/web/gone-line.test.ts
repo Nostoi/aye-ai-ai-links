@@ -99,7 +99,7 @@ describe("goneLine", () => {
     const part = dom(goneLine(link("1"), GONE));
     expect(part.querySelector("[data-gone] p")?.textContent).toBe("This page seems gone");
     expect(part.querySelector("[data-gone]")?.textContent).not.toMatch(/\d/);
-    expect(buttons(goneLine(link("1"), GONE))).toEqual(["It still works", "It's stale"]);
+    expect(buttons(goneLine(link("1"), GONE))).toEqual(["It still works", "Done with it"]);
   });
 
   it("gives an archived link the line alone, and never the needs-you amber", () => {
@@ -237,7 +237,7 @@ describe("the gone line's buttons", () => {
     expect((p.$("button[data-act=still-works]") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("It's stale posts /home/archive, hides the card, and its Undo restores it", async () => {
+  it("Done with it posts /home/archive, hides the card, and its Undo restores it", async () => {
     const change = {
       before: { state: "active", putAwayAt: null, snoozedUntil: null },
       after: { state: "archived", putAwayAt: null },
@@ -249,14 +249,14 @@ describe("the gone line's buttons", () => {
     expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
     expect(p.$("li[data-id]").hidden).toBe(true);
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Let go. You won't see it again unless you search for it.",
+      "Done with it. Off Home, All links and your spaces. Still findable in search.",
     );
     await click(p, "#undo-bar button");
     expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change }));
     expect(p.$("li[data-id]").hidden).toBe(false);
   });
 
-  it("a refused It's stale shows the message and leaves the card", async () => {
+  it("a refused Done with it shows the message and leaves the card", async () => {
     const p = load(() => ({ status: 404, body: { code: "not_found", message: "Gone." } }));
     await click(p, "button[data-act=gone-done]");
     expect(p.$("li[data-id]").hidden).toBe(false);

@@ -531,7 +531,7 @@ describe("Bring it back and the markers on Out of your lists", () => {
     const lines = [...dom(html).querySelectorAll(".link-row .card-line")].map(
       (l) => l.lastElementChild?.textContent,
     );
-    expect(lines).toEqual(["Put away", "Stale"]);
+    expect(lines).toEqual(["Put away", "Done"]);
   });
 
   it("puts no marker on an active row", () => {

@@ -438,7 +438,7 @@ describe("the card menu on every card", () => {
     );
   });
 
-  it("keeps the frosted circle only where the dot sits on a picture (#295)", () => {
+  it("keeps the frosted circle only on the Pictures view, where the dot sits on a picture (#295)", () => {
     const frosted = (html: string, w: "desktop" | "phone") => {
       const dot = el(html, ".card-menu-dot");
       expect(computed(dot, "background", w), html).toBe(
@@ -451,11 +451,11 @@ describe("the card menu on every card", () => {
     const pictures = `<main data-view="pictures"><ul><li class="link-row">${menu}</li></ul></main>`;
     frosted(pictures, "desktop");
     frosted(pictures, "phone");
-    frosted(`<ul><li class="result">${menu}</li></ul>`, "phone");
     const flat = (html: string, w: "desktop" | "phone") =>
       expect(computed(el(html, ".card-menu-dot"), "box-shadow", w), html).toBe("none");
     const list = `<main data-view="list"><ul><li class="link-row">${menu}</li></ul></main>`;
     flat(`<ul><li class="result">${menu}</li></ul>`, "desktop");
+    flat(`<ul><li class="result">${menu}</li></ul>`, "phone");
     flat(list, "desktop");
     flat(list, "phone");
   });

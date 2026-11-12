@@ -30,7 +30,7 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
 
 - **2026-11-11:** Space-card titles are links (#271; owner-approved design critique, in session). This supersedes the plain titles of #195 and #265.
   - **Titles open their links** in a new tab and are recorded with `/links/opened`; a non-web link's title stays plain text. The card is a container: its name link covers it, and only the titles and See all sit above. On a phone the titles are hidden and the card stays one tap target to the space.
-  - **See all N →** ends each card and opens the space; N is the space's active link count (`homeSpaces` calls `count` per pinned space). A total, not an unread count.
+  - **See all N →** ends each card and opens the space; N is the space's active link count (`homeSpaces` calls `count` per pinned space). A total, not an unread count. A space with no active links reads **Open →** instead (#274, owner).
   - **Trim** now cuts the name of any pinned space, the card's own included, longest first, one cut. **One dash:** a spaced `-`, `–` or `—` shows as " — " (display only).
   - **Wider cards:** the grid's smallest column is 260px. Ask AI's page context skips an element with no layout boxes, so the phone-hidden titles are not sent as shown.
 

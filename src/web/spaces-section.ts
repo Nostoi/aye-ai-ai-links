@@ -52,14 +52,14 @@ const card = (names: string[]) => (s: HomeSpace) => {
   const href = escapeHtml(spaceHref(s.key));
   return `<div class="home-space${spaceClass(s.color ? { color: s.color } : null)}">
 <a class="home-space-name" href="${href}"><span class="dot" aria-hidden="true"></span>${escapeHtml(s.name)}</a>${recent(s, names)}
-<a class="home-space-all" href="${href}">See all ${s.count}<span class="visually-hidden"> ${escapeHtml(s.name)}</span> →</a>
+<a class="home-space-all" href="${href}">${s.count === 0 ? "Open" : `See all ${s.count}`}<span class="visually-hidden"> ${escapeHtml(s.name)}</span> →</a>
 </div>`;
 };
 
 /**
  * "Your spaces" on the home page: each pinned tag as a card in its color, with its name, the
- * titles of its newest links (each opening its link) and "See all N" with its active link count.
- * The name and "See all" open its space page, and so does the rest of the card. With nothing
+ * titles of its newest links (each opening its link) and "See all N" with its active link count,
+ * or "Open" when it has none. The name and that last link open its space page, and so does the rest of the card. With nothing
  * pinned, one quiet line says how.
  */
 export const spacesSection = (

@@ -6,8 +6,10 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import type { LinkView } from "../core/tools.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
 import { copyHref } from "./copy-page.js";
+import { DONE_HINT } from "./done-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage, type WorthCards } from "./home-page.js";
+import { NOT_NOW_HINT } from "./not-now.js";
 import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { spacesSection } from "./spaces-section.js";
@@ -83,7 +85,14 @@ const on = (...keys: string[]): Pick<Link, "tags"> => ({
   })),
 });
 const dom = (html: string) => parseHTML(html).document;
-const reasonOf = (html: string) => dom(html).querySelector(".worth-feature .reason")?.textContent;
+/** The featured card's grey line, part by part, as the reader sees it. */
+const lineParts = (html: string) =>
+  [...dom(html).querySelectorAll(".worth-feature .card-line > *")].map((p) => p.textContent);
+/** The reason, which ends the grey line (before Saved copy when there is one). */
+const reasonOf = (html: string) => {
+  const parts = lineParts(html).filter((t) => t !== "Saved copy");
+  return parts[parts.length - 1];
+};
 /** A card's menu rows, in order, each as its act, marked when hidden for the script to show. */
 const menuRows = (el: Element | null) =>
   [...(el?.querySelectorAll("details.card-menu .card-menu-list button") ?? [])].map(
@@ -135,10 +144,35 @@ describe("Worth a look today", () => {
     const open = feature.querySelector("a.button.primary[data-open]") as HTMLAnchorElement;
     expect(open.textContent).toBe("Open it");
     expect(open.getAttribute("href")).toBe(feature.querySelector("h3 a")?.getAttribute("href"));
-    expect(shownButtons(feature)).toEqual(["archive Done with it", "snooze Not now"]);
+    expect(shownButtons(feature)).toEqual([
+      `snooze Not now${NOT_NOW_HINT}`,
+      `archive Done with it${DONE_HINT}`,
+    ]);
     const row = d.querySelector(".worth-row");
     expect(shownButtons(row)).toEqual([]);
     expect(row?.querySelector("a.button")).toBeNull();
+  });
+
+  it("orders the featured buttons Open it, Not now, Done with it, each pill with its hint", () => {
+    const feature = dom(render([card([])])).querySelector(".worth-feature") as HTMLElement;
+    const controls = [...feature.querySelectorAll("a.button, .feature-quiet button")].filter(
+      (e) => !e.closest("details.card-menu"),
+    );
+    expect(controls.map((e) => (e as HTMLElement).dataset.act ?? "open")).toEqual([
+      "open",
+      "snooze",
+      "archive",
+    ]);
+    const hint = (act: string) =>
+      feature.querySelector(`.feature-quiet button[data-act=${act}] small`)?.textContent;
+    expect(hint("snooze")).toBe(NOT_NOW_HINT);
+    expect(hint("archive")).toBe(DONE_HINT);
+    expect(hint("snooze")).toBe("Not suggested for two weeks");
+    expect(hint("archive")).toBe("Still findable in search");
+    const label = (act: string) =>
+      feature.querySelector(`.feature-quiet button[data-act=${act}] span`)?.textContent;
+    expect(label("snooze")).toBe("Not now");
+    expect(label("archive")).toBe("Done with it");
   });
 
   it("gives a row the seven-row menu and the featured card the menu without its visible two", () => {
@@ -233,15 +267,15 @@ describe("Worth a look today", () => {
     it("quotes a focus entry the owner gave as what they said", () => {
       for (const source of ["stated", "asked"] as const) {
         expect(reasonOf(render([card([focus("home batteries", source)])]))).toBe(
-          `You said you're working on "home batteries"`,
+          "fits what you're working on",
         );
       }
     });
 
     it("never says 'You said' for an inferred focus entry, and calls it a guess", () => {
       const html = render([card([focus("home batteries", "inferred")])]);
-      expect(reasonOf(html)).toBe(`Maybe you're working on "home batteries" (a guess)`);
-      expect(html).not.toContain("You said");
+      expect(reasonOf(html)).toBe("may fit what you're working on (a guess)");
+      expect(reasonOf(html)).not.toMatch(/^fits/);
     });
 
     describe("a link that came back", () => {
@@ -266,22 +300,20 @@ describe("Worth a look today", () => {
       it("names the month it was put away and the focus it fits, for a stated or asked focus", () => {
         for (const source of ["stated", "asked"] as const) {
           expect(reasonOf(render([cameBack("home batteries", source)]))).toBe(
-            `You put this away in August. It fits "home batteries".`,
+            "put away in August, fits what you're working on",
           );
         }
       });
 
       it("calls an inferred focus a guess and never says 'It fits' flatly", () => {
         const html = render([cameBack("home batteries", "inferred")]);
-        expect(reasonOf(html)).toBe(
-          `You put this away in August. It may fit "home batteries" (a guess).`,
-        );
-        expect(html).not.toContain("It fits");
+        expect(reasonOf(html)).toBe("put away in August, may fit what you're working on (a guess)");
+        expect(reasonOf(html)).not.toMatch(/, fits/);
       });
 
       it("adds the year when it was put away in another year", () => {
         const html = render([cameBack("x", "stated", new Date("2025-12-03T10:00:00Z"))]);
-        expect(reasonOf(html)).toBe(`You put this away in December 2025. It fits "x".`);
+        expect(reasonOf(html)).toBe("put away in December 2025, fits what you're working on");
       });
 
       it("keeps Open it, Done with it and Not now, and takes its space's colour", () => {
@@ -291,23 +323,23 @@ describe("Worth a look today", () => {
         const feature = dom(html).querySelector(".worth-feature");
         expect(feature?.classList.contains("space-clay")).toBe(true);
         expect(feature?.querySelector("a.button.primary")?.textContent).toBe("Open it");
-        expect(feature?.querySelector("[data-act=archive]")?.textContent).toBe("Done with it");
-        expect(feature?.querySelector("[data-act=snooze]")?.textContent).toBe("Not now");
+        expect(feature?.querySelector("[data-act=archive] span")?.textContent).toBe("Done with it");
+        expect(feature?.querySelector("[data-act=snooze] span")?.textContent).toBe("Not now");
       });
     });
 
     it("says a link not opened lately was saved over a month ago", () => {
       expect(reasonOf(render([card([{ kind: "not_opened_recently" }])]))).toBe(
-        "You saved this over a month ago",
+        "saved over a month ago",
       );
     });
 
     it("falls back to the saved date for no why or never shown", () => {
       for (const kind of ["no_why", "never_surfaced"] as const) {
-        expect(reasonOf(render([card([{ kind }])]))).toBe("You saved this March 12");
+        expect(reasonOf(render([card([{ kind }])]))).toBe("saved March 12");
       }
       expect(reasonOf(render([card([], { savedAt: new Date("2025-03-12T10:00:00Z") })]))).toBe(
-        "You saved this March 12, 2025",
+        "saved March 12, 2025",
       );
     });
 
@@ -315,27 +347,40 @@ describe("Worth a look today", () => {
       const html = render([
         card([{ kind: "no_why" }, { kind: "not_opened_recently" }, focus("x", "stated")]),
       ]);
-      expect(reasonOf(html)).toBe(`You said you're working on "x"`);
+      expect(reasonOf(html)).toBe("fits what you're working on");
     });
 
-    it("is a line with the space's dot, not a pill", () => {
-      const d = dom(render([card([])]));
-      expect(d.querySelector(".worth-feature .reason .dot")?.getAttribute("aria-hidden")).toBe(
-        "true",
-      );
-      expect(themeCss).not.toMatch(/\.reason\{[^}]*border-radius:999px/);
+    it("has no separate reason line: the reason ends the grey line, with no dot of its own", () => {
+      const d = dom(render([card([focus("x", "stated")])]));
+      expect(d.querySelector(".reason")).toBeNull();
+      expect(d.querySelector(".worth-feature .dot")).toBeNull();
+      expect(lineParts(render([card([focus("x", "stated")])]))).toEqual([
+        "example.com",
+        "fits what you're working on",
+      ]);
+      expect(themeCss).not.toMatch(/\.reason[{,.]/);
+    });
+
+    it("shows the saved date once: in the reason when that is the plain one, not again", () => {
+      const plain = lineParts(render([card([])])).join("|");
+      expect(plain.match(/March 12/g)).toHaveLength(1);
+      expect(lineParts(render([card([{ kind: "not_opened_recently" }])]))).toEqual([
+        "example.com",
+        "saved over a month ago",
+      ]);
+      for (const reasons of [[focus("x", "stated")], [{ kind: "not_opened_recently" as const }]]) {
+        expect(lineParts(render([card(reasons)])).join("|")).not.toContain("March 12");
+      }
     });
   });
 
-  it("shows the featured why quoted, as a guess when inferred, and the date only when the reason lacks it", () => {
+  it("shows the featured why quoted, as a guess when inferred, with the reason ending the grey line", () => {
     const said = dom(render([card([{ kind: "not_opened_recently" }])]));
     expect(said.querySelector(".feature-why")?.textContent).toBe('"to compare"');
-    const parts = (d: Document) =>
-      [...d.querySelectorAll(".worth-feature .card-line > *")].map((p) => p.textContent);
-    expect(parts(said)).toEqual(["example.com", "saved March 12"]);
+    expect(lineParts(said.toString())).toEqual(["example.com", "saved over a month ago"]);
     const plain = dom(render([card([], { why: { text: "maybe solar", source: "inferred" } })]));
     expect(plain.querySelector(".feature-why")?.textContent).toBe("Why (a guess): maybe solar");
-    expect(parts(plain)).toEqual(["example.com"]);
+    expect(lineParts(plain.toString())).toEqual(["example.com", "saved March 12"]);
   });
 
   it("shows a row's why, a guess as a guess, and its site and date when it has none", () => {
@@ -379,7 +424,7 @@ describe("Worth a look today", () => {
     expect(amber).toEqual(expect.arrayContaining([".tell-why"]));
     expect(amber.some((s) => s.split(",").includes(".needs-you"))).toBe(true);
     const html = render([card([{ kind: "no_why" }], { why: null })]);
-    for (const el of dom(html).querySelectorAll(".reason, [data-pic]")) {
+    for (const el of dom(html).querySelectorAll(".worth-feature .card-line, [data-pic]")) {
       expect(el.className).not.toMatch(/amber|needs-you|tell-why/);
     }
   });

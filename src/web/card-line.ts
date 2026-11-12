@@ -7,7 +7,7 @@ import { escapeHtml } from "./page.js";
 
 /**
  * A card's grey line: its space (color dot and name), its site, when it was saved (`saved`, a
- * date already in words), Saved copy, a link to its saved copy in the same tab, and `marker`
+ * date already in words) or `reason` (which wins, in the same place), Saved copy, a link to its saved copy in the same tab, and `marker`
  * (Put away or Done, for a link out of your lists), in that order. A missing part drops out, and
  * no part draws no line. The dots between parts are the theme's,
  * drawn only before a part that shows, so Remove saved copy (`removeCopyScript`, which hides
@@ -19,12 +19,15 @@ export function cardLine(
     space,
     copy,
     saved,
+    reason,
     marker,
     from,
   }: {
     space?: Space | null;
     copy?: CopyInfo | undefined;
     saved?: string;
+    /** Why the card is shown, in lower case. It takes `saved`'s place and wins over it. */
+    reason?: string;
     marker?: string | null | undefined;
     /** The address of the list page this line is on, so the saved copy's Back returns to it. */
     from?: string | undefined;
@@ -38,9 +41,12 @@ export function cardLine(
     space === undefined
       ? ""
       : `<span class="line-space"${space ? "" : " hidden"}><span class="dot" aria-hidden="true"></span><span data-space-name>${space ? escapeHtml(space.name) : ""}</span></span>`;
+  // The line's text is lower case after a space or site, and starts with a capital without them.
+  const sentence = (text: string) =>
+    space || host ? text : text.charAt(0).toUpperCase() + text.slice(1);
   const parts = [
     host ? `<span>${escapeHtml(host)}</span>` : "",
-    saved ? `<span>${space || host ? "saved" : "Saved"} ${escapeHtml(saved)}</span>` : "",
+    saved || reason ? `<span>${escapeHtml(sentence(reason ?? `saved ${saved}`))}</span>` : "",
     copy
       ? `<a class="saved-copy" href="${escapeHtml(copyHref(link.id, from))}" data-act="read-copy">Saved copy</a>`
       : "",

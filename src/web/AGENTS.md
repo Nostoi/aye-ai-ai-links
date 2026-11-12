@@ -14,7 +14,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 ## Color
 
 - Each space (pinned tag) keeps one color everywhere, through the `.space-*` classes. The colors are `SPACE_COLORS` in `src/core/tag-space.ts`. A new pin takes a color no tag holds while one is free; two spaces may share a color past that, or when the owner picks one. A card's space comes from `linkSpace` and a tag's color from `spaceColor` (`src/core/link-space.ts`); both pass only `SPACE_COLORS`, and only for a pinned tag. An unpinned tag keeps its stored color but shows none, except on the Tags page, which edits that color and shows it. Other class names never start with `space-`.
-- Amber only ever means "needs you". Never use it for a space, or for the reason a card is shown: that uses its space's color.
+- Amber only ever means "needs you". Never use it for a space.
 - Everything else is neutral. The teal logo is the one brand exception.
 
 ## Pages
@@ -29,7 +29,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 - The edit dialog's tags (#239): the list root that holds the cards carries `data-within` (the space page's list, with `data-own="1"`, and a search within a space), and every Save and Undo sends them so the server answers the card's space as that list reads it. A card's `data-tags` is `editData`'s JSON of its tags in order; the dialog sends the final names with the tags it opened with, and a link whose tags changed meanwhile is a 409 that writes nothing. The dialog reads `/tags/names` once per open, for suggestions only; it still works without them.
 - All links and space pages show their links as rows (`linkRow`, `link-rows.ts`) in one white card per month: picture, title, the why when there is one (else the summary), the grey line, and the ⋯ menu. The List / Pictures switch changes only `data-view` on the page's `<main>`, so both views share one markup and the theme draws each; the choice is the `aye_view` cookie, per browser, which the server reads (`viewOf`) so the page draws right away.
 - Home's "Worth a look today" (#195) is one featured card, then Also today rows.
-  - The featured card holds Home's one filled button outside the search, Open it. Its Done with it and Not now are quiet buttons, so its ⋯ starts at Put it away (`editMenu`'s `onCard`). It alone asks Tell me why, and its grey line is `cardLine`.
+  - The featured card (owner, 2026-11-12, mockup card B) has its picture on the left, level with the title, and the ⋯ in its top-right corner. It holds Home's one filled button outside the search, Open it, then Not now and Done with it, in that order: soft-filled pills of Open it's shape, each with its hint (`NOT_NOW_HINT`, `DONE_HINT`) under the label. Its ⋯ starts at Put it away (`editMenu`'s `onCard`). It alone asks Tell me why. It has no reason line: its grey line is `cardLine`, and the reason (`reason`) ends it in the place of the saved date, so a date reason never repeats the date.
   - An Also today row has no buttons of its own, so its ⋯ has seven items: Not now comes first (`notNow`). This is the exception to the six-item menu (owner ruling, #195 comment 6304189584; the six itself is the owner's ruling in #198). A row never links a saved copy.
   - The gone row is the exception to that: it keeps Read the saved copy after its gone line (#195 comment 6304329071), and the theme hides the link with the line.
   - Home changes a card only once the server agrees, so one action's refusal never brings back a card another took out.

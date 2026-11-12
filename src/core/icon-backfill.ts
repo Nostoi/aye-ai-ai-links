@@ -80,17 +80,18 @@ const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
  * - Last, a link with a terminal snapshot and no favicon row, or a `none`/`refused` one from an
  *   older discovery version (#272): saved before favicons, or whose icon check could not read
  *   its page. It records `outcomeFavicons` of what its page came to, so a short link that ends at
- *   a PDF or an HTTP error gets the destination's root guesses. A fetch failure that may pass, a
- *   child that could not run and an abort back off; on its last attempt it records what the
- *   outcome gives instead of parking the link. An extraction that fails on the page's content is
- *   recorded at once.
+ *   a PDF or an HTTP error gets the destination's root guesses. A fetch failure that may pass
+ *   backs off, and on its last attempt it records what the outcome gives instead of parking the
+ *   link. An extraction that fails on the page's content is recorded at once. A child that could
+ *   not run and an abort nobody asked for are faults of the machine, not the page: they back off
+ *   and are never recorded.
  *
  * The image pass then fetches a recorded icon, and the favicon pass a recorded favicon. Every
  * attempt either records the link, which ends its candidacy for that kind, or backs it off, so
  * no sweep fetches the same page as the last. Each kind keeps its own budget per link: one that
  * fails `MAX_IMAGE_ATTEMPTS` times (a child that could not run, an abort nobody asked for, a store
  * write that failed) is left alone for the life of the process, with nothing written (the favicon
- * kind aside, as above). While the network is down a link only waits. Backoffs are kept in
+ * kind's passing fetch failures aside, as above). While the network is down a link only waits. Backoffs are kept in
  * memory, so a restart tries those links again. `stop` writes nothing for the attempt it cuts off.
  */
 export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
@@ -138,7 +139,7 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     if (signal.aborted) return { kind: "stopped" };
     if (page.kind !== "ok") {
       const outcome: AttemptOutcome = { stage: "fetch", fetch: page };
-      if (page.kind === "aborted") return mayPass("fetch:aborted", outcome);
+      if (page.kind === "aborted") return { kind: "failed", why: "fetch:aborted" };
       if (page.kind === "network_error" || page.kind === "timeout") {
         const up = await o.canResolve(signal);
         if (signal.aborted) return { kind: "stopped" };
@@ -150,9 +151,9 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     const out = await extractor.extract(page.html, page.finalUrl, signal);
     if (signal.aborted) return { kind: "stopped" };
     const outcome: AttemptOutcome = { stage: "extract", extract: out };
-    if (out.kind === "aborted") return mayPass("extract:aborted", outcome);
+    if (out.kind === "aborted") return { kind: "failed", why: "extract:aborted" };
     if (out.kind === "spawn_failed") {
-      return mayPass(`extract:spawn_failed:${out.detail}`, outcome);
+      return { kind: "failed", why: `extract:spawn_failed:${out.detail}` };
     }
     if (kind === "favicon") return settle(outcome);
     if (kind === "wordPicture" && out.kind !== "ok" && out.metadata === null) {

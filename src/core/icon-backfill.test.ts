@@ -893,11 +893,8 @@ describe("icon backfill", () => {
       expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS);
     });
 
-    it.each<[string, Parameters<typeof setup>[0]]>([
-      ["a timeout", { page: () => ({ kind: "timeout" }) }],
-      ["a child that cannot start", { extract: () => ({ kind: "spawn_failed", detail: "x" }) }],
-    ])("settles a link whose attempts run out on %s as none", async (_n, o) => {
-      const t = setup(o);
+    it("settles a link whose attempts run out on a timeout as none", async () => {
+      const t = setup({ page: () => ({ kind: "timeout" }) });
       const id = await t.noFavicon(1);
       for (let i = 0; i < MAX_IMAGE_ATTEMPTS; i++) {
         await t.pass.sweep();
@@ -905,6 +902,22 @@ describe("icon backfill", () => {
       }
       expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS);
       expect(rowOf(t, id)).toMatchObject({ candidates: [], status: "none" });
+    });
+
+    it.each<[string, Parameters<typeof setup>[0]]>([
+      ["a child that cannot start", { extract: () => ({ kind: "spawn_failed", detail: "x" }) }],
+      ["a fetch aborted without stop()", { page: () => ({ kind: "aborted" }) }],
+      ["an extraction aborted without stop()", { extract: () => ({ kind: "aborted" }) }],
+    ])("★ writes nothing when attempts run out on %s, a fault of the machine", async (_n, o) => {
+      // [Settling a machine fault on the last attempt, a lasting none for a page that works.]
+      const t = setup(o);
+      const id = await t.noFavicon(1);
+      for (let i = 0; i < MAX_IMAGE_ATTEMPTS + 2; i++) {
+        await t.pass.sweep();
+        t.wait();
+      }
+      expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS);
+      expect(rowOf(t, id)).toBeNull();
     });
 
     it("★ never counts a network that is down, and writes nothing while it is", async () => {

@@ -241,7 +241,7 @@ describe("the Handy tiles", () => {
     expect(themeCss).toContain(
       '.card-line>:not([hidden]):has(~ :not([hidden]))::after{content:"·"',
     );
-    expect(themeCss).not.toMatch(/\.card-line>[^{]*::before/);
+    expect(themeCss).not.toMatch(/\.card-line[ >][^{]*::before/);
   });
 
   it("gives the grey line's Saved copy a 44px tap area without growing the line", () => {

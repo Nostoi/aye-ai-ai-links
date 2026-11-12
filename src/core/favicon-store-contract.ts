@@ -122,9 +122,9 @@ export function describeFaviconStoreContract(
       const r = record({ faviconUrls: [F1] });
       expect(await h.links.recordSnapshot(A, link.id, lease.claim + 1, r)).toBe(false);
       expect(await h.row(A, link.id)).toBeNull();
-      const five = [1, 2, 3, 4, 5].map((i) => `https://ex.com/${i}.png`);
+      const tooMany = [1, 2, 3, 4, 5, 6, 7].map((i) => `https://ex.com/${i}.png`);
       expect(
-        await h.links.recordSnapshot(A, link.id, lease.claim, record({ faviconUrls: five })),
+        await h.links.recordSnapshot(A, link.id, lease.claim, record({ faviconUrls: tooMany })),
       ).toBe(false);
       expect(await h.row(A, link.id)).toBeNull();
     });
@@ -211,8 +211,8 @@ export function describeFaviconStoreContract(
         await h.images.recordWordPictureCheck(A, link.id, "https://ex.com/other.png", [], [F2]),
       ).toBe(false);
       expect(await h.row(A, link.id)).toEqual(before);
-      const five = [1, 2, 3, 4, 5].map((i) => `https://ex.com/${i}.png`);
-      expect(await h.images.recordWordPictureCheck(A, link.id, IMG, [], five)).toBe(false);
+      const tooMany = [1, 2, 3, 4, 5, 6, 7].map((i) => `https://ex.com/${i}.png`);
+      expect(await h.images.recordWordPictureCheck(A, link.id, IMG, [], tooMany)).toBe(false);
       expect(await h.row(A, link.id)).toEqual(before);
       expect(await h.images.recordWordPictureCheck(A, link.id, IMG, [], null)).toBe(true);
       expect(await h.row(A, link.id)).toEqual(before);

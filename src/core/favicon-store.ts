@@ -1,12 +1,6 @@
 import type { ImageBytes, ImageEnd, StoredImage } from "./image-store.js";
 import type { OwnerId } from "./types.js";
 
-/**
- * How favicons are found (#272). A row records the version that found its candidates, so a later
- * way of finding them can tell the rows it has not looked at. 1: declared PNG, JPEG, GIF and WebP
- * icons. 2: declared ICOs too, and the site root's `/apple-touch-icon.png` then `/favicon.ico`
- * when a page has no usable icon.
- */
 export const FAVICON_DISCOVERY_VERSION = 2;
 
 /**

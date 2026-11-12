@@ -10,6 +10,7 @@ import { dib, ico, png, svg } from "../core/image-test-kit.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { at, newLink, record } from "../core/snapshot-store-contract.js";
 import { isPublicAddress } from "./address-policy.js";
+import { extractSnapshot } from "./extract.js";
 import { createFaviconFetcher } from "./favicon-fetcher.js";
 import type { Resolve } from "./guarded-lookup.js";
 
@@ -19,6 +20,8 @@ import type { Resolve } from "./guarded-lookup.js";
  */
 const names: Record<string, LookupAddress[]> = {
   "site.test": [{ address: "::1", family: 6 }],
+  /** The same server, as a site whose /favicon.ico holds only BMPs. */
+  "bmp.test": [{ address: "::1", family: 6 }],
   "evil.test": [{ address: "127.0.0.1", family: 4 }],
 };
 const resolve: Resolve = async (hostname) => {
@@ -46,6 +49,10 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     res.writeHead(200, { "content-type": type, ...extra });
     res.end(body);
   };
+  if (req.headers.host?.startsWith("bmp.test")) {
+    if (req.url === "/favicon.ico") return send("image/x-icon", ico([{ data: dib(32, 32) }]));
+    if (req.url === "/apple-touch-icon.png") return send("image/png", png(180, 180));
+  }
   switch (req.url) {
     case "/x-icon":
       return send("image/x-icon", ICO);
@@ -175,21 +182,33 @@ describe("the favicon fetcher (#272)", () => {
     expect(await fetchPath(path)).toEqual({ kind: "not_image", contentType });
   });
 
-  it("★ stores nothing for a soft-404 /favicon.ico: the favicon pass ends it as none", async () => {
-    // [Storing the error page's bytes because the server called them an icon.]
+  /** Records a link with these favicon candidates, then runs one favicon pass over it with the real fetcher. */
+  async function passOver(faviconUrls: string[]) {
     const store = new FakeStore();
     const { link } = await store.insertIfAbsent("o", newLink(1, at(0)));
     const lease = await store.leaseSnapshot("o", link.id, at(1), at(100));
-    const url = `http://site.test:${sitePort}/favicon.ico`;
-    const r = record({ imageUrl: null, faviconUrls: [url] });
+    const r = record({ imageUrl: null, faviconUrls });
     expect(await store.recordSnapshot("o", link.id, lease?.claim ?? -1, r)).toBe(true);
     const fetcher = createFaviconFetcher({ version: "v1", resolve, isAllowed: allowSite });
     open.push(fetcher);
     const pass = createFaviconPass({ store, fetcher, now: () => at(2), log: () => {} });
     await pass.sweep();
     await pass.stop();
-    expect(store.faviconRow("o", link.id)).toMatchObject({ status: "none", stored: false });
-    expect(await store.favicon("o", link.id)).toBe(null);
+    return { store, id: link.id };
+  }
+
+  it("★ stores nothing for a soft-404 /favicon.ico: the favicon pass ends it as none", async () => {
+    const { store, id } = await passOver([`http://site.test:${sitePort}/favicon.ico`]);
+    expect(store.faviconRow("o", id)).toMatchObject({ status: "none", stored: false });
+    expect(await store.favicon("o", id)).toBe(null);
+  });
+
+  it("★ a page declaring a BMP-only /favicon.ico gets the root's apple-touch-icon.png", async () => {
+    const page = `<link rel="icon" href="/favicon.ico"><title>t</title>`;
+    const { faviconUrls } = extractSnapshot(page, `http://bmp.test:${sitePort}/post`);
+    const { store, id } = await passOver(faviconUrls);
+    expect(store.faviconRow("o", id)).toMatchObject({ status: "ok", stored: true });
+    expect((await store.favicon("o", id))?.bytes).toEqual(new Uint8Array(png(180, 180)));
   });
 
   it.each([

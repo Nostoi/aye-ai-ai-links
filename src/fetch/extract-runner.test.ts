@@ -51,7 +51,11 @@ describe("child extractor: the real extraction code, as the child loads it", () 
         title: "Hi",
         imageUrl: "https://example.com/i.png",
         iconUrls: ["https://example.com/icon.png"],
-        faviconUrls: ["https://example.com/icon.png"],
+        faviconUrls: [
+          "https://example.com/icon.png",
+          "https://example.com/apple-touch-icon.png",
+          "https://example.com/favicon.ico",
+        ],
       },
     });
     expect(out.kind === "ok" && out.text).toContain("Rottnest");

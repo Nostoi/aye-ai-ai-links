@@ -300,9 +300,9 @@ describe("snapshotRecord", () => {
 
   it("★ keeps at most MAX_FAVICON_URLS favicons, string ones only, apart from the icons (#272)", () => {
     // [Handing the store a record it refuses, or trusting the child's unvalidated list.]
-    const five = [1, 2, 3, 4, 5].map((n) => `https://x.test/f${n}.png`);
-    const r = map(extractOf({ kind: "ok", metadata: { ...meta, faviconUrls: five }, text: "b" }));
-    expect(r.faviconUrls).toEqual(five.slice(0, 4));
+    const seven = [1, 2, 3, 4, 5, 6, 7].map((n) => `https://x.test/f${n}.png`);
+    const r = map(extractOf({ kind: "ok", metadata: { ...meta, faviconUrls: seven }, text: "b" }));
+    expect(r.faviconUrls).toEqual(seven.slice(0, 6));
     expect(r.iconUrls).toEqual(meta.iconUrls);
     for (const bad of [5, {}, "abc", null, undefined]) {
       const metadata = { ...meta, faviconUrls: bad } as unknown as PageMetadata;
@@ -355,18 +355,20 @@ describe("snapshotRecord", () => {
   );
 
   it.each(extractFails)(
-    "extract %s without metadata leaves it null, even on the last attempt",
+    "★ extract %s without metadata keeps the page's fields null and records no favicon candidates (#272)",
     (_n, extract, status) => {
-      const r = map(extractOf({ ...extract, metadata: null } as ExtractOutcome), 6);
-      expect(r).toMatchObject({
-        status,
-        nextFetchAt: null,
-        title: null,
-        description: null,
-        imageUrl: null,
-        iconUrls: [],
-        faviconUrls: null,
-      });
+      for (const attempts of [1, 6]) {
+        const r = map(extractOf({ ...extract, metadata: null } as ExtractOutcome), attempts);
+        expect(r).toMatchObject({
+          status,
+          nextFetchAt: null,
+          title: null,
+          description: null,
+          imageUrl: null,
+          iconUrls: [],
+          faviconUrls: [],
+        });
+      }
     },
   );
 

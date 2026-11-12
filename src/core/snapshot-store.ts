@@ -96,7 +96,7 @@ export function hasConsistentSchedule(r: SnapshotRecord): boolean {
 export const MAX_ICON_URLS = 2;
 
 /** The most favicon candidates a record may name (#272): its own list, apart from the icons above. */
-export const MAX_FAVICON_URLS = 4;
+export const MAX_FAVICON_URLS = 6;
 
 /**
  * The icon candidates in an extraction's metadata, as a record may carry them: the strings, in
@@ -110,8 +110,6 @@ export function boundedIconUrls(value: unknown): string[] {
 /**
  * The site root's favicon guesses (#272, owner): `/apple-touch-icon.png` then `/favicon.ico` at
  * the origin of `finalUrl`, the address after redirects, so a short link gets its destination's.
- * For a page with no usable icon, and for a link that is not a page. None for anything but an
- * http or https address.
  */
 export function rootFaviconUrls(finalUrl: string): string[] {
   let url: URL;

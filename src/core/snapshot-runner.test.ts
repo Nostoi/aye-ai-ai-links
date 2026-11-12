@@ -198,6 +198,21 @@ describe("snapshot runner", () => {
     expect(await s.store.pendingFavicons(null, 10)).toEqual([]);
   });
 
+  it("★ an extraction that fails before its metadata writes a none favicon row (#272)", async () => {
+    const s = setup();
+    const link = await s.save(A, 1);
+    s.extract.run = async () => ({ kind: "timeout", metadata: null });
+    await s.runner.kick(A, link.id);
+    expect(s.records.map((r) => r.rec.status)).toEqual(["extract_timeout"]);
+    expect(s.store.faviconRow(A, link.id)).toEqual({
+      candidates: [],
+      status: "none",
+      generation: 1,
+      discovery: FAVICON_DISCOVERY_VERSION,
+      stored: false,
+    });
+  });
+
   it("★ a PDF reached through a short link stores its destination's root favicons, pending (#272)", async () => {
     // [Leaving a non-HTML link with no favicon row, or building the guesses from the short link.]
     const s = setup();

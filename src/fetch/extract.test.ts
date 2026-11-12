@@ -403,6 +403,7 @@ describe("favicon urls (#272)", () => {
       "https://example.com/48.png",
       "https://example.com/180.png",
       "https://example.com/16.png",
+      ...ROOT_FAVICONS,
     ]);
     expect(s.faviconUrls).toHaveLength(MAX_FAVICON_URLS);
   });
@@ -411,26 +412,36 @@ describe("favicon urls (#272)", () => {
     // [Taking the largest first, as the large picture's icons do.]
     const sized = (sizes: string) => link(`rel="icon" sizes="${sizes}" href="/${sizes}.png"`);
     const s = read(sized("24x24") + sized("64x64") + sized("8x8") + sized("32x32"));
-    expect(s.faviconUrls).toEqual(
-      ["32x32", "64x64", "24x24", "8x8"].map((n) => `https://example.com/${n}.png`),
-    );
+    expect(s.faviconUrls).toEqual([
+      ...["32x32", "64x64", "24x24", "8x8"].map((n) => `https://example.com/${n}.png`),
+      ...ROOT_FAVICONS,
+    ]);
     const t = read(link('rel="icon" href="/u.png"') + sized("16x16") + sized("192x192"));
-    expect(t.faviconUrls).toEqual(
-      ["192x192", "16x16", "u"].map((n) => `https://example.com/${n}.png`),
-    );
+    expect(t.faviconUrls).toEqual([
+      ...["192x192", "16x16", "u"].map((n) => `https://example.com/${n}.png`),
+      ...ROOT_FAVICONS,
+    ]);
   });
 
   it("★ puts an unsized rel=icon before an unsized apple-touch-icon", () => {
     // [The large picture's tie rule, where the later declaration wins.]
     const s = read(link('rel="icon" href="/i.png"') + link('rel="apple-touch-icon" href="/t.png"'));
-    expect(s.faviconUrls).toEqual(["https://example.com/i.png", "https://example.com/t.png"]);
+    expect(s.faviconUrls).toEqual([
+      "https://example.com/i.png",
+      "https://example.com/t.png",
+      ...ROOT_FAVICONS,
+    ]);
     expect(s.iconUrls).toEqual(["https://example.com/t.png", "https://example.com/i.png"]);
   });
 
   it("★ resolves against the final URL it is given, after redirects, not a saved short link", () => {
     // [Resolving against the link's saved address.]
     const s = read(link('rel="icon" href="/fav.png"'), "https://destination.example/article");
-    expect(s.faviconUrls).toEqual(["https://destination.example/fav.png"]);
+    expect(s.faviconUrls).toEqual([
+      "https://destination.example/fav.png",
+      "https://destination.example/apple-touch-icon.png",
+      "https://destination.example/favicon.ico",
+    ]);
   });
 
   it("★ takes a declared ICO, which the large picture's icons still refuse", () => {
@@ -443,7 +454,7 @@ describe("favicon urls (#272)", () => {
     ]) {
       const s = read(link(attrs) + link('rel="icon" sizes="32x32" href="/p.png"'));
       const href = new URL(attrs.match(/href="([^"]+)"/)?.[1] ?? "", URL0).href;
-      expect(s.faviconUrls, attrs).toEqual(["https://example.com/p.png", href]);
+      expect(s.faviconUrls, attrs).toEqual(["https://example.com/p.png", href, ...ROOT_FAVICONS]);
       expect(s.iconUrls, attrs).toEqual(["https://example.com/p.png"]);
     }
   });
@@ -473,12 +484,14 @@ describe("favicon urls (#272)", () => {
     ]);
   });
 
-  it("adds no fallbacks when any candidate is usable, an ICO alone included", () => {
+  it("★ puts the root guesses after the declared icons, never repeating one the page declared", () => {
     expect(read(link('rel="icon" href="/favicon.ico"')).faviconUrls).toEqual([
       "https://example.com/favicon.ico",
+      "https://example.com/apple-touch-icon.png",
     ]);
     expect(read(link('rel="apple-touch-icon" href="/t.png"')).faviconUrls).toEqual([
       "https://example.com/t.png",
+      ...ROOT_FAVICONS,
     ]);
   });
 });

@@ -139,12 +139,9 @@ function rankedIcons(doc: Document, base: string): { icons: string[]; favicons: 
   return { icons: hrefs(icons), favicons: hrefs([...found].sort(faviconOrder)) };
 }
 
-/**
- * The favicon candidates (#272): the best declared ones, or, when the page has no usable one,
- * the site root's (`rootFaviconUrls`), from the final URL, never the document's `<base href>`.
- */
 export function faviconCandidates(declared: string[], finalUrl: string): string[] {
-  return declared.length > 0 ? declared.slice(0, MAX_FAVICON_URLS) : rootFaviconUrls(finalUrl);
+  const root = rootFaviconUrls(finalUrl);
+  return [...new Set([...declared.slice(0, MAX_FAVICON_URLS - root.length), ...root])];
 }
 
 export type Metadata = {

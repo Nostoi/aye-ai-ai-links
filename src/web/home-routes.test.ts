@@ -190,7 +190,7 @@ describe("the home card actions", () => {
     const res = await browser.send("/home/snooze", post({ id }));
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({
-      message: "This link is already out of your lists. Reload.",
+      message: "This link is already done or put away. Reload.",
     });
     expect(row(world, id)).toEqual(before);
   });
@@ -244,7 +244,7 @@ describe("the home card actions", () => {
     expect(eventKinds(world, id)).toEqual(["put_away"]);
   });
 
-  it("/home/put-away on a link that is already out of your lists is a 409, changing nothing", async () => {
+  it("/home/put-away on a link that is already done and put away is a 409, changing nothing", async () => {
     const { world, browser, id } = await home();
     await browser.send("/home/archive", post({ id }));
     const before = row(world, id);

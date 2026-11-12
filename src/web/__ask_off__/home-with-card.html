@@ -167,6 +167,7 @@ div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-car
 .worth-row h4{margin:0;font-size:16px;font-weight:700;line-height:1.3}
 .worth-row h4 a{text-decoration:none}
 .also-why,.also-body .card-line{margin:2px 0 0;font-size:14px;color:var(--soft)}
+.also-why{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .also-body .gone-line p{margin:2px 0 0;font-size:14px}
 .worth-row>.card-menu{position:relative;top:auto;right:auto}
 .gone-copy{display:inline-flex;align-items:center;min-height:44px;font-size:14px;color:var(--soft)}
@@ -846,7 +847,7 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""}}};
 const stateCard = (card, act) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("worth-cards");

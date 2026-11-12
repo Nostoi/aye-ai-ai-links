@@ -89,14 +89,14 @@ const ACTIONS: Record<Key, Action> = {
     name: "Put it away",
     select: ".card-menu button[data-act=put-away]",
     url: "/home/put-away",
-    undo: "Put away. Out of your lists but still saved. If you start something it fits, it'll come back.",
+    undo: "Put away. Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
     json: CHANGE,
   },
   bring: {
     name: "Bring it back",
     select: ".card-menu button[data-act=bring-back]",
     url: "/home/bring-back",
-    undo: "Back in your lists.",
+    undo: "Brought back.",
     json: CHANGE,
   },
   delete: {
@@ -293,12 +293,12 @@ describe("the edit dialog's Delete link", () => {
 const archived = (id: string): Link => ({ ...link(id), state: "archived" });
 const DONE_PAGES: [string, string, (links: Link[]) => string][] = [
   [
-    "Out of your lists on All links",
+    "Done and put away on All links",
     "all-error",
     (links) => allPage({ ...common, links, older: null, gone, order: "newest", done: true }),
   ],
   [
-    "a space's Out of your lists",
+    "a space's Done and put away",
     "space-error",
     (links) => spacePage({ ...common, links, older: null, gone, tag: KITCHEN, done: true }),
   ],
@@ -334,7 +334,7 @@ describe.each(DONE_PAGES)("%s: Bring it back takes one action at a time", (_, er
       const next = name === "Delete link" ? ACTIONS.delete : ACTIONS.copy;
       const p = runPage(html(links), fine);
       await press(p, "7", ACTIONS.bring);
-      expect(undoText(p)).toBe("Back in your lists.");
+      expect(undoText(p)).toBe("Brought back.");
       await press(p, "7", next);
       expect(sentUrls(p)).toEqual(["/home/bring-back", next.url]);
       expect(undoText(p)).toBe(next.undo);

@@ -8,7 +8,7 @@ import { escapeHtml } from "./page.js";
 /**
  * A card's grey line: its space (color dot and name), its site, when it was saved (`saved`, a
  * date already in words), Saved copy, a link to its saved copy in the same tab, and `marker`
- * (Put away or Done, for a link out of your lists), in that order. A missing part drops out, and
+ * (Put away or Done, for a link done or put away), in that order. A missing part drops out, and
  * no part draws no line. The dots between parts are the theme's,
  * drawn only before a part that shows, so Remove saved copy (`removeCopyScript`, which hides
  * `[data-act=read-copy]`) takes the link's dot with it.

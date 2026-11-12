@@ -123,10 +123,10 @@ describe("the Tidy up page", () => {
     expect(buttons.every((b) => b.getAttribute("type") === "button")).toBe(true);
     const [keep, away, stale] = buttons;
     expect(keep?.textContent).toContain("Keep");
-    expect(keep?.textContent).toContain("Stays in your lists, as it is now.");
+    expect(keep?.textContent).toContain("Stays where it is.");
     expect(away?.textContent).toContain("Put it away");
     expect(away?.textContent).toContain(
-      "Out of your lists. Comes back when you start something it fits.",
+      "Off Home, All links and your spaces. Comes back when you start something it fits.",
     );
     expect(away?.textContent).toContain("If you're not sure");
     expect(away?.className).toContain("safe");
@@ -299,7 +299,7 @@ describe("the Tidy up session", () => {
     const { p, choose } = load();
     await choose("put-away");
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Put away. Out of your lists but still saved. If you start something it fits, it'll come back.",
+      "Put away. Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
     );
     expect(p.$("#undo-bar strong").textContent).toBe("Put away.");
     await choose("stale");

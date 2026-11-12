@@ -78,7 +78,7 @@ describe("the card menu", () => {
     expect(
       [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => e.textContent),
     ).toEqual([
-      "It's stale",
+      "Done with it",
       "Put it away",
       "Keep handy",
       "Edit link…",

@@ -130,8 +130,8 @@ describe("the Tidy up page", () => {
     );
     expect(away?.textContent).toContain("If you're not sure");
     expect(away?.className).toContain("safe");
-    expect(stale?.textContent).toContain("It's stale");
-    expect(stale?.textContent).toContain("Out of sight for good. Search still finds it.");
+    expect(stale?.textContent).toContain("Done with it");
+    expect(stale?.textContent).toContain("Still findable in search.");
     expect(keep?.textContent).not.toContain("If you're not sure");
     expect(stale?.textContent).not.toContain("If you're not sure");
     expect(keep?.className).not.toContain("safe");
@@ -295,7 +295,7 @@ describe("the Tidy up session", () => {
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
-  it("Put it away and It's stale offer their bars, title first", async () => {
+  it("Put it away and Done with it offer their bars, title first", async () => {
     const { p, choose } = load();
     await choose("put-away");
     expect(p.$("#undo-bar span").textContent).toBe(
@@ -304,7 +304,7 @@ describe("the Tidy up session", () => {
     expect(p.$("#undo-bar strong").textContent).toBe("Put away.");
     await choose("stale");
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Let go. You won't see it again unless you search for it.",
+      "Done with it. Off Home, All links and your spaces. Still findable in search.",
     );
   });
 

@@ -539,7 +539,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <p id="space-error" role="alert"></p>
 <div class="done-empty">
 <p>Nothing here is done or put away yet.</p>
-<p class="small">Links you mark stale or put away from this space wait here. Search still finds them.</p>
+<p class="small">Links you are done with or put away from this space wait here. Search still finds them.</p>
 </div>
 
 </main>
@@ -1157,7 +1157,7 @@ form.addEventListener("submit", async (event) => {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("It's stale") stays in the page, hidden.
+  // A card moved out of the list ("Done with it") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -1209,7 +1209,7 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Let go.","text":"You won't see it again unless you search for it."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""}}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""}}};
 const stateCard = (card, act) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("space-links");

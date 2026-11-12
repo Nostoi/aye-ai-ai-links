@@ -6,24 +6,24 @@ const BACK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
 const CHECK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
 
 /** The owner's name for taking a link out of their lists; the wire value stays `archived`. */
-export const STALE_LABEL = "It's stale";
+export const DONE_LABEL = "Done with it";
 
 /** The name of the list section holding links the owner has let go (the done views). */
 export const DONE_AND_PUT_AWAY = "Done and put away";
 
-/** The Undo bar every It's stale shows: a bold title, then the text (`showUndo(text, undo, title)`). */
-export const STALE_UNDO = {
-  title: "Let go.",
-  text: "You won't see it again unless you search for it.",
+/** The Undo bar every Done with it shows: a bold title, then the text (`showUndo(text, undo, title)`). */
+export const DONE_UNDO = {
+  title: "Done with it.",
+  text: "Off Home, All links and your spaces. Still findable in search.",
 };
 
 /** What a link done or put away is called on its grey line and the Save page. */
 export const PUT_AWAY_MARKER = "Put away";
-export const STALE_MARKER = "Stale";
+export const DONE_MARKER = "Done";
 
-/** `Put away` or `Stale` for a link done or put away (archived with or without `putAwayAt`); null for an active one. */
+/** `Put away` or `Done` for a link done or put away (archived with or without `putAwayAt`); null for an active one. */
 export const outOfListsMarker = (link: Pick<Link, "state" | "putAwayAt">) =>
-  link.state === "active" ? null : link.putAwayAt ? PUT_AWAY_MARKER : STALE_MARKER;
+  link.state === "active" ? null : link.putAwayAt ? PUT_AWAY_MARKER : DONE_MARKER;
 
 /** The Undo bar every Put it away shows. */
 export const PUT_AWAY_UNDO = {
@@ -34,8 +34,8 @@ export const PUT_AWAY_UNDO = {
 /** The Undo bar Bring it back shows: a title and no text. */
 export const BRING_BACK_UNDO = { title: "Brought back.", text: "" };
 
-/** The card menu's first row, which takes the link off the lists; its script is `doneLinkScript`. */
-export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: STALE_LABEL };
+/** The card menu's first row, which marks the link done; its script is `doneLinkScript`. */
+export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: DONE_LABEL };
 
 /** The card menu's row that puts a link away until something it fits comes up. */
 export const PUT_AWAY_ITEM: MenuItem = { act: "put-away", icon: TRAY, text: "Put it away" };
@@ -45,15 +45,15 @@ export const BRING_BACK_ITEM: MenuItem = { act: "bring-back", icon: BACK, text: 
 
 /** Each state action: its route and the bar its Undo is offered on. */
 const STATE_ACTS = {
-  archive: { route: "/home/archive", undo: STALE_UNDO },
+  archive: { route: "/home/archive", undo: DONE_UNDO },
   "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO },
   "bring-back": { route: "/home/bring-back", undo: BRING_BACK_UNDO },
 };
 
 /**
- * It's stale, Put it away and Bring it back on the cards inside `#root`, including those Show
- * older links appends. Defines the page-global `stateCard(card, act)` and `doneCard(card)` (It's
- * stale), which the gone line's It's stale and Home's buttons also call. An action posts its
+ * Done with it, Put it away and Bring it back on the cards inside `#root`, including those Show
+ * older links appends. Defines the page-global `stateCard(card, act)` and `doneCard(card)` (Done
+ * with it), which the gone line's Done with it and Home's buttons also call. An action posts its
  * route and takes the card out with `takeOut(listRoot, card, false, change)` (hidden, not removed;
  * a `takeOut` that keeps the card on the page shows `change.after` itself) once the answer is the
  * `StateChange` as JSON. Its Undo posts `/home/undo-state` with that change, exactly as received,

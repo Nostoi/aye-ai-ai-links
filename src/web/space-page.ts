@@ -119,7 +119,7 @@ function row(
 }
 
 /**
- * Tell me why, the ⋯ menu (It's stale, Keep handy, the edit dialog, the saved copy's Remove
+ * Tell me why, the ⋯ menu (Done with it, Keep handy, the edit dialog, the saved copy's Remove
  * and Delete link) and the gone line on the active cards, including those Show older links appends.
  */
 const cardsScript = (ask: boolean) => `<script>
@@ -150,7 +150,7 @@ const CHEVRON = `<svg class="chevron" width="12" height="12" viewBox="0 0 12 12"
 /** The first Done and put away page's card for when it holds nothing. */
 const DONE_EMPTY = `<div class="done-empty">
 <p>Nothing here is done or put away yet.</p>
-<p class="small">Links you mark stale or put away from this space wait here. Search still finds them.</p>
+<p class="small">Links you are done with or put away from this space wait here. Search still finds them.</p>
 </div>
 `;
 

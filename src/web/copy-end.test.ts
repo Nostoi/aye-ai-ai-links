@@ -8,9 +8,9 @@ import {
   BRING_BACK_ITEM,
   BRING_BACK_UNDO,
   DONE_ITEM,
+  DONE_UNDO,
   PUT_AWAY_ITEM,
   PUT_AWAY_UNDO,
-  STALE_UNDO,
 } from "./done-link.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
@@ -99,7 +99,7 @@ describe("the end of the saved copy", () => {
 
   it.each([
     ["put away", PUT_AWAY, "Put away"],
-    ["stale", STALE, "Stale"],
+    ["stale", STALE, "Done"],
   ])("a %s link shows only its marker and Bring it back", (_, over, marker) => {
     const html = render(over);
     const d = dom(html);
@@ -201,7 +201,7 @@ const OUT_LINE = "#copy-end-out .copy-end-line";
 const ACTIVE_LINE = "#copy-end-active .copy-end-label";
 
 describe.each([
-  ["It's stale", "archive", "/home/archive", STALE_CHANGE, STALE_UNDO, "Stale"],
+  ["Done with it", "archive", "/home/archive", STALE_CHANGE, DONE_UNDO, "Done"],
   ["Put it away", "put-away", "/home/put-away", PUT_CHANGE, PUT_AWAY_UNDO, "Put away"],
 ])("%s at the end of the copy", (_, act, route, change, undo, marker) => {
   const load = (answer: (s: Post) => Answer = () => ({ status: 200, body: change })) =>
@@ -357,10 +357,10 @@ describe("opening the link from the end-of-copy page", () => {
     expect(p.focused()).toEqual([]);
   });
 
-  it("leaves a Stale row Stale", async () => {
+  it("leaves a Done row Done", async () => {
     const p = load(STALE);
     await click(p, OPEN);
-    expect(row(p)).toEqual({ group: "out: Stale", acts: ["bring-back"] });
+    expect(row(p)).toEqual({ group: "out: Done", acts: ["bring-back"] });
   });
 
   it.each([

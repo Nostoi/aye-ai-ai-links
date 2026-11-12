@@ -9,7 +9,7 @@ import type { Ask } from "./ask-panel.js";
 import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript, outOfListsMarker, STALE_MARKER } from "./done-link.js";
+import { DONE_MARKER, doneLinkScript, outOfListsMarker } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { initialsText } from "./initials.js";
@@ -170,7 +170,7 @@ function resultItem(
   keep: boolean,
   from: string,
 ): string {
-  return `<li class="result${spaceClass(space)}${outOfListsMarker(link) === STALE_MARKER ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
+  return `<li class="result${spaceClass(space)}${outOfListsMarker(link) === DONE_MARKER ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}

@@ -182,7 +182,7 @@ export async function putAwayLink(
   return { before: beforeOf(link), after: { state: "archived", putAwayAt }, at: putAwayAt };
 }
 
-/** It's stale: active or put away -> archived, putAwayAt null. */
+/** Done with it: active or put away -> archived, putAwayAt null. */
 export async function archiveLink(
   deps: StateDeps,
   owner: OwnerId,

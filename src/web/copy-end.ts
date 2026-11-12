@@ -5,11 +5,11 @@ import type { Back } from "./copy-page.js";
 import {
   BRING_BACK_ITEM,
   DONE_ITEM,
+  DONE_MARKER,
   doneLinkScript,
   outOfListsMarker,
   PUT_AWAY_ITEM,
   PUT_AWAY_MARKER,
-  STALE_MARKER,
 } from "./done-link.js";
 import { KEEP_ITEM, keepHandyScript, NOT_HANDY } from "./keep-handy.js";
 import { escapeHtml } from "./page.js";
@@ -69,7 +69,7 @@ const takeOut = (listRoot, card, remove, change) => {
     const isOut = !!state && state.state !== "active";
     active.hidden = isOut;
     out.hidden = !isOut;
-    if (isOut) marker.textContent = state.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(STALE_MARKER)};
+    if (isOut) marker.textContent = state.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(DONE_MARKER)};
     return isOut ? out.querySelector(".copy-end-line") : active.querySelector(".copy-end-label");
   };
   if (change) show(change.after).focus();

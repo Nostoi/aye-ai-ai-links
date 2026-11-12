@@ -72,7 +72,7 @@ export function profileStats(stats: Stats, now: Date, reading: StatsReading | nu
 ${card("Saved", stats.saved)}
 ${card("Opened", stats.opened)}
 ${card("Not opened yet", stats.notOpenedYet)}
-${card("Set aside", stats.setAside, "done, stale, put away or not handy")}
+${card("Set aside", stats.setAside, "done with it, put away or not handy")}
 </div>
 ${stats.notNow > 0 ? `<p>Put off with Not now: ${stats.notNow}</p>` : ""}
 ${partialNote(stats, now)}

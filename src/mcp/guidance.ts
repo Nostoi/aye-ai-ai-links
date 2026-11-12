@@ -41,7 +41,7 @@ Keep handy: if the owner says they use a link regularly, send handy {action: "ke
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means stale, out of sight for good. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner is done with it: off their lists, still findable in search. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
@@ -71,7 +71,7 @@ export const UNDO_TAG_CHANGE = `Put back what merge_tags or delete_tag changed, 
 
 If the tags changed since, nothing is undone and you are told so. If a later change to the same tags is in the way, nothing is undone either; undoing that one may not be enough, so tell the owner and ask the owner before undoing any other change. The result has the tags that came back, each with its links.`;
 
-export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to mark it stale (update_link state "archived") if the owner says it's stale.`;
+export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to mark it done (update_link state "archived") if the owner is done with it.`;
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
@@ -118,9 +118,9 @@ Reasons:
 - no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or when the owner opens it from the web page; any other opening, such as from a browser bookmark, is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.
-- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is the whole days since its last recorded opening, or null when none is recorded. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to mark it stale or send handy {action: "not_handy", source: "asked"}.
+- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is the whole days since its last recorded opening, or null when none is recorded. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to mark it done or send handy {action: "not_handy", source: "asked"}.
 
-Offer to snooze a link (update_link with snoozedUntil) or mark it stale (state "archived"). Send opened: true if the owner opens one.
+Offer to snooze a link (update_link with snoozedUntil) or mark it done (state "archived"). Send opened: true if the owner opens one.
 
 Each call marks the links it returns as shown, so the next call returns others. Don't call it again to "refresh": that uses links up before the owner sees them. An empty list means nothing is due.`;
 

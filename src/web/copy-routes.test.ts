@@ -567,7 +567,7 @@ describe("the end of the copy page, against the store", () => {
     expect((await owner.send("/links/opened", post(id))).status).toBe(204);
     expect(await stored(w, id)).toEqual({ state: "archived", putAwayAt: null });
     expect(await endOf(owner, id)).toEqual({
-      line: ["Stale"],
+      line: ["Done"],
       acts: ["bring-back"],
     });
   });

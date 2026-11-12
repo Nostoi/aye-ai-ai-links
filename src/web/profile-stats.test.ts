@@ -52,7 +52,7 @@ describe("the profile stats section", () => {
     expect(card(html, "Not opened yet")).toContain(">4<");
     const aside = card(html, "Set aside");
     expect(aside).toContain(">3<");
-    expect(aside).toContain("done, stale, put away or not handy");
+    expect(aside).toContain("done with it, put away or not handy");
     expect(html).toContain("Openings from bookmarks or outside the app aren't counted.");
   });
 

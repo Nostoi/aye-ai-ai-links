@@ -79,10 +79,10 @@ const CHANGE = {
 };
 const ACTIONS: Record<Key, Action> = {
   done: {
-    name: "It's stale",
+    name: "Done with it",
     select: ".card-menu button[data-act=archive]",
     url: "/home/archive",
-    undo: "Let go. You won't see it again unless you search for it.",
+    undo: "Done with it. Off Home, All links and your spaces. Still findable in search.",
     json: CHANGE,
   },
   put: {
@@ -248,7 +248,9 @@ describe("All links, on a card Show older appended", () => {
     expect(sentUrls(p)).toEqual(["/home/archive"]);
     release();
     await p.settle();
-    expect(undoText(p)).toBe("Let go. You won't see it again unless you search for it.");
+    expect(undoText(p)).toBe(
+      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+    );
   });
 
   function html(links: Link[], older: string | null = null) {
@@ -281,7 +283,9 @@ describe("the edit dialog's Delete link", () => {
     expect(sentUrls(p)).toEqual(["/home/archive"]);
     release();
     await p.settle();
-    expect(undoText(p)).toBe("Let go. You won't see it again unless you search for it.");
+    expect(undoText(p)).toBe(
+      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+    );
   });
 });
 

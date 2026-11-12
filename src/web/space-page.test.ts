@@ -438,7 +438,7 @@ describe("a space's links done and put away", () => {
       "Nothing here is done or put away yet.",
     );
     expect(card?.textContent).toContain(
-      "Links you mark stale or put away from this space wait here. Search still finds them.",
+      "Links you are done with or put away from this space wait here. Search still finds them.",
     );
     expect(dom(done()).querySelector("#space-links")).toBeNull();
   });
@@ -847,7 +847,7 @@ describe("Bring it back and the markers on a space's Done and put away", () => {
     const lines = [...dom(html).querySelectorAll(".link-row .card-line")].map(
       (l) => l.lastElementChild?.textContent,
     );
-    expect(lines).toEqual(["Put away", "Stale"]);
+    expect(lines).toEqual(["Put away", "Done"]);
   });
 
   it("puts no marker on an active row", () => {

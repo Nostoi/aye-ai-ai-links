@@ -4,7 +4,7 @@ import { TIDY_SESSION, type TidyLink } from "../core/tidy-up.js";
 import type { FocusEntry, Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 import { cardLine } from "./card-line.js";
-import { PUT_AWAY_UNDO, STALE_UNDO } from "./done-link.js";
+import { DONE_UNDO, PUT_AWAY_UNDO } from "./done-link.js";
 import { monthName, whyText } from "./link-rows.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -47,7 +47,7 @@ function fitFact(fit: FocusEntry | null, hasFocus: boolean): string {
 const CHOICES = `<div class="tidy-choices">
 <button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays where it is.</span><kbd class="key" aria-hidden="true">1</kbd></button>
 <button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Off Home, All links and your spaces. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
-<button type="button" data-act="stale" aria-keyshortcuts="3"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span><kbd class="key" aria-hidden="true">3</kbd></button>
+<button type="button" data-act="stale" aria-keyshortcuts="3"><b>Done with it</b><span>Still findable in search.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>`;
 
 function step({ link, fit }: TidyLink, at: number, input: TidyPageInput): string {
@@ -91,7 +91,7 @@ function finish(count: number): string {
 const ACTS = {
   keep: { route: "/tidy/keep", undo: null },
   "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO },
-  stale: { route: "/home/archive", undo: STALE_UNDO },
+  stale: { route: "/home/archive", undo: DONE_UNDO },
 };
 const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
 
@@ -100,7 +100,7 @@ const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
  * is one card for `whileBusy`: a second click is dropped while a choice is out, and an Undo
  * waits for it (`whenFree`), then runs. A choice posts its route; only an answer that is OK hides the link and shows the first
  * link not yet decided, or the finish screen, and moves focus to its heading. Put it away and
- * It's stale answer the `StateChange` that their Undo posts back to `/home/undo-state` exactly as
+ * Done with it answer the `StateChange` that their Undo posts back to `/home/undo-state` exactly as
  * received, then shows that link again as undecided. A refusal is shown in `#tidy-error`.
  * Keys 1, 2 and 3 press the shown link's choices, except in a field, with a modifier, or on the
  * finish screen.

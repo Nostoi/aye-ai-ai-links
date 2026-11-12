@@ -19,12 +19,12 @@ export const PENCIL = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidd
 export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit link…" };
 
 /**
- * A card's ⋯ menu on the pages with the edit dialog (#192). An active link's menu opens with It's
- * stale, Put it away and Keep handy, which reads Not handy anymore once `handy` is kept; both
+ * A card's ⋯ menu on the pages with the edit dialog (#192). An active link's menu opens with Done
+ * with it, Put it away and Keep handy, which reads Not handy anymore once `handy` is kept; both
  * Keep rows are rendered and the script swaps them. A link done or put away starts at Edit and
  * offers Bring it back after it. Then Remove saved copy when `copy` is there, and Delete link
  * last. The copy itself opens from the card's grey line (`cardLine`). Home's rows add Not now
- * after Put it away (`notNow`); Home's featured card shows It's stale and Not now as buttons, so
+ * after Put it away (`notNow`); Home's featured card shows Done with it and Not now as buttons, so
  * its menu leaves those two out (`onCard`).
  */
 export const editMenu = (

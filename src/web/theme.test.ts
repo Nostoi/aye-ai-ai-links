@@ -741,7 +741,7 @@ describe("Home's Worth a look cards (#195)", () => {
     expect(computed(open, "justify-content", "phone")).toBe("center");
   });
 
-  it("keeps It's stale and Not now as quiet text buttons at least 44px tall", () => {
+  it("keeps Done with it and Not now as quiet text buttons at least 44px tall", () => {
     const quiet = feature(
       '<div class="feature-quiet"><button data-act="archive">It\'s stale</button></div>',
       "button",

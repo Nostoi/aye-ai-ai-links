@@ -154,11 +154,9 @@ describe("the theme css", () => {
     expect(phone).not.toContain("overflow-x:auto");
   });
 
-  it("puts the tile menu in the top-right corner of every tile, on a translucent circle", () => {
+  it("puts the tile menu in the top-right corner of every tile, as a flat round dot (#295)", () => {
     expect(themeCss).toMatch(/\.card-menu\{[^}]*top:\d+px;right:\d+px/);
-    expect(themeCss).toMatch(
-      /\.card-menu-dot\{[^}]*border-radius:50%;[^}]*background:color-mix\(in srgb,var\(--surface\) \d+%,transparent\)/,
-    );
+    expect(themeCss).toMatch(/\.card-menu-dot\{[^}]*border-radius:50%/);
   });
 
   it("holds a tile's placed text inside the tile, so the row doesn't widen the page", () => {
@@ -427,11 +425,39 @@ describe("the card menu on every card", () => {
     expect(themeCss).not.toContain("tile-menu");
   });
 
-  it("sets a search card's dot on a light ink tint, since it sits on the card and not on a picture", () => {
-    expect(rule(".result .card-menu-dot")).toContain(
-      "background:color-mix(in srgb,var(--ink) 7%,transparent)",
+  it("draws every card's dot flat and grey, with a soft ink fill on hover or open (#295)", () => {
+    const dot = el('<div class="card-menu"><span class="card-menu-dot"></span></div>', "span");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(dot, "color", w), w).toBe("var(--soft)");
+      expect(computed(dot, "background", w), w).toBe("none");
+      expect(computed(dot, "box-shadow", w), w).toBe("none");
+      expect(computed(dot, "backdrop-filter", w), w).toBe("none");
+    }
+    expect(rule(".card-menu summary:hover .card-menu-dot,.card-menu[open] .card-menu-dot")).toBe(
+      "color:var(--ink);background:color-mix(in srgb,var(--ink) 7%,transparent)",
     );
-    expect(rule(".result .card-menu-dot")).toContain("backdrop-filter:none");
+  });
+
+  it("keeps the frosted circle only where the dot sits on a picture (#295)", () => {
+    const frosted = (html: string, w: "desktop" | "phone") => {
+      const dot = el(html, ".card-menu-dot");
+      expect(computed(dot, "background", w), html).toBe(
+        "color-mix(in srgb,var(--surface) 75%,transparent)",
+      );
+      expect(computed(dot, "box-shadow", w), html).toBe("0 1px 3px rgb(0 0 0 / .12)");
+      expect(computed(dot, "backdrop-filter", w), html).toBe("blur(6px)");
+    };
+    const menu = '<div class="card-menu"><span class="card-menu-dot"></span></div>';
+    const pictures = `<main data-view="pictures"><ul><li class="link-row">${menu}</li></ul></main>`;
+    frosted(pictures, "desktop");
+    frosted(pictures, "phone");
+    frosted(`<ul><li class="result">${menu}</li></ul>`, "phone");
+    const flat = (html: string, w: "desktop" | "phone") =>
+      expect(computed(el(html, ".card-menu-dot"), "box-shadow", w), html).toBe("none");
+    const list = `<main data-view="list"><ul><li class="link-row">${menu}</li></ul></main>`;
+    flat(`<ul><li class="result">${menu}</li></ul>`, "desktop");
+    flat(list, "desktop");
+    flat(list, "phone");
   });
 
   it("leaves result and link cards unclipped, so the open menu shows, and rounds their pictures instead", () => {
@@ -727,7 +753,7 @@ describe("icons and initials", () => {
     expect(computed(tile, "--icon", "phone")).toBe("56px");
     expect(
       computed(el('<div class="feature-pic icon-box"></div>', "div"), "--icon", "desktop"),
-    ).toBe("80px");
+    ).toBe("120px");
   });
   it("puts the icon on the plate token, light in both modes, and drops .handy-initials", () => {
     expect(tokens.light.plate).toBe("#FFFFFF");
@@ -745,10 +771,27 @@ describe("Home's Worth a look cards (#195)", () => {
   const areas = (width: "desktop" | "phone") =>
     computed(feature("", "article"), "grid-template-areas", width) ?? "";
 
-  it("puts the featured picture at 112px on a wide screen and 64px on a phone, softly framed", () => {
+  it("puts the featured picture at 168px in a 168px column on a wide screen and 64px on a phone, softly framed (#295)", () => {
     const pic = feature('<div class="feature-pic"></div>', ".feature-pic");
-    expect(computed(pic, "width", "desktop")).toBe("112px");
-    expect(computed(pic, "height", "desktop")).toBe("112px");
+    expect(computed(pic, "width", "desktop")).toBe("168px");
+    expect(computed(pic, "height", "desktop")).toBe("168px");
+    expect(computed(feature("", "article"), "grid-template-columns", "desktop")).toBe(
+      "168px minmax(0,1fr)",
+    );
+    const sized = feature('<div class="feature-pic icon-box"></div>', ".feature-pic");
+    expect(computed(sized, "--icon", "desktop")).toBe("120px");
+    const grey = feature('<div class="feature-pic initials-box"></div>', ".feature-pic");
+    expect(computed(grey, "--initials", "desktop")).toBe("60px");
+    const menu = feature('<div class="card-menu"></div>', ".card-menu");
+    expect(computed(menu, "top", "desktop")).toBe("4px");
+    expect(computed(menu, "right", "desktop")).toBe("4px");
+    const label = feature(
+      '<div class="feature-why"><p><span class="why-label"></span></p></div>',
+      ".why-label",
+    );
+    expect(computed(label, "display", "desktop")).toBe("block");
+    expect(computed(label, "color", "desktop")).toBe("var(--soft)");
+    expect(computed(label, "font-weight", "desktop")).toBe("600");
     expect(computed(pic, "width", "phone")).toBe("64px");
     expect(computed(pic, "height", "phone")).toBe("64px");
     for (const w of ["desktop", "phone"] as const) {
@@ -832,8 +875,8 @@ describe("Home's Worth a look cards (#195)", () => {
     const rm = row('<details class="card-menu"></details>', "details");
     expect(computed(fm, "position", "desktop")).toBe("absolute");
     expect(computed(fm, "position", "phone")).toBe("absolute");
-    expect(computed(fm, "top", "phone")).toBe("10px");
-    expect(computed(fm, "right", "phone")).toBe("10px");
+    expect(computed(fm, "top", "phone")).toBe("4px");
+    expect(computed(fm, "right", "phone")).toBe("4px");
     expect(computed(rm, "position", "desktop")).toBe("relative");
   });
 

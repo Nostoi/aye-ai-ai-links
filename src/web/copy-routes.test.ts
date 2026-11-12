@@ -532,13 +532,13 @@ describe("the end of the copy page, against the store", () => {
     const link = await deps.store.get("owner", id);
     return { state: link?.state, putAwayAt: link?.putAwayAt ?? null };
   };
-  const ACTIVE_ROW = { line: null, acts: ["archive", "put-away", "keep"] };
+  const ACTIVE_ROW = { line: null, acts: ["put-away", "archive", "keep"] };
 
   it("Keep handy, then the page shows Not handy anymore", async () => {
     const { id, owner } = await world();
     expect(await endOf(owner, id)).toEqual(ACTIVE_ROW);
     expect((await owner.send("/tools/keep", post(id))).status).toBe(200);
-    expect((await endOf(owner, id)).acts).toEqual(["archive", "put-away", "not-handy"]);
+    expect((await endOf(owner, id)).acts).toEqual(["put-away", "archive", "not-handy"]);
   });
 
   it("Put it away: the store holds it archived with putAwayAt set, and the page shows the put-away row", async () => {

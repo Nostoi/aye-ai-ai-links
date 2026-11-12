@@ -1,6 +1,6 @@
 import type { ExtractOutcome, PageMetadata } from "./extract.js";
 import type { FetchOutcome } from "./fetch.js";
-import { boundedIconUrls, type SnapshotRecord } from "./snapshot-store.js";
+import { boundedFaviconUrls, boundedIconUrls, type SnapshotRecord } from "./snapshot-store.js";
 import type { SnapshotStatus } from "./types.js";
 import { keptPreview } from "./word-picture-host.js";
 
@@ -38,6 +38,7 @@ export function pastLastAttemptRecord(attempts: number): SnapshotRecord {
     description: null,
     imageUrl: null,
     iconUrls: [],
+    faviconUrls: null,
     text: null,
     lastError: "lease:expired",
   };
@@ -134,6 +135,7 @@ export function snapshotRecord(input: {
     description: null,
     imageUrl: null,
     iconUrls: [],
+    faviconUrls: null,
     text: null,
   };
   if ("retry" in v) {
@@ -156,6 +158,8 @@ export function snapshotRecord(input: {
     description: v.metadata?.description ?? null,
     imageUrl: keptPreview(url, v.metadata?.imageUrl ?? null),
     iconUrls: boundedIconUrls(v.metadata?.iconUrls),
+    // Null without metadata: the favicon was not looked for, so the link's stays as it was.
+    faviconUrls: v.metadata ? boundedFaviconUrls(v.metadata.faviconUrls) : null,
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,
   };

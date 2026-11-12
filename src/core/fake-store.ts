@@ -9,6 +9,8 @@ import {
   holdsWritten,
   sameTags,
 } from "./covered-fields.js";
+import { FakeFavicons } from "./fake-favicons.js";
+import type { FaviconReader, FaviconStore, PendingFavicon } from "./favicon-store.js";
 import type { IconBackfillStore, IconCandidate, PreviewLink } from "./icon-backfill-store.js";
 import {
   type ImageBytes,
@@ -35,6 +37,7 @@ import type { LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js"
 import {
   hasConsistentSchedule,
   hasValidIcons,
+  MAX_FAVICON_URLS,
   MAX_ICON_URLS,
   type SnapshotLease,
   type SnapshotRecord,
@@ -157,6 +160,8 @@ export class FakeStore
     LinkImageReader,
     LinkEditStore,
     IconBackfillStore,
+    FaviconStore,
+    FaviconReader,
     SummaryCandidates,
     StatsStore,
     StatsReadingStore,
@@ -168,6 +173,7 @@ export class FakeStore
   private tokens = new Map<OwnerId, Map<string, number>>();
   private links = new Map<OwnerId, Map<string, Link>>();
   private hidden = new Map<OwnerId, Map<string, { link: Link; at: Date }>>();
+  private favicons = new FakeFavicons();
   private tags = new Map<OwnerId, Map<string, Tag>>();
   /** Old key to the live key it reaches, by owner. Every value is a live key: actions keep it so. */
   private aliases = new Map<OwnerId, Map<string, string>>();
@@ -266,6 +272,7 @@ export class FakeStore
     this.tokens.get(owner)?.delete(id);
     this.toolRows.get(owner)?.delete(id);
     this.checkRows.get(owner)?.delete(id);
+    this.favicons.drop(owner, id);
     this.events = this.events.filter((e) => e.owner !== owner || e.linkId !== id);
     for (const perLink of [
       this.imageStates,
@@ -300,6 +307,7 @@ export class FakeStore
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: null,
       text: null,
       lastError: null,
     });
@@ -362,6 +370,7 @@ export class FakeStore
     if (result.imageUrl !== null && this.storedImages.get(key)?.role === "icon") {
       this.storedImages.delete(key);
     }
+    if (result.faviconUrls !== null) this.favicons.rewrite(owner, linkId, result.faviconUrls);
     this.bumpToken(owner, linkId);
     return true;
   }
@@ -1323,16 +1332,47 @@ export class FakeStore
     linkId: string,
     imageUrl: string,
     iconUrls: string[],
+    faviconUrls: string[] | null,
   ): Promise<boolean> {
     const s = this.snapshots.get(owner)?.get(linkId);
     if (!s || this.isHidden(owner, linkId) || s.imageUrl !== imageUrl) return false;
     if (iconUrls.length > MAX_ICON_URLS) return false;
+    if ((faviconUrls?.length ?? 0) > MAX_FAVICON_URLS) return false;
     const key = imageKey(owner, linkId);
     s.imageUrl = null;
     s.iconUrls = [...iconUrls];
     this.imageStates.set(key, { status: iconUrls.length > 0 ? "pending" : "none" });
     if (this.storedImages.get(key)?.role === "preview") this.storedImages.delete(key);
+    if (faviconUrls !== null) this.favicons.rewrite(owner, linkId, faviconUrls);
     return true;
+  }
+
+  /** The link exists for its owner and is not deleted. */
+  private live = (owner: OwnerId, linkId: string): boolean => this.owned(owner).has(linkId);
+
+  async pendingFavicons(afterId: string | null, limit: number): Promise<PendingFavicon[]> {
+    return this.favicons.pending(afterId, limit, this.live);
+  }
+
+  async writeFavicon(owner: OwnerId, linkId: string, generation: number, image: ImageBytes) {
+    return this.favicons.write(owner, linkId, generation, image, this.live);
+  }
+
+  async endFavicon(owner: OwnerId, linkId: string, generation: number, end: ImageEnd) {
+    return this.favicons.end(owner, linkId, generation, end, this.live);
+  }
+
+  async faviconVersions(owner: OwnerId, linkIds: string[]) {
+    return this.favicons.versions(owner, linkIds, this.live);
+  }
+
+  async favicon(owner: OwnerId, linkId: string): Promise<StoredImage | null> {
+    return this.favicons.read(owner, linkId, this.live);
+  }
+
+  /** Test inspection: the link's favicon row, as `link_favicons` would hold it. */
+  faviconRow(owner: OwnerId, linkId: string) {
+    return this.favicons.row(owner, linkId);
   }
 
   /** Test seeding: the image status a snapshot recorded before PR B has (NULL). */

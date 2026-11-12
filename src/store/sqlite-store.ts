@@ -41,6 +41,7 @@ import type {
 import { attachTags, readCovered, TAG_SELECT, writeReceipt } from "./link-edit-receipts.js";
 import { COPY_MAY_HOLD_FILES, removeCopyWithLink, restoreCopyWithLink } from "./saved-copies.js";
 import { fromMs, parseId, toMs } from "./sql-values.js";
+import { rewriteFavicon } from "./sqlite-favicons.js";
 
 export class StoreError extends Error {
   constructor(
@@ -427,6 +428,7 @@ export class SqliteStore
             .prepare("DELETE FROM link_images WHERE owner_id = ? AND link_id = ? AND role = 'icon'")
             .run(owner, n);
         }
+        if (r.faviconUrls !== null) rewriteFavicon(this.db, owner, n, r.faviconUrls);
         return true;
       })
       .immediate();

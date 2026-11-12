@@ -34,6 +34,7 @@ import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { rewriteFavicon, SqliteFaviconStore } from "../store/sqlite-favicons.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
 import { outsideRefs } from "../web/outside-refs-test-kit.js";
 
@@ -571,6 +572,8 @@ describe("owner isolation coverage", () => {
   const A_IMAGE = png(321, 123, Buffer.from("A's own image bytes for the route guard"));
   /** A's saved-copy picture: distinct bytes from A_IMAGE. */
   const A_COPY_IMAGE = png(322, 124, Buffer.from("A's saved copy picture for the route guard"));
+  /** A's stored favicon (#272): distinct bytes from A_IMAGE. */
+  const A_FAVICON = png(32, 32, Buffer.from("A's favicon bytes for the route guard"));
   /** A line only A's saved copy holds. */
   const A_COPY_TEXT = "Quokkas shelter in A's saved copy for the route guard";
   const COPY_NONCE = "0123456789abcdef0123456789abcdef";
@@ -668,6 +671,7 @@ describe("owner isolation coverage", () => {
     "GET /tags/names": { request: "/tags/names", marker: () => A_TAG_NAME },
     "GET /ai/card/:id{[0-9]+}": { request: "/ai/card/:id", marker: () => "Quokka habitat notes" },
     "GET /images/:id{[0-9]+}": { request: "/images/:id", marker: () => A_IMAGE },
+    "GET /images/:id{[0-9]+}/favicon": { request: "/images/:id/favicon", marker: () => A_FAVICON },
     "GET /links/:id{[0-9]+}/copy": { request: "/links/:id/copy", marker: () => A_COPY_TEXT },
     "GET /links/:id{[0-9]+}/copy/images/:n{[0-9]{1,2}}": {
       request: "/links/:id/copy/images/1",
@@ -743,6 +747,10 @@ describe("owner isolation coverage", () => {
       inputHash: "h",
     });
     await storeImage(world, aLinkId, A_IMAGE);
+    rewriteFavicon(world.links, A, Number(aLinkId), ["https://a.example/favicon.png"]);
+    const favicon = { contentType: "image/png" as const, bytes: A_FAVICON };
+    const favicons = new SqliteFaviconStore(world.links);
+    expect(await favicons.writeFavicon(A, String(aLinkId), 1, favicon, new Date())).toBe(true);
     await storeCopyImage(world, String(aLinkId), A_COPY_IMAGE);
     // A second link whose page named a remote image and has none stored: its card must not
     // fall back to the remote URL, or A's search page makes an outside request.

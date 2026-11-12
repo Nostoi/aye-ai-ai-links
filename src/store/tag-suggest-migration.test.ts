@@ -18,8 +18,8 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("tag merge dismissals migration", () => {
-  it("is the last entry and adds an empty table keyed by owner and both keys", () => {
-    expect(MIGRATIONS).toHaveLength(DISMISSALS + 1);
+  it("is followed by the link favicons entry and adds an empty table keyed by owner and both keys", () => {
+    expect(MIGRATIONS).toHaveLength(DISMISSALS + 2);
     expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
     expect(
       db

@@ -11,7 +11,14 @@ import { A, at, B, newLink } from "./snapshot-store-contract.js";
 
 const pageOk: ExtractOutcome = {
   kind: "ok",
-  metadata: { title: "T", description: null, imageUrl: null, iconUrls: [] },
+  metadata: {
+    title: "T",
+    description: null,
+    imageUrl: null,
+    iconUrls: [],
+    faviconUrls: [],
+    declaresIcon: false,
+  },
   text: "body",
 };
 
@@ -145,6 +152,8 @@ describe("snapshot runner", () => {
       description: null,
       imageUrl: "https://opengraph.githubassets.com/x/repo",
       iconUrls: ["https://github.com/fluidicon.png"],
+      faviconUrls: [],
+      declaresIcon: false,
     };
     s.extract.run = async () => ({ kind: "ok", metadata: page, text: "body" });
     const { link } = await s.store.insertIfAbsent(A, {
@@ -469,7 +478,14 @@ describe("snapshot runner", () => {
         .find((c) => c.arg === url)
         ?.finish({
           kind: "ok",
-          metadata: { title: `title of ${url}`, description: null, imageUrl: null, iconUrls: [] },
+          metadata: {
+            title: `title of ${url}`,
+            description: null,
+            imageUrl: null,
+            iconUrls: [],
+            faviconUrls: [],
+            declaresIcon: false,
+          },
           text: `text of ${url}`,
         });
     };

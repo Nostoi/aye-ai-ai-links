@@ -27,8 +27,8 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("tag edits migration", () => {
-  it("is followed by the tag merge dismissals entry and adds both tables, empty, with their keys", () => {
-    expect(MIGRATIONS).toHaveLength(TAG_EDITS + 2);
+  it("is followed by the tag merge dismissals and link favicons entries and adds both tables, empty, with their keys", () => {
+    expect(MIGRATIONS).toHaveLength(TAG_EDITS + 3);
     expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
     expect(primaryKey("tag_aliases")).toEqual(["owner_id", "old_key"]);
     expect(primaryKey("tag_changes")).toEqual(["owner_id", "change_id"]);

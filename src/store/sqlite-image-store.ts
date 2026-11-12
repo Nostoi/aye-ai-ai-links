@@ -15,9 +15,10 @@ import {
   type ShownPicture,
   type StoredImage,
 } from "../core/image-store.js";
-import { MAX_ICON_URLS } from "../core/snapshot-store.js";
+import { MAX_FAVICON_URLS, MAX_ICON_URLS } from "../core/snapshot-store.js";
 import type { OwnerId } from "../core/types.js";
 import { parseId } from "./sql-values.js";
+import { rewriteFavicon } from "./sqlite-favicons.js";
 
 /** Fetched pictures, a page's preview or a site's icon (`link_images`, pending in `snapshots.image_status`), the one-time icon check of links snapshotted before icons were looked for, the word-picture check that swaps a preview for the site's icon, and the reads of whichever picture shows: the owner's (`owner_images`), else the fetched one. */
 export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfillStore {
@@ -232,9 +233,11 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
     linkId: string,
     imageUrl: string,
     iconUrls: string[],
+    faviconUrls: string[] | null,
   ): Promise<boolean> {
     const n = parseId(linkId);
     if (n === null || iconUrls.length > MAX_ICON_URLS) return false;
+    if ((faviconUrls?.length ?? 0) > MAX_FAVICON_URLS) return false;
     const first = iconUrls[0] ?? null;
     return this.db
       .transaction(() => {
@@ -253,6 +256,7 @@ export class SqliteImageStore implements ImageStore, LinkImageReader, IconBackfi
             "DELETE FROM link_images WHERE owner_id = ? AND link_id = ? AND role = 'preview'",
           )
           .run(owner, n);
+        if (faviconUrls !== null) rewriteFavicon(this.db, owner, n, faviconUrls);
         return true;
       })
       .immediate();

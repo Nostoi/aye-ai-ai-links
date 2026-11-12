@@ -40,14 +40,17 @@ export interface IconBackfillStore {
 
   /**
    * Drops the snapshot's preview, `imageUrl`, and its fetched picture, and records the page's
-   * fresh icons in place of the old ones, as `recordIconCheck` does. Returns false, writing
-   * nothing, unless the live link's snapshot still names `imageUrl`, and for more than
-   * MAX_ICON_URLS icons.
+   * fresh icons in place of the old ones, as `recordIconCheck` does. In the same write it rewrites
+   * the link's favicon candidates (#272, `FaviconStore`) to `faviconUrls`, unless that is null
+   * (the page was not read), which leaves them as they were. Returns false, writing nothing,
+   * unless the live link's snapshot still names `imageUrl`, and for more than MAX_ICON_URLS
+   * icons or MAX_FAVICON_URLS favicons.
    */
   recordWordPictureCheck(
     owner: OwnerId,
     linkId: string,
     imageUrl: string,
     iconUrls: string[],
+    faviconUrls: string[] | null,
   ): Promise<boolean>;
 }

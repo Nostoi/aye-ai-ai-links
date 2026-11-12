@@ -378,7 +378,7 @@ export function describeIconBackfillStoreContract(
       it("★ replaces the preview with the fresh icons: the first is pending, the preview gone", async () => {
         // [Keeping the snapshot's old icon candidates, or the fetched preview.]
         const id = await withPreview();
-        expect(await h.images.recordWordPictureCheck(A, id, IMG, [ICON2, ICON3])).toBe(true);
+        expect(await h.images.recordWordPictureCheck(A, id, IMG, [ICON2, ICON3], null)).toBe(true);
         expect(await h.imageStatus(A, id)).toBe("pending");
         expect(await h.images.pendingImages(null, 100)).toEqual([
           { owner: A, linkId: id, imageUrl: ICON2, role: "icon" },
@@ -394,7 +394,7 @@ export function describeIconBackfillStoreContract(
 
       it("records none when the fresh page had no icon: nothing pending, no picture", async () => {
         const id = await withPreview();
-        expect(await h.images.recordWordPictureCheck(A, id, IMG, [])).toBe(true);
+        expect(await h.images.recordWordPictureCheck(A, id, IMG, [], null)).toBe(true);
         expect(await h.imageStatus(A, id)).toBe("none");
         expect(await h.images.pendingImages(null, 100)).toEqual([]);
         expect(await h.images.image(A, id)).toBeNull();
@@ -410,7 +410,7 @@ export function describeIconBackfillStoreContract(
         });
         expect(await h.edits.applyEdit(A, id, { picture: { set: PNG } }, at(6))).not.toBeNull();
         const before = await stateOf(A, id);
-        expect(await h.images.recordWordPictureCheck(A, id, IMG, [ICON2])).toBe(true);
+        expect(await h.images.recordWordPictureCheck(A, id, IMG, [ICON2], null)).toBe(true);
         const after = await stateOf(A, id);
         expect(after.snapshot).toEqual({ ...before.snapshot, imageUrl: null });
         expect(after.snapshot?.status).toBe("extract_timeout");
@@ -465,7 +465,7 @@ export function describeIconBackfillStoreContract(
         const { owner, id, writer, icons, url } = await seed();
         const before = await stateOf(owner, id);
         const status = await h.imageStatus(owner, id);
-        expect(await h.images.recordWordPictureCheck(writer, id, url, icons)).toBe(false);
+        expect(await h.images.recordWordPictureCheck(writer, id, url, icons, null)).toBe(false);
         expect(await stateOf(owner, id)).toEqual(before);
         expect(await h.imageStatus(owner, id)).toBe(status);
       });
@@ -473,13 +473,13 @@ export function describeIconBackfillStoreContract(
       it("★ keeps the stored preview when it refuses", async () => {
         // [Deleting the preview row before checking the snapshot still names it.]
         const id = await withPreview();
-        expect(await h.images.recordWordPictureCheck(A, id, ICON3, [ICON])).toBe(false);
+        expect(await h.images.recordWordPictureCheck(A, id, ICON3, [ICON], null)).toBe(false);
         expect(await h.images.image(A, id, "page")).toMatchObject({ role: "preview" });
       });
 
       it("answers an id never issued with false", async () => {
-        expect(await h.images.recordWordPictureCheck(A, "999", IMG, [ICON])).toBe(false);
-        expect(await h.images.recordWordPictureCheck(A, "nope", IMG, [])).toBe(false);
+        expect(await h.images.recordWordPictureCheck(A, "999", IMG, [ICON], null)).toBe(false);
+        expect(await h.images.recordWordPictureCheck(A, "nope", IMG, [], null)).toBe(false);
       });
     });
   });

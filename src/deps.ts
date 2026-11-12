@@ -12,6 +12,7 @@ import { ExportFolder } from "./store/export-folder.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
 import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 import { SqliteSearchLog } from "./store/search-log.js";
+import { SqliteFaviconStore } from "./store/sqlite-favicons.js";
 import { SqliteImageStore } from "./store/sqlite-image-store.js";
 import { SqliteLinkCheckStore } from "./store/sqlite-link-checks.js";
 import { SqliteLinkEditStore } from "./store/sqlite-link-edits.js";
@@ -49,6 +50,8 @@ export function createDeps(
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     /** Preview images: the image pass writes them, the web door reads them. */
     images: new SqliteImageStore(db),
+    /** Site favicons (#272): the favicon pass writes them, the web door reads them. */
+    favicons: new SqliteFaviconStore(db),
     /** The owner's title, picture and tag edits and their Undo (#145, #239). */
     edits: new SqliteLinkEditStore(db),
     /** Renaming, merging and deleting tags, and the Undo of a merge or delete (#240). */

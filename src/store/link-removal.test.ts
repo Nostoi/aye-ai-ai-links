@@ -172,6 +172,38 @@ describe("hidden links in runner and byte reads", () => {
   });
 });
 
+describe("hidden links in the favicon reads (#272)", () => {
+  it("favicon reads and the favicon pass skip a hidden link, and Undo brings it back", async () => {
+    const { db, deps, save, snapshot, hide } = setup();
+    const shown = await save();
+    await snapshot(shown, { faviconUrls: [ICON] });
+    expect(await deps.favicons.writeFavicon(A, shown, 1, PNG, at(5))).toBe(true);
+    const waiting = await save();
+    await snapshot(waiting, { faviconUrls: [ICON] });
+    const row = (id: string) =>
+      db.prepare("SELECT * FROM link_favicons WHERE link_id = ?").get(Number(id));
+    const rows = [row(shown), row(waiting)];
+    const seen = async () => ({
+      versions: [...(await deps.favicons.faviconVersions(A, [shown, waiting])).keys()],
+      bytes: (await deps.favicons.favicon(A, shown))?.bytes ?? null,
+      pending: (await deps.favicons.pendingFavicons(null, 10)).map((p) => p.linkId),
+    });
+    const before = await seen();
+    expect(before).toEqual({ versions: [shown], bytes: PNG.bytes, pending: [waiting] });
+
+    await hide(shown, waiting);
+    expect(await seen()).toEqual({ versions: [], bytes: null, pending: [] });
+    expect(await deps.favicons.writeFavicon(A, waiting, 1, PNG, at(6))).toBe(false);
+    expect(await deps.favicons.endFavicon(A, waiting, 1, "none")).toBe(false);
+    expect([row(shown), row(waiting)]).toEqual(rows);
+
+    for (const id of [shown, waiting]) {
+      expect(await deps.store.unmarkDeleted(A, id, at(0))).toBe(true);
+    }
+    expect(await seen()).toEqual(before);
+  });
+});
+
 describe("hidden links in the digest, Handy and the gone pick", () => {
   it("digest, Handy and the gone pick leave out a hidden link", async () => {
     const { deps, save, hide } = setup();
@@ -347,6 +379,7 @@ const LINK_TABLES = [
   "link_checks",
   "saved_copies",
   "saved_copy_images",
+  "link_favicons",
 ];
 const SEARCH_TABLES = ["link_search", "snapshot_search"];
 
@@ -365,6 +398,10 @@ function seedChildren(db: Database.Database, owner: string, id: string): void {
   run("INSERT INTO link_vectors VALUES (?, ?, 'm', 1, 'h', x'00000000', 5)");
   run("INSERT INTO link_images VALUES (?, ?, 'image/png', x'00', 'h', 5, 'preview')");
   run("INSERT INTO owner_images VALUES (?, ?, 'image/png', x'00', 'h', 5)");
+  run(
+    `INSERT INTO link_favicons (owner_id, link_id, candidates, status, generation, discovery,
+       content_type, bytes, sha256, fetched_at) VALUES (?, ?, '[]', 'ok', 1, 1, 'image/png', x'00', 'h', 5)`,
+  );
   run(
     `INSERT INTO link_edits (owner_id, link_id, edit_id, title_changed, picture_changed,
        written_title, at) VALUES (?, ?, 'e', 1, 0, 't', 5)`,
@@ -641,6 +678,19 @@ describe("a runner's next write after its link was purged", () => {
       (p) => p.deps.images.endImage(A, p.id, ICON, "preview", "none"),
     ],
     ["recordIconCheck", "snapshots", false, (p) => p.deps.images.recordIconCheck(A, p.id, [ICON])],
+    [
+      "recordSnapshot with favicons",
+      "link_favicons",
+      false,
+      (p) => p.deps.store.recordSnapshot(A, p.id, p.claim, record({ faviconUrls: [ICON] })),
+    ],
+    [
+      "writeFavicon",
+      "link_favicons",
+      false,
+      (p) => p.deps.favicons.writeFavicon(A, p.id, 1, PNG, at(20)),
+    ],
+    ["endFavicon", "link_favicons", false, (p) => p.deps.favicons.endFavicon(A, p.id, 1, "none")],
     [
       "updateCheckIf",
       "link_checks",

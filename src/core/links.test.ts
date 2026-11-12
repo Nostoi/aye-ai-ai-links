@@ -86,6 +86,7 @@ async function finishOk(store: FakeStore, owner: string, id: string, text: strin
     description: "About the page",
     imageUrl: null,
     iconUrls: [],
+    faviconUrls: null,
     text,
     lastError: null,
   });
@@ -273,7 +274,14 @@ describe("saveLink with the real snapshot runner", () => {
 
   const PAGE: ExtractOutcome = {
     kind: "ok",
-    metadata: { title: "Page title", description: null, imageUrl: null, iconUrls: [] },
+    metadata: {
+      title: "Page title",
+      description: null,
+      imageUrl: null,
+      iconUrls: [],
+      faviconUrls: [],
+      declaresIcon: false,
+    },
     text: "page text",
   };
 

@@ -25,6 +25,7 @@ import { readCopyNotice } from "../core/copy-usage.js";
 import { CoreError, type CoreErrorCode } from "../core/errors.js";
 import type { ExportBuilds } from "../core/export-builds.js";
 import { exportFilename, exportManifest } from "../core/export-format.js";
+import type { FaviconReader } from "../core/favicon-store.js";
 import type { LinkImageReader } from "../core/image-store.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { type LinkCheckDeps, restoreCheck, stillWorks } from "../core/link-check.js";
@@ -148,6 +149,9 @@ const SAVE_PAGE_HEADERS = { ...NO_STORE, "Content-Security-Policy": "frame-ances
 
 /** A link's stored preview image. The id must be digits; anything else is not this route. */
 export const IMAGE_ROUTE = "/images/:id{[0-9]+}";
+
+/** A link's stored site favicon (#272), apart from its picture. */
+export const FAVICON_ROUTE = "/images/:id{[0-9]+}/favicon";
 
 /** The page for reading a link's saved copy. */
 export const COPY_ROUTE = "/links/:id{[0-9]+}/copy";
@@ -717,6 +721,8 @@ export function webApp({
       /** Counts a space's active links for its Home card. */
       count: LinkCount;
       images: LinkImageReader;
+      /** Each link's site favicon (#272), apart from its picture. */
+      favicons: FaviconReader;
       edits: LinkEditStore;
       tagEdits: TagEditStore;
       tagSuggest: TagSuggestStore;
@@ -1078,6 +1084,14 @@ export function webApp({
     if (!image) return c.text("Not found.", 404, NO_STORE);
     const cached = c.req.query("v") === image.version;
     return c.body(new Uint8Array(image.bytes), 200, imageHeaders(image.contentType, cached));
+  });
+
+  // The same 404 as `/images/:id` for a link with no stored favicon, a deleted or another owner's.
+  app.get(FAVICON_ROUTE, session, async (c) => {
+    const favicon = await deps.favicons.favicon(c.get("caller").owner, c.req.param("id"));
+    if (!favicon) return c.text("Not found.", 404, NO_STORE);
+    const cached = c.req.query("v") === favicon.version;
+    return c.body(new Uint8Array(favicon.bytes), 200, imageHeaders(favicon.contentType, cached));
   });
 
   // A picture that is not an `ok` image of the owner's copy answers the same 404 as `/images/:id`.

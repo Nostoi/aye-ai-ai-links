@@ -5,6 +5,7 @@ import { Readability } from "@mozilla/readability";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CPU_BUDGET_TIMEOUT_MS, cpuTimed } from "../core/cpu-time-test-kit.js";
+import { MAX_FAVICON_URLS } from "../core/snapshot-store.js";
 import { extractSnapshot } from "./extract.js";
 
 const URL0 = "https://example.com/post/1";
@@ -377,6 +378,55 @@ describe("icon urls", () => {
   );
 });
 
+describe("favicon urls (#272)", () => {
+  const read = (head: string, url = URL0) => extractSnapshot(page("", head), url);
+  const link = (attrs: string) => `<link ${attrs}>`;
+
+  it("★ keeps its own longer list beside the two large-picture icons, which do not change", () => {
+    // [Sharing iconUrls' cap of two, or changing iconUrls.]
+    const head =
+      link('rel="icon" sizes="16x16" href="/16.png"') +
+      link('rel="icon" sizes="32x32" href="/32.png"') +
+      link('rel="icon" sizes="48x48" href="/48.png"') +
+      link('rel="apple-touch-icon" sizes="180x180" href="/180.png"') +
+      link('rel="icon" sizes="8x8" href="/8.png"');
+    const s = read(head);
+    expect(s.iconUrls).toEqual(["https://example.com/180.png", "https://example.com/48.png"]);
+    expect(s.faviconUrls).toEqual([
+      "https://example.com/180.png",
+      "https://example.com/48.png",
+      "https://example.com/32.png",
+      "https://example.com/16.png",
+    ]);
+    expect(s.faviconUrls).toHaveLength(MAX_FAVICON_URLS);
+  });
+
+  it("★ resolves against the final URL it is given, after redirects, not a saved short link", () => {
+    // [Resolving against the link's saved address.]
+    const s = read(link('rel="icon" href="/fav.png"'), "https://destination.example/article");
+    expect(s.faviconUrls).toEqual(["https://destination.example/fav.png"]);
+  });
+
+  it("filters as iconUrls does: no SVG, ICO, media or unusable address", () => {
+    const head =
+      link('rel="icon" type="image/svg+xml" href="/i.svg"') +
+      link('rel="icon" href="/favicon.ico"') +
+      link('rel="icon" media="(prefers-color-scheme: dark)" href="/dark.png"') +
+      link('rel="icon" href="javascript:alert(1)"');
+    expect(read(head).faviconUrls).toEqual([]);
+  });
+
+  it("★ says whether the page declared any icon, usable or not", () => {
+    // [Deriving it from the usable list: an SVG-only page would read as declaring nothing.]
+    expect(read(link('rel="icon" type="image/svg+xml" href="/i.svg"')).declaresIcon).toBe(true);
+    expect(read(link('rel="icon" href="/favicon.ico"')).declaresIcon).toBe(true);
+    expect(read(link('rel="apple-touch-icon" href="/t.png"')).declaresIcon).toBe(true);
+    expect(read(link('rel="mask-icon" href="/m.svg"')).declaresIcon).toBe(false);
+    expect(read(link('rel="stylesheet" href="/s.css"')).declaresIcon).toBe(false);
+    expect(read("").declaresIcon).toBe(false);
+  });
+});
+
 describe("text", () => {
   it("returns article text, and null for a page with no article", () => {
     const s = extractSnapshot(article(""), URL0);
@@ -489,13 +539,23 @@ describe("degenerate input", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: [],
+      declaresIcon: false,
       text: null,
     });
   });
 });
 
 describe("extraction never throws and keeps the metadata", () => {
-  const NULLS = { title: null, description: null, imageUrl: null, iconUrls: [], text: null };
+  const NULLS = {
+    title: null,
+    description: null,
+    imageUrl: null,
+    iconUrls: [],
+    faviconUrls: [],
+    declaresIcon: false,
+    text: null,
+  };
 
   it.each([
     "<template>x</template>",
@@ -537,6 +597,8 @@ describe("extraction never throws and keeps the metadata", () => {
       description: null,
       imageUrl: "https://example.com/og.png",
       iconUrls: [],
+      faviconUrls: [],
+      declaresIcon: false,
       text: null,
     });
   });

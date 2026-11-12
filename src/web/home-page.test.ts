@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DigestLink, DigestReason } from "../core/digest.js";
 import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import type { CopyInfo } from "../core/saved-copy.js";
+import { SPACE_COLORS } from "../core/tag-space.js";
 import type { LinkView } from "../core/tools.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
 import { copyHref } from "./copy-page.js";
@@ -359,6 +360,17 @@ describe("Worth a look today", () => {
         "fits what you're working on",
       ]);
       expect(themeCss).not.toMatch(/\.reason[{,.]/);
+    });
+
+    it("starts the grey line with a dot in the space's color only when the card has a space", () => {
+      const rule = themeCss
+        .match(/([^{}]*)\{[^}]*\}/g)
+        ?.find((r) => r.includes(">.card-line::before"));
+      expect(rule).toBeDefined();
+      const selector = rule?.slice(0, rule.indexOf("{")) ?? "";
+      for (const color of SPACE_COLORS) expect(selector).toContain(`.worth-feature.space-${color}`);
+      expect(rule).toMatch(/background:var\(--space\)/);
+      expect(selector).not.toMatch(/\.worth-feature>/);
     });
 
     it("shows the saved date once: in the reason when that is the plain one, not again", () => {

@@ -56,6 +56,8 @@ const spaceClasses = SPACE_COLORS.map((name) => `.space-${name}{--space:var(--${
   "\n",
 );
 
+const featureSpaceDot = `${SPACE_COLORS.map((name) => `.worth-feature.space-${name}>.card-line::before`).join(",")}{content:"";flex:none;width:8px;height:8px;margin-right:2px;border-radius:50%;background:var(--space)}`;
+
 /** Bar widths for the profile's Stats section, so it needs no inline `style=`. */
 const pctClasses = Array.from({ length: 101 }, (_, n) => `.pct-${n}{width:${n}%}`).join("");
 
@@ -205,6 +207,7 @@ div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-car
 .feature-why p{margin:0 0 6px}
 .feature-why .ask{margin:4px 0 10px}
 .worth-feature>.card-line{grid-area:line;margin:0 0 14px}
+${featureSpaceDot}
 .feature-buttons{grid-area:buttons;display:flex;flex-wrap:wrap;align-items:stretch;gap:10px}
 .feature-open{display:flex;align-items:stretch}
 .feature-open a.button{min-height:48px;padding:0 24px}

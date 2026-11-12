@@ -71,8 +71,8 @@ describe("the end of the saved copy", () => {
     const d = dom(render());
     expect(squash(d.querySelector("#copy-end .copy-end-label"))).toBe("Finished with this link?");
     expect(visibleActs(render())).toEqual([
-      [DONE_ITEM.act, DONE_ITEM.text],
       [PUT_AWAY_ITEM.act, PUT_AWAY_ITEM.text],
+      [DONE_ITEM.act, DONE_ITEM.text],
       [KEEP_ITEM.act, KEEP_ITEM.text],
     ]);
     const notHandy = d.querySelector("#copy-end .handy-on button[data-act=not-handy]");
@@ -89,8 +89,8 @@ describe("the end of the saved copy", () => {
   it("shows Not handy anymore instead of Keep handy on a kept link", () => {
     const html = render({}, KEPT);
     expect(visibleActs(html)).toEqual([
-      [DONE_ITEM.act, DONE_ITEM.text],
       [PUT_AWAY_ITEM.act, PUT_AWAY_ITEM.text],
+      [DONE_ITEM.act, DONE_ITEM.text],
       [NOT_HANDY.act, NOT_HANDY.text],
     ]);
     const keep = dom(html).querySelector("#copy-end button[data-act=keep]") as HTMLElement;
@@ -144,7 +144,7 @@ describe("the end of the saved copy", () => {
     ["unreadable", "unreadable" as const],
   ])("still shows the row when the copy is %s", (_, copy) => {
     const html = render({}, null, copy);
-    expect(visibleActs(html).map(([act]) => act)).toEqual(["archive", "put-away", "keep"]);
+    expect(visibleActs(html).map(([act]) => act)).toEqual(["put-away", "archive", "keep"]);
   });
 });
 
@@ -221,7 +221,7 @@ describe.each([
     await click(p, ACT(act));
     await click(p, UNDO);
     expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change }));
-    expect(row(p)).toEqual({ group: "active", acts: ["archive", "put-away", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
     expect(p.focused().at(-1)).toBe(p.$(ACTIVE_LINE));
   });
 
@@ -230,7 +230,7 @@ describe.each([
     await click(p, ACT(act));
     expect(squash(p.$("#copy-end-error"))).toBe("That link is already done.");
     expect(p.$("#copy-end-error").getAttribute("role")).toBe("alert");
-    expect(row(p)).toEqual({ group: "active", acts: ["archive", "put-away", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
@@ -253,7 +253,7 @@ describe("Bring it back at the end of the copy", () => {
     const p = load();
     await click(p, ACT("bring-back"));
     expect(p.sent).toEqual([post("/home/bring-back", { id: "7" })]);
-    expect(row(p)).toEqual({ group: "active", acts: ["archive", "put-away", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
     expect(barText(p)).toBe(BRING_BACK_UNDO.title);
     await click(p, UNDO);
     expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change: BRING_CHANGE }));
@@ -266,7 +266,7 @@ describe("Bring it back at the end of the copy", () => {
     await click(p, ACT("bring-back"));
     expect(row(p).group).toBe("active");
     await click(p, UNDO);
-    expect(row(p)).toEqual({ group: "active", acts: ["archive", "put-away", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
   });
 
   it("takes no other action until its Undo has been answered", async () => {
@@ -302,28 +302,28 @@ describe("Keep handy at the end of the copy", () => {
     const p = runPage(render(), answer);
     await click(p, ACT("keep"));
     expect(p.sent).toEqual([post("/tools/keep", { id: "7" })]);
-    expect(row(p).acts).toEqual(["archive", "put-away", "not-handy"]);
+    expect(row(p).acts).toEqual(["put-away", "archive", "not-handy"]);
     expect(barText(p)).toBe("Kept on your Handy shelf.");
     await click(p, UNDO);
     expect(p.sent[1]).toEqual(post("/tools/undo", { id: "7", tool: KEPT_ROW, previous: null }));
-    expect(row(p).acts).toEqual(["archive", "put-away", "keep"]);
+    expect(row(p).acts).toEqual(["put-away", "archive", "keep"]);
   });
 
   it("Not handy anymore posts /tools/not-handy, swaps to Keep handy, and Undo swaps back", async () => {
     const p = runPage(render({}, KEPT), answer);
     await click(p, ACT("not-handy"));
     expect(p.sent).toEqual([post("/tools/not-handy", { id: "7" })]);
-    expect(row(p).acts).toEqual(["archive", "put-away", "keep"]);
+    expect(row(p).acts).toEqual(["put-away", "archive", "keep"]);
     expect(barText(p)).toBe("Not handy anymore.");
     await click(p, UNDO);
-    expect(row(p).acts).toEqual(["archive", "put-away", "not-handy"]);
+    expect(row(p).acts).toEqual(["put-away", "archive", "not-handy"]);
   });
 
   it("a refusal says why in the row's alert", async () => {
     const p = runPage(render(), () => REFUSED("Keep handy changed."));
     await click(p, ACT("keep"));
     expect(squash(p.$("#copy-end-error"))).toBe("Keep handy changed.");
-    expect(row(p).acts).toEqual(["archive", "put-away", "keep"]);
+    expect(row(p).acts).toEqual(["put-away", "archive", "keep"]);
   });
 });
 
@@ -352,7 +352,7 @@ describe("opening the link from the end-of-copy page", () => {
     const p = load(PUT_AWAY);
     await click(p, OPEN);
     expect(p.sent).toEqual([opened("7")]);
-    expect(row(p)).toEqual({ group: "active", acts: ["archive", "put-away", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
     expect(p.$("#undo-bar").hidden).toBe(true);
     expect(p.focused()).toEqual([]);
   });
@@ -375,7 +375,7 @@ describe("opening the link from the end-of-copy page", () => {
   it("changes nothing on an active page", async () => {
     const p = load({});
     await click(p, OPEN);
-    expect(row(p)).toEqual({ group: "active", acts: ["archive", "put-away", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
     expect(p.focused()).toEqual([]);
   });
 

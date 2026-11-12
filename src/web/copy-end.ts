@@ -41,8 +41,8 @@ export function copyEnd(link: Link, handy: HandyView | null, back: Back): string
   return `<section class="copy-end" id="copy-end" aria-label="${QUESTION}">
 <div class="copy-end-acts" id="${ACTIVE_ID}"${out ? " hidden" : ""}>
 <span class="copy-end-label" tabindex="-1">${QUESTION}</span>
-${button(DONE_ITEM)}
 ${button(PUT_AWAY_ITEM)}
+${button(DONE_ITEM)}
 <span data-handy>${button(KEEP_ITEM, kept)}<span class="handy-on"${kept ? "" : " hidden"}>${button(NOT_HANDY)}</span></span>
 </div>
 <div class="copy-end-acts" id="${OUT_ID}"${out ? "" : " hidden"}>

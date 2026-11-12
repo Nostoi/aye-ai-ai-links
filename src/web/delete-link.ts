@@ -1,5 +1,7 @@
 import type { MenuItem } from "./card-menu.js";
-import { TRASH } from "./copy-menu.js";
+
+/** The trash can: Delete link's alone, the one action that cannot come back after its Undo (#284). */
+const TRASH = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>`;
 
 /** The card menu's last row, which deletes the link; its script is `deleteLinkScript`. */
 export const deleteLinkItem: MenuItem = { act: "delete-link", icon: TRASH, text: "Delete link" };

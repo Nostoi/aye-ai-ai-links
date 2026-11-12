@@ -19,12 +19,12 @@ export const PENCIL = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidd
 export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit link…" };
 
 /**
- * A card's ⋯ menu on the pages with the edit dialog (#192). An active link's menu opens with Done
- * with it, Put it away and Keep handy, which reads Not handy anymore once `handy` is kept; both
- * Keep rows are rendered and the script swaps them. A link done or put away starts at Edit and
- * offers Bring it back after it. Then Remove saved copy when `copy` is there, and Delete link
- * last. The copy itself opens from the card's grey line (`cardLine`). Home's rows add Not now
- * after Put it away (`notNow`); Home's featured card shows Done with it and Not now as buttons, so
+ * A card's ⋯ menu on the pages with the edit dialog, mildest first (#284). An active link's menu
+ * opens with Put it away, Done with it and Keep handy, which reads Not handy anymore once `handy`
+ * is kept; both Keep rows are rendered and the script swaps them. A link done or put away starts
+ * at Edit and offers Bring it back after it. Then Remove saved copy when `copy` is there, and
+ * Delete link last. The copy itself opens from the card's grey line (`cardLine`). Home's rows put
+ * Not now first (`notNow`); Home's featured card shows Done with it and Not now as buttons, so
  * its menu leaves those two out (`onCard`).
  */
 export const editMenu = (
@@ -45,9 +45,9 @@ export const editMenu = (
   const active = link.state === "active";
   const first = active
     ? [
-        ...(onCard ? [] : [DONE_ITEM]),
-        PUT_AWAY_ITEM,
         ...(notNow && !onCard ? [NOT_NOW_ITEM] : []),
+        PUT_AWAY_ITEM,
+        ...(onCard ? [] : [DONE_ITEM]),
         { ...KEEP_ITEM, hidden: kept },
         { ...NOT_HANDY, hidden: !kept },
         DIVIDER,

@@ -246,9 +246,13 @@ describe("the Handy shelf", () => {
     );
     expect(
       [...(menu?.querySelectorAll(".card-menu-list > *") ?? [])].map(
-        (b) => `${b.getAttribute("data-act")} ${b.textContent}`,
+        (b) =>
+          `${b.getAttribute("data-act")} ${b.textContent} ${b.querySelector("small")?.textContent ?? "-"}`,
       ),
-    ).toEqual(["archive Done with it", "not-handy Not handy anymore"]);
+    ).toEqual([
+      "archive Done with itStill findable in search Still findable in search",
+      "not-handy Not handy anymore -",
+    ]);
     expect(guess?.querySelector("details")).toBeNull();
   });
 

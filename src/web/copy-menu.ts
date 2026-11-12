@@ -1,11 +1,12 @@
 import type { MenuItem } from "./card-menu.js";
 
-export const TRASH = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>`;
+/** A page with a minus: the saved copy goes, the link stays (only Delete link has the trash can). */
+const PAGE_MINUS = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8.5z"/><path d="M13.5 3.5v5h5"/><path d="M9.5 14h5"/></svg>`;
 
 /** The menu row that removes a link's saved copy; its script is `removeCopyScript`. */
 export const removeCopyItem: MenuItem = {
   act: "remove-copy",
-  icon: TRASH,
+  icon: PAGE_MINUS,
   text: "Remove saved copy",
 };
 

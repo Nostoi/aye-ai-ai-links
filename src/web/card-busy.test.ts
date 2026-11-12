@@ -89,7 +89,7 @@ const ACTIONS: Record<Key, Action> = {
     name: "Put it away",
     select: ".card-menu button[data-act=put-away]",
     url: "/home/put-away",
-    undo: "Put away. Out of your lists but still saved. If you start something it fits, it'll come back.",
+    undo: "Put away. Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
     json: CHANGE,
   },
   bring: {
@@ -289,12 +289,12 @@ describe("the edit dialog's Delete link", () => {
 const archived = (id: string): Link => ({ ...link(id), state: "archived" });
 const DONE_PAGES: [string, string, (links: Link[]) => string][] = [
   [
-    "Out of your lists on All links",
+    "Done and put away on All links",
     "all-error",
     (links) => allPage({ ...common, links, older: null, gone, order: "newest", done: true }),
   ],
   [
-    "a space's Out of your lists",
+    "a space's Done and put away",
     "space-error",
     (links) => spacePage({ ...common, links, older: null, gone, tag: KITCHEN, done: true }),
   ],

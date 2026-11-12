@@ -9,7 +9,7 @@ const CHECK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true
 export const STALE_LABEL = "It's stale";
 
 /** The name of the list section holding links the owner has let go (the done views). */
-export const OUT_OF_LISTS = "Out of your lists";
+export const DONE_AND_PUT_AWAY = "Done and put away";
 
 /** The Undo bar every It's stale shows: a bold title, then the text (`showUndo(text, undo, title)`). */
 export const STALE_UNDO = {
@@ -17,24 +17,24 @@ export const STALE_UNDO = {
   text: "You won't see it again unless you search for it.",
 };
 
-/** What a link out of your lists is called on its grey line and the Save page. */
+/** What a link done or put away is called on its grey line and the Save page. */
 export const PUT_AWAY_MARKER = "Put away";
 export const STALE_MARKER = "Stale";
 
-/** `Put away` or `Stale` for a link out of your lists (archived with or without `putAwayAt`); null for an active one. */
+/** `Put away` or `Stale` for a link done or put away (archived with or without `putAwayAt`); null for an active one. */
 export const outOfListsMarker = (link: Pick<Link, "state" | "putAwayAt">) =>
   link.state === "active" ? null : link.putAwayAt ? PUT_AWAY_MARKER : STALE_MARKER;
 
 /** The Undo bar every Put it away shows. */
 export const PUT_AWAY_UNDO = {
   title: "Put away.",
-  text: "Out of your lists but still saved. If you start something it fits, it'll come back.",
+  text: "Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
 };
 
 /** The Undo bar Bring it back shows: a title and no text. */
 export const BRING_BACK_UNDO = { title: "Back in your lists.", text: "" };
 
-/** The card menu's first row, which takes the link out of your lists; its script is `doneLinkScript`. */
+/** The card menu's first row, which takes the link off the lists; its script is `doneLinkScript`. */
 export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: STALE_LABEL };
 
 /** The card menu's row that puts a link away until something it fits comes up. */

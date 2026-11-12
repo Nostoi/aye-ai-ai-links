@@ -286,7 +286,7 @@ describe("a space page", () => {
     expect(html).toContain("No older links.");
     expect(html).not.toContain("No links in this space yet.");
     expect(space({ later: true, done: true })).not.toContain(
-      "Nothing here is out of your lists yet.",
+      "Nothing here is done or put away yet.",
     );
   });
 
@@ -299,7 +299,7 @@ describe("a space page", () => {
     expect(older.searchParams.get("before")).toBe("100.1");
   });
 
-  it("links to the links out of your lists", () => {
+  it("links to the links done and put away", () => {
     const done = hrefs(space(), "a.done-link").map((h) => new URL(h, ORIGIN));
     expect(done.map((u) => [u.pathname, u.searchParams.get("tag")])).toEqual([
       ["/spaces/done", "home batteries"],
@@ -371,7 +371,7 @@ describe("a space's sort orders", () => {
     expect(tagIn(newest?.getAttribute("href") as string).searchParams.has("order")).toBe(false);
   });
 
-  it("sends the link to Out of your lists with no order, as that view has no sort", () => {
+  it("sends the link to Done and put away with no order, as that view has no sort", () => {
     const href = hrefs(space({ order: "oldest", links: [link("1")] }), "a.done-link")[0];
     expect(tagIn(href as string).searchParams.has("order")).toBe(false);
   });
@@ -403,14 +403,14 @@ describe("a space's sort orders", () => {
   });
 });
 
-describe("a space's links out of your lists", () => {
+describe("a space's links done and put away", () => {
   const done = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
     space({ done: true, ...over });
 
   it("is headed so, links back to the space, and pages within the done view", () => {
     const html = done({ links: [link("1", { state: "archived" })], older: "9.1" });
-    expect(html).toContain("Out of your lists");
-    expect(dom(html).querySelector("title")?.textContent).toContain("Out of your lists in ");
+    expect(html).toContain("Done and put away");
+    expect(dom(html).querySelector("title")?.textContent).toContain("Done and put away in ");
     const back = hrefs(html, "a.back-link").map((h) => new URL(h, ORIGIN));
     expect(back.map((u) => [u.pathname, u.searchParams.get("tag")])).toEqual([
       ["/spaces", "home batteries"],
@@ -435,7 +435,7 @@ describe("a space's links out of your lists", () => {
   it("says when nothing in the space is done, in a card that explains what lands here", () => {
     const card = dom(done()).querySelector(".done-empty");
     expect(card?.querySelector("p:first-child")?.textContent).toBe(
-      "Nothing here is out of your lists yet.",
+      "Nothing here is done or put away yet.",
     );
     expect(card?.textContent).toContain(
       "Links you mark stale or put away from this space wait here. Search still finds them.",
@@ -443,7 +443,7 @@ describe("a space's links out of your lists", () => {
     expect(dom(done()).querySelector("#space-links")).toBeNull();
   });
 
-  it("tops the page with Back to the space, in its dot, above an Out of your lists heading with the switch", () => {
+  it("tops the page with Back to the space, in its dot, above an Done and put away heading with the switch", () => {
     const d = dom(done({ links: [link("1", { state: "archived" })] }));
     expect(
       d.querySelector("header.page-head, .change-link, nav.orders, .search-instead"),
@@ -455,7 +455,7 @@ describe("a space's links out of your lists", () => {
     expect(back.className).toContain("space-teal");
     expect(back.querySelector(".dot")).not.toBeNull();
     const head = d.querySelector("h1");
-    expect(head?.textContent).toBe("Out of your lists");
+    expect(head?.textContent).toBe("Done and put away");
     expect(head?.parentElement?.querySelector(".view-switch")).not.toBeNull();
     expect(d.querySelectorAll("h1")).toHaveLength(1);
   });
@@ -470,7 +470,7 @@ describe("a space's links out of your lists", () => {
     const d = dom(done({ later: true }));
     expect(d.querySelector(".done-empty")).toBeNull();
     expect(d.querySelector("main")?.textContent).toContain("No older links.");
-    expect(d.querySelector("main")?.textContent).not.toContain("Nothing here is out of your lists");
+    expect(d.querySelector("main")?.textContent).not.toContain("Nothing here is done and put away");
   });
 
   it("shows the card, and hides the switch, only while no row is shown and no older link waits", () => {
@@ -735,10 +735,10 @@ describe("openings on a space page (#124)", () => {
   describe("its active links", () => {
     itRecordsOpenings(() => space({ links: shown }), web, "/links/opened");
   });
-  describe("its links out of your lists", () => {
+  describe("its links done and put away", () => {
     itRecordsOpenings(() => space({ links: shown, done: true }), web, "/links/opened");
   });
-  describe("a put-away link opened on Out of your lists", () => {
+  describe("a put-away link opened on Done and put away", () => {
     const put = link("1", { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
     const stale = link("2", { state: "archived" });
     const html = () => space({ links: [put, stale], done: true });
@@ -825,7 +825,7 @@ describe("the space card's picture", () => {
   });
 });
 
-describe("Bring it back and the markers on a space's Out of your lists", () => {
+describe("Bring it back and the markers on a space's Done and put away", () => {
   const CHANGE = {
     before: { state: "archived", putAwayAt: "2026-10-01T00:00:00.000Z", snoozedUntil: null },
     after: { state: "active", putAwayAt: null },

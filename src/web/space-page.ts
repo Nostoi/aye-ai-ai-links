@@ -8,7 +8,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { doneLinkScript, OUT_OF_LISTS, PUT_AWAY_MARKER } from "./done-link.js";
+import { DONE_AND_PUT_AWAY, doneLinkScript, PUT_AWAY_MARKER } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -22,7 +22,7 @@ import { CARD_FETCH, tellWhyScript } from "./tell-why.js";
 
 /**
  * The URL of a tag's space page in `order` (newest is the plain address), or with `done` its links
- * out of your lists; `before` is a page's `older` cursor. Every part is encoded, so any key comes
+ * done or put away; `before` is a page's `older` cursor. Every part is encoded, so any key comes
  * back as itself.
  */
 export const spaceHref = (
@@ -62,7 +62,7 @@ ${kind ? `<p class="page-kind">${kind}</p>\n` : ""}${t.description ? `<p class="
 
 type Input = {
   tag: Tag;
-  /** How the links are ordered; newest first on Out of your lists, which has no sort. */
+  /** How the links are ordered; newest first on Done and put away, which has no sort. */
   order?: LinkOrder;
   catalog: Tag[];
   links: Link[];
@@ -71,7 +71,7 @@ type Input = {
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
-  /** The links out of your lists, rather than the active ones. */
+  /** The links done or put away, rather than the active ones. */
   done: boolean;
   /** A page after the first. */
   later?: boolean;
@@ -147,9 +147,9 @@ ${doneLinkScript("space-links", "space-error")}
 
 const CHEVRON = `<svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6.5 1L1.5 6l5 5"/></svg>`;
 
-/** The first Out of your lists page's card for when it holds nothing. */
+/** The first Done and put away page's card for when it holds nothing. */
 const DONE_EMPTY = `<div class="done-empty">
-<p>Nothing here is out of your lists yet.</p>
+<p>Nothing here is done or put away yet.</p>
 <p class="small">Links you mark stale or put away from this space wait here. Search still finds them.</p>
 </div>
 `;
@@ -164,7 +164,7 @@ function emptyText({ order, later }: { order: LinkOrder; later?: boolean }) {
 
 /**
  * A tag's space: a header in its color (`spaceColor`: neutral while it is unpinned), then its
- * active links newest first, or with `done` the links out of your lists. Each page has at most
+ * active links newest first, or with `done` the links done or put away. Each page has at most
  * the links given; `older` is the cursor of the next page, or null.
  */
 export function spacePage(input: Input): string {
@@ -193,15 +193,15 @@ ${viewSwitch(view)}
   // (and its Undo) needs no script of its own.
   const body = done
     ? `<a class="back-link${tagSpaceClass(tag)}" href="${escapeHtml(spaceHref(tag.key))}">${CHEVRON}<span class="dot" aria-hidden="true"></span>Back to ${escapeHtml(tag.name)}</a>
-<div class="list-head done-head"><h1>${OUT_OF_LISTS}</h1>${viewSwitch(view)}</div>
+<div class="list-head done-head"><h1>${DONE_AND_PUT_AWAY}</h1>${viewSwitch(view)}</div>
 <p id="space-error" role="alert"></p>
 ${later ? "" : DONE_EMPTY}${links.length === 0 && !later ? "" : `${list}\n`}${more}`
     : `${tools}
 <p id="space-error" role="alert"></p>
 ${list}
-${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">${OUT_OF_LISTS}</a></p>`;
+${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">${DONE_AND_PUT_AWAY}</a></p>`;
   return page(
-    `${done ? `${OUT_OF_LISTS} in ` : ""}${tag.name} · Aye-AI-AI Links`,
+    `${done ? `${DONE_AND_PUT_AWAY} in ` : ""}${tag.name} · Aye-AI-AI Links`,
     `<main class="space" data-view="${view}">
 ${body}
 </main>

@@ -232,7 +232,7 @@ describe("Put it away from the ⋯ menu", () => {
     expect(p.sent).toEqual([post("/home/put-away", { id: "7" })]);
     expect(p.$("[data-id='7']").hidden).toBe(true);
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Put away. Out of your lists but still saved. If you start something it fits, it'll come back.",
+      "Put away. Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
     );
   });
 

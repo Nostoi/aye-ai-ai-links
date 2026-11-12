@@ -122,7 +122,7 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
-export const ALREADY_DONE = "This link is already out of your lists. Reload.";
+export const ALREADY_DONE = "This link is already done or put away. Reload.";
 
 export async function unsnoozeLink(
   deps: WorthDeps,

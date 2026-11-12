@@ -7,7 +7,7 @@ export const GONE_TEXT = "This page seems gone";
 
 /**
  * The line a card carries once its link seems gone (#128). An active link also gets It still works
- * and It's stale; a link already out of your lists gets the line only. It carries no date, and no
+ * and It's stale; a link already done or put away gets the line only. It carries no date, and no
  * link to a saved copy: the card's grey line (`cardLine`) has that.
  */
 export function goneLine(link: Link, view: GoneView | null | undefined): string {

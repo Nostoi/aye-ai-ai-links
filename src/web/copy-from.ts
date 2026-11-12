@@ -2,7 +2,7 @@ import { findSpaceTag } from "../core/spaces.js";
 import type { Tag } from "../core/types.js";
 import { allHref } from "./all-page.js";
 import type { Back } from "./copy-page.js";
-import { OUT_OF_LISTS } from "./done-link.js";
+import { DONE_AND_PUT_AWAY } from "./done-link.js";
 import { searchHref } from "./pages.js";
 import { spaceHref } from "./space-page.js";
 
@@ -64,7 +64,7 @@ export function backTarget(from: string | undefined, catalog: Tag[]): Back {
     case "/all":
       return ALL;
     case "/all/done":
-      return { label: OUT_OF_LISTS, href: allHref("newest", { done: true }) };
+      return { label: DONE_AND_PUT_AWAY, href: allHref("newest", { done: true }) };
     case "/spaces":
     case "/spaces/done": {
       const tag = ownedTag(catalog, query.get("tag"));

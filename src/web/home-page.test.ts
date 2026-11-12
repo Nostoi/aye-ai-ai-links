@@ -823,7 +823,7 @@ describe("the home page's script", () => {
               status: 409,
               body: {
                 code: "conflict",
-                message: "This link is already out of your lists. Reload.",
+                message: "This link is already done or put away. Reload.",
               },
               wait: snooze,
             }

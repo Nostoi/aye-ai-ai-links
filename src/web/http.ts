@@ -960,7 +960,7 @@ export function webApp({
     const { owner } = c.get("caller");
     const before = c.req.query("before");
     const done = state === "archived";
-    // Out of your lists has no sort: it never reads `order`, so its cursors are newest's.
+    // Done and put away has no sort: it never reads `order`, so its cursors are newest's.
     let order: LinkOrder = "newest";
     try {
       if (!done) order = checkedOrder(c.req.query("order"));

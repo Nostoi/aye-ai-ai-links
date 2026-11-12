@@ -100,12 +100,11 @@ describe("the end of the saved copy", () => {
   it.each([
     ["put away", PUT_AWAY, "Put away"],
     ["stale", STALE, "Stale"],
-  ])("a %s link shows Out of your lists, its marker and only Bring it back", (_, over, marker) => {
+  ])("a %s link shows only its marker and Bring it back", (_, over, marker) => {
     const html = render(over);
     const d = dom(html);
     expect((d.querySelector("#copy-end-active") as HTMLElement).hidden).toBe(true);
     expect([...d.querySelectorAll("#copy-end .card-line > span")].map((s) => squash(s))).toEqual([
-      "Out of your lists",
       marker,
     ]);
     expect(visibleActs(html)).toEqual([[BRING_BACK_ITEM.act, BRING_BACK_ITEM.text]]);

@@ -264,7 +264,7 @@ describe("a space page's sort orders", () => {
     expect(res.headers.get("location")).toBe("/spaces?tag=kitchen&order=oldest");
   });
 
-  it("gives Out of your lists no sort: it reads no order and lists newest first", async () => {
+  it("gives Done and put away no sort: it reads no order and lists newest first", async () => {
     const world = await oauthWorld();
     const first = await save(world, A, "https://a.example/1", ["Kitchen"], "Old one");
     const second = await save(world, A, "https://a.example/2", ["Kitchen"], "New one");
@@ -277,7 +277,7 @@ describe("a space page's sort orders", () => {
     expect(parseHTML(html(asked)).document.querySelector("nav.orders")).toBeNull();
   });
 
-  it("sends the Out of your lists address with no order, whatever the order of the space", async () => {
+  it("sends the Done and put away address with no order, whatever the order of the space", async () => {
     const { browser } = await seeded();
     const page = html(await browser.send("/spaces?tag=kitchen&order=oldest"));
     expect(hrefsOf(page, "a.done-link")).toEqual(["/spaces/done?tag=kitchen"]);

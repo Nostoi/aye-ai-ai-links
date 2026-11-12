@@ -71,7 +71,7 @@ const dom = (html: string) => parseHTML(html).document;
 const texts = (html: string, selector: string) =>
   [...dom(html).querySelectorAll(selector)].map((e) => e.textContent?.trim());
 
-describe("the section All links and Out of your lists mark as current", () => {
+describe("the section All links and Done and put away mark as current", () => {
   it.each([false, true])("marks /all in the bar and the phone menu (done: %s)", (done) => {
     const marked = [...dom(all({ done })).querySelectorAll('nav.menu [aria-current="page"]')];
     expect(marked.map((a) => [a.className, a.getAttribute("href")])).toEqual([
@@ -169,9 +169,9 @@ describe("the All links page", () => {
   it("fades the cards on the done page, which links back in the same order", () => {
     const html = all({ done: true, order: "oldest", links: [link("1", { state: "archived" })] });
     expect(dom(html).querySelector(".link-row")?.className).toContain("faded");
-    expect(texts(html, "h1")).toEqual(["Out of your lists"]);
+    expect(texts(html, "h1")).toEqual(["Done and put away"]);
     expect(dom(html).querySelector("title")?.textContent).toBe(
-      "Out of your lists · All links · Aye-AI-AI Links",
+      "Done and put away · All links · Aye-AI-AI Links",
     );
     expect(dom(html).querySelector("a.back-link")?.getAttribute("href")).toBe("/all?order=oldest");
     expect(dom(html).querySelector("a.done-link")).toBeNull();
@@ -247,10 +247,10 @@ describe("the All links page", () => {
   it.each([
     [{}, "No links yet."],
     [{ order: "opened" as const }, "Nothing opened yet. Links you open from this site show here."],
-    [{ done: true }, "Nothing here is out of your lists yet."],
+    [{ done: true }, "Nothing here is done or put away yet."],
     [
       { done: true, order: "opened" as const },
-      "You haven't opened any of the links out of your lists.",
+      "You haven't opened any of the links you're done with or put away.",
     ],
     [{ later: true }, "No older links."],
     [{ later: true, order: "oldest" as const }, "No more links."],
@@ -321,10 +321,10 @@ describe("openings on All links (#124)", () => {
   describe("its active links", () => {
     itRecordsOpenings(() => all({ links: shown }), web, "/links/opened");
   });
-  describe("its links out of your lists", () => {
+  describe("its links done and put away", () => {
     itRecordsOpenings(() => all({ links: shown, done: true }), web, "/links/opened");
   });
-  describe("a put-away link opened on Out of your lists", () => {
+  describe("a put-away link opened on Done and put away", () => {
     const put = link("1", { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
     const stale = link("2", { state: "archived" });
     const html = () => all({ links: [put, stale], done: true });
@@ -509,7 +509,7 @@ describe("the List / Pictures switch on All links", () => {
   });
 });
 
-describe("Bring it back and the markers on Out of your lists", () => {
+describe("Bring it back and the markers on Done and put away", () => {
   const CHANGE = {
     before: { state: "archived", putAwayAt: "2026-10-01T00:00:00.000Z", snoozedUntil: null },
     after: { state: "active", putAwayAt: null },

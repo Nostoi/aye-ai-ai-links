@@ -19,7 +19,7 @@ describe("backTarget", () => {
   it.each([
     ["/", { label: "Home", href: "/" }],
     ["/all", ALL],
-    ["/all/done", { label: "Out of your lists", href: "/all/done" }],
+    ["/all/done", { label: "Done and put away", href: "/all/done" }],
     ["/spaces?tag=kitchen", { label: "Kitchen", href: "/spaces?tag=kitchen" }],
     ["/spaces?tag=KITCHEN", { label: "Kitchen", href: "/spaces?tag=kitchen" }],
     ["/spaces/done?tag=kitchen", { label: "Kitchen", href: "/spaces/done?tag=kitchen" }],
@@ -37,7 +37,7 @@ describe("backTarget", () => {
   it("drops the order and the page position, so Back lands on the list's first page", () => {
     expect(backTarget("/all?order=opened&before=garbage", CATALOG)).toEqual(ALL);
     expect(backTarget("/all/done?before=x", CATALOG)).toEqual({
-      label: "Out of your lists",
+      label: "Done and put away",
       href: "/all/done",
     });
     expect(backTarget("/spaces?tag=kitchen&order=banana&before=zz", CATALOG)).toEqual({

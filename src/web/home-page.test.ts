@@ -401,6 +401,13 @@ describe("Worth a look today", () => {
     ).toEqual(["example.com", "saved March 12"]);
   });
 
+  it("keeps each row's why to one line, cut with an ellipsis (#286)", () => {
+    const rule = themeCss.match(/\.also-why\{([^}]*)\}/);
+    for (const decl of ["white-space:nowrap", "overflow:hidden", "text-overflow:ellipsis"]) {
+      expect(rule?.[1]).toContain(decl);
+    }
+  });
+
   it("asks why, in amber, on the featured card only", () => {
     const html = render([card([], { why: null }), card([], { why: null })]);
     const d = dom(html);
@@ -873,7 +880,7 @@ describe("the home page's script", () => {
               status: 409,
               body: {
                 code: "conflict",
-                message: "This link is already out of your lists. Reload.",
+                message: "This link is already done or put away. Reload.",
               },
               wait: snooze,
             }

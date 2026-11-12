@@ -190,7 +190,7 @@ const homeActs = {
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
-    showUndo("Not suggested for two weeks.", async () =>
+    showUndo(${JSON.stringify(`${NOT_NOW_HINT}.`)}, async () =>
       undoOr(await post("/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }), putBack),
     );
   },

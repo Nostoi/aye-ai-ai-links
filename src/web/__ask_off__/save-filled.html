@@ -171,6 +171,7 @@ div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-car
 .worth-row h4{margin:0;font-size:16px;font-weight:700;line-height:1.3}
 .worth-row h4 a{text-decoration:none}
 .also-why,.also-body .card-line{margin:2px 0 0;font-size:14px;color:var(--soft)}
+.also-why{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .also-body .gone-line p{margin:2px 0 0;font-size:14px}
 .worth-row>.card-menu{position:relative;top:auto;right:auto}
 .gone-copy{display:inline-flex;align-items:center;min-height:44px;font-size:14px;color:var(--soft)}
@@ -689,7 +690,7 @@ bringBack.addEventListener("click", () =>
     resultError.textContent = "";
     const res = await post("/home/bring-back", { id: savedLink.dataset.id });
     if (res && res.status === 200) {
-      heading.textContent = "Back in your list";
+      heading.textContent = "Brought back";
       bringBack.hidden = true;
       savedState.hidden = true;
     } else {

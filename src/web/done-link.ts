@@ -6,7 +6,7 @@ const BACK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
 /** An archive box for Done with it; a check would read as "selected" (#284). */
 const ARCHIVE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1"/><path d="M5 9v10.5h14V9"/><path d="M10 13h4"/></svg>`;
 
-/** The small line under Done with it and Put it away, in the menu and on Home's featured card. */
+/** The small line under Done with it and Put it away, saying what happens; one constant each. */
 export const DONE_HINT = "Still findable in search";
 export const PUT_AWAY_HINT = "Back when you start something it fits";
 
@@ -14,7 +14,7 @@ export const PUT_AWAY_HINT = "Back when you start something it fits";
 export const DONE_LABEL = "Done with it";
 
 /** The name of the list section holding links the owner has let go (the done views). */
-export const OUT_OF_LISTS = "Out of your lists";
+export const DONE_AND_PUT_AWAY = "Done and put away";
 
 /** The Undo bar every Done with it shows: a bold title, then the text (`showUndo(text, undo, title)`). */
 export const DONE_UNDO = {
@@ -22,24 +22,24 @@ export const DONE_UNDO = {
   text: "Off Home, All links and your spaces. Still findable in search.",
 };
 
-/** What a link out of your lists is called on its grey line and the Save page. */
+/** What a link done or put away is called on its grey line and the Save page. */
 export const PUT_AWAY_MARKER = "Put away";
 export const DONE_MARKER = "Done";
 
-/** `Put away` or `Done` for a link out of your lists (archived with or without `putAwayAt`); null for an active one. */
+/** `Put away` or `Done` for a link done or put away (archived with or without `putAwayAt`); null for an active one. */
 export const outOfListsMarker = (link: Pick<Link, "state" | "putAwayAt">) =>
   link.state === "active" ? null : link.putAwayAt ? PUT_AWAY_MARKER : DONE_MARKER;
 
 /** The Undo bar every Put it away shows. */
 export const PUT_AWAY_UNDO = {
   title: "Put away.",
-  text: "Out of your lists but still saved. If you start something it fits, it'll come back.",
+  text: "Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
 };
 
 /** The Undo bar Bring it back shows: a title and no text. */
-export const BRING_BACK_UNDO = { title: "Back in your lists.", text: "" };
+export const BRING_BACK_UNDO = { title: "Brought back.", text: "" };
 
-/** The card menu's first row, which takes the link out of your lists; its script is `doneLinkScript`. */
+/** The card menu's row that marks the link done; its script is `doneLinkScript`. */
 export const DONE_ITEM: MenuItem = {
   act: "archive",
   icon: ARCHIVE,
@@ -55,7 +55,7 @@ export const PUT_AWAY_ITEM: MenuItem = {
   hint: PUT_AWAY_HINT,
 };
 
-/** An archived link's row that returns it to your lists. */
+/** An archived link's row that makes it active again. */
 export const BRING_BACK_ITEM: MenuItem = { act: "bring-back", icon: BACK, text: "Bring it back" };
 
 /** Each state action: its route and the bar its Undo is offered on. */

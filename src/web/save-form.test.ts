@@ -289,7 +289,7 @@ describe("Save on the page", () => {
     expect(visible(page.$("#saved-state"))).toBe(false);
   });
 
-  it("archived: Bring it back posts /home/bring-back, then says Back in your list", async () => {
+  it("archived: Bring it back posts /home/bring-back, then says Brought back", async () => {
     const page = load(answering({ ...ANSWER, state: "archived" }));
     page.fire("#save-form", "submit");
     await page.settle();
@@ -302,7 +302,7 @@ describe("Save on the page", () => {
       redirect: "manual",
       keepalive: undefined,
     });
-    expect(page.$("#save-heading").textContent).toBe("Back in your list");
+    expect(page.$("#save-heading").textContent).toBe("Brought back");
     expect(visible(page.$("#bring-back"))).toBe(false);
     expect(visible(page.$("#saved-state"))).toBe(false);
     expect(visible(page.$("#close"))).toBe(true);

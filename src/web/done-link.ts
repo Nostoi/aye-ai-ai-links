@@ -32,7 +32,7 @@ export const PUT_AWAY_UNDO = {
 };
 
 /** The Undo bar Bring it back shows: a title and no text. */
-export const BRING_BACK_UNDO = { title: "Back in your lists.", text: "" };
+export const BRING_BACK_UNDO = { title: "Back on Home, All links and your spaces.", text: "" };
 
 /** The card menu's first row, which takes the link off the lists; its script is `doneLinkScript`. */
 export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: STALE_LABEL };
@@ -40,7 +40,7 @@ export const DONE_ITEM: MenuItem = { act: "archive", icon: CHECK, text: STALE_LA
 /** The card menu's row that puts a link away until something it fits comes up. */
 export const PUT_AWAY_ITEM: MenuItem = { act: "put-away", icon: TRAY, text: "Put it away" };
 
-/** An archived link's row that returns it to your lists. */
+/** An archived link's row that returns it to Home, All links and your spaces. */
 export const BRING_BACK_ITEM: MenuItem = { act: "bring-back", icon: BACK, text: "Bring it back" };
 
 /** Each state action: its route and the bar its Undo is offered on. */

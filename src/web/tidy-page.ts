@@ -45,7 +45,7 @@ function fitFact(fit: FocusEntry | null, hasFocus: boolean): string {
 }
 
 const CHOICES = `<div class="tidy-choices">
-<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays in your lists, as it is now.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays where it is.</span><kbd class="key" aria-hidden="true">1</kbd></button>
 <button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Off Home, All links and your spaces. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
 <button type="button" data-act="stale" aria-keyshortcuts="3"><b>It's stale</b><span>Out of sight for good. Search still finds it.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>`;

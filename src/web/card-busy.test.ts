@@ -96,7 +96,7 @@ const ACTIONS: Record<Key, Action> = {
     name: "Bring it back",
     select: ".card-menu button[data-act=bring-back]",
     url: "/home/bring-back",
-    undo: "Back in your lists.",
+    undo: "Back on Home, All links and your spaces.",
     json: CHANGE,
   },
   delete: {
@@ -330,7 +330,7 @@ describe.each(DONE_PAGES)("%s: Bring it back takes one action at a time", (_, er
       const next = name === "Delete link" ? ACTIONS.delete : ACTIONS.copy;
       const p = runPage(html(links), fine);
       await press(p, "7", ACTIONS.bring);
-      expect(undoText(p)).toBe("Back in your lists.");
+      expect(undoText(p)).toBe("Back on Home, All links and your spaces.");
       await press(p, "7", next);
       expect(sentUrls(p)).toEqual(["/home/bring-back", next.url]);
       expect(undoText(p)).toBe(next.undo);

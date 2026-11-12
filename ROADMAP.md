@@ -28,6 +28,12 @@ Newest first. Each entry is dated; later entries override earlier ones and the s
   - **One placeholder.** `SEARCH_PLACEHOLDER` in `pages.ts` is the example text on both fields, in the theme's `--soft`.
   - **Ask AI handoff.** With the AI set up, a non-blank query and a query no longer than the Ask box's limit (`MAX_TEXT_CHARS`, 4000, now also the textarea's `maxlength`), "Not it?" shows **Ask AI about “…”**. The Ask script opens the panel and fills the message box only if it is empty; a draft is left alone, and nothing is sent. With no AI the page carries none of it.
 
+- **2026-11-11:** Space-card titles are links (#271; owner-approved design critique, in session). This supersedes the plain titles of #195 and #265.
+  - **Titles open their links** in a new tab and are recorded with `/links/opened`; a non-web link's title stays plain text. The card is a container: its name link covers it, and only the titles and See all sit above. On a phone the titles are hidden and the card stays one tap target to the space.
+  - **See all N →** ends each card and opens the space; N is the space's active link count (`homeSpaces` calls `count` per pinned space). A total, not an unread count.
+  - **Trim** now cuts the name of any pinned space, the card's own included, longest first, one cut. **One dash:** a spaced `-`, `–` or `—` shows as " — " (display only).
+  - **Wider cards:** the grid's smallest column is 260px. Ask AI's page context skips an element with no layout boxes, so the phone-hidden titles are not sent as shown.
+
 - **2026-11-11:** Home's cards tell themselves apart (#265; owner-approved design critique, in session).
   - **Space cards** prefer links the other cards don't show, best effort (`homeSpaces`, `src/core/spaces.ts`). This departs from #195's "three recent titles" (#195 comment 6304189584): a card shows up to three of its links, newest first, but not always its three newest. Selection is by link identity, from each space's newest `min(3 × spaces, 24)`; spaces with the fewest candidates are served first.
   - **Title prefix trim,** display only: a space card cuts the space's own name and a clear label break (whitespace, a dash, whitespace; or a colon, whitespace) from the front of a title, so "Language Arts 8 — Grammar" reads "Grammar" and "Go-to-market" stays whole in a space called Go.

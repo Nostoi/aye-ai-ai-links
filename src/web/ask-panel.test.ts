@@ -1207,6 +1207,16 @@ describe("telling the AI which page the owner is on", () => {
     expect(await sentPage(body, "/", stored)).toMatchObject({ ids: ["1", "3"], shown: 2 });
   });
 
+  it("skips a card with no layout boxes, such as one the stylesheet hides", async () => {
+    const t = talk(() => okAnswer(), { body: pageOf("1", "2", "3") });
+    const two = t.document.querySelector('[data-id="2"]') as unknown as {
+      getClientRects: () => unknown[];
+    };
+    two.getClientRects = () => [];
+    await t.say("what is here");
+    expect(posted(t).page).toMatchObject({ ids: ["1", "3"], shown: 2 });
+  });
+
   it("sends the first 60 ids and counts all of them in shown", async () => {
     const all = Array.from({ length: 70 }, (_, i) => String(i + 1));
     const page = (await sentPage(pageOf(...all))) as { ids: string[]; shown: number };

@@ -544,6 +544,26 @@ describe("the home page's script", () => {
     ]);
   });
 
+  it("records an opening from a title on a space card with /links/opened, without stopping the link", async () => {
+    const titled = link({ title: "Bread" });
+    const p = runPage(
+      homePage({
+        worth: worth([card([])]),
+        shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
+        spaces: spacesSection([
+          { key: "kitchen", name: "Kitchen", color: null, count: 1, recent: [titled] },
+        ]),
+      }),
+      fine,
+    );
+    const click = p.dispatch(p.$(".home-space-recent a[data-open]"), "click");
+    await p.settle();
+    expect(click.defaultPrevented).toBe(false);
+    expect(p.sent).toEqual([
+      { url: "/links/opened", body: { id: titled.id }, redirect: "manual", keepalive: true },
+    ]);
+  });
+
   it("a came-back card's three buttons post the existing routes", async () => {
     const away = new Date("2026-08-20T10:00:00Z");
     const came: DigestLink = {

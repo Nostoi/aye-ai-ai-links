@@ -206,6 +206,7 @@ const PAGES: [string, string][] = [
           key: "kitchen",
           name: "Kitchen",
           color: "clay",
+          count: 0,
           recent: [],
         },
       ]),

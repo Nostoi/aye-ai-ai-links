@@ -10,9 +10,11 @@ import { escapeHtml } from "./page.js";
 export const openLink = (link: Link, label: string, className?: string) =>
   `<a${className ? ` class="${className}"` : ""} href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" data-open>${label}</a>`;
 
-/** A saved link's title (escaped HTML): linked by `openLink` when it is a web link, else plain. */
-export function linkTitle(link: Link): string {
-  const label = escapeHtml(displayTitle(link));
+/**
+ * A saved link's title (escaped HTML): linked by `openLink` when it is a web link, else plain.
+ * `label` is already-escaped HTML to show instead of the title, for a card that trims it.
+ */
+export function linkTitle(link: Link, label: string = escapeHtml(displayTitle(link))): string {
   return isWebUrl(link.url) ? openLink(link, label) : label;
 }
 

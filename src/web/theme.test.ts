@@ -109,13 +109,18 @@ describe("the theme css", () => {
 
   it("lays the spaces out in a grid, two across with names only on a phone, and the shelf in one column there", () => {
     expect(themeCss).toMatch(
-      /\.home-spaces\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(200px,1fr\)\)/,
+      /\.home-spaces\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(260px,1fr\)\)/,
+    );
+    expect(themeCss).toMatch(/\.home-space\{position:relative;/);
+    expect(themeCss).toMatch(/\.home-space-name::after\{content:"";position:absolute;inset:0/);
+    expect(themeCss).toMatch(
+      /\.home-space-recent a,\.home-space-all\{position:relative;z-index:1;/,
     );
     const phone = /@media \(max-width:600px\)\{(.*)\}$/m.exec(themeCss)?.[1] ?? "";
     const rule = (sel: string) =>
       new RegExp(`(?:^|\\})${sel.replace(/[.>]/g, "\\$&")}\\{([^}]*)\\}`).exec(phone)?.[1] ?? "";
     expect(rule(".home-spaces")).toContain("grid-template-columns:repeat(2,minmax(0,1fr))");
-    expect(rule(".home-space-recent")).toBe("display:none");
+    expect(rule(".home-space-recent,.home-space-all")).toBe("display:none");
     expect(rule(".handy-row")).toContain("grid-template-columns:1fr");
     expect(phone).not.toContain("overflow-x:auto");
   });

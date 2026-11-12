@@ -133,6 +133,10 @@ export function whyLine(why: Link["why"]): string {
   return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: "${text}"`;
 }
 
+/** The address `FAVICON_ROUTE` (`http.ts`) serves a link's stored site favicon at; `version` busts the cache. */
+export const faviconSrc = (linkId: string, version: string) =>
+  `/images/${encodeURIComponent(linkId)}/favicon?v=${encodeURIComponent(version)}`;
+
 /**
  * The link's stored image served by this site (a cover photo, or an icon shown whole), else its
  * initials; `className` styles all three. `data-pic` marks the box for the edit dialog, which

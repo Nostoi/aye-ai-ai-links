@@ -854,6 +854,10 @@ export function webApp({
     const copies = await deps.savedCopies.copyInfo(owner, ids);
     const views = await linkViews(deps, owner, cards);
     const { spaces, catalog } = await homeSpaces(deps, owner);
+    const favicons = await deps.favicons.faviconVersions(
+      owner,
+      spaces.flatMap((s) => s.recent.map((l) => l.id)),
+    );
     const worth = { links, images, now: deps.now(), catalog, gone, pictures, copies, views };
     const items = await listShelf(deps, owner);
     // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
@@ -866,7 +870,7 @@ export function webApp({
     const page = homePage({
       worth,
       shelf,
-      spaces: spacesSection(spaces),
+      spaces: spacesSection(spaces, favicons),
       tidy,
       ask: askOn(c, "Home"),
     });

@@ -345,6 +345,9 @@ img.handy-image{background:#fff}
 .home-space-name::after{content:"";position:absolute;inset:0;border-radius:18px}
 .home-space-name:focus-visible{outline:none}
 .home-space-name:focus-visible::after{outline:3px solid var(--blue);outline-offset:-3px;box-shadow:inset 0 0 0 6px var(--surface)}
+.home-fav{display:inline-block;width:18px;height:18px;margin-right:8px;vertical-align:-5px;border-radius:4px}
+img.home-fav{background:var(--plate)}
+.home-fav-none{background:var(--line);opacity:.55}
 .home-space-recent a,.home-space-all{position:relative;z-index:1;color:inherit;text-decoration:none}
 .home-space-recent a:hover,.home-space-recent a:focus-visible,.home-space-all:hover,.home-space-all:focus-visible{text-decoration:underline}
 .home-space-all{display:inline-block;margin-top:10px;font-size:13.5px;color:var(--soft)}

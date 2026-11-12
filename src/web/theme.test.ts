@@ -107,6 +107,10 @@ describe("the theme css", () => {
     expect(themeCss).toContain('ui-rounded, "SF Pro Rounded", system-ui, sans-serif');
   });
 
+  it("sets each space card favicon on the plate, so a dark icon on a transparent ground shows in dark mode (#272)", () => {
+    expect(themeCss).toContain("img.home-fav{background:var(--plate)}");
+  });
+
   it("lays the spaces out in a grid, two across with names only on a phone, and the shelf in one column there", () => {
     expect(themeCss).toMatch(
       /\.home-spaces\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(260px,1fr\)\)/,

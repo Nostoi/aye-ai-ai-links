@@ -96,6 +96,35 @@ describe("the Your spaces section", () => {
     expect(outsideRefs(html)).toEqual([]);
   });
 
+  it("puts a versioned favicon image before the title of a link that has one, and an empty square before one that has none", () => {
+    const html = spacesSection(
+      [space({ key: "k", recent: [link("7", { title: "Bread" }), link("3", { title: "Soup" })] })],
+      new Map([["7", 'v"1']]),
+    );
+    const [bread, soup] = [...dom(html).querySelectorAll(".home-space-recent > [data-id]")];
+    const img = bread?.querySelector("img.home-fav");
+    expect(img?.getAttribute("src")).toBe("/images/7/favicon?v=v%221");
+    expect([
+      img?.getAttribute("alt"),
+      img?.getAttribute("width"),
+      img?.getAttribute("height"),
+    ]).toEqual(["", "18", "18"]);
+    expect([img?.getAttribute("loading"), img?.getAttribute("decoding")]).toEqual([
+      "lazy",
+      "async",
+    ]);
+    // Before the title link, inside the [data-id] span, and not a link itself.
+    expect(bread?.firstElementChild).toBe(img);
+    expect(img?.closest("a")).toBeNull();
+    expect(bread?.querySelector("a[data-open]")?.textContent).toBe("Bread");
+    expect(soup?.querySelector("img")).toBeNull();
+    const empty = soup?.firstElementChild;
+    expect(empty?.className).toBe("home-fav home-fav-none");
+    expect(empty?.getAttribute("aria-hidden")).toBe("true");
+    expect(soup?.querySelector("a[data-open]")?.textContent).toBe("Soup");
+    expect(outsideRefs(html)).toEqual([]);
+  });
+
   it("gives the grid an id for the opening script", () => {
     expect(dom(spacesSection([space({ key: "k" })])).querySelector(".home-spaces")?.id).toBe(
       "home-spaces",

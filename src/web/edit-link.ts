@@ -21,7 +21,7 @@ export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit link
 /**
  * A card's ⋯ menu on the pages with the edit dialog (#192). An active link's menu opens with Done
  * with it, Put it away and Keep handy, which reads Not handy anymore once `handy` is kept; both
- * Keep rows are rendered and the script swaps them. A link out of your lists starts at Edit and
+ * Keep rows are rendered and the script swaps them. A link done or put away starts at Edit and
  * offers Bring it back after it. Then Remove saved copy when `copy` is there, and Delete link
  * last. The copy itself opens from the card's grey line (`cardLine`). Home's rows add Not now
  * after Put it away (`notNow`); Home's featured card shows Done with it and Not now as buttons, so

@@ -552,8 +552,8 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </ul>
 <p><a class="tidy-open" href="https://example.com/1" target="_blank" rel="noopener noreferrer" data-open>Open it to check</a></p>
 <div class="tidy-choices">
-<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays in your lists, as it is now.</span><kbd class="key" aria-hidden="true">1</kbd></button>
-<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays where it is.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Off Home, All links and your spaces. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
 <button type="button" data-act="stale" aria-keyshortcuts="3"><b>Done with it</b><span>Still findable in search.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>
 </article>
@@ -575,8 +575,8 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </ul>
 <p><a class="tidy-open" href="https://example.com/2" target="_blank" rel="noopener noreferrer" data-open>Open it to check</a></p>
 <div class="tidy-choices">
-<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays in your lists, as it is now.</span><kbd class="key" aria-hidden="true">1</kbd></button>
-<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Out of your lists. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays where it is.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" class="safe" data-act="put-away" aria-keyshortcuts="2"><b>Put it away</b><span>Off Home, All links and your spaces. Comes back when you start something it fits.</span><em>If you're not sure</em><kbd class="key" aria-hidden="true">2</kbd></button>
 <button type="button" data-act="stale" aria-keyshortcuts="3"><b>Done with it</b><span>Still findable in search.</span><kbd class="key" aria-hidden="true">3</kbd></button>
 </div>
 </article>
@@ -644,7 +644,7 @@ const whenFree = async (card, run) => {
 {
 const tidyRoot = document.getElementById("tidy");
 const tidyAlert = document.getElementById("tidy-error");
-const tidyActs = {"keep":{"route":"/tidy/keep","undo":null},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"stale":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}}};
+const tidyActs = {"keep":{"route":"/tidy/keep","undo":null},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"stale":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}}};
 const tidyKeys = {"1":"keep","2":"put-away","3":"stale"};
 const steps = [...tidyRoot.querySelectorAll("section[data-id]")];
 const finished = tidyRoot.querySelector(".tidy-done");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Out of your lists in Kitchen · Aye-AI-AI Links</title>
+<title>Done and put away in Kitchen · Aye-AI-AI Links</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2036%22%3E%3Crect%20x%3D%223.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Crect%20x%3D%2227.5%22%20y%3D%225.5%22%20width%3D%2233%22%20height%3D%2225%22%20rx%3D%2212.5%22%20fill%3D%22%23fff%22%20stroke%3D%22%232F8F83%22%20stroke-width%3D%225%22%2F%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3Ccircle%20cx%3D%2247%22%20cy%3D%2215.5%22%20r%3D%225%22%20fill%3D%22%2326262B%22%2F%3E%3C%2Fsvg%3E">
 <style>
 :root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--about:#57534D;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;--fill:#EDEAE3;}
@@ -535,10 +535,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <div class="column">
 <main class="space" data-view="list">
 <a class="back-link space-clay" href="/spaces?tag=kitchen"><svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6.5 1L1.5 6l5 5"/></svg><span class="dot" aria-hidden="true"></span>Back to Kitchen</a>
-<div class="list-head done-head"><h1>Out of your lists</h1><div class="view-switch" role="group" aria-label="View"><button type="button" data-choice="list" aria-pressed="true">List</button><button type="button" data-choice="pictures" aria-pressed="false">Pictures</button></div></div>
+<div class="list-head done-head"><h1>Done and put away</h1><div class="view-switch" role="group" aria-label="View"><button type="button" data-choice="list" aria-pressed="true">List</button><button type="button" data-choice="pictures" aria-pressed="false">Pictures</button></div></div>
 <p id="space-error" role="alert"></p>
 <div class="done-empty">
-<p>Nothing here is out of your lists yet.</p>
+<p>Nothing here is done or put away yet.</p>
 <p class="small">Links you are done with or put away from this space wait here. Search still finds them.</p>
 </div>
 
@@ -1209,7 +1209,7 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""}}};
 const stateCard = (card, act) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("space-links");

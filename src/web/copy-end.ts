@@ -7,7 +7,6 @@ import {
   DONE_ITEM,
   DONE_MARKER,
   doneLinkScript,
-  OUT_OF_LISTS,
   outOfListsMarker,
   PUT_AWAY_ITEM,
   PUT_AWAY_MARKER,
@@ -33,7 +32,7 @@ const button = ({ act, text }: MenuItem, hidden = false) =>
 
 /**
  * What follows the article: "Finished with this link?" with the menu's actions as buttons, or,
- * for a link out of your lists, that and Bring it back. Both groups are always written and one is
+ * for a link done or put away, that and Bring it back. Both groups are always written and one is
  * hidden, so the page's script only switches them. Its Keep handy control is `keepHandyScript`'s.
  */
 export function copyEnd(link: Link, handy: HandyView | null, back: Back): string {
@@ -47,7 +46,7 @@ ${button(PUT_AWAY_ITEM)}
 <span data-handy>${button(KEEP_ITEM, kept)}<span class="handy-on"${kept ? "" : " hidden"}>${button(NOT_HANDY)}</span></span>
 </div>
 <div class="copy-end-acts" id="${OUT_ID}"${out ? "" : " hidden"}>
-<p class="card-line copy-end-line" tabindex="-1"><span>${OUT_OF_LISTS}</span><span>${out ?? PUT_AWAY_MARKER}</span></p>
+<p class="card-line copy-end-line" tabindex="-1"><span>${out ?? PUT_AWAY_MARKER}</span></p>
 ${button(BRING_BACK_ITEM)}
 </div>
 <p class="error" id="${ERROR_ID}" role="alert"></p>

@@ -366,7 +366,7 @@ describe("the copy page's Back line", () => {
     [undefined, "Back to All links", "/all"],
     ["/", "Back to Home", "/"],
     ["/all?order=opened&before=garbage", "Back to All links", "/all"],
-    ["/all/done", "Back to Out of your lists", "/all/done"],
+    ["/all/done", "Back to Done and put away", "/all/done"],
     ["/spaces?tag=kitchen", "Back to Kitchen", "/spaces?tag=kitchen"],
     ["/spaces?tag=kitchen&order=banana", "Back to Kitchen", "/spaces?tag=kitchen"],
     ["/spaces/done?tag=Kitchen", "Back to Kitchen", "/spaces/done?tag=kitchen"],
@@ -548,7 +548,7 @@ describe("the end of the copy page, against the store", () => {
     expect(link.state).toBe("archived");
     expect(link.putAwayAt).not.toBeNull();
     expect(await endOf(owner, id)).toEqual({
-      line: ["Out of your lists", "Put away"],
+      line: ["Put away"],
       acts: ["bring-back"],
     });
   });
@@ -567,7 +567,7 @@ describe("the end of the copy page, against the store", () => {
     expect((await owner.send("/links/opened", post(id))).status).toBe(204);
     expect(await stored(w, id)).toEqual({ state: "archived", putAwayAt: null });
     expect(await endOf(owner, id)).toEqual({
-      line: ["Out of your lists", "Done"],
+      line: ["Done"],
       acts: ["bring-back"],
     });
   });

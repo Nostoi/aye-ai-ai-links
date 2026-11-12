@@ -153,7 +153,7 @@ bringBack.addEventListener("click", () =>
     resultError.textContent = "";
     const res = await post("/home/bring-back", { id: savedLink.dataset.id });
     if (res && res.status === 200) {
-      heading.textContent = "Back in your list";
+      heading.textContent = "Brought back";
       bringBack.hidden = true;
       savedState.hidden = true;
     } else {

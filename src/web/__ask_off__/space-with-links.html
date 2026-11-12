@@ -601,7 +601,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 </section>
 </div>
 <p><a class="show-older" id="older" href="/spaces?tag=kitchen&amp;before=r1">Show older links</a></p>
-<p class="small"><a class="done-link" href="/spaces/done?tag=kitchen">Out of your lists</a></p>
+<p class="small"><a class="done-link" href="/spaces/done?tag=kitchen">Done and put away</a></p>
 </main>
 <dialog class="edit-link" id="edit-link" aria-labelledby="edit-link-title">
 <form class="edit-form" novalidate>
@@ -1399,7 +1399,7 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""}}};
 const stateCard = (card, act) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("space-links");

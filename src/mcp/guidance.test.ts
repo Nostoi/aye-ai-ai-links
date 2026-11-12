@@ -43,6 +43,10 @@ describe("get_stats guidance", () => {
     expect(GET_STATS).not.toMatch(/treat the others as complete/);
   });
 
+  it("counts links done with in setAside, as stats.ts does, not only put away ones (#288)", () => {
+    expect(GET_STATS).toMatch(/setAside is links done with, put away or declined as a kept tool;/);
+  });
+
   it("tells agents to present the reading as a guess", () => {
     expect(GET_STATS).toMatch(/reading.*guess.*never as a fact/s);
   });

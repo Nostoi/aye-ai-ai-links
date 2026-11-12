@@ -119,6 +119,23 @@ describe("cardLine", () => {
     expect(parts(cardLine(link(NOT_WEB), { saved: "October 1" }))).toEqual(["Saved October 1"]);
   });
 
+  it("draws a reason where the saved date goes, winning over it, capitalized only when it comes first", () => {
+    const reason = "fits what you're working on";
+    expect(parts(cardLine(link(), { reason, copy: COPY }))).toEqual([
+      "ex.com",
+      reason,
+      "Saved copy",
+    ]);
+    expect(parts(cardLine(link(), { space: KITCHEN, reason }))).toEqual([
+      "Kitchen",
+      "ex.com",
+      reason,
+    ]);
+    expect(parts(cardLine(link(NOT_WEB), { reason }))).toEqual(["Fits what you're working on"]);
+    expect(parts(cardLine(link(), { reason, saved: "October 1" }))).toEqual(["ex.com", reason]);
+    expect(parts(cardLine(link(NOT_WEB), { reason: "<b>x</b>" }))).toEqual(["<b>x</b>"]);
+  });
+
   it("keeps a hostile space name and host as text", () => {
     const html = cardLine(link("https://ex.com/7"), {
       space: { ...KITCHEN, name: "<b>K</b>" },

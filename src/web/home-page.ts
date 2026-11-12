@@ -10,7 +10,7 @@ import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { DONE_LABEL, doneLinkScript } from "./done-link.js";
+import { DONE_HINT, DONE_LABEL, doneLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
@@ -39,38 +39,27 @@ export type WorthCards = {
   views?: Map<string, LinkView>;
 };
 
-const quoted = (text: string) => `"${escapeHtml(text)}"`;
+const FITS = "fits what you're working on";
+const MAY_FIT = "may fit what you're working on (a guess)";
 
 /**
- * The reason a card is shown, in plain words. A link that came back says when it was put away;
- * then a focus entry comes. One an agent inferred is a guess, never something the owner said.
+ * Why a card is shown, as the end of its grey line (`cardLine`'s `reason`). A link that came back
+ * says when it was put away; then a focus entry comes. One an agent inferred is a guess, never
+ * something the owner said. The plain reason is the saved date, so the line shows it once.
  */
-function reason({ link, reasons }: DigestLink, now: Date): { text: string; plain: boolean } {
+function reason({ link, reasons }: DigestLink, now: Date): string {
   const back = reasons.find(
     (r): r is Extract<DigestReason, { kind: "came_back" }> => r.kind === "came_back",
   );
   if (back) {
-    const when = `You put this away in ${monthName(back.putAwayAt, now)}.`;
-    return {
-      text:
-        back.focus.source === "inferred"
-          ? `${when} It may fit ${quoted(back.focus.text)} (a guess).`
-          : `${when} It fits ${quoted(back.focus.text)}.`,
-      plain: false,
-    };
+    return `put away in ${monthName(back.putAwayAt, now)}, ${back.focus.source === "inferred" ? MAY_FIT : FITS}`;
   }
   const focus = reasons.find(
     (r): r is Extract<DigestReason, { kind: "focus_words" }> => r.kind === "focus_words",
   );
-  if (focus) {
-    return focus.focus.source === "inferred"
-      ? { text: `Maybe you're working on ${quoted(focus.focus.text)} (a guess)`, plain: false }
-      : { text: `You said you're working on ${quoted(focus.focus.text)}`, plain: false };
-  }
-  if (reasons.some((r) => r.kind === "not_opened_recently")) {
-    return { text: "You saved this over a month ago", plain: false };
-  }
-  return { text: `You saved this ${savedOn(link.savedAt, now)}`, plain: true };
+  if (focus) return focus.focus.source === "inferred" ? MAY_FIT : FITS;
+  if (reasons.some((r) => r.kind === "not_opened_recently")) return "saved over a month ago";
+  return `saved ${savedOn(link.savedAt, now)}`;
 }
 
 /** A card's opening tag: its classes and space, its id, and what the edit dialog reads. */
@@ -80,32 +69,35 @@ function opening(classes: string, link: Link, cards: WorthCards): string {
 }
 
 /**
- * The featured card: the reason with its space's dot, the title, the why (or Tell me why, in
- * amber), the grey line with the saved date when the reason doesn't say it and Saved copy, Open it
- * (the page's one filled button), Done with it and Not now, the ⋯ without those two, and a
- * small picture.
+ * The featured card: a small picture on the left, the title, the why (or Tell me why, in amber),
+ * the grey line ending with the reason and Saved copy, then Open it (the page's one filled
+ * button), Not now and Done with it, each of those two with a small line saying what happens.
+ * The ⋯ is without those two.
  */
 function featured(d: DigestLink, cards: WorthCards): string {
   const { link } = d;
-  const why = reason(d, cards.now);
   const copy = cards.copies?.get(link.id);
   const open = isWebUrl(link.url)
     ? `<div class="feature-open">${openLink(link, "Open it", "button primary")}</div>\n`
     : "";
   const said = link.why ? `<p>${whyText(link.why)}</p>` : `${askWhy(link)}\n${whyAnswer("p", "")}`;
-  const saved = why.plain ? {} : { saved: savedOn(link.savedAt, cards.now) };
   return `${opening(`worth-card worth-feature${link.why ? "" : " needs-you"}`, link, cards)}
-<p class="reason"><span class="dot" aria-hidden="true"></span>${why.text}</p>
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>
-${cardLine(link, { copy, ...saved, from: "/" })}${open}<div class="feature-quiet">
-<button type="button" data-act="archive">${DONE_LABEL}</button>
-<button type="button" data-act="snooze">Not now</button>
+${cardLine(link, { copy, reason: reason(d, cards.now), from: "/" })}<div class="feature-buttons">
+${open}<div class="feature-quiet">
+${pill("snooze", "Not now", NOT_NOW_HINT)}
+${pill("archive", DONE_LABEL, DONE_HINT)}
+</div>
 </div>
 ${editMenu(link, { copy, handy: cards.views?.get(link.id)?.handy, onCard: true })}
 ${tile(link, cards.images.get(link.id), "feature-pic")}
 </article>`;
 }
+
+/** One of the featured card's soft buttons: its label, then a small grey line under it. */
+const pill = (act: string, label: string, hint: string) =>
+  `<button type="button" data-act="${act}"><span>${escapeHtml(label)}</span><small>${escapeHtml(hint)}</small></button>`;
 
 /** An Also today row: a small picture (hidden on a phone), the title, `line`, and the six-row ⋯. */
 function row(link: Link, cards: WorthCards, classes: string, line: string): string {

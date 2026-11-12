@@ -31,6 +31,31 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
+  it.each([
+    ["at rest", ".feature-quiet button{", ".feature-quiet button small{"],
+    ["on hover", ".feature-quiet button:hover{", ".feature-quiet button:hover small{"],
+  ])("keeps the soft pills' label and hint readable %s", (_state, pill, hint) => {
+    const rule = (start: string) => {
+      const at = themeCss.indexOf(start);
+      return at < 0 ? "" : themeCss.slice(at, themeCss.indexOf("}", at));
+    };
+    const share = Number(/var\(--ink\) (\d+)%,var\(--surface\)/.exec(rule(pill))?.[1]) / 100;
+    expect(share).toBeGreaterThan(0);
+    const hintColor = (/color:var\(--([a-z]+)\)/.exec(rule(hint))?.[1] ??
+      /color:var\(--([a-z]+)\)/.exec(rule(".feature-quiet button small{"))?.[1]) as "ink" | "soft";
+    const fill = `#${[1, 3, 5]
+      .map((i) =>
+        Math.round(
+          Number.parseInt(t.ink.slice(i, i + 2), 16) * share +
+            Number.parseInt(t.surface.slice(i, i + 2), 16) * (1 - share),
+        )
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")}`;
+    expect(contrast(t.ink, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t[hintColor], fill)).toBeGreaterThanOrEqual(4.5);
+  });
   it("keeps the summary's ink strictly between the why's and the grey line's", () => {
     const against = (name: "ink" | "about" | "soft") => contrast(t[name], t.surface);
     expect(against("ink")).toBeGreaterThan(against("about"));
@@ -216,7 +241,7 @@ describe("the Handy tiles", () => {
     expect(themeCss).toContain(
       '.card-line>:not([hidden]):has(~ :not([hidden]))::after{content:"·"',
     );
-    expect(themeCss).not.toMatch(/\.card-line[^{]*(::before)/);
+    expect(themeCss).not.toMatch(/\.card-line[ >][^{]*::before/);
   });
 
   it("gives the grey line's Saved copy a 44px tap area without growing the line", () => {
@@ -720,19 +745,24 @@ describe("Home's Worth a look cards (#195)", () => {
   const areas = (width: "desktop" | "phone") =>
     computed(feature("", "article"), "grid-template-areas", width) ?? "";
 
-  it("puts the featured picture at 120px on a wide screen and 64px on a phone", () => {
+  it("puts the featured picture at 112px on a wide screen and 64px on a phone, softly framed", () => {
     const pic = feature('<div class="feature-pic"></div>', ".feature-pic");
-    expect(computed(pic, "width", "desktop")).toBe("120px");
-    expect(computed(pic, "height", "desktop")).toBe("120px");
+    expect(computed(pic, "width", "desktop")).toBe("112px");
+    expect(computed(pic, "height", "desktop")).toBe("112px");
     expect(computed(pic, "width", "phone")).toBe("64px");
     expect(computed(pic, "height", "phone")).toBe("64px");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(pic, "border", w), w).toBe("1px solid var(--line)");
+      expect(computed(pic, "opacity", w), w).toBe(".92");
+    }
   });
 
-  it("sets Open it beside the quiet pair on a wide screen; on a phone, full width with the ⋯ beside it and the pair below", () => {
-    expect(areas("desktop")).toContain('"open quiet');
-    expect(areas("desktop")).toMatch(/"reason reason reason menu"/);
-    expect(areas("phone")).toContain('"open menu"');
-    expect(areas("phone")).toContain('"quiet quiet"');
+  it("sets the picture left of the text and the buttons; on a phone, full width Open it with the pair below", () => {
+    expect(areas("desktop")).toContain('"pic title"');
+    expect(areas("desktop")).toContain('"pic buttons"');
+    expect(areas("desktop")).not.toContain("menu");
+    expect(areas("phone")).toContain('"pic title"');
+    expect(areas("phone")).toContain('"buttons buttons"');
     const open = feature(
       '<div class="feature-open"><a class="button primary">Open it</a></div>',
       "a",
@@ -741,17 +771,27 @@ describe("Home's Worth a look cards (#195)", () => {
     expect(computed(open, "justify-content", "phone")).toBe("center");
   });
 
-  it("keeps Done with it and Not now as quiet text buttons at least 44px tall", () => {
-    const quiet = feature(
-      '<div class="feature-quiet"><button data-act="archive">It\'s stale</button></div>',
+  it("makes Not now and Done with it soft-filled pills as tall as Open it, at least 44px", () => {
+    const pill = feature(
+      '<div class="feature-quiet"><button data-act="archive"><span>x</span><small>y</small></button></div>',
       "button",
     );
+    const open = feature(
+      '<div class="feature-open"><a class="button primary">Open it</a></div>',
+      "a",
+    );
     for (const width of ["desktop", "phone"] as const) {
-      expect(computed(quiet, "background", width), width).toBe("none");
-      expect(computed(quiet, "border", width), width).toBe("0");
-      expect(
-        Number.parseInt(computed(quiet, "min-height", width) ?? "", 10),
-      ).toBeGreaterThanOrEqual(44);
+      expect(computed(pill, "background", width), width).toBe(
+        "color-mix(in srgb,var(--ink) 7%,var(--surface))",
+      );
+      expect(computed(pill, "border-radius", width), width).toBe("999px");
+      expect(computed(pill, "border", width), width).toBe("0");
+      for (const el of [pill, open]) {
+        expect(
+          Number.parseInt(computed(el, "min-height", width) ?? "", 10),
+          width,
+        ).toBeGreaterThanOrEqual(48);
+      }
     }
   });
 
@@ -787,18 +827,14 @@ describe("Home's Worth a look cards (#195)", () => {
     },
   );
 
-  it("gives each card's ⋯ its own cell instead of the card's corner", () => {
+  it("keeps the featured ⋯ in the card's top-right corner and gives a row's ⋯ its own cell", () => {
     const fm = feature('<details class="card-menu"></details>', "details");
     const rm = row('<details class="card-menu"></details>', "details");
-    for (const menu of [fm, rm]) expect(computed(menu, "position", "desktop")).toBe("relative");
-    expect(computed(fm, "grid-area", "desktop")).toBe("menu");
-  });
-
-  it("shows the reason in its space's colour, mixed toward ink, and never amber", () => {
-    const reason = feature('<p class="reason"></p>', ".reason");
-    const color = computed(reason, "color", "desktop") ?? "";
-    expect(color).toContain("var(--space,var(--soft))");
-    expect(color).not.toContain("amber");
+    expect(computed(fm, "position", "desktop")).toBe("absolute");
+    expect(computed(fm, "position", "phone")).toBe("absolute");
+    expect(computed(fm, "top", "phone")).toBe("10px");
+    expect(computed(fm, "right", "phone")).toBe("10px");
+    expect(computed(rm, "position", "desktop")).toBe("relative");
   });
 
   it.each([
@@ -823,11 +859,7 @@ describe("Home's Worth a look cards (#195)", () => {
     },
   );
 
-  it("gives the gone row's buttons the featured card's quiet look, and no other page's", () => {
-    const quiet = feature(
-      '<div class="feature-quiet"><button type="button">Not now</button></div>',
-      "button",
-    );
+  it("gives the gone row's buttons a quiet text look, and no other page's", () => {
     const goneRow = row(
       '<div class="also-body"><div class="gone-line"><div class="actions small-actions"><button type="button">It still works</button></div></div></div>',
       "button",
@@ -837,16 +869,18 @@ describe("Home's Worth a look cards (#195)", () => {
       "button",
     );
     for (const w of ["desktop", "phone"] as const) {
-      for (const prop of ["color", "font-size", "font-weight", "min-height", "background"]) {
-        expect(computed(goneRow, prop, w), `${w} ${prop}`).toBe(computed(quiet, prop, w));
-      }
+      expect(computed(goneRow, "color", w), w).toBe("var(--soft)");
+      expect(computed(goneRow, "font-size", w), w).toBe("15px");
+      expect(computed(goneRow, "font-weight", w), w).toBe("600");
+      expect(computed(goneRow, "min-height", w), w).toBe("48px");
+      expect(computed(goneRow, "background", w), w).toBe("none");
       expect(computed(goneRow, "text-decoration", w), w).toBe("none");
       expect(computed(elsewhere, "text-decoration", w), w).toBe("underline");
       expect(computed(elsewhere, "font-size", w), w).toBe("14px");
     }
   });
 
-  it("drops the grey square from a featured icon and sizes its box to the icon, with no empty column", () => {
+  it("drops the grey square from a featured icon and sizes its box to the icon, with no frame", () => {
     const icon = feature('<div class="feature-pic icon-box"></div>', ".feature-pic");
     const grey = feature('<div class="feature-pic initials-box"></div>', ".feature-pic");
     for (const w of ["desktop", "phone"] as const) {
@@ -855,8 +889,8 @@ describe("Home's Worth a look cards (#195)", () => {
       expect(computed(icon, "height", w), w).toBe("auto");
       expect(computed(grey, "background", w), w).toBe("var(--pic)");
     }
-    expect(computed(feature("", "article"), "grid-template-columns", "desktop")).toMatch(/ auto$/);
-    expect(computed(feature("", "article"), "grid-template-columns", "phone")).toMatch(/ auto$/);
+    expect(computed(icon, "border", "desktop")).toBe("0");
+    expect(computed(icon, "opacity", "desktop")).toBe("1");
   });
 });
 

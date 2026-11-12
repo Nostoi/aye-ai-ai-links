@@ -100,7 +100,7 @@ Every note and focus entry has a source: stated (the owner said it), asked (you 
 
 export const GET_STATS = `Get counts of the owner's library over a window: the last 30, 90 or 365 days, or all time (the default). Use it when the owner asks how they are using their links.
 
-Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links put away or declined as a kept tool; notNow is links snoozed with Not now, which means later, not no. tags has every tag with its saved and opened counts, most saved first.
+Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links done with, put away or declined as a kept tool; notNow is links snoozed with Not now, which means later, not no. tags has every tag with its saved and opened counts, most saved first.
 
 opened only counts openings made through the app or an AI (the owner opening a link on the web page, or an agent sending opened: true); it misses any opening from a browser bookmark or elsewhere, so never tell the owner they have not read something because of it. Counts are kept from trackingSince. partialCounts names the counts that may be too low because the window starts before trackingSince; say so for those counts; the others don't depend on when tracking began.
 

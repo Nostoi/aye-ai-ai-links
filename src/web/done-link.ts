@@ -6,7 +6,7 @@ const BACK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
 /** An archive box for Done with it; a check would read as "selected" (#284). */
 const ARCHIVE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1"/><path d="M5 9v10.5h14V9"/><path d="M10 13h4"/></svg>`;
 
-/** The small line under Done with it and Put it away, in the menu and on Home's featured card. */
+/** The small line under Done with it and Put it away, saying what happens; one constant each. */
 export const DONE_HINT = "Still findable in search";
 export const PUT_AWAY_HINT = "Back when you start something it fits";
 

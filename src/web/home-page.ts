@@ -15,6 +15,7 @@ import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { monthName, whyText } from "./link-rows.js";
+import { NOT_NOW_HINT } from "./not-now.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
@@ -197,7 +198,7 @@ const homeActs = {
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
-    showUndo("Not suggested for two weeks.", async () =>
+    showUndo(${JSON.stringify(`${NOT_NOW_HINT}.`)}, async () =>
       undoOr(await post("/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }), putBack),
     );
   },

@@ -13,6 +13,7 @@ let clock: number;
 const deps = () => ({
   store,
   listing: new FakeSearch(store),
+  count: new FakeSearch(store),
   images: {
     imageVersions: async (_owner: string, ids: string[]) =>
       new Map(
@@ -51,8 +52,8 @@ describe("homeSpaces", () => {
     await pin("a", "kitchen", "clay");
     await pin("a", "home batteries", "teal");
     expect(shape((await homeSpaces(deps(), "a")).spaces)).toEqual([
-      { key: "home batteries", name: "Home batteries", color: "teal", recent: [both] },
-      { key: "kitchen", name: "Kitchen", color: "clay", recent: [both] },
+      { key: "home batteries", name: "Home batteries", color: "teal", count: 1, recent: [both] },
+      { key: "kitchen", name: "Kitchen", color: "clay", count: 1, recent: [both] },
     ]);
   });
 
@@ -78,6 +79,24 @@ describe("homeSpaces", () => {
     await pin("b", "kitchen", "clay");
     const [kitchen] = (await homeSpaces(deps(), "a")).spaces;
     expect(kitchen?.recent.map((l) => l.id)).toEqual([newest, second, third]);
+  });
+
+  it("counts a space's active links only: not put-away, deleted or another owner's", async () => {
+    await save("a", ["kitchen"]);
+    await save("a", ["kitchen"]);
+    const away = await save("a", ["kitchen"]);
+    const gone = await save("a", ["kitchen"]);
+    await save("a", ["garden"]);
+    await save("b", ["kitchen"]);
+    await store.update("a", away, { state: "archived" });
+    await store.markDeleted("a", gone, new Date(clock++));
+    await pin("a", "kitchen", "clay");
+    await pin("a", "garden", "teal");
+    const { spaces } = await homeSpaces(deps(), "a");
+    expect(spaces.map((s) => [s.key, s.count])).toEqual([
+      ["garden", 1],
+      ["kitchen", 2],
+    ]);
   });
 
   it("lets a space whose newest links another card shows show its own other links", async () => {

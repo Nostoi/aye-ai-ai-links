@@ -46,7 +46,7 @@ import type { ProfileStore } from "../core/profile-store.js";
 import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/saved-copy.js";
-import type { LinkListing, LinkOrder } from "../core/search.js";
+import type { LinkCount, LinkListing, LinkOrder } from "../core/search.js";
 import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
 import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
 import { getStats, parseWindow, statsReading } from "../core/stats.js";
@@ -714,6 +714,8 @@ export function webApp({
       store: LinkRemover;
       /** The blank listing All links and space pages page through. */
       listing: LinkListing;
+      /** Counts a space's active links for its Home card. */
+      count: LinkCount;
       images: LinkImageReader;
       edits: LinkEditStore;
       tagEdits: TagEditStore;

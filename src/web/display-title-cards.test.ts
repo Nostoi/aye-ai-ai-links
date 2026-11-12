@@ -178,7 +178,7 @@ describe("a link with no title", () => {
 
   it("names a space's recent link on Home by its readable title", () => {
     const html = spacesSection([
-      { key: "kitchen", name: "Kitchen", color: null, recent: [link()] },
+      { key: "kitchen", name: "Kitchen", color: null, count: 1, recent: [link()] },
     ]);
     const { document } = parseHTML(html);
     expect(document.querySelector(".home-space-recent > *")?.textContent).toBe("Post by @alice");

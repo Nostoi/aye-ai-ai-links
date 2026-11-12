@@ -158,11 +158,13 @@ export const ASK_SCRIPT = `<script>
   });
 
   const MAX_PAGE_IDS = ${MAX_PAGE_IDS};
-  // The link ids on the page, in order, once each: not the panel's own cards, nor anything hidden.
+  // The link ids on the page, in order, once each: not the panel's own cards, nor anything hidden
+  // (by [hidden] or by the stylesheet, which leaves an element no layout boxes).
   const pageIds = () => {
     const ids = new Set();
     for (const el of document.querySelectorAll("[data-id]")) {
       if (panel.contains(el) || el.closest("[hidden]")) continue;
+      if (el.getClientRects?.().length === 0) continue;
       const id = el.getAttribute("data-id");
       if (/^[0-9]+$/.test(id)) ids.add(id);
     }

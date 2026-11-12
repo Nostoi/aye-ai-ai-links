@@ -18,6 +18,7 @@ import { monthName, whyText } from "./link-rows.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
+import { SPACES_ID } from "./spaces-section.js";
 import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
 
 /**
@@ -309,7 +310,8 @@ ${removeCopyScript("worth-cards", "home-error")}
 ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}
 </script>
 ${openedScript("worth-cards", "/home/opened")}
-${openedScript("handy", "/links/opened")}`,
+${openedScript("handy", "/links/opened")}
+${openedScript(SPACES_ID, "/links/opened")}`,
     {
       menu: true,
       here: "home",

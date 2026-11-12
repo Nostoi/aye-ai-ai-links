@@ -293,7 +293,7 @@ describe("Your spaces on the home page", () => {
     expect(html(await a.send("/"))).toContain("Pin a tag on the");
     await setTagPinned(depsOf(world), A, { name: "Kitchen", pinned: true });
     const home = html(await a.send("/"));
-    expect(hrefsOf(home, "a.home-space")).toEqual(["/spaces?tag=kitchen"]);
+    expect(hrefsOf(home, "a.home-space-name")).toEqual(["/spaces?tag=kitchen"]);
     // A card's edit data (data-tags) names all of its own link's tags; no other place on Home does.
     expect(home.replace(/ data-tags="[^"]*"/g, "")).not.toContain("Baking");
     expect(home).not.toContain("Bsecretspace");
@@ -305,7 +305,7 @@ describe("Your spaces on the home page", () => {
     await save(world, A, "https://a.example/odd", [ODD_NAME], "The odd link");
     await setTagPinned(depsOf(world), A, { name: ODD_NAME, pinned: true });
     const browser = await signedIn(world);
-    const fromHome = hrefsOf(html(await browser.send("/")), "a.home-space");
+    const fromHome = hrefsOf(html(await browser.send("/")), "a.home-space-name");
     const fromTags = hrefsOf(html(await browser.send("/tags")), "a.tag-name");
     expect(fromHome).toHaveLength(1);
     expect(fromTags).toEqual(fromHome);
@@ -321,7 +321,7 @@ describe("Your spaces on the home page", () => {
     await setTagPinned(depsOf(world), A, { name: HOSTILE, pinned: true });
     const browser = await signedIn(world);
     const home = html(await browser.send("/"));
-    const [href] = hrefsOf(home, "a.home-space");
+    const [href] = hrefsOf(home, "a.home-space-name");
     const space = html(await browser.send(href as string));
     for (const page of [home, space]) {
       expect(page).not.toContain("<img src=x");

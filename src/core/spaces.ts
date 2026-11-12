@@ -1,7 +1,7 @@
 import { CoreError } from "./errors.js";
 import { type LinkPage, linkPage } from "./link-pages.js";
 import { spaceColor } from "./link-space.js";
-import type { LinkListing, LinkOrder } from "./search.js";
+import type { LinkCount, LinkListing, LinkOrder } from "./search.js";
 import type { LinkStore } from "./store.js";
 import type { SpaceColor } from "./tag-space.js";
 import { tagKey } from "./tags.js";
@@ -15,6 +15,8 @@ export type HomeSpace = {
   key: string;
   name: string;
   color: SpaceColor | null;
+  /** How many active links it has: a total, not a count of unread ones. */
+  count: number;
   /**
    * Up to three of its active links, newest first. Best effort: a card prefers links no other
    * card shows (`homeSpaces`), so these are not always the space's three newest.
@@ -60,7 +62,7 @@ function pickRecent(pools: Link[][]): Link[][] {
  * owner's catalog comes too, for `linkSpace`.
  */
 export async function homeSpaces(
-  deps: Deps,
+  deps: Deps & { count: LinkCount },
   owner: OwnerId,
 ): Promise<{ spaces: HomeSpace[]; catalog: Tag[] }> {
   const catalog = await deps.store.listTags(owner);
@@ -72,12 +74,16 @@ export async function homeSpaces(
         (await linkPage(deps, owner, { tagKey: tag.key, state: "active", limit: poolSize })).links,
     ),
   );
+  const counts = await Promise.all(
+    pinned.map((tag) => deps.count.count(owner, { tagKey: tag.key, state: "active" })),
+  );
   const recent = pickRecent(pools);
   const spaces = pinned.map(
     (tag, i): HomeSpace => ({
       key: tag.key,
       name: tag.name,
       color: spaceColor(tag),
+      count: counts[i] ?? 0,
       recent: recent[i] ?? [],
     }),
   );

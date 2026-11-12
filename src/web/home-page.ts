@@ -197,7 +197,7 @@ const homeActs = {
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
-    showUndo("Hidden from Home for two weeks.", async () =>
+    showUndo("Not suggested for two weeks.", async () =>
       undoOr(await post("/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }), putBack),
     );
   },

@@ -599,7 +599,7 @@ describe("the home page's script", () => {
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/home/snooze", body: { id }, redirect: "manual" });
     expect(hidden(p, id)).toBe(true);
-    expect(p.$("#undo-bar span").textContent).toBe("Hidden from Home for two weeks.");
+    expect(p.$("#undo-bar span").textContent).toBe("Not suggested for two weeks.");
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toMatchObject({ url: "/home/unsnooze" });
@@ -641,7 +641,7 @@ describe("the home page's script", () => {
       "snooze",
       "archive",
       "/home/snooze",
-      "Hidden from Home for two weeks.",
+      "Not suggested for two weeks.",
     ],
     [
       "Done with it, then Not now",
@@ -683,7 +683,7 @@ describe("the home page's script", () => {
     answer(null);
     await p.settle();
     expect(urls(p)).toEqual(["/home/snooze"]);
-    expect(p.$("#undo-bar span").textContent).toBe("Hidden from Home for two weeks.");
+    expect(p.$("#undo-bar span").textContent).toBe("Not suggested for two weeks.");
   });
 
   it.each([
@@ -692,7 +692,7 @@ describe("the home page's script", () => {
       "snooze",
       "delete-link",
       "/home/snooze",
-      "Hidden from Home for two weeks.",
+      "Not suggested for two weeks.",
     ],
     ["Delete link, then Not now", "delete-link", "snooze", "/links/delete", "Link deleted."],
     [

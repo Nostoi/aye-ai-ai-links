@@ -31,21 +31,30 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
-  it("keeps text readable on the soft pill fill of Not now and Done with it", () => {
-    const mix = (a: string, b: string) =>
-      `#${[1, 3, 5]
-        .map((i) =>
-          Math.round(
-            Number.parseInt(a.slice(i, i + 2), 16) * 0.07 +
-              Number.parseInt(b.slice(i, i + 2), 16) * 0.93,
-          )
-            .toString(16)
-            .padStart(2, "0"),
+  it.each([
+    ["at rest", ".feature-quiet button{", ".feature-quiet button small{"],
+    ["on hover", ".feature-quiet button:hover{", ".feature-quiet button:hover small{"],
+  ])("keeps the soft pills' label and hint readable %s", (_state, pill, hint) => {
+    const rule = (start: string) => {
+      const at = themeCss.indexOf(start);
+      return at < 0 ? "" : themeCss.slice(at, themeCss.indexOf("}", at));
+    };
+    const share = Number(/var\(--ink\) (\d+)%,var\(--surface\)/.exec(rule(pill))?.[1]) / 100;
+    expect(share).toBeGreaterThan(0);
+    const hintColor = (/color:var\(--([a-z]+)\)/.exec(rule(hint))?.[1] ??
+      /color:var\(--([a-z]+)\)/.exec(rule(".feature-quiet button small{"))?.[1]) as "ink" | "soft";
+    const fill = `#${[1, 3, 5]
+      .map((i) =>
+        Math.round(
+          Number.parseInt(t.ink.slice(i, i + 2), 16) * share +
+            Number.parseInt(t.surface.slice(i, i + 2), 16) * (1 - share),
         )
-        .join("")}`;
-    const fill = mix(t.ink, t.surface);
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")}`;
     expect(contrast(t.ink, fill)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t.soft, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t[hintColor], fill)).toBeGreaterThanOrEqual(4.5);
   });
   it("keeps the summary's ink strictly between the why's and the grey line's", () => {
     const against = (name: "ink" | "about" | "soft") => contrast(t[name], t.surface);

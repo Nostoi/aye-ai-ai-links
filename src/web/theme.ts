@@ -212,6 +212,7 @@ div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-car
 .feature-quiet button{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:48px;padding:6px 22px;border:0;border-radius:999px;background:color-mix(in srgb,var(--ink) 7%,var(--surface));color:var(--ink);font-size:15px;font-weight:600;line-height:1.25;text-decoration:none}
 .feature-quiet button small{display:block;font-size:12px;font-weight:400;color:var(--soft)}
 .feature-quiet button:hover{background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
+.feature-quiet button:hover small{color:var(--ink)}
 .also-body .small-actions button{min-height:48px;padding:0 4px;border:0;background:none;color:var(--soft);font-size:15px;font-weight:600;text-decoration:none}
 .also-body .small-actions button:hover{color:var(--ink)}
 .worth-feature>.card-menu{top:10px;right:10px}

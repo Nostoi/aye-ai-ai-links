@@ -1,12 +1,14 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { addSecondUser, oauthWorld, SECOND_USER, type World } from "../auth/oauth-test-kit.js";
+import { png } from "../core/image-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { mergeTags, renameTag } from "../core/tag-edit.js";
 import { setTagColor, setTagPinned } from "../core/tag-space.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS, MODEL_KEY } from "../search/model.js";
+import { rewriteFavicon, SqliteFaviconStore } from "../store/sqlite-favicons.js";
 
 const A = "owner";
 const B = SECOND_USER.id;
@@ -298,6 +300,34 @@ describe("Your spaces on the home page", () => {
     expect(home.replace(/ data-tags="[^"]*"/g, "")).not.toContain("Baking");
     expect(home).not.toContain("Bsecretspace");
     expect(html(await b.send("/"))).not.toContain("Kitchen");
+  });
+
+  it("shows a stored favicon beside the owner's titles only, never another owner's", async () => {
+    const world = await oauthWorld();
+    await addSecondUser(world);
+    const withIcon = await save(world, A, "https://a.example/with", ["Kitchen"], "Has an icon");
+    const without = await save(world, A, "https://a.example/without", ["Kitchen"], "No icon");
+    const theirs = await save(world, B, "https://b.example/theirs", ["Kitchen"], "B's link");
+    await setTagPinned(depsOf(world), A, { name: "Kitchen", pinned: true });
+    const favicons = new SqliteFaviconStore(world.links);
+    for (const [owner, id] of [
+      [A, withIcon],
+      [B, theirs],
+    ] as const) {
+      rewriteFavicon(world.links, owner, Number(id), ["https://x.example/f.png"]);
+      const bytes = { contentType: "image/png" as const, bytes: png(32, 32, Buffer.from(id)) };
+      expect(await favicons.writeFavicon(owner, id, 1, bytes, new Date())).toBe(true);
+    }
+    const version = (await favicons.faviconVersions(A, [withIcon])).get(withIcon) as string;
+    const home = parseHTML(html(await (await signedIn(world)).send("/"))).document;
+    const row = (id: string) => home.querySelector(`.home-space-recent [data-id="${id}"]`);
+    expect(row(withIcon)?.querySelector("img.home-fav")?.getAttribute("src")).toBe(
+      `/images/${withIcon}/favicon?v=${version}`,
+    );
+    expect(row(without)?.querySelector("img")).toBeNull();
+    expect(row(without)?.querySelector(".home-fav-none")).not.toBeNull();
+    expect(home.querySelectorAll(`img[src*="/images/${theirs}/"]`)).toHaveLength(0);
+    expect(home.querySelectorAll(".home-space-recent img.home-fav")).toHaveLength(1);
   });
 
   it("round-trips an odd tag name through the rendered href, from home and from the Tags page", async () => {

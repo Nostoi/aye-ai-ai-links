@@ -5,7 +5,7 @@ import { faviconBigEnough } from "./image-type.js";
 
 export type FaviconPassOptions = {
   store: FaviconStore;
-  /** The guarded image fetcher the image pass uses: the same address rules, redirects and caps. */
+  /** The guarded favicon fetcher: the image fetcher's address rules, redirects and caps, and an ICO's PNG. */
   fetcher: ImageFetcher;
   now: () => Date;
   log?: (message: string, error?: unknown) => void;
@@ -34,7 +34,7 @@ const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
  * Fetches and stores each link's site favicon (#272) in the background, apart from the image pass
  * and the link's one picture.
  *
- * A pending favicon's candidates are tried in order, through the guarded image fetcher, until one
+ * A pending favicon's candidates are tried in order, through the guarded favicon fetcher, until one
  * is an image at least `FAVICON_MIN_PX` on its shorter side; that one is stored. When none is:
  * if a candidate failed in a way that may pass (a network error, a timeout, 408, 429 or 5xx), the
  * favicon waits out a backoff and all are tried again, ending as `none` on the

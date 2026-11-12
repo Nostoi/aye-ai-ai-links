@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeStore } from "./fake-store.js";
 import { createFaviconPass, type FaviconPass } from "./favicon-pass.js";
+import { FAVICON_DISCOVERY_VERSION } from "./favicon-store.js";
 import type { ImageFetcher, ImageOutcome } from "./fetch.js";
 import { createImageIndexer, MAX_IMAGE_ATTEMPTS, RETRY_MAX_MS } from "./image-indexer.js";
 import { png } from "./image-test-kit.js";
@@ -145,7 +146,7 @@ describe("favicon pass", () => {
       candidates: [F2],
       status: "pending",
       generation: 2,
-      discovery: 1,
+      discovery: FAVICON_DISCOVERY_VERSION,
       stored: false,
     });
     await t.pass.sweep();

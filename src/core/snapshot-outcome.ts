@@ -38,7 +38,7 @@ export function pastLastAttemptRecord(attempts: number): SnapshotRecord {
     description: null,
     imageUrl: null,
     iconUrls: [],
-    faviconUrls: null,
+    faviconUrls: [],
     text: null,
     lastError: "lease:expired",
   };
@@ -116,6 +116,17 @@ function judge(outcome: AttemptOutcome): Verdict {
 }
 
 /**
+ * A terminal attempt's favicon candidates (#272): the page's when its metadata was read. A fetch
+ * that ended with no page looked and found nothing (`[]`, written as a `none` favicon), except
+ * `not_html`, whose outcome carries no final address to build the root fallbacks from, and an
+ * extraction that failed before its metadata: both leave the link's favicon as it was (`null`).
+ */
+function terminalFavicons(outcome: AttemptOutcome, metadata: PageMetadata | null | undefined) {
+  if (metadata) return boundedFaviconUrls(metadata.faviconUrls);
+  return outcome.stage === "fetch" && outcome.fetch.kind !== "not_html" ? [] : null;
+}
+
+/**
  * The record to write for a finished attempt. `attempts` is the lease count (this attempt
  * included) and is written back unchanged. A retry that has no attempts left becomes `failed`.
  * Nothing here produces `pending`. `url` is the link's saved address, which decides whether the
@@ -142,6 +153,8 @@ export function snapshotRecord(input: {
     const delay = attempts >= MAX_ATTEMPTS ? undefined : RETRY_DELAYS_MS[attempts - 1];
     return {
       ...base,
+      // A retry leaves the favicon as it was; the last one found no page (#272).
+      faviconUrls: delay === undefined ? [] : null,
       status: delay === undefined ? "failed" : "retrying",
       nextFetchAt: delay === undefined ? null : new Date(now.getTime() + delay),
       fetchedAt: null,
@@ -158,8 +171,7 @@ export function snapshotRecord(input: {
     description: v.metadata?.description ?? null,
     imageUrl: keptPreview(url, v.metadata?.imageUrl ?? null),
     iconUrls: boundedIconUrls(v.metadata?.iconUrls),
-    // Null without metadata: the favicon was not looked for, so the link's stays as it was.
-    faviconUrls: v.metadata ? boundedFaviconUrls(v.metadata.faviconUrls) : null,
+    faviconUrls: terminalFavicons(outcome, v.metadata),
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,
   };

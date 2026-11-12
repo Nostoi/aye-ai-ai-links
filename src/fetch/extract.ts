@@ -1,5 +1,5 @@
 import { parseHTML } from "linkedom";
-import { extractMetadata, type Metadata } from "./extract-metadata.ts";
+import { extractMetadata, faviconCandidates, type Metadata } from "./extract-metadata.ts";
 import { articleText, flattenTemplates, readArticle } from "./extract-text.ts";
 
 // The extraction child loads this file: see AGENTS.md in this folder for the import rules.
@@ -8,14 +8,14 @@ export type Snapshot = Metadata & {
   text: string | null;
 };
 
-const NO_METADATA: Metadata = {
+/** A page with no document: nothing declared, so its favicons are the site root's (#272). */
+const noMetadata = (finalUrl: string): Metadata => ({
   title: null,
   description: null,
   imageUrl: null,
   iconUrls: [],
-  faviconUrls: [],
-  declaresIcon: false,
-};
+  faviconUrls: faviconCandidates([], finalUrl),
+});
 
 /** Parses the HTML with a detached DOM that runs no script and loads nothing. */
 export function parsePage(html: string): Document {
@@ -23,7 +23,7 @@ export function parsePage(html: string): Document {
 }
 
 export function pageMetadata(doc: Document, finalUrl: string): Metadata {
-  return doc.documentElement ? extractMetadata(doc, finalUrl) : NO_METADATA;
+  return doc.documentElement ? extractMetadata(doc, finalUrl) : noMetadata(finalUrl);
 }
 
 /** The readable text and the article element it came from; `article` is null whenever `text` is. */

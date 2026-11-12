@@ -13,9 +13,9 @@ export type SnapshotRecord = {
   /** The site's icon candidates, best first; at most MAX_ICON_URLS. */
   iconUrls: string[];
   /**
-   * The favicon candidates (#272), best first; at most MAX_FAVICON_URLS. Null when no page
-   * metadata was read, which leaves the link's favicon as it was; a list, even an empty one,
-   * rewrites it.
+   * The favicon candidates (#272), best first; at most MAX_FAVICON_URLS. A list, even an empty
+   * one, rewrites the link's favicon; an empty one says it was looked for and none found. Null
+   * leaves it as it was (`snapshotRecord` says when).
    */
   faviconUrls: string[] | null;
   text: string | null;

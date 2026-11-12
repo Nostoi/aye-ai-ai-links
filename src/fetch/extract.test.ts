@@ -9,6 +9,11 @@ import { MAX_FAVICON_URLS } from "../core/snapshot-store.js";
 import { extractSnapshot } from "./extract.js";
 
 const URL0 = "https://example.com/post/1";
+/** What a page with no usable icon gets as favicons (#272): the site root's guesses. */
+const ROOT_FAVICONS = [
+  "https://example.com/apple-touch-icon.png",
+  "https://example.com/favicon.ico",
+];
 const PARA = "Home batteries store solar energy for evening use. ";
 const BODY = PARA.repeat(20);
 
@@ -392,13 +397,34 @@ describe("favicon urls (#272)", () => {
       link('rel="icon" sizes="8x8" href="/8.png"');
     const s = read(head);
     expect(s.iconUrls).toEqual(["https://example.com/180.png", "https://example.com/48.png"]);
+    // In the favicon order (next test), which the 18 px squares need, not the large picture's.
     expect(s.faviconUrls).toEqual([
-      "https://example.com/180.png",
-      "https://example.com/48.png",
       "https://example.com/32.png",
+      "https://example.com/48.png",
+      "https://example.com/180.png",
       "https://example.com/16.png",
     ]);
     expect(s.faviconUrls).toHaveLength(MAX_FAVICON_URLS);
+  });
+
+  it("★ orders favicons for an 18 px square: 32 px and up smallest first, then smaller largest first, then unsized", () => {
+    // [Taking the largest first, as the large picture's icons do.]
+    const sized = (sizes: string) => link(`rel="icon" sizes="${sizes}" href="/${sizes}.png"`);
+    const s = read(sized("24x24") + sized("64x64") + sized("8x8") + sized("32x32"));
+    expect(s.faviconUrls).toEqual(
+      ["32x32", "64x64", "24x24", "8x8"].map((n) => `https://example.com/${n}.png`),
+    );
+    const t = read(link('rel="icon" href="/u.png"') + sized("16x16") + sized("192x192"));
+    expect(t.faviconUrls).toEqual(
+      ["192x192", "16x16", "u"].map((n) => `https://example.com/${n}.png`),
+    );
+  });
+
+  it("★ puts an unsized rel=icon before an unsized apple-touch-icon", () => {
+    // [The large picture's tie rule, where the later declaration wins.]
+    const s = read(link('rel="icon" href="/i.png"') + link('rel="apple-touch-icon" href="/t.png"'));
+    expect(s.faviconUrls).toEqual(["https://example.com/i.png", "https://example.com/t.png"]);
+    expect(s.iconUrls).toEqual(["https://example.com/t.png", "https://example.com/i.png"]);
   });
 
   it("★ resolves against the final URL it is given, after redirects, not a saved short link", () => {
@@ -407,23 +433,53 @@ describe("favicon urls (#272)", () => {
     expect(s.faviconUrls).toEqual(["https://destination.example/fav.png"]);
   });
 
-  it("filters as iconUrls does: no SVG, ICO, media or unusable address", () => {
-    const head =
-      link('rel="icon" type="image/svg+xml" href="/i.svg"') +
-      link('rel="icon" href="/favicon.ico"') +
-      link('rel="icon" media="(prefers-color-scheme: dark)" href="/dark.png"') +
-      link('rel="icon" href="javascript:alert(1)"');
-    expect(read(head).faviconUrls).toEqual([]);
+  it("★ takes a declared ICO, which the large picture's icons still refuse", () => {
+    // [Admitting ICO to iconUrls too, or keeping it out of the favicons.]
+    for (const attrs of [
+      'rel="icon" type="image/x-icon" href="/a"',
+      'rel="icon" type="image/vnd.microsoft.icon" href="/a"',
+      'rel="icon" href="/a.ico"',
+      'rel="shortcut icon" href="/A.ICO"',
+    ]) {
+      const s = read(link(attrs) + link('rel="icon" sizes="32x32" href="/p.png"'));
+      const href = new URL(attrs.match(/href="([^"]+)"/)?.[1] ?? "", URL0).href;
+      expect(s.faviconUrls, attrs).toEqual(["https://example.com/p.png", href]);
+      expect(s.iconUrls, attrs).toEqual(["https://example.com/p.png"]);
+    }
   });
 
-  it("★ says whether the page declared any icon, usable or not", () => {
-    // [Deriving it from the usable list: an SVG-only page would read as declaring nothing.]
-    expect(read(link('rel="icon" type="image/svg+xml" href="/i.svg"')).declaresIcon).toBe(true);
-    expect(read(link('rel="icon" href="/favicon.ico"')).declaresIcon).toBe(true);
-    expect(read(link('rel="apple-touch-icon" href="/t.png"')).declaresIcon).toBe(true);
-    expect(read(link('rel="mask-icon" href="/m.svg"')).declaresIcon).toBe(false);
-    expect(read(link('rel="stylesheet" href="/s.css"')).declaresIcon).toBe(false);
-    expect(read("").declaresIcon).toBe(false);
+  it("★ adds the site root's apple-touch-icon.png, then favicon.ico, when no candidate is usable", () => {
+    // [Gating on whether the page declared any icon: SVG-only, media-only and data: pages declare one.]
+    for (const head of [
+      "",
+      link('rel="icon" type="image/svg+xml" href="/i.svg"'),
+      link('rel="icon" media="(prefers-color-scheme: dark)" href="/dark.png"'),
+      link('rel="icon" href="data:image/png;base64,iVBORw0KGgo="'),
+      link('rel="icon" href="javascript:alert(1)"'),
+      link('rel="mask-icon" href="/m.svg"'),
+    ]) {
+      const s = read(head);
+      expect(s.faviconUrls, head).toEqual(ROOT_FAVICONS);
+      expect(s.iconUrls, head).toEqual([]);
+    }
+  });
+
+  it("★ builds the fallbacks from the final URL's origin, never the page's <base href>", () => {
+    // [Resolving `/favicon.ico` against the document base, as a declared icon is.]
+    const head = '<base href="https://cdn.elsewhere.example/assets/">';
+    expect(read(head, "https://destination.example:8443/a/b?c#d").faviconUrls).toEqual([
+      "https://destination.example:8443/apple-touch-icon.png",
+      "https://destination.example:8443/favicon.ico",
+    ]);
+  });
+
+  it("adds no fallbacks when any candidate is usable, an ICO alone included", () => {
+    expect(read(link('rel="icon" href="/favicon.ico"')).faviconUrls).toEqual([
+      "https://example.com/favicon.ico",
+    ]);
+    expect(read(link('rel="apple-touch-icon" href="/t.png"')).faviconUrls).toEqual([
+      "https://example.com/t.png",
+    ]);
   });
 });
 
@@ -539,8 +595,7 @@ describe("degenerate input", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
-      faviconUrls: [],
-      declaresIcon: false,
+      faviconUrls: ROOT_FAVICONS,
       text: null,
     });
   });
@@ -552,8 +607,7 @@ describe("extraction never throws and keeps the metadata", () => {
     description: null,
     imageUrl: null,
     iconUrls: [],
-    faviconUrls: [],
-    declaresIcon: false,
+    faviconUrls: ROOT_FAVICONS,
     text: null,
   };
 
@@ -597,8 +651,7 @@ describe("extraction never throws and keeps the metadata", () => {
       description: null,
       imageUrl: "https://example.com/og.png",
       iconUrls: [],
-      faviconUrls: [],
-      declaresIcon: false,
+      faviconUrls: ROOT_FAVICONS,
       text: null,
     });
   });

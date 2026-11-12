@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import zlib from "node:zlib";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ImageFetcher, ImageOutcome } from "../core/fetch.js";
-import { gif, png, svg } from "../core/image-test-kit.js";
+import { dib, gif, ico, png, svg } from "../core/image-test-kit.js";
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { isPublicAddress } from "./address-policy.js";
 import type { Resolve } from "./guarded-lookup.js";
@@ -29,6 +29,8 @@ const resolve: Resolve = async (hostname) => {
 const allowSite = (ip: string) => ip === "::1" || isPublicAddress(ip);
 
 const PNG = png(640, 480);
+/** An ICO holding a 256 px PNG, which only the favicon fetcher unwraps (#272). */
+const ICO = ico([{ data: dib(16, 16) }, { data: png(256, 256) }]);
 const bomb = zlib.gzipSync(Buffer.alloc(20_000_000, 0));
 
 let target: http.Server;
@@ -53,6 +55,10 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return send("image/png", PNG);
     case "png-as-octet":
       return send("application/octet-stream", PNG);
+    case "ico":
+      return send("image/x-icon", ICO);
+    case "ico-as-octet":
+      return send("application/octet-stream", ICO);
     case "gif-as-png":
       return send("image/png", gif(10, 10));
     case "png-untyped":
@@ -192,6 +198,9 @@ describe("what is not kept", () => {
     ["an SVG served as image/png", "/svg-as-png"],
     ["HTML served as image/png", "/html-as-png"],
     ["a PNG header cut short", "/cut-header"],
+    // The large picture and saved copies never take an ICO, even one holding a PNG (#272).
+    ["an ICO holding a PNG, served as image/x-icon", "/ico"],
+    ["an ICO holding a PNG, served as application/octet-stream", "/ico-as-octet"],
   ])("refuses %s as not_image", async (_, path) => {
     expect(await fetchPath(path)).toMatchObject({ kind: "not_image" });
   });

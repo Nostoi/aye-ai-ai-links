@@ -8,13 +8,12 @@ export type PageMetadata = {
   /** The site's icon candidates, best first; at most MAX_ICON_URLS. Read it with `boundedIconUrls`. */
   iconUrls: string[];
   /**
-   * The favicon candidates (#272), best first, resolved as a browser resolves them: against the
-   * page's `<base href>`, else its final address after redirects. At most MAX_FAVICON_URLS. Read
-   * it with `boundedFaviconUrls`.
+   * The favicon candidates (#272), best first: the declared icons (ICO included), resolved as a
+   * browser resolves them, against the page's `<base href>`, else its final address after
+   * redirects; or, when none is usable, `/apple-touch-icon.png` then `/favicon.ico` at the final
+   * address's origin. At most MAX_FAVICON_URLS. Read it with `boundedFaviconUrls`.
    */
   faviconUrls: string[];
-  /** Whether the page declares any icon, usable or not (#272). */
-  declaresIcon: boolean;
 };
 
 /**

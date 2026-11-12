@@ -20,7 +20,6 @@ const meta: PageMetadata = {
   imageUrl: "https://x.test/i.png",
   iconUrls: ["https://x.test/a.png", "https://x.test/b.png"],
   faviconUrls: ["https://x.test/a.png", "https://x.test/b.png", "https://x.test/c.png"],
-  declaresIcon: true,
 };
 
 type FailedFetch = Exclude<FetchOutcome, { kind: "ok" }>;
@@ -119,7 +118,8 @@ describe("retry schedule", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
-      faviconUrls: null,
+      // Looked, found nothing (#272): an empty list writes a `none` favicon, so it is not looked for again.
+      faviconUrls: [],
       text: null,
       lastError: "lease:expired",
     });
@@ -166,25 +166,29 @@ describe("snapshotRecord", () => {
     expectConsistent(r);
   });
 
-  const terminal: [string, AttemptOutcome, string, string][] = [
+  /** Each terminal fetch outcome: its status, its error and its favicon candidates (#272). */
+  const terminal: [string, AttemptOutcome, string, string, string[] | null][] = [
     [
       "not_html",
       fetchOf({ kind: "not_html", contentType: "image/png" }),
       "not_html",
       "fetch:not_html",
+      // No final address to build the root fallbacks from yet, so the favicon is left as it was.
+      null,
     ],
-    ["too_large", fetchOf({ kind: "too_large" }), "failed", "fetch:too_large"],
-    ["http 404", fetchOf({ kind: "http_error", status: 404 }), "failed", "fetch:http:404"],
-    ["http 403", fetchOf({ kind: "http_error", status: 403 }), "failed", "fetch:http:403"],
-    ["http 301", fetchOf({ kind: "http_error", status: 301 }), "failed", "fetch:http:301"],
-    ...refusedReasons.map((reason): [string, AttemptOutcome, string, string] => [
+    ["too_large", fetchOf({ kind: "too_large" }), "failed", "fetch:too_large", []],
+    ["http 404", fetchOf({ kind: "http_error", status: 404 }), "failed", "fetch:http:404", []],
+    ["http 403", fetchOf({ kind: "http_error", status: 403 }), "failed", "fetch:http:403", []],
+    ["http 301", fetchOf({ kind: "http_error", status: 301 }), "failed", "fetch:http:301", []],
+    ...refusedReasons.map((reason): [string, AttemptOutcome, string, string, string[]] => [
       `refused ${reason}`,
       fetchOf({ kind: "refused", reason }),
       "refused",
       `fetch:refused:${reason}`,
+      [],
     ]),
   ];
-  it.each(terminal)("%s is terminal", (_n, outcome, status, lastError) => {
+  it.each(terminal)("%s is terminal", (_n, outcome, status, lastError, faviconUrls) => {
     const r = map(outcome, 1);
     expect(r).toEqual({
       status,
@@ -195,11 +199,29 @@ describe("snapshotRecord", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
-      faviconUrls: null,
+      faviconUrls,
       text: null,
       lastError,
     });
     expectConsistent(r);
+  });
+
+  it("★ a fetch that ends with no page records no favicon candidates; a retry leaves them (#272)", () => {
+    // [Leaving it null: no favicon row is written, so the link reads as never looked at.]
+    for (const fetch of [
+      { kind: "refused", reason: "address" },
+      { kind: "too_large" },
+      { kind: "http_error", status: 404 },
+    ] as const) {
+      expect(map(fetchOf(fetch)).faviconUrls, fetch.kind).toEqual([]);
+    }
+    const transient = fetchOf({ kind: "http_error", status: 503 });
+    expect(map(transient, MAX_ATTEMPTS - 1)).toMatchObject({
+      status: "retrying",
+      faviconUrls: null,
+    });
+    expect(map(transient, MAX_ATTEMPTS)).toMatchObject({ status: "failed", faviconUrls: [] });
+    expect(pastLastAttemptRecord(MAX_ATTEMPTS + 1).faviconUrls).toEqual([]);
   });
 
   it("ok keeps metadata and text, stamps fetchedAt, and has no error", () => {

@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  FAVICON_DISCOVERY_VERSION,
-  type FaviconReader,
-  type FaviconStore,
-} from "./favicon-store.js";
+import type { FaviconReader, FaviconStore } from "./favicon-store.js";
 import type { IconBackfillStore } from "./icon-backfill-store.js";
 import { type ImageBytes, imageVersion } from "./image-store.js";
 import type { SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
@@ -85,7 +81,8 @@ export function describeFaviconStoreContract(
         candidates: [F1, F2],
         status: "pending",
         generation: 1,
-        discovery: FAVICON_DISCOVERY_VERSION,
+        // Version 2 (#272 PR 2): declared ICOs and the site root's fallbacks.
+        discovery: 2,
         stored: false,
       });
       expect(await h.favicons.pendingFavicons(null, 100)).toEqual([

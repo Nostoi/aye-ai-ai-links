@@ -29,6 +29,7 @@ import { createSummaryPass, type SummaryPass } from "./core/summary-pass.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
 import { type AppDeps, createDeps } from "./deps.js";
 import { createChildExtractor } from "./fetch/extract-runner.js";
+import { createFaviconFetcher } from "./fetch/favicon-fetcher.js";
 import { createGuardedFetcher } from "./fetch/guarded-fetcher.js";
 import { createImageFetcher } from "./fetch/image-fetcher.js";
 import { createJsonFetcher } from "./fetch/json-fetcher.js";
@@ -48,7 +49,8 @@ const SETTLE_MS = 5_000;
  * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
  * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
  * fetcher (5 MiB cap) and the child extractor. `imageFetcher` replaces the guarded image fetcher
- * the image pass and the favicon pass use, and `faviconPollMs` sets the favicon pass's sweep interval. `copyExtractor` replaces the copy pass's own child extractor, and
+ * the image pass and the copy pass use; `faviconFetcher` replaces the favicon pass's own, which
+ * also takes an ICO's PNG, and `faviconPollMs` sets the favicon pass's sweep interval. `copyExtractor` replaces the copy pass's own child extractor, and
  * `copyPollMs` its sweep interval. `iconExtractor` replaces the icon backfill's own child extractor, and
  * `iconPollMs` its sweep interval. `summaryPollMs` and `summaryGapMs` set the summary pass's sweep interval and the gap between its AI calls. `linkChecker` replaces the guarded link checker the check runner uses.
  * `wrapAuthMigrations` runs around the auth migrations, so a test can hold
@@ -65,6 +67,8 @@ export type StartOptions = {
   fetcher?: PageFetcher;
   extractor?: PageExtractor;
   imageFetcher?: ImageFetcher;
+  /** Replaces the guarded favicon fetcher the favicon pass uses. */
+  faviconFetcher?: ImageFetcher;
   /** Time between image pass sweeps; its 15 s default when left out. */
   imagePollMs?: number;
   /** Time between favicon pass sweeps; its 15 s default when left out. */
@@ -146,6 +150,7 @@ export async function startServer(
     fetcher = createGuardedFetcher({ version: config.version }),
     extractor = createChildExtractor(),
     imageFetcher = createImageFetcher({ version: config.version }),
+    faviconFetcher = createFaviconFetcher({ version: config.version }),
     imagePollMs,
     faviconPollMs,
     linkChecker = createLinkChecker({ version: config.version }),
@@ -196,6 +201,7 @@ export async function startServer(
     await checks?.stop();
     await jsonFetcher.close();
     await imageFetcher.close();
+    await faviconFetcher.close();
     await linkChecker.close();
     await fetcher.close();
     await extractor.close();
@@ -255,10 +261,10 @@ export async function startServer(
       now: deps.now,
       ...(imagePollMs !== undefined && { pollMs: imagePollMs }),
     });
-    // The image pass's fetcher: the same address rules, redirects and size caps (#272).
+    // Its own fetcher, which takes an ICO's PNG; the image pass's rules otherwise (#272).
     favicons = createFaviconPass({
       store: deps.favicons,
-      fetcher: imageFetcher,
+      fetcher: faviconFetcher,
       now: deps.now,
       ...(faviconPollMs !== undefined && { pollMs: faviconPollMs }),
     });

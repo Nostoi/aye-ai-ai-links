@@ -72,7 +72,6 @@ const PAGE: ExtractOutcome = {
     imageUrl: null,
     iconUrls: [],
     faviconUrls: [],
-    declaresIcon: false,
   },
   text: "page text",
 };
@@ -87,7 +86,6 @@ const PAGE_WITH_IMAGE: ExtractOutcome = {
     imageUrl: IMAGE_URL,
     iconUrls: [],
     faviconUrls: [],
-    declaresIcon: false,
   },
 };
 const PNG: ImageOutcome = {
@@ -152,6 +150,8 @@ function fakePipeline(
     fetch: (url, signal) => (o.fetchImage ? o.fetchImage(url, signal) : Promise.resolve(PNG)),
     close: async () => {},
   };
+  // The favicon pass's own fetcher: a fake answering as the image fetcher does, so no test fetches a real favicon.
+  const faviconFetcher: ImageFetcher = { ...imageFetcher };
   const linkChecker: LinkChecker = {
     canResolve: async () => true,
     check: async (url): Promise<LinkCheckOutcome> => ({ kind: "ok", finalUrl: url }),
@@ -167,6 +167,7 @@ function fakePipeline(
     extractor,
     iconExtractor,
     imageFetcher,
+    faviconFetcher,
     linkChecker,
     embedder: new FakeEmbedder(DIMS),
     log,
@@ -1402,7 +1403,6 @@ describe("startServer", () => {
         imageUrl: null,
         iconUrls: [ICON_URL],
         faviconUrls: [],
-        declaresIcon: false,
       },
       text: "page text",
     };
@@ -1431,7 +1431,7 @@ describe("startServer", () => {
         ...fakePipeline({
           extract: async () => ({
             ...PAGE_WITH_ICON,
-            metadata: { ...PAGE_WITH_ICON.metadata, faviconUrls: [ICON_URL], declaresIcon: true },
+            metadata: { ...PAGE_WITH_ICON.metadata, faviconUrls: [ICON_URL] },
           }),
           fetchImage: async () => ({
             kind: "ok",
@@ -1515,8 +1515,9 @@ describe("startServer", () => {
       expect(images()).toEqual([{ status: "pending", stored: 0 }]);
     });
 
-    it("★ on stop, aborts a favicon fetch in flight before closing the image fetcher, leaving it pending (#272)", async () => {
-      // [Closing the shared fetcher first, so the fetch ends as a failure and the favicon is ended.]
+    it("★ on stop, aborts a favicon fetch in flight before closing the favicon fetcher, leaving it pending (#272)", async () => {
+      // [Closing the fetcher first, so the fetch ends as a failure and the favicon is ended.]
+      // The favicon pass has its own fetcher since PR 2, so this test injects that one.
       await seed("https://example.com/backlog");
       const events: string[] = [];
       const pipeline = fakePipeline({
@@ -1528,12 +1529,11 @@ describe("startServer", () => {
             imageUrl: null,
             iconUrls: [],
             faviconUrls: [ICON_URL],
-            declaresIcon: true,
           },
           text: "page text",
         }),
       });
-      const imageFetcher: ImageFetcher = {
+      const faviconFetcher: ImageFetcher = {
         fetch: (_url, signal) =>
           new Promise<ImageOutcome>((resolve) => {
             events.push("fetching");
@@ -1544,12 +1544,12 @@ describe("startServer", () => {
               }, 20),
             );
           }),
-        close: async () => void events.push("image fetcher closed"),
+        close: async () => void events.push("favicon fetcher closed"),
       };
-      const { stop } = await start({ ...pipeline, imageFetcher, faviconPollMs: 20 });
+      const { stop } = await start({ ...pipeline, faviconFetcher, faviconPollMs: 20 });
       await until(() => events.includes("fetching"), "a favicon fetch");
       await stop();
-      expect(events).toEqual(["fetching", "aborted", "image fetcher closed"]);
+      expect(events).toEqual(["fetching", "aborted", "favicon fetcher closed"]);
       expect(read("SELECT status, bytes IS NOT NULL AS stored FROM link_favicons")).toEqual([
         { status: "pending", stored: 0 },
       ]);
@@ -1769,7 +1769,6 @@ describe("startServer", () => {
               imageUrl: null,
               iconUrls: [OLD_ICON],
               faviconUrls: [],
-              declaresIcon: false,
             },
             text: "new text",
           };
@@ -1875,7 +1874,6 @@ describe("startServer", () => {
             imageUrl: CARD,
             iconUrls: [FLUID],
             faviconUrls: [],
-            declaresIcon: false,
           },
           text: "new text",
         }),

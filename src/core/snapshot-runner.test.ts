@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
+import { FAVICON_DISCOVERY_VERSION } from "./favicon-store.js";
 import type { FetchOutcome } from "./fetch.js";
 import type { CopyKeeper } from "./keep-copy.js";
 import type { CopyDraft } from "./saved-copy.js";
@@ -17,7 +18,6 @@ const pageOk: ExtractOutcome = {
     imageUrl: null,
     iconUrls: [],
     faviconUrls: [],
-    declaresIcon: false,
   },
   text: "body",
 };
@@ -153,7 +153,6 @@ describe("snapshot runner", () => {
       imageUrl: "https://opengraph.githubassets.com/x/repo",
       iconUrls: ["https://github.com/fluidicon.png"],
       faviconUrls: [],
-      declaresIcon: false,
     };
     s.extract.run = async () => ({ kind: "ok", metadata: page, text: "body" });
     const { link } = await s.store.insertIfAbsent(A, {
@@ -173,6 +172,30 @@ describe("snapshot runner", () => {
         role: "preview",
       },
     ]);
+  });
+
+  it("★ a fetch that ends with no page writes a none favicon row: looked, found nothing (#272)", async () => {
+    // [Recording null, which writes no row, so the link reads as never looked at.]
+    const s = setup();
+    const refused = await s.save(A, 1);
+    const gone = await s.save(A, 2);
+    s.fetch.run = async (url) =>
+      url.endsWith("/1")
+        ? { kind: "refused", reason: "address" }
+        : { kind: "http_error", status: 404 };
+    expect(refused.url.endsWith("/1") && gone.url.endsWith("/2")).toBe(true);
+    await s.runner.kick(A, refused.id);
+    await s.runner.kick(A, gone.id);
+    for (const link of [refused, gone]) {
+      expect(s.store.faviconRow(A, link.id)).toEqual({
+        candidates: [],
+        status: "none",
+        generation: 1,
+        discovery: FAVICON_DISCOVERY_VERSION,
+        stored: false,
+      });
+    }
+    expect(await s.store.pendingFavicons(null, 10)).toEqual([]);
   });
 
   it("runs at most 2 jobs at once across sweeps and kicks, and finishes them all", async () => {
@@ -484,7 +507,6 @@ describe("snapshot runner", () => {
             imageUrl: null,
             iconUrls: [],
             faviconUrls: [],
-            declaresIcon: false,
           },
           text: `text of ${url}`,
         });

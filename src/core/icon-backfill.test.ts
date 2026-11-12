@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome, PageExtractor, PageMetadata } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
+import { FAVICON_DISCOVERY_VERSION } from "./favicon-store.js";
 import type { FetchOutcome, PageFetcher } from "./fetch.js";
 import { createIconBackfill, iconsToRecord } from "./icon-backfill.js";
 import { createImageIndexer, MAX_IMAGE_ATTEMPTS, RETRY_MAX_MS } from "./image-indexer.js";
@@ -23,7 +24,6 @@ const meta = (over: Partial<PageMetadata> = {}): PageMetadata => ({
   imageUrl: null,
   iconUrls: [ICON, ICON2],
   faviconUrls: [],
-  declaresIcon: false,
   ...over,
 });
 const okExtract = (m: PageMetadata = meta()): ExtractOutcome => ({
@@ -539,7 +539,7 @@ describe("icon backfill", () => {
         candidates: fresh,
         status: "pending",
         generation: 2,
-        discovery: 1,
+        discovery: FAVICON_DISCOVERY_VERSION,
         stored: false,
       });
     });

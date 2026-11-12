@@ -624,7 +624,7 @@ describe("Not now", () => {
   });
 });
 
-describe("It's stale", () => {
+describe("Done with it", () => {
   it("archives the link, and undo makes it active again", async () => {
     const l = await link();
     await archiveLink(deps(), A, l.id);
@@ -709,7 +709,7 @@ describe("put away, stale, bring back and their Undo", () => {
     expect(await get(away.id)).toEqual(before);
   });
 
-  it("It's stale: from active and from put away, clearing the marker", async () => {
+  it("Done with it: from active and from put away, clearing the marker", async () => {
     const active = await link();
     const away = await putAway();
     expect((await archiveLink(deps(), A, active.id)).before.state).toBe("active");
@@ -722,7 +722,7 @@ describe("put away, stale, bring back and their Undo", () => {
     expect(await get(away.id)).toMatchObject({ state: "archived", putAwayAt: null });
   });
 
-  it("It's stale refuses a link that is already stale", async () => {
+  it("Done with it refuses a link that is already stale", async () => {
     const stale = await link(A, { state: "archived" });
     expect(await code(archiveLink(deps(), A, stale.id))).toBe("conflict");
   });
@@ -751,7 +751,7 @@ describe("put away, stale, bring back and their Undo", () => {
     });
   });
 
-  it("Undo of It's stale on a put-away link restores it put away, with the same date", async () => {
+  it("Undo of Done with it on a put-away link restores it put away, with the same date", async () => {
     const away = await putAway();
     const change = await archiveLink(deps(), A, away.id);
     await undoStateChange(deps(), A, away.id, change);
@@ -822,7 +822,7 @@ describe("stats events from the state actions (#161)", () => {
     expect(kinds(l)).toEqual([["put_away", NOW.getTime()]]);
   });
 
-  it("It's stale records stale at now, and a refused one records nothing", async () => {
+  it("Done with it records stale at now, and a refused one records nothing", async () => {
     const l = await link();
     await archiveLink(deps(), A, l.id);
     expect(await code(archiveLink(deps(), A, l.id))).toBe("conflict");
@@ -872,7 +872,7 @@ describe("stats events from the state actions (#161)", () => {
     expect(kinds(l)).toEqual([["put_away", at(DAY).getTime()]]);
   });
 
-  it("undo of It's stale removes the stale event and leaves an earlier put_away", async () => {
+  it("undo of Done with it removes the stale event and leaves an earlier put_away", async () => {
     const l = await link();
     await putAwayLink(deps(), A, l.id);
     clock = at(DAY);

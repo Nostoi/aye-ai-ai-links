@@ -557,7 +557,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 <div class="row-body">
 <h3 data-card-title><a href="https://example.com/4" target="_blank" rel="noopener noreferrer" data-open>Title 4</a></h3>
 <p class="row-why">"to compare"</p>
-<p class="card-line"><span class="line-space"><span class="dot" aria-hidden="true"></span><span data-space-name>Kitchen</span></span><span>example.com</span><span>Stale</span></p>
+<p class="card-line"><span class="line-space"><span class="dot" aria-hidden="true"></span><span data-space-name>Kitchen</span></span><span>example.com</span><span>Done</span></p>
 </div>
 <details class="card-menu" name="menu">
 <summary><span class="card-menu-dot" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg></span><span class="visually-hidden">More for Title 4</span></summary>
@@ -1197,7 +1197,7 @@ if (copyRoot) {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("It's stale") stays in the page, hidden.
+  // A card moved out of the list ("Done with it") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -1249,7 +1249,7 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Let go.","text":"You won't see it again unless you search for it."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Back in your lists.","text":""}}};
 const stateCard = (card, act) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("all-links");

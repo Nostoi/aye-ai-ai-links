@@ -271,7 +271,7 @@ describe("Save on the page", () => {
   });
 
   it.each([
-    ["stale", null, "Stale"],
+    ["stale", null, "Done"],
     ["put away", "2026-10-01T00:00:00.000Z", "Put away"],
   ])("archived and %s: says %s before Bring it back", async (_, putAwayAt, text) => {
     const page = load(answering({ ...ANSWER, state: "archived", putAwayAt }));

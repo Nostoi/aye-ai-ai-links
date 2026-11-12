@@ -4,7 +4,7 @@ import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu } from "./card-menu.js";
 import { displayTitle } from "./display-title.js";
-import { DONE_ITEM, STALE_LABEL, STALE_UNDO } from "./done-link.js";
+import { DONE_ITEM, DONE_LABEL, DONE_UNDO } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { NOT_HANDY } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
@@ -31,7 +31,7 @@ const STILL_USING = `<div class="ask">
 <p class="small">Still using?</p>
 <div class="actions small-actions">
 <button type="button" data-act="still-using">Yes</button>
-<button type="button" data-act="done">${STALE_LABEL}</button>
+<button type="button" data-act="done">${DONE_LABEL}</button>
 </div>
 </div>`;
 
@@ -42,7 +42,7 @@ const GONE_ASK = `<div class="ask">
 <p class="small">${SEEMS_GONE}</p>
 <div class="actions small-actions">
 <button type="button" data-act="still-works">It works</button>
-<button type="button" data-act="done">${STALE_LABEL}</button>
+<button type="button" data-act="done">${DONE_LABEL}</button>
 </div>
 </div>`;
 
@@ -212,7 +212,7 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    // It's stale on a tile's ask and the menu's It's stale (archive) are the same action.
+    // Done with it on a tile's ask and the menu's Done with it (archive) are the same action.
     const done = act === "done" || act === "archive";
     if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
@@ -232,7 +232,7 @@ if (handy) {
           return;
         }
         dropped = await refreshShelf(from);
-        offerUndo(${JSON.stringify(STALE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(STALE_UNDO.title)});
+        offerUndo(${JSON.stringify(DONE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(DONE_UNDO.title)});
         return;
       }
       if (act === "still-works") {

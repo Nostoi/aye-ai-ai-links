@@ -1323,7 +1323,7 @@ export function webApp({
     }),
   );
 
-  // It's stale, Put it away and Bring it back answer the change they made; the page sends it
+  // Done with it, Put it away and Bring it back answer the change they made; the page sends it
   // back, as it got it, to `/home/undo-state`.
   const stateActions = [
     ["/home/archive", archiveLink],

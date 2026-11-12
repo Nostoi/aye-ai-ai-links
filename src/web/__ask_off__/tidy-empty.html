@@ -599,7 +599,7 @@ const whenFree = async (card, run) => {
 {
 const tidyRoot = document.getElementById("tidy");
 const tidyAlert = document.getElementById("tidy-error");
-const tidyActs = {"keep":{"route":"/tidy/keep","undo":null},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"stale":{"route":"/home/archive","undo":{"title":"Let go.","text":"You won't see it again unless you search for it."}}};
+const tidyActs = {"keep":{"route":"/tidy/keep","undo":null},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Out of your lists but still saved. If you start something it fits, it'll come back."}},"stale":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}}};
 const tidyKeys = {"1":"keep","2":"put-away","3":"stale"};
 const steps = [...tidyRoot.querySelectorAll("section[data-id]")];
 const finished = tidyRoot.querySelector(".tidy-done");

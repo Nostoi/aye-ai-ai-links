@@ -184,7 +184,7 @@ describe("Delete link from the ⋯ menu", () => {
     expect(p.focused().at(-2)).toBe(p.$("[data-id='9'] .card-menu summary"));
   });
 
-  // `hidden` as goneScript leaves a card moved out of the list ("It's stale").
+  // `hidden` as goneScript leaves a card moved out of the list ("Done with it").
   it("skips a hidden card when it moves focus on", async () => {
     const p = runPage(allLinks([link("7"), link("8"), link("9")]));
     p.$("[data-id='8']").hidden = true;

@@ -122,10 +122,10 @@ describe("get_digest guidance", () => {
   });
 });
 
-describe("the owner's word for archiving is stale", () => {
-  it('get_digest offers to mark a link stale, still sending state "archived"', () => {
-    expect(GET_DIGEST).toContain('mark it stale (state "archived")');
-    expect(GET_DIGEST).toContain("offer to mark it stale or send handy");
+describe("the owner's word for archiving is done", () => {
+  it('get_digest offers to mark a link done, still sending state "archived"', () => {
+    expect(GET_DIGEST).toContain('mark it done (state "archived")');
+    expect(GET_DIGEST).toContain("offer to mark it done or send handy");
     expect(GET_DIGEST).not.toMatch(/archive it/);
   });
 });
@@ -134,7 +134,7 @@ describe("gone guidance", () => {
   it("get_link, search_links and list_links end with the gone note; the shared instructions do not carry it", () => {
     const GONE_NOTE = (guidance as Record<string, string>).GONE_NOTE ?? "";
     expect(GONE_NOTE).toMatch(
-      /seems gone.*never that it is certainly dead.*offer to mark it stale \(update_link state "archived"\)/s,
+      /seems gone.*never that it is certainly dead.*offer to mark it done \(update_link state "archived"\)/s,
     );
     expect(GONE_NOTE).not.toMatch(/offer to archive/);
     for (const d of [guidance.GET_LINK, guidance.SEARCH_LINKS, guidance.LIST_LINKS]) {

@@ -31,7 +31,7 @@ const MAGNIFIER = `<a class="menu-search" href="/search" aria-label="Search"><sv
 /** The menu section a page belongs to: it marks that section's link as the current page. */
 export type Here = "home" | "all" | "tags";
 
-/** The menu's page links in order; Home shows only in the phone menu, the logo being its link on a wide screen. */
+/** The menu's page links in order, in the bar and again in the phone menu. */
 const PAGE_LINKS: { here?: Here; href: string; label: string }[] = [
   { here: "home", href: "/", label: "Home" },
   { here: "all", href: "/all", label: "All links" },
@@ -40,17 +40,17 @@ const PAGE_LINKS: { here?: Here; href: string; label: string }[] = [
 ];
 
 /**
- * Three page links (All links, Spaces and tags, + Save), then the Search magnifier (#264; not on
+ * Four page links (Home, All links, Spaces and tags, + Save), then the Search magnifier (#264; not on
  * Home, which has the field), which stays in the bar on the phone, then Ask AI when the AI is set up (#159),
  * then one `<details>` (#196): the Account circle at desktop width, the Menu button on the phone,
- * where it also holds Home and the page links (`menu-phone-only`; the inline ones hide there).
+ * where it also holds the page links (`menu-phone-only`; the inline ones hide there).
  * `here` marks the link of the page's section with `aria-current="page"`, in the bar and in the
  * menu. Sign out is the one `#sign-out`.
  */
 const menuHtml = (withAsk: boolean, here: Here | undefined) => {
   const link = ({ here: section, href, label }: (typeof PAGE_LINKS)[number], cls: string) =>
     `<a class="${cls}" href="${href}"${section !== undefined && section === here ? ' aria-current="page"' : ""}>${label}</a>`;
-  const bar = PAGE_LINKS.filter((l) => l.href !== "/").map((l) => link(l, "menu-page"));
+  const bar = PAGE_LINKS.map((l) => link(l, "menu-page"));
   const phone = PAGE_LINKS.map((l) => link(l, "menu-phone-only"));
   return `<nav class="menu" aria-label="Main">${bar.join("")}${here === "home" ? "" : MAGNIFIER}${withAsk ? ASK_BUTTON : ""}<details class="account-menu" name="menu"><summary><span class="account-dot" aria-hidden="true">${PERSON}${BARS}</span><span class="visually-hidden label-wide">Account</span><span class="visually-hidden label-phone">Menu</span></summary><div class="account-list">${phone.join("")}<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out" type="button">Sign out</button></div></details></nav>`;
 };

@@ -20,8 +20,15 @@ describe("the Ask AI panel's markup", () => {
 
   it("puts Ask AI between the page links and the account menu, as a toggle for the panel", () => {
     const items = [...document.querySelectorAll(".menu > *")].map((e) => e.textContent?.trim());
-    expect(items.slice(0, 5)).toEqual(["All links", "Spaces and tags", "+ Save", "", "Ask AI"]);
-    expect(items).toHaveLength(6);
+    expect(items.slice(0, 6)).toEqual([
+      "Home",
+      "All links",
+      "Spaces and tags",
+      "+ Save",
+      "",
+      "Ask AI",
+    ]);
+    expect(items).toHaveLength(7);
     const button = document.getElementById("ask-open");
     expect(button?.tagName).toBe("BUTTON");
     expect(button?.getAttribute("type")).toBe("button");

@@ -238,10 +238,10 @@ describe("the All links page", () => {
     expect(phone).toMatch(/\.all-tools \.search-instead\{grid-column:1\/-1;/);
   });
 
-  it("offers Search instead, and puts All links first in the menu", () => {
+  it("offers Search instead, and puts All links after Home in the menu", () => {
     const html = all();
     expect(dom(html).querySelector("a.search-instead")?.getAttribute("href")).toBe("/search");
-    expect(texts(html, "nav.menu a")[0]).toBe("All links");
+    expect(texts(html, "nav.menu a").slice(0, 2)).toEqual(["Home", "All links"]);
   });
 
   it.each([

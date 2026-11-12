@@ -5,7 +5,7 @@ import { cardMenu, DIVIDER } from "./card-menu.js";
 import { runAskPage, type runPage } from "./opened-test-kit.js";
 import { page } from "./page.js";
 import { olderScript } from "./show-older.js";
-import { themeCss } from "./theme.js";
+import { askCss, themeCss } from "./theme.js";
 
 /** The navigation every signed-in page shares (#196). */
 
@@ -105,6 +105,12 @@ describe("the navigation bar", () => {
   it("keeps the bar at the right edge when it wraps under the logo, so the open menu stays on screen", () => {
     expect(themeCss).toMatch(/\.menu\{[^}]*margin-left:auto/);
     expect(themeCss).toMatch(/\.account-list\{[^}]*right:0/);
+  });
+
+  it("wraps the bar onto a second row, right-aligned, rather than breaking a label", () => {
+    expect(themeCss).toMatch(/\.menu\{[^}]*flex-wrap:wrap[^}]*justify-content:flex-end/);
+    expect(themeCss).toMatch(/\.menu-page\{[^}]*white-space:nowrap/);
+    expect(askCss).toMatch(/#ask-open\{[^}]*white-space:nowrap/);
   });
 
   it("makes the summary and every row at least 44px", () => {

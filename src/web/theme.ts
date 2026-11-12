@@ -66,8 +66,8 @@ html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
 .column{max-width:980px;margin:0 auto;padding:0 24px}
 .site{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 24px;padding-top:24px;padding-bottom:8px}
-.menu{display:flex;align-items:center;gap:4px 22px;margin-left:auto;font-size:15.5px}
-.menu-page{display:inline-flex;align-items:center;min-height:44px;text-decoration:none}
+.menu{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px 22px;margin-left:auto;font-size:15.5px}
+.menu-page{display:inline-flex;align-items:center;min-height:44px;text-decoration:none;white-space:nowrap}
 .menu-search{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;color:var(--ink)}
 .menu-search svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .menu-page[aria-current=page],.account-list .menu-phone-only[aria-current=page]{font-weight:600;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
@@ -581,7 +581,7 @@ ${spaceClasses}
  * set up, so `themeCss` and the copy page's hashed style stay as they were. Colors are tokens only.
  * Above 900px the open panel is a 400px column on the right; at 900px and below, a full-screen sheet.
  */
-export const askCss = `#ask-open{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1.5px solid var(--line);border-radius:999px;background:var(--surface);cursor:pointer;font:inherit;font-size:15px;font-weight:600;color:var(--ink)}
+export const askCss = `#ask-open{display:inline-flex;align-items:center;gap:8px;min-height:44px;white-space:nowrap;padding:0 16px;border:1.5px solid var(--line);border-radius:999px;background:var(--surface);cursor:pointer;font:inherit;font-size:15px;font-weight:600;color:var(--ink)}
 #ask-open[aria-pressed=true]{border-color:var(--field)}
 #ask-open svg{flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
 #ask-panel{position:fixed;top:0;right:0;bottom:0;z-index:30;width:400px;display:flex;flex-direction:column;background:var(--surface);border-left:1.5px solid var(--line)}

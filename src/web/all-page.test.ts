@@ -561,9 +561,7 @@ describe("Bring it back and the markers on Done and put away", () => {
         { url: "/home/bring-back", body: { id }, redirect: "manual", keepalive: undefined },
       ]);
       expect(p.$(`[data-id='${id}']`).hidden).toBe(true);
-      expect(p.$("#undo-bar span").textContent?.trim()).toBe(
-        "Back on Home, All links and your spaces.",
-      );
+      expect(p.$("#undo-bar span").textContent?.trim()).toBe("Brought back.");
       p.dispatch(p.$("#undo-bar button"), "click");
       await p.settle();
       expect(sentPosts(p).at(-1)).toEqual({

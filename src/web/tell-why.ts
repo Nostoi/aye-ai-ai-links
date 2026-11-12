@@ -15,9 +15,15 @@ export const askWhy = (link: Link) =>
 </form>
 </div>`;
 
-/** Where a saved answer is shown, after `prefix`; hidden until then. */
-export const whyAnswer = (tag: "p" | "span", prefix: string, className?: string) =>
-  `<${tag}${className ? ` class="${className}"` : ""} data-why-answer data-prefix="${escapeHtml(prefix)}" hidden></${tag}>`;
+/** The small grey label above a featured card's stated or asked why. */
+export const WHY_LABEL = "You saved it for";
+
+/**
+ * Where a saved answer is shown, after `prefix` and in quotation marks; hidden until then. With a
+ * `label`, the answer is that label on its own line above the text, unquoted.
+ */
+export const whyAnswer = (tag: "p" | "span", prefix: string, className?: string, label?: string) =>
+  `<${tag}${className ? ` class="${className}"` : ""} data-why-answer data-prefix="${escapeHtml(prefix)}"${label ? ` data-label="${escapeHtml(label)}"` : ""} hidden></${tag}>`;
 
 /**
  * `post` sends JSON without following a redirect, answering null when the request fails;
@@ -94,7 +100,13 @@ if (whyRoot) {
       return;
     }
     const answer = card.querySelector("[data-why-answer]");
-    answer.textContent = answer.dataset.prefix + '"' + input.value.trim() + '"';
+    const text = input.value.trim();
+    if (answer.dataset.label) {
+      const label = document.createElement("span");
+      label.className = "why-label";
+      label.textContent = answer.dataset.label;
+      answer.replaceChildren(label, text);
+    } else answer.textContent = answer.dataset.prefix + '"' + text + '"';
     answer.hidden = false;
     card.querySelector(".ask").remove();
     card.querySelector(".row-about")?.remove();

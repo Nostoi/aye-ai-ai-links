@@ -200,7 +200,7 @@ div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-car
 .worth-rows{display:flex;flex-direction:column;gap:10px}
 .worth-feature,.worth-row{position:relative;min-width:0;background:var(--surface);overflow-wrap:anywhere}
 .worth-feature:has(.card-menu[open]),.worth-row:has(.card-menu[open]){z-index:5}
-.worth-feature{display:grid;grid-template-columns:112px minmax(0,1fr);grid-template-areas:"pic title" "pic why" "pic line" "pic buttons";column-gap:20px;align-items:start;padding:20px 20px 20px 24px;border-radius:20px;box-shadow:0 4px 18px #0000000f}
+.worth-feature{display:grid;grid-template-columns:168px minmax(0,1fr);grid-template-areas:"pic title" "pic why" "pic line" "pic buttons";column-gap:20px;align-items:start;padding:20px 20px 20px 24px;border-radius:20px;box-shadow:0 4px 18px #0000000f}
 .worth-feature h3{grid-area:title;margin:2px 0 6px;padding-right:44px;font-size:22px;line-height:1.25}
 .worth-card h3 a{position:relative;text-decoration:none}
 .feature-why{grid-area:why;min-width:0;font-size:15.5px}
@@ -218,8 +218,9 @@ ${featureSpaceDot}
 .feature-quiet button:hover small{color:var(--ink)}
 .also-body .small-actions button{min-height:48px;padding:0 4px;border:0;background:none;color:var(--soft);font-size:15px;font-weight:600;text-decoration:none}
 .also-body .small-actions button:hover{color:var(--ink)}
-.worth-feature>.card-menu{top:10px;right:10px}
-.feature-pic{grid-area:pic;align-self:start;width:112px;height:112px;border:1px solid var(--line);border-radius:14px;opacity:.92;object-fit:cover;background:var(--pic);--icon:80px;--initials:40px}
+.worth-feature>.card-menu{top:4px;right:4px}
+.why-label{display:block;margin:0 0 1px;font-size:13px;font-weight:600;color:var(--soft)}
+.feature-pic{grid-area:pic;align-self:start;width:168px;height:168px;border:1px solid var(--line);border-radius:14px;opacity:.92;object-fit:cover;background:var(--pic);--icon:120px;--initials:60px}
 .feature-pic.icon-box{width:auto;height:auto;border:0;opacity:1;background:none}
 .worth-row{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;column-gap:14px;padding:10px 4px 10px 12px;border-radius:16px;box-shadow:0 2px 10px #0000000b}
 .also-pic{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--pic);--icon:32px;--initials:17px}
@@ -254,12 +255,10 @@ img.handy-image{background:#fff}
 .card-menu summary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;color:var(--soft);cursor:pointer;list-style:none}
 .card-menu summary::-webkit-details-marker{display:none}
 .handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-row:has(.card-menu[open]){z-index:5}
-.card-menu-dot{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;color:var(--ink);background:color-mix(in srgb,var(--surface) 75%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 1px 3px rgb(0 0 0 / .12);transition:background-color .15s}
+.card-menu-dot{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;color:var(--soft);background:none;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;transition:background-color .15s}
 .card-menu-dot svg{fill:currentColor}
 .handy-tile .card-menu{position:relative;top:auto;right:auto;z-index:3;grid-row:1;grid-column:3}
-.card-menu summary:hover .card-menu-dot,.card-menu[open] .card-menu-dot{color:var(--ink);background:var(--surface)}
-.result .card-menu-dot{background:color-mix(in srgb,var(--ink) 7%,transparent);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
-.result .card-menu summary:hover .card-menu-dot,.result .card-menu[open] .card-menu-dot{background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.card-menu summary:hover .card-menu-dot,.card-menu[open] .card-menu-dot{color:var(--ink);background:color-mix(in srgb,var(--ink) 7%,transparent)}
 .card-menu-list{position:absolute;top:42px;right:-4px;width:max-content;padding:4px;border-radius:14px;background:var(--surface);border:1px solid color-mix(in srgb,var(--ink) 9%,transparent);box-shadow:0 12px 32px rgb(0 0 0 / .16),0 2px 6px rgb(0 0 0 / .06);transform-origin:top right;animation:menu-in .12s ease-out}
 .card-menu-list button{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;text-align:left}
 .card-menu-list small{display:block;margin-top:1px;color:var(--soft);font-size:12px;font-weight:400}
@@ -408,7 +407,6 @@ img.row-pic{display:block}
 .row-about{font-size:15px;color:var(--about)}
 .row-body .row-about{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .link-row .card-menu{top:50%;right:8px;margin-top:-22px}
-main:not([data-view=pictures]) .link-row .card-menu-dot{background:none;-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
 .list-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin:0 0 16px}
 .list-head h2{margin:0}
 .all-tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
@@ -423,6 +421,8 @@ main:not([data-view=pictures]) .link-row .card-menu-dot{background:none;-webkit-
 [data-view=pictures] .row-why{white-space:normal}
 [data-view=pictures] .row-body .row-about{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 [data-view=pictures] .link-row .card-menu{top:2px;right:2px;margin-top:0}
+[data-view=pictures] .link-row .card-menu-dot{color:var(--ink);background:color-mix(in srgb,var(--surface) 75%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+[data-view=pictures] .link-row .card-menu summary:hover .card-menu-dot,[data-view=pictures] .link-row .card-menu[open] .card-menu-dot{color:var(--ink);background:var(--surface)}
 .show-older{display:inline-flex;align-items:center;min-height:44px;padding:0 26px;border-radius:999px;background:var(--ink);color:var(--surface);font-size:15.5px;font-weight:600;text-decoration:none}
 .all-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px}
 .all-head h1{margin:0}

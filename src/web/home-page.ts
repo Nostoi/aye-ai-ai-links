@@ -20,7 +20,7 @@ import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
 import { SPACES_ID } from "./spaces-section.js";
-import { askWhy, CARD_FETCH, tellWhyScript, whyAnswer } from "./tell-why.js";
+import { askWhy, CARD_FETCH, tellWhyScript, WHY_LABEL, whyAnswer } from "./tell-why.js";
 
 /**
  * What "Worth a look today" shows: the picks, the image version of each that has one, now, the
@@ -80,7 +80,9 @@ function featured(d: DigestLink, cards: WorthCards): string {
   const open = isWebUrl(link.url)
     ? `<div class="feature-open">${openLink(link, "Open it", "button primary")}</div>\n`
     : "";
-  const said = link.why ? `<p>${whyText(link.why)}</p>` : `${askWhy(link)}\n${whyAnswer("p", "")}`;
+  const said = link.why
+    ? `<p>${link.why.source === "inferred" ? whyText(link.why) : `<span class="why-label">${WHY_LABEL}</span>${escapeHtml(link.why.text)}`}</p>`
+    : `${askWhy(link)}\n${whyAnswer("p", "", undefined, WHY_LABEL)}`;
   return `${opening(`worth-card worth-feature${link.why ? "" : " needs-you"}`, link, cards)}
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>

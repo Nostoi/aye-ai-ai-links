@@ -386,12 +386,14 @@ describe("Worth a look today", () => {
     });
   });
 
-  it("shows the featured why quoted, as a guess when inferred, with the reason ending the grey line", () => {
+  it("shows the featured why under a You saved it for label without quotes, as a guess when inferred, with the reason ending the grey line", () => {
     const said = dom(render([card([{ kind: "not_opened_recently" }])]));
-    expect(said.querySelector(".feature-why")?.textContent).toBe('"to compare"');
+    expect(said.querySelector(".feature-why .why-label")?.textContent).toBe("You saved it for");
+    expect(said.querySelector(".feature-why")?.textContent).toBe("You saved it forto compare");
     expect(lineParts(said.toString())).toEqual(["example.com", "saved over a month ago"]);
     const plain = dom(render([card([], { why: { text: "maybe solar", source: "inferred" } })]));
     expect(plain.querySelector(".feature-why")?.textContent).toBe("Why (a guess): maybe solar");
+    expect(plain.querySelector(".feature-why .why-label")).toBeNull();
     expect(lineParts(plain.toString())).toEqual(["example.com", "saved March 12"]);
   });
 
@@ -935,7 +937,9 @@ describe("the home page's script", () => {
     expect(article.querySelector(".ask")).toBeNull();
     const answer = article.querySelector(".feature-why [data-why-answer]") as HTMLElement;
     expect(answer.hidden).toBe(false);
-    expect(answer.textContent).toBe('"for the <kitchen>"');
+    expect(answer.querySelector(".why-label")?.textContent).toBe("You saved it for");
+    expect(answer.textContent).toBe("You saved it forfor the <kitchen>");
+    expect(answer.querySelector("kitchen")).toBeNull();
   });
 
   it("sends no blank answer, and shows the refusal of one that was not saved", async () => {

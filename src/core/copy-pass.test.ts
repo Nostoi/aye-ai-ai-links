@@ -209,7 +209,9 @@ describe("copy pass backfill", () => {
     });
 
     it("records none for a 404", async () => {
-      const t = setup({ page: () => ({ kind: "http_error", status: 404 }) });
+      const t = setup({
+        page: () => ({ kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await t.link(1);
       await t.pass.sweep();
       expect(t.status(id)).toBe("none");
@@ -223,7 +225,9 @@ describe("copy pass backfill", () => {
     });
 
     it("tries a 503 again, and settles failed on the fifth failure with no sixth fetch", async () => {
-      const t = setup({ page: () => ({ kind: "http_error", status: 503 }) });
+      const t = setup({
+        page: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await t.link(1);
       await t.pass.sweep();
       expect(t.status(id)).toBeNull();
@@ -268,7 +272,10 @@ describe("copy pass backfill", () => {
       let fetches = 0;
       let stopping: Promise<void> | undefined;
       const t = setup({
-        page: (url) => (++fetches <= 4 ? { kind: "http_error", status: 503 } : okPage(url)),
+        page: (url) =>
+          ++fetches <= 4
+            ? { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }
+            : okPage(url),
         extract: () => {
           stopping = t.pass.stop();
           return okExtract();
@@ -298,7 +305,9 @@ describe("copy pass backfill", () => {
     });
 
     it("fetches exactly five times when the final write keeps throwing, then writes failed", async () => {
-      const t = setup({ page: () => ({ kind: "http_error", status: 503 }) });
+      const t = setup({
+        page: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await t.link(1);
       await t.sweeps(4);
       const write = vi.spyOn(t.copies, "recordNoCopy");
@@ -318,7 +327,10 @@ describe("copy pass backfill", () => {
 
     it("keeps a failure budget through a sweep in which the link is not a candidate", async () => {
       const limit = 2 * MAX_COPY_BYTES;
-      const t = setup({ limitBytes: limit, page: () => ({ kind: "http_error", status: 503 }) });
+      const t = setup({
+        limitBytes: limit,
+        page: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await t.link(1);
       const limits = { copyBytes: MAX_COPY_BYTES, totalBytes: 0 };
       await t.copies.saveCopy(OWNER, id, draft(), limits, at(2));
@@ -336,7 +348,10 @@ describe("copy pass backfill", () => {
     it("does not count a pause mid-attempt, and copies once the folder is back", async () => {
       let fetches = 0;
       const t = setup({
-        page: (url) => (++fetches <= 4 ? { kind: "http_error", status: 503 } : okPage(url)),
+        page: (url) =>
+          ++fetches <= 4
+            ? { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }
+            : okPage(url),
       });
       const id = await t.link(1);
       await t.sweeps(4);
@@ -440,7 +455,10 @@ describe("copy pass backfill", () => {
   describe("the full boundary", () => {
     async function noRoomRetried(free: number): Promise<boolean> {
       const limit = 2 * MAX_COPY_BYTES;
-      const t = setup({ limitBytes: limit, page: () => ({ kind: "http_error", status: 503 }) });
+      const t = setup({
+        limitBytes: limit,
+        page: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await t.link(1);
       const limits = { copyBytes: MAX_COPY_BYTES, totalBytes: 0 };
       await t.copies.saveCopy(OWNER, id, draft(), limits, at(2));
@@ -571,7 +589,8 @@ describe("copy pass fix round 1", () => {
   it("a settle write that throws does not block the next link's backfill", async () => {
     let fail = true;
     const t = setup({
-      page: (url) => (fail ? { kind: "http_error", status: 503 } : okPage(url)),
+      page: (url) =>
+        fail ? { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" } : okPage(url),
     });
     const a = await t.link(1);
     await t.sweeps(4);
@@ -598,7 +617,10 @@ describe("copy pass fix round 1", () => {
     let fetches = 0;
     let stopping: Promise<void> | undefined;
     const t = setup({
-      page: (url) => (++fetches <= 4 ? { kind: "http_error", status: 503 } : okPage(url)),
+      page: (url) =>
+        ++fetches <= 4
+          ? { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }
+          : okPage(url),
     });
     const id = await t.link(1);
     await t.sweeps(4);
@@ -613,8 +635,8 @@ describe("copy pass fix round 1", () => {
   });
 
   it.each([
-    ["a 503", { kind: "http_error", status: 503 } as FetchOutcome],
-    ["a 404", { kind: "http_error", status: 404 } as FetchOutcome],
+    ["a 503", { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" } as FetchOutcome],
+    ["a 404", { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" } as FetchOutcome],
   ])("counts nothing for %s answered after stop", async (_n, outcome) => {
     let stopping: Promise<void> | undefined;
     const t = setup({
@@ -635,7 +657,9 @@ describe("copy pass fix round 1", () => {
     [2, RETRY_BASE_MS * 2],
     [3, RETRY_BASE_MS * 4],
   ])("waits RETRY_BASE_MS * 2^(k-1) after attempt %i", async (k, gap) => {
-    const t = setup({ page: () => ({ kind: "http_error", status: 503 }) });
+    const t = setup({
+      page: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+    });
     await t.link(1);
     await t.pass.sweep();
     for (let j = 1; j < k; j++) {
@@ -665,7 +689,8 @@ describe("copy pass fix round 1", () => {
   it("resets the failure budget when a keep completes", async () => {
     let fail = true;
     const t = setup({
-      page: (url) => (fail ? { kind: "http_error", status: 503 } : okPage(url)),
+      page: (url) =>
+        fail ? { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" } : okPage(url),
     });
     const id = await t.link(1);
     await t.sweeps(4);
@@ -705,7 +730,7 @@ describe("copy pass images", () => {
           ? okImage("image/png")
           : url === IMG(2)
             ? okImage("image/jpeg")
-            : { kind: "http_error", status: 404 },
+            : { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" },
     });
     const id = await t.copyWith(1, [IMG(1), IMG(2), IMG(3)]);
     await t.pass.sweep();
@@ -719,7 +744,9 @@ describe("copy pass images", () => {
   });
 
   it("tries a 503 again, ends none on the fifth failure, and fetches no sixth time", async () => {
-    const t = setup({ image: () => ({ kind: "http_error", status: 503 }) });
+    const t = setup({
+      image: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+    });
     const id = await t.copyWith(1, [IMG(1)]);
     await t.sweeps(4);
     expect(await pendingImages(t)).toHaveLength(1);
@@ -743,7 +770,9 @@ describe("copy pass images", () => {
   });
 
   it("fetches exactly five times when the final endCopyImage keeps throwing", async () => {
-    const t = setup({ image: () => ({ kind: "http_error", status: 503 }) });
+    const t = setup({
+      image: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+    });
     await t.copyWith(1, [IMG(1)]);
     await t.sweeps(4);
     const end = vi.spyOn(t.copies, "endCopyImage");
@@ -757,7 +786,10 @@ describe("copy pass images", () => {
 
   it("does not stall the phase when a settle write throws with the folder ready", async () => {
     const t = setup({
-      image: (url) => (url === IMG(1) ? { kind: "http_error", status: 503 } : okImage()),
+      image: (url) =>
+        url === IMG(1)
+          ? { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }
+          : okImage(),
     });
     const a = await t.copyWith(1, [IMG(1)]);
     await t.sweeps(4);
@@ -828,7 +860,7 @@ describe("copy pass images", () => {
     const t = setup({
       image: () => {
         stopping = t.pass.stop();
-        return { kind: "http_error", status: 503 };
+        return { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" };
       },
     });
     await t.copyWith(1, [IMG(1)]);
@@ -857,7 +889,9 @@ describe("copy pass images", () => {
     [2, RETRY_BASE_MS * 2],
     [3, RETRY_BASE_MS * 4],
   ])("waits RETRY_BASE_MS * 2^(k-1) after image attempt %i", async (k, gap) => {
-    const t = setup({ image: () => ({ kind: "http_error", status: 503 }) });
+    const t = setup({
+      image: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+    });
     await t.copyWith(1, [IMG(1)]);
     await t.pass.sweep();
     for (let j = 1; j < k; j++) {
@@ -1212,7 +1246,7 @@ describe("copy pass timeout backoff, stop and unavailable paths", () => {
     const t = setup({
       page: () => {
         stopping = t.pass.stop();
-        return { kind: "http_error", status: 503 };
+        return { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" };
       },
       image: () => okImage(),
     });
@@ -1396,8 +1430,26 @@ describe("copy pass network outage", () => {
   });
 
   it.each([
-    ["a 503", { page: (): FetchOutcome => ({ kind: "http_error", status: 503 }) }],
-    ["a 404", { page: (): FetchOutcome => ({ kind: "http_error", status: 404 }) }],
+    [
+      "a 503",
+      {
+        page: (): FetchOutcome => ({
+          kind: "http_error",
+          status: 503,
+          finalUrl: "https://ex.com/gone",
+        }),
+      },
+    ],
+    [
+      "a 404",
+      {
+        page: (): FetchOutcome => ({
+          kind: "http_error",
+          status: 404,
+          finalUrl: "https://ex.com/gone",
+        }),
+      },
+    ],
     ["a page that is ok", {}],
     ["a refusal", { page: (): FetchOutcome => ({ kind: "refused", reason: "address" }) }],
     [
@@ -1413,7 +1465,9 @@ describe("copy pass network outage", () => {
   });
 
   it("never asks the canary after an image 503", async () => {
-    const t = setup({ image: () => ({ kind: "http_error", status: 503 }) });
+    const t = setup({
+      image: () => ({ kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }),
+    });
     await t.copyWith(1, [IMG(1)]);
     await t.sweeps(3);
     expect(t.imageCalls.length).toBeGreaterThan(0);

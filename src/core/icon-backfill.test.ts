@@ -17,6 +17,7 @@ const PREVIEW = "https://ex.com/og.png";
 const GITHUB = "https://github.com/Nostoi/aye-ai-ai-links";
 /** GitHub's two usable-type icons, as the extraction ranks them: its 32 px PNG, then fluid-icon. */
 const FAVICON = "https://github.githubassets.com/favicons/favicon.png";
+const FAV = "https://ex.com/fav.png";
 const FLUID = "https://github.com/fluidicon.png";
 const meta = (over: Partial<PageMetadata> = {}): PageMetadata => ({
   title: "Fresh title",
@@ -112,11 +113,24 @@ function setup(
       clock += RETRY_MAX_MS;
     },
     /** A link snapshotted before icons were looked for: ok, no preview, image status NULL. */
-    async legacy(n: number) {
+    async legacy(n: number, over: Partial<SnapshotRecord> = {}) {
       const { link } = await store.insertIfAbsent(OWNER, newLink(n, at(0)));
       const lease = await store.leaseSnapshot(OWNER, link.id, at(1), at(100));
-      await store.recordSnapshot(OWNER, link.id, lease?.claim ?? -1, record({ imageUrl: null }));
+      await store.recordSnapshot(
+        OWNER,
+        link.id,
+        lease?.claim ?? -1,
+        record({ imageUrl: null, ...over }),
+      );
       store.forgetIconCheck(OWNER, link.id);
+      return link.id;
+    },
+    /** A link snapshotted before favicons: terminal, looked at for icons, with no favicon row. */
+    async noFavicon(n: number, over: Partial<SnapshotRecord> = {}) {
+      const { link } = await store.insertIfAbsent(OWNER, newLink(n, at(0)));
+      const lease = await store.leaseSnapshot(OWNER, link.id, at(1), at(100));
+      const r = record({ imageUrl: null, ...over });
+      await store.recordSnapshot(OWNER, link.id, lease?.claim ?? -1, r);
       return link.id;
     },
     status: (id: string) => store.imageStatusOf(OWNER, id),
@@ -219,10 +233,10 @@ describe("icon backfill", () => {
         { kind: "not_html", finalUrl: "https://ex.com/1", contentType: "application/pdf" },
       ],
       ["too large", { kind: "too_large" }],
-      ["a 404", { kind: "http_error", status: 404 }],
-      ["a 500", { kind: "http_error", status: 500 }],
-      ["a 408", { kind: "http_error", status: 408 }],
-      ["a 429", { kind: "http_error", status: 429 }],
+      ["a 404", { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }],
+      ["a 500", { kind: "http_error", status: 500, finalUrl: "https://ex.com/gone" }],
+      ["a 408", { kind: "http_error", status: 408, finalUrl: "https://ex.com/gone" }],
+      ["a 429", { kind: "http_error", status: 429, finalUrl: "https://ex.com/gone" }],
       ["a timeout with the network up", { kind: "timeout" }],
       ["a network error with the network up", { kind: "network_error", code: "ECONNRESET" }],
     ])("records none for a fetch that ends %s: tried once", async (_name, outcome) => {
@@ -334,7 +348,7 @@ describe("icon backfill", () => {
     it("★ stops trying a link whose child never starts after MAX_IMAGE_ATTEMPTS, writing nothing, until a restart (R3)", async () => {
       // [Retrying forever, or writing 'none' once the budget is spent.]
       const t = setup({ extract: () => ({ kind: "spawn_failed", detail: "exit code 1" }) });
-      const a = await t.legacy(1);
+      const a = await t.legacy(1, { faviconUrls: [FAV] });
       for (let i = 0; i < MAX_IMAGE_ATTEMPTS + 3; i++) {
         await t.pass.sweep();
         t.wait();
@@ -392,7 +406,7 @@ describe("icon backfill", () => {
   it("★ looks at a link whose dead flag clears while the pass runs, with no restart", async () => {
     // [Stopping the timer after a sweep that found nothing to do.]
     const t = setup({ pollMs: 5 });
-    const id = await t.legacy(1);
+    const id = await t.legacy(1, { faviconUrls: [FAV] });
     await t.store.updateCheckIf(OWNER, id, null, gone);
     t.pass.start();
     await sleep(40);
@@ -549,7 +563,9 @@ describe("icon backfill", () => {
 
     it("★ leaves the favicon as it was when the page could not be read (#272)", async () => {
       // [Rewriting it from a failed read, which ends a good favicon as none.]
-      const t = setup({ page: () => ({ kind: "http_error", status: 404 }) });
+      const t = setup({
+        page: () => ({ kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await withPreview(t, 1, GITHUB, { faviconUrls: [FAVICON] });
       const before = t.store.faviconRow(OWNER, id);
       await t.pass.sweep();
@@ -594,7 +610,7 @@ describe("icon backfill", () => {
     it("★ recovers from a store write that throws, in the same process (finding 4)", async () => {
       // [Giving up on the link after one failure.]
       const t = setup({ extract: githubPage });
-      const id = await withPreview(t, 1, GITHUB);
+      const id = await withPreview(t, 1, GITHUB, { faviconUrls: [FAVICON] });
       vi.spyOn(t.store, "recordWordPictureCheck").mockRejectedValueOnce(new Error("disk full"));
       await t.pass.sweep();
       expect(t.logged.some((l) => l.includes("a store call failed"))).toBe(true);
@@ -611,7 +627,9 @@ describe("icon backfill", () => {
     it("★ never reads an ordinary page that names a preview, and leaves it as it was", async () => {
       // [Swapping every preview, not only a word-picture host's.]
       const t = setup({ extract: githubPage });
-      const id = await withPreview(t, 1, "https://example.com/article");
+      const id = await withPreview(t, 1, "https://example.com/article", {
+        faviconUrls: [FAVICON],
+      });
       const before = await t.store.get(OWNER, id);
       await t.pass.sweep();
       await t.pass.sweep();
@@ -633,9 +651,9 @@ describe("icon backfill", () => {
     });
 
     it.each<[string, FetchOutcome]>([
-      ["a 503", { kind: "http_error", status: 503 }],
-      ["a 429", { kind: "http_error", status: 429 }],
-      ["a 408", { kind: "http_error", status: 408 }],
+      ["a 503", { kind: "http_error", status: 503, finalUrl: "https://ex.com/gone" }],
+      ["a 429", { kind: "http_error", status: 429, finalUrl: "https://ex.com/gone" }],
+      ["a 408", { kind: "http_error", status: 408, finalUrl: "https://ex.com/gone" }],
       ["a timeout with the network up", { kind: "timeout" }],
       ["a network error with the network up", { kind: "network_error", code: "ECONNRESET" }],
     ])(
@@ -694,7 +712,7 @@ describe("icon backfill", () => {
     );
 
     it.each<[string, FetchOutcome]>([
-      ["a 404", { kind: "http_error", status: 404 }],
+      ["a 404", { kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }],
       ["refused", { kind: "refused", reason: "address" }],
     ])(
       "★ ends at initials when the page read fails with %s, never at the old preview",
@@ -711,12 +729,292 @@ describe("icon backfill", () => {
 
     it("★ reads a word-picture link even while it is flagged gone", async () => {
       // [Copying the icon candidates' dead-flag rule, so a dead GitHub link keeps its preview.]
-      const t = setup({ page: () => ({ kind: "http_error", status: 404 }) });
+      const t = setup({
+        page: () => ({ kind: "http_error", status: 404, finalUrl: "https://ex.com/gone" }),
+      });
       const id = await withPreview(t, 1, GITHUB);
       await t.store.updateCheckIf(OWNER, id, null, gone);
       await t.pass.sweep();
       expect(t.pageCalls).toEqual([GITHUB]);
       expect(t.status(id)).toBe("none");
+    });
+  });
+
+  describe("the favicon check (#272)", () => {
+    const GONE = "https://destination.example/blocked";
+    const ROOT = ["https://ex.com/apple-touch-icon.png", "https://ex.com/favicon.ico"];
+    const GONE_ROOT = [
+      "https://destination.example/apple-touch-icon.png",
+      "https://destination.example/favicon.ico",
+    ];
+    const withFavicon = () => okExtract(meta({ faviconUrls: [FAV] }));
+    const rowOf = (t: ReturnType<typeof setup>, id: string) => t.store.faviconRow(OWNER, id);
+    const http = (status: number, finalUrl = GONE): FetchOutcome => ({
+      kind: "http_error",
+      status,
+      finalUrl,
+    });
+
+    it("★ gives a link snapshotted before favicons its page's candidates, from one page read", async () => {
+      // [No third kind: such a link never gets a favicon row from the snapshot path.]
+      const t = setup({ extract: withFavicon });
+      const id = await t.noFavicon(1);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual(["https://ex.com/1"]);
+      expect(rowOf(t, id)).toEqual({
+        candidates: [FAV],
+        status: "pending",
+        generation: 1,
+        discovery: FAVICON_DISCOVERY_VERSION,
+        stored: false,
+      });
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(1);
+    });
+
+    it("★ hands over the favicon candidates of a successful icon-check read: no second read, even if the page later fails", async () => {
+      // [Discarding them in the icon check, so a second read finds a 404 and records none.]
+      const t = setup({ extract: withFavicon });
+      const id = await t.legacy(1);
+      await t.pass.sweep();
+      expect(rowOf(t, id)).toMatchObject({ candidates: [FAV], status: "pending", generation: 1 });
+      expect(t.status(id)).toBe("pending");
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual(["https://ex.com/1"]);
+    });
+
+    it("★ leaves an icon-check link with no favicon row when its page was not read, and the favicon check then settles it", async () => {
+      // [Writing an empty list from the icon check, which would end the favicon search without a second read.]
+      const t = setup({ page: () => http(404, "https://ex.com/gone") });
+      const id = await t.legacy(1);
+      await t.pass.sweep();
+      expect(t.status(id)).toBe("none");
+      expect(rowOf(t, id)).toBeNull();
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(2);
+      expect(rowOf(t, id)).toMatchObject({ candidates: ROOT, status: "pending" });
+    });
+
+    it.each<[string, FetchOutcome, string[]]>([
+      [
+        "not html",
+        {
+          kind: "not_html",
+          finalUrl: "https://files.example/a.pdf",
+          contentType: "application/pdf",
+        },
+        ["https://files.example/apple-touch-icon.png", "https://files.example/favicon.ico"],
+      ],
+      ["a 404", http(404), GONE_ROOT],
+      ["a 403", http(403), GONE_ROOT],
+      ["a 410", http(410), GONE_ROOT],
+      ["refused", { kind: "refused", reason: "address" }, []],
+      ["too large", { kind: "too_large" }, []],
+    ])(
+      "settles a fetch that ends %s at once, from the address that answered",
+      async (_n, outcome, want) => {
+        const t = setup({ page: () => outcome });
+        const id = await t.noFavicon(1);
+        await t.pass.sweep();
+        expect(rowOf(t, id)).toMatchObject({
+          candidates: want,
+          status: want.length > 0 ? "pending" : "none",
+        });
+        expect(t.extractOptions).toEqual([]);
+        await t.pass.sweep();
+        expect(t.pageCalls).toHaveLength(1);
+      },
+    );
+
+    it.each<[string, ExtractOutcome]>([
+      ["a timeout", { kind: "timeout", metadata: null }],
+      ["a crash", { kind: "crashed", metadata: null, detail: "exit code 1" }],
+      ["out of memory", { kind: "out_of_memory", metadata: null }],
+    ])(
+      "★ settles an extraction that ends in %s before metadata as none, once, even after a restart",
+      async (_n, outcome) => {
+        // [Backing off a content failure, which reads the same crashing page again and again.]
+        const t = setup({ extract: () => outcome });
+        const id = await t.noFavicon(1);
+        await t.pass.sweep();
+        expect(rowOf(t, id)).toMatchObject({ candidates: [], status: "none" });
+        await t.pass.stop();
+        await t.make().sweep();
+        expect(t.pageCalls).toHaveLength(1);
+      },
+    );
+
+    it("keeps the candidates of an extraction that ends badly after its metadata", async () => {
+      const t = setup({
+        extract: () => ({ kind: "timeout", metadata: meta({ faviconUrls: [FAV] }) }),
+      });
+      const id = await t.noFavicon(1);
+      await t.pass.sweep();
+      expect(rowOf(t, id)).toMatchObject({ candidates: [FAV], status: "pending" });
+    });
+
+    it.each<[string, Parameters<typeof setup>[0]]>([
+      ["a 503", { page: () => http(503) }],
+      ["a 429", { page: () => http(429) }],
+      ["a timeout with the network up", { page: () => ({ kind: "timeout" }) }],
+      [
+        "a network error with the network up",
+        { page: () => ({ kind: "network_error", code: "ECONNRESET" }) },
+      ],
+      ["a fetch aborted without stop()", { page: () => ({ kind: "aborted" }) }],
+      ["a child that cannot start", { extract: () => ({ kind: "spawn_failed", detail: "x" }) }],
+      ["an extraction aborted without stop()", { extract: () => ({ kind: "aborted" }) }],
+    ])("backs off after %s, writing nothing, and reads the page again later", async (_n, o) => {
+      const t = setup(o);
+      const id = await t.noFavicon(1);
+      await t.pass.sweep();
+      expect(rowOf(t, id)).toBeNull();
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(1);
+      t.wait();
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(2);
+    });
+
+    it("★ settles a link whose destination keeps answering 503 with the destination's root guesses on its last attempt", async () => {
+      // [Parking the link unrecorded once its attempts run out, or writing an empty list.]
+      const t = setup({ page: () => http(503) });
+      const id = await t.noFavicon(1);
+      for (let i = 0; i < MAX_IMAGE_ATTEMPTS - 1; i++) {
+        await t.pass.sweep();
+        expect(rowOf(t, id)).toBeNull();
+        t.wait();
+      }
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS);
+      expect(rowOf(t, id)).toMatchObject({ candidates: GONE_ROOT, status: "pending" });
+      t.wait();
+      await t.pass.sweep();
+      expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS);
+    });
+
+    it.each<[string, Parameters<typeof setup>[0]]>([
+      ["a timeout", { page: () => ({ kind: "timeout" }) }],
+      ["a child that cannot start", { extract: () => ({ kind: "spawn_failed", detail: "x" }) }],
+    ])("settles a link whose attempts run out on %s as none", async (_n, o) => {
+      const t = setup(o);
+      const id = await t.noFavicon(1);
+      for (let i = 0; i < MAX_IMAGE_ATTEMPTS; i++) {
+        await t.pass.sweep();
+        t.wait();
+      }
+      expect(t.pageCalls).toHaveLength(MAX_IMAGE_ATTEMPTS);
+      expect(rowOf(t, id)).toMatchObject({ candidates: [], status: "none" });
+    });
+
+    it("★ never counts a network that is down, and writes nothing while it is", async () => {
+      // [Counting an offline attempt, so the last-attempt write fires with no verdict from the site.]
+      let up = false;
+      const t = setup({
+        page: (url) => (up ? okPage(url) : { kind: "network_error", code: "ENOTFOUND" }),
+        extract: withFavicon,
+        canResolve: () => up,
+      });
+      const id = await t.noFavicon(1);
+      for (let i = 0; i < MAX_IMAGE_ATTEMPTS + 2; i++) {
+        await t.pass.sweep();
+        t.wait();
+      }
+      expect(rowOf(t, id)).toBeNull();
+      up = true;
+      await t.pass.sweep();
+      expect(rowOf(t, id)).toMatchObject({ candidates: [FAV], status: "pending" });
+      expect(t.logged).toEqual([]);
+    });
+
+    it("★ keeps its budget apart from the other kinds: a link the word-picture check gave up on still settles", async () => {
+      // [Failures keyed by owner and link, so the favicon check inherits the word-picture backoff.]
+      const t = setup({ extract: () => ({ kind: "crashed", metadata: null, detail: "x" }) });
+      const { link } = await t.store.insertIfAbsent(OWNER, {
+        ...newLink(1, at(0)),
+        url: GITHUB,
+        urlKey: "github.com/Nostoi/aye-ai-ai-links",
+      });
+      const lease = await t.store.leaseSnapshot(OWNER, link.id, at(1), at(100));
+      const r = record({ imageUrl: PREVIEW, iconUrls: [FAVICON] });
+      expect(await t.store.recordSnapshot(OWNER, link.id, lease?.claim ?? -1, r)).toBe(true);
+      await t.pass.sweep();
+      expect(rowOf(t, link.id)).toBeNull();
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([GITHUB, GITHUB]);
+      expect(rowOf(t, link.id)).toMatchObject({ candidates: [], status: "none" });
+    });
+
+    it("reads a none row below the current discovery version again, and rewrites it", async () => {
+      const t = setup({ extract: withFavicon });
+      const id = await t.noFavicon(1, { faviconUrls: [] });
+      t.store.seedFavicon(OWNER, id, { status: "none", discovery: 1 });
+      await t.pass.sweep();
+      expect(rowOf(t, id)).toMatchObject({ candidates: [FAV], status: "pending", generation: 2 });
+    });
+
+    it.each<["ok" | "pending" | "none", number]>([
+      ["ok", 1],
+      ["pending", 1],
+      ["none", FAVICON_DISCOVERY_VERSION],
+    ])("★ never reads a link whose favicon row is %s at version %i", async (status, discovery) => {
+      // [A re-read of a working favicon, which could lose it.]
+      const t = setup({ extract: withFavicon });
+      const id = await t.noFavicon(1, { faviconUrls: [FAV] });
+      t.store.seedFavicon(OWNER, id, { status, discovery });
+      const before = rowOf(t, id);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual([]);
+      expect(rowOf(t, id)).toEqual(before);
+    });
+
+    it("★ writes nothing for a link deleted during the read, and reads it again once the delete is undone", async () => {
+      // [Writing to a hidden link, or forgetting it for good.]
+      let doomed = "";
+      let deleted = false;
+      const t: ReturnType<typeof setup> = setup({
+        page: async (url) => {
+          if (!deleted) await t.store.markDeleted(OWNER, doomed, at(50));
+          deleted = true;
+          return okPage(url);
+        },
+        extract: withFavicon,
+      });
+      doomed = await t.noFavicon(1);
+      await t.pass.sweep();
+      expect(rowOf(t, doomed)).toBeNull();
+      expect(await t.store.unmarkDeleted(OWNER, doomed, at(50))).toBe(true);
+      t.wait();
+      await t.pass.sweep();
+      expect(rowOf(t, doomed)).toMatchObject({ candidates: [FAV], status: "pending" });
+    });
+
+    it("★ leaves a row that appeared during the read alone", async () => {
+      // [A write that does not compare the claim: it would rewrite the newer row.]
+      const other = "https://ex.com/other.png";
+      let id = "";
+      const t: ReturnType<typeof setup> = setup({
+        page: async (url) => {
+          expect(await t.store.recordFaviconCheck(OWNER, id, null, [other])).toBe(true);
+          return okPage(url);
+        },
+        extract: withFavicon,
+      });
+      id = await t.noFavicon(1);
+      await t.pass.sweep();
+      expect(rowOf(t, id)).toMatchObject({ candidates: [other], generation: 1 });
+      expect(t.logged.some((l) => l.includes("the store refused the check"))).toBe(true);
+    });
+
+    it("looks at the favicon after the icon kinds: a legacy link first, then this one", async () => {
+      const t = setup({ extract: withFavicon });
+      const bare = await t.noFavicon(1);
+      await t.legacy(2);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual(["https://ex.com/2"]);
+      await t.pass.sweep();
+      expect(t.pageCalls).toEqual(["https://ex.com/2", "https://ex.com/1"]);
+      expect(rowOf(t, bare)).toMatchObject({ candidates: [FAV] });
     });
   });
 });

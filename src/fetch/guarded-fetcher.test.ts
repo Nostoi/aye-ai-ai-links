@@ -85,6 +85,8 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return res.end(html("status"));
     case "r":
       return redirect(res, Number(arg), "/ok");
+    case "r-error":
+      return redirect(res, 302, `/status/${arg}`);
     case "r-pdf":
       return Number(arg) > 0
         ? redirect(res, 302, `/r-pdf/${Number(arg) - 1}`)
@@ -367,6 +369,7 @@ describe("redirects", () => {
     expect(await fetcherWith().fetch(siteUrl("/r/300"))).toEqual({
       kind: "http_error",
       status: 300,
+      finalUrl: siteUrl("/r/300"),
     });
     expect(siteHits).toEqual(["/r/300"]);
   });
@@ -493,6 +496,15 @@ describe("what comes back", () => {
     expect(await fetcherWith().fetch(siteUrl(`/status/${status}`))).toEqual({
       kind: "http_error",
       status,
+      finalUrl: siteUrl(`/status/${status}`),
+    });
+  });
+
+  it("names the address that answered with the error, after redirects", async () => {
+    expect(await fetcherWith().fetch(siteUrl("/r-error/403"))).toEqual({
+      kind: "http_error",
+      status: 403,
+      finalUrl: siteUrl("/status/403"),
     });
   });
 

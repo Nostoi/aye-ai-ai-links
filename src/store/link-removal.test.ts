@@ -677,7 +677,18 @@ describe("a runner's next write after its link was purged", () => {
       false,
       (p) => p.deps.images.endImage(A, p.id, ICON, "preview", "none"),
     ],
-    ["recordIconCheck", "snapshots", false, (p) => p.deps.images.recordIconCheck(A, p.id, [ICON])],
+    [
+      "recordIconCheck",
+      "snapshots",
+      false,
+      (p) => p.deps.images.recordIconCheck(A, p.id, [ICON], null),
+    ],
+    [
+      "recordFaviconCheck",
+      "link_favicons",
+      false,
+      (p) => p.deps.images.recordFaviconCheck(A, p.id, null, [ICON]),
+    ],
     [
       "recordSnapshot with favicons",
       "link_favicons",

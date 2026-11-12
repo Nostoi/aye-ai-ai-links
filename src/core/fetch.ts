@@ -10,7 +10,8 @@ export type RefusedReason =
 /** The ways any guarded fetch can end without a usable body, whatever it was fetching. */
 export type FetchFailure =
   | { kind: "refused"; reason: RefusedReason }
-  | { kind: "http_error"; status: number }
+  /** `finalUrl` is the address that answered with the error, after any redirects. */
+  | { kind: "http_error"; status: number; finalUrl: string }
   | { kind: "network_error"; code: string }
   | { kind: "too_large" }
   | { kind: "timeout" }

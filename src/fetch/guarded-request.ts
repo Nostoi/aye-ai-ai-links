@@ -126,7 +126,7 @@ export function createGuardedRequest(options: GuardedRequestOptions) {
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
         discard(res.body);
-        return { kind: "http_error", status: res.statusCode };
+        return { kind: "http_error", status: res.statusCode, finalUrl: url.href };
       }
       return read({
         finalUrl: url.href,

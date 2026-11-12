@@ -17,10 +17,11 @@ export type PendingFavicon = {
 /**
  * Persistence contract for the favicon pass (#272). Any implementation must meet all of it.
  *
- * - A link's favicon candidates are written only by the snapshot's record (from its page, or empty
- *   when its fetch ended with no page) and the word-picture check, which reads the page afresh.
- *   Each rewrite, even to the same list, moves the generation
- *   on, drops the stored favicon, and makes it pending (or `none` when the list is empty).
+ * - A link's favicon candidates are written only by the snapshot's record (from its page, the site
+ *   root's guesses, or empty), and by the icon backfill (`IconBackfillStore`): the word-picture
+ *   check, the large-picture check and the favicon check. Each rewrite, even to the same list,
+ *   moves the generation on, drops the stored favicon, and makes it pending (or `none` when the
+ *   list is empty).
  * - Both writes compare and set on the generation and on the favicon still being pending, so a
  *   fetch that began before its candidates were rewritten changes nothing.
  * - Owner scoping: every method takes the owner and never touches another owner's link, except

@@ -120,12 +120,20 @@ function judge(outcome: AttemptOutcome): Verdict {
   }
 }
 
-function terminalFavicons(outcome: AttemptOutcome, metadata: PageMetadata | null | undefined) {
-  if (metadata) return boundedFaviconUrls(metadata.faviconUrls);
-  if (outcome.stage === "fetch" && outcome.fetch.kind === "not_html") {
-    return rootFaviconUrls(outcome.fetch.finalUrl);
+/**
+ * The favicon candidates (#272) an attempt's outcome leads to when nothing more will be tried: the
+ * page's own when its metadata was read; the site root's guesses for the address that answered
+ * when that was not a page (`not_html`) or was an HTTP error; none for anything else (a refusal,
+ * `too_large`, no server reached, an extraction that ended before its metadata). Used for a
+ * terminal outcome and for the last retry, and by the icon backfill.
+ */
+export function outcomeFavicons(outcome: AttemptOutcome): string[] {
+  if (outcome.stage === "extract") {
+    const e = outcome.extract;
+    return "metadata" in e && e.metadata ? boundedFaviconUrls(e.metadata.faviconUrls) : [];
   }
-  return [];
+  const f = outcome.fetch;
+  return f.kind === "not_html" || f.kind === "http_error" ? rootFaviconUrls(f.finalUrl) : [];
 }
 
 /**
@@ -155,8 +163,8 @@ export function snapshotRecord(input: {
     const delay = attempts >= MAX_ATTEMPTS ? undefined : RETRY_DELAYS_MS[attempts - 1];
     return {
       ...base,
-      // A retry leaves the favicon as it was; the last one found no page (#272).
-      faviconUrls: delay === undefined ? [] : null,
+      // A retry leaves the favicon as it was; the last one settles it as a terminal outcome does (#272).
+      faviconUrls: delay === undefined ? outcomeFavicons(outcome) : null,
       status: delay === undefined ? "failed" : "retrying",
       nextFetchAt: delay === undefined ? null : new Date(now.getTime() + delay),
       fetchedAt: null,
@@ -173,7 +181,7 @@ export function snapshotRecord(input: {
     description: v.metadata?.description ?? null,
     imageUrl: keptPreview(url, v.metadata?.imageUrl ?? null),
     iconUrls: boundedIconUrls(v.metadata?.iconUrls),
-    faviconUrls: terminalFavicons(outcome, v.metadata),
+    faviconUrls: outcomeFavicons(outcome),
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,
   };

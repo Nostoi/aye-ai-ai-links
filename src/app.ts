@@ -22,6 +22,7 @@ import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
 import type { ReadGate } from "./core/copy-reading.js";
 import type { ExportBuilds } from "./core/export-builds.js";
+import type { FaviconReader } from "./core/favicon-store.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
@@ -154,6 +155,7 @@ export type AppOptions = {
       deps: AppMcpDeps & {
         store: LinkRemover;
         images: LinkImageReader;
+        favicons: FaviconReader;
         edits: LinkEditStore;
         tagEdits: TagEditStore;
         tagSuggest: TagSuggestStore;

@@ -45,6 +45,7 @@ export const record = (over: Partial<SnapshotRecord> = {}): SnapshotRecord => ({
   description: "Page description",
   imageUrl: "https://ex.com/i.png",
   iconUrls: [],
+  faviconUrls: null,
   text: "body text",
   lastError: null,
   ...over,

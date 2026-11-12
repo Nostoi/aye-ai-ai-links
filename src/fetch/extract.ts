@@ -8,7 +8,14 @@ export type Snapshot = Metadata & {
   text: string | null;
 };
 
-const NO_METADATA: Metadata = { title: null, description: null, imageUrl: null, iconUrls: [] };
+const NO_METADATA: Metadata = {
+  title: null,
+  description: null,
+  imageUrl: null,
+  iconUrls: [],
+  faviconUrls: [],
+  declaresIcon: false,
+};
 
 /** Parses the HTML with a detached DOM that runs no script and loads nothing. */
 export function parsePage(html: string): Document {

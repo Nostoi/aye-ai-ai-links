@@ -13,6 +13,8 @@ import {
 } from "./image-test-kit.js";
 import {
   checkImage,
+  FAVICON_MIN_PX,
+  faviconBigEnough,
   ICON_MIN_PX,
   iconBigEnough,
   MAX_IMAGE_BYTES,
@@ -209,4 +211,42 @@ describe("iconBigEnough", () => {
   });
 
   it("is 64", () => expect(ICON_MIN_PX).toBe(64));
+});
+
+describe("faviconBigEnough (#272)", () => {
+  it.each([
+    ["16×16 PNG", png(16, 16), true],
+    ["32×32 PNG", png(32, 32), true],
+    ["15×200 PNG", png(15, 200), false],
+    ["16×16 GIF", gif(16, 16), true],
+    ["15×15 JPEG", jpeg(15, 15), false],
+    ["a header cut short", Buffer.from([0x89, 0x50, 0x4e, 0x47]), false],
+  ])("%s", (_n, bytes, want) => {
+    expect(faviconBigEnough(bytes)).toBe(want);
+  });
+
+  it("★ is 16, for favicons only: the large picture's icon floor stays 64", () => {
+    // [Lowering the shared floor, which lets a 32 px icon fill a large box.]
+    expect(FAVICON_MIN_PX).toBe(16);
+    expect(iconBigEnough(png(32, 32))).toBe(false);
+    expect(faviconBigEnough(png(32, 32))).toBe(true);
+  });
+});
+
+describe("what the large picture and saved copies still refuse (#272)", () => {
+  /** An ICO whose one entry is a PNG: the 6-byte header, a 16-byte entry, then the PNG. */
+  const icoWithPng = () => {
+    const inner = png(32, 32);
+    const head = Buffer.alloc(22);
+    head.writeUInt16LE(1, 2);
+    head.writeUInt16LE(1, 4);
+    head.writeUInt32LE(inner.length, 14);
+    head.writeUInt32LE(22, 18);
+    return Buffer.concat([head, inner]);
+  };
+
+  it("★ checkImage still refuses an ICO, even one holding a PNG", () => {
+    // [Unwrapping ICO in the shared check, which changes the large picture and saved copies.]
+    expect(checkImage(icoWithPng())).toEqual({ ok: false, reason: "not_image" });
+  });
 });

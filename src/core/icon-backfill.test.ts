@@ -22,6 +22,8 @@ const meta = (over: Partial<PageMetadata> = {}): PageMetadata => ({
   description: "Fresh description",
   imageUrl: null,
   iconUrls: [ICON, ICON2],
+  faviconUrls: [],
+  declaresIcon: false,
   ...over,
 });
 const okExtract = (m: PageMetadata = meta()): ExtractOutcome => ({
@@ -521,6 +523,35 @@ describe("icon backfill", () => {
       expect((await t.store.imageVersions(OWNER, [id])).get(id)?.fit).toBe("contain");
       expect(await t.store.image(OWNER, id, "page")).toMatchObject({ role: "icon" });
       expect(await t.store.wordPictureCandidates(null, 100)).toEqual([]);
+    });
+
+    it("★ rewrites the favicon candidates from the page it read afresh, in the same write (#272)", async () => {
+      // [Leaving the snapshot's old favicon pending, so a fetch of it lands after the page moved on.]
+      const fresh = ["https://ex.com/fresh-32.png", "https://ex.com/fresh-16.png"];
+      const t = setup({
+        extract: () =>
+          okExtract(meta({ imageUrl: PREVIEW, iconUrls: [FLUID], faviconUrls: fresh })),
+      });
+      const id = await withPreview(t, 1, GITHUB, { faviconUrls: [FAVICON] });
+      expect(t.store.faviconRow(OWNER, id)).toMatchObject({ candidates: [FAVICON], generation: 1 });
+      await t.pass.sweep();
+      expect(t.store.faviconRow(OWNER, id)).toEqual({
+        candidates: fresh,
+        status: "pending",
+        generation: 2,
+        discovery: 1,
+        stored: false,
+      });
+    });
+
+    it("★ leaves the favicon as it was when the page could not be read (#272)", async () => {
+      // [Rewriting it from a failed read, which ends a good favicon as none.]
+      const t = setup({ page: () => ({ kind: "http_error", status: 404 }) });
+      const id = await withPreview(t, 1, GITHUB, { faviconUrls: [FAVICON] });
+      const before = t.store.faviconRow(OWNER, id);
+      await t.pass.sweep();
+      expect((await t.store.get(OWNER, id))?.snapshot?.imageUrl).toBeNull();
+      expect(t.store.faviconRow(OWNER, id)).toEqual(before);
     });
 
     it.each(["extract_timeout", "extract_crashed", "extract_out_of_memory"] as const)(

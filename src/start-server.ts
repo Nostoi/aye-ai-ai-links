@@ -15,6 +15,7 @@ import { modelRoot, type ServerConfig } from "./config.js";
 import { type CopyPass, createCopyPass } from "./core/copy-pass.js";
 import type { ExportBuilds } from "./core/export-builds.js";
 import type { PageExtractor } from "./core/extract.js";
+import { createFaviconPass, type FaviconPass } from "./core/favicon-pass.js";
 import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createIconBackfill, type IconBackfill } from "./core/icon-backfill.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
@@ -47,7 +48,7 @@ const SETTLE_MS = 5_000;
  * `drainMs`, `settleMs` and `saveWaitMs` shorten the waits, `embedder` replaces the model, and
  * `fetcher` and `extractor` replace the real page pipeline, which is otherwise the guarded
  * fetcher (5 MiB cap) and the child extractor. `imageFetcher` replaces the guarded image fetcher
- * the image pass uses. `copyExtractor` replaces the copy pass's own child extractor, and
+ * the image pass and the favicon pass use, and `faviconPollMs` sets the favicon pass's sweep interval. `copyExtractor` replaces the copy pass's own child extractor, and
  * `copyPollMs` its sweep interval. `iconExtractor` replaces the icon backfill's own child extractor, and
  * `iconPollMs` its sweep interval. `summaryPollMs` and `summaryGapMs` set the summary pass's sweep interval and the gap between its AI calls. `linkChecker` replaces the guarded link checker the check runner uses.
  * `wrapAuthMigrations` runs around the auth migrations, so a test can hold
@@ -66,6 +67,8 @@ export type StartOptions = {
   imageFetcher?: ImageFetcher;
   /** Time between image pass sweeps; its 15 s default when left out. */
   imagePollMs?: number;
+  /** Time between favicon pass sweeps; its 15 s default when left out. */
+  faviconPollMs?: number;
   /** Replaces the guarded link checker the dead-link checks use. */
   linkChecker?: LinkChecker;
   /** Time between check sweeps; its 60 s default when left out. */
@@ -103,19 +106,19 @@ export type StartOptions = {
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
- * The snapshot runner, the vector indexer, the image pass, the copy pass, the icon backfill, the summary pass (only when the AI is set up), the check runner, the link purger and the
+ * The snapshot runner, the vector indexer, the image pass, the favicon pass, the copy pass, the icon backfill, the summary pass (only when the AI is set up), the check runner, the link purger and the
  * metadata refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
  * 1. In-app AI turns are stopped first: a model call in flight is aborted and the turn answers
  *    that the server is stopping, so its request ends before the drain; a tool call already
  *    running carries on, and step 3 waits for it.
- *    The runner, the indexer, the image pass, the copy pass, the icon backfill, the summary pass and the check runner take no new work;
- *    running jobs, an embedding, an image fetch, a copy in the making, a page being read for its icon,
+ *    The runner, the indexer, the image pass, the favicon pass, the copy pass, the icon backfill, the summary pass and the check runner take no new work;
+ *    running jobs, an embedding, an image or favicon fetch, a copy in the making, a page being read for its icon,
  *    a summary being written and a link check in flight carry on.
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
  * 3. The runner aborts its jobs, which give their attempts back, the image pass aborts its fetch,
- *    leaving that image pending, the copy pass aborts its fetch or extraction, leaving the copy for
+ *    leaving that image pending, the favicon pass aborts its fetch, leaving that favicon pending, the copy pass aborts its fetch or extraction, leaving the copy for
  *    the next sweep, the icon backfill aborts its fetch or extraction, recording nothing, so the link
  *    stays a candidate, the summary pass aborts its AI call, writing nothing, so the link stays a
  *    candidate, and the check runner aborts its check, recording nothing, so the
@@ -124,7 +127,7 @@ export type StartOptions = {
  * 4. Export builds are told to stop, before any wait: a running build stops at its next read and
  *    discards its temporary file, or the next start deletes it.
  *    The metadata refresher stops: it aborts every metadata fetch in flight and waits for them.
- *    The image pass's, the copy pass's, the icon backfill's, the summary pass's and the check runner's stops are awaited again. Then the
+ *    The image pass's, the favicon pass's, the copy pass's, the icon backfill's, the summary pass's and the check runner's stops are awaited again. Then the
  *    JSON fetcher closes, the image fetcher, the link checker, the page fetcher, and the three
  *    extractors (killing any child).
  * 5. The MCP handler closes, then the database, then the auth database.
@@ -144,6 +147,7 @@ export async function startServer(
     extractor = createChildExtractor(),
     imageFetcher = createImageFetcher({ version: config.version }),
     imagePollMs,
+    faviconPollMs,
     linkChecker = createLinkChecker({ version: config.version }),
     checkPollMs,
     linkPurgeMs,
@@ -168,6 +172,7 @@ export async function startServer(
   let closeApp: (() => Promise<void>) | undefined;
   let refresher: MetadataRefresher | undefined;
   let images: ImageIndexer | undefined;
+  let favicons: FaviconPass | undefined;
   let copyPass: CopyPass | undefined;
   let iconBackfill: IconBackfill | undefined;
   let summaryPass: SummaryPass | undefined;
@@ -182,6 +187,7 @@ export async function startServer(
     await refresher?.stop();
     // Its fetch must end before the fetcher closes, or a closed fetcher would end it as a failure.
     await images?.stop();
+    await favicons?.stop();
     await copyPass?.stop();
     await iconBackfill?.stop();
     await summaryPass?.stop();
@@ -248,6 +254,13 @@ export async function startServer(
       fetcher: imageFetcher,
       now: deps.now,
       ...(imagePollMs !== undefined && { pollMs: imagePollMs }),
+    });
+    // The image pass's fetcher: the same address rules, redirects and size caps (#272).
+    favicons = createFaviconPass({
+      store: deps.favicons,
+      fetcher: imageFetcher,
+      now: deps.now,
+      ...(faviconPollMs !== undefined && { pollMs: faviconPollMs }),
     });
     copyPass = createCopyPass({
       copies: savedCopies,
@@ -349,6 +362,7 @@ export async function startServer(
   runner.start();
   indexer.start();
   images?.start();
+  favicons?.start();
   copyPass?.start();
   iconBackfill?.start();
   summaryPass?.start();
@@ -387,6 +401,10 @@ export async function startServer(
     const imagesStopped = (images?.stop() ?? Promise.resolve()).then(() => {
       imagesEnded = true;
     });
+    let faviconsEnded = false;
+    const faviconsStopped = (favicons?.stop() ?? Promise.resolve()).then(() => {
+      faviconsEnded = true;
+    });
     let copiesEnded = false;
     const copiesStopped = (copyPass?.stop() ?? Promise.resolve()).then(() => {
       copiesEnded = true;
@@ -415,6 +433,7 @@ export async function startServer(
       stopped,
       indexStopped,
       imagesStopped,
+      faviconsStopped,
       copiesStopped,
       iconsStopped,
       summariesStopped,
@@ -425,7 +444,7 @@ export async function startServer(
     try {
       if (await Promise.race([ended, timedOut])) {
         console.error(
-          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; stats reading pass ${readingsEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
+          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; favicon pass ${faviconsEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; stats reading pass ${readingsEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
         );
       }
     } finally {
@@ -438,6 +457,7 @@ export async function startServer(
     runner.quiesce();
     indexer.quiesce();
     images?.quiesce();
+    favicons?.quiesce();
     copyPass?.quiesce();
     iconBackfill?.quiesce();
     summaryPass?.quiesce();

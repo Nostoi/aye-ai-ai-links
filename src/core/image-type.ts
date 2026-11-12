@@ -128,6 +128,18 @@ export const ICON_MIN_PX = 64;
 
 /** Whether an icon's header declares at least ICON_MIN_PX on its shorter side; false when it can't be read. */
 export function iconBigEnough(bytes: Uint8Array): boolean {
+  return shorterSideAtLeast(bytes, ICON_MIN_PX);
+}
+
+/** The shortest side, in pixels, a favicon must have to be kept (#272, owner ruling). Favicons only. */
+export const FAVICON_MIN_PX = 16;
+
+/** Whether a favicon's header declares at least FAVICON_MIN_PX on its shorter side; false when it can't be read. */
+export function faviconBigEnough(bytes: Uint8Array): boolean {
+  return shorterSideAtLeast(bytes, FAVICON_MIN_PX);
+}
+
+function shorterSideAtLeast(bytes: Uint8Array, px: number): boolean {
   const header = readImageHeader(bytes);
-  return header !== null && Math.min(header.width, header.height) >= ICON_MIN_PX;
+  return header !== null && Math.min(header.width, header.height) >= px;
 }

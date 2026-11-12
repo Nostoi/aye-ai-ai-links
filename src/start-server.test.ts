@@ -66,7 +66,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const PAGE: ExtractOutcome = {
   kind: "ok",
-  metadata: { title: "Page title", description: null, imageUrl: null, iconUrls: [] },
+  metadata: {
+    title: "Page title",
+    description: null,
+    imageUrl: null,
+    iconUrls: [],
+    faviconUrls: [],
+    declaresIcon: false,
+  },
   text: "page text",
 };
 
@@ -74,7 +81,14 @@ const IMAGE_URL = "https://example.com/preview.png";
 /** A page whose metadata names a preview image. */
 const PAGE_WITH_IMAGE: ExtractOutcome = {
   ...PAGE,
-  metadata: { title: "Page title", description: null, imageUrl: IMAGE_URL, iconUrls: [] },
+  metadata: {
+    title: "Page title",
+    description: null,
+    imageUrl: IMAGE_URL,
+    iconUrls: [],
+    faviconUrls: [],
+    declaresIcon: false,
+  },
 };
 const PNG: ImageOutcome = {
   kind: "ok",
@@ -1382,7 +1396,14 @@ describe("startServer", () => {
     const ICON_URL = "https://example.com/icon.png";
     const PAGE_WITH_ICON: ExtractOutcome = {
       kind: "ok",
-      metadata: { title: "Page title", description: null, imageUrl: null, iconUrls: [ICON_URL] },
+      metadata: {
+        title: "Page title",
+        description: null,
+        imageUrl: null,
+        iconUrls: [ICON_URL],
+        faviconUrls: [],
+        declaresIcon: false,
+      },
       text: "page text",
     };
 
@@ -1402,6 +1423,34 @@ describe("startServer", () => {
       await until(() => images()[0]?.status === "ok", "a stored icon");
       expect(read<{ role: string }>("SELECT role FROM link_images")).toEqual([{ role: "icon" }]);
       expect(asked).toEqual([ICON_URL]);
+    });
+
+    it("★ stores a saved page's 32 px favicon apart from its picture, through the image fetcher (#272)", async () => {
+      // [A favicon pass left unstarted, or one sharing the large picture's 64 px floor.]
+      const { port } = await start({
+        ...fakePipeline({
+          extract: async () => ({
+            ...PAGE_WITH_ICON,
+            metadata: { ...PAGE_WITH_ICON.metadata, faviconUrls: [ICON_URL], declaresIcon: true },
+          }),
+          fetchImage: async () => ({
+            kind: "ok",
+            contentType: "image/png",
+            bytes: new Uint8Array(png(32, 32)),
+          }),
+        }),
+        imagePollMs: 20,
+        faviconPollMs: 20,
+      });
+      expect((await post(port, SAVE)).status).toBe(200);
+      const favicons = () =>
+        read<{ status: string; stored: number }>(
+          "SELECT status, bytes IS NOT NULL AS stored FROM link_favicons",
+        );
+      await until(() => favicons()[0]?.status === "ok", "a stored favicon");
+      await until(() => images()[0]?.status === "none", "the large picture's icon ended");
+      expect(favicons()).toEqual([{ status: "ok", stored: 1 }]);
+      expect(images()).toEqual([{ status: "none", stored: 0 }]);
     });
 
     it("records none for a saved page that names no picture, and fetches no image", async () => {
@@ -1464,6 +1513,46 @@ describe("startServer", () => {
       await stop();
       expect(events).toEqual(["fetching", "aborted", "image fetcher closed"]);
       expect(images()).toEqual([{ status: "pending", stored: 0 }]);
+    });
+
+    it("★ on stop, aborts a favicon fetch in flight before closing the image fetcher, leaving it pending (#272)", async () => {
+      // [Closing the shared fetcher first, so the fetch ends as a failure and the favicon is ended.]
+      await seed("https://example.com/backlog");
+      const events: string[] = [];
+      const pipeline = fakePipeline({
+        extract: async () => ({
+          kind: "ok",
+          metadata: {
+            title: "Page title",
+            description: null,
+            imageUrl: null,
+            iconUrls: [],
+            faviconUrls: [ICON_URL],
+            declaresIcon: true,
+          },
+          text: "page text",
+        }),
+      });
+      const imageFetcher: ImageFetcher = {
+        fetch: (_url, signal) =>
+          new Promise<ImageOutcome>((resolve) => {
+            events.push("fetching");
+            signal?.addEventListener("abort", () =>
+              setTimeout(() => {
+                events.push("aborted");
+                resolve({ kind: "aborted" });
+              }, 20),
+            );
+          }),
+        close: async () => void events.push("image fetcher closed"),
+      };
+      const { stop } = await start({ ...pipeline, imageFetcher, faviconPollMs: 20 });
+      await until(() => events.includes("fetching"), "a favicon fetch");
+      await stop();
+      expect(events).toEqual(["fetching", "aborted", "image fetcher closed"]);
+      expect(read("SELECT status, bytes IS NOT NULL AS stored FROM link_favicons")).toEqual([
+        { status: "pending", stored: 0 },
+      ]);
     });
   });
 
@@ -1679,6 +1768,8 @@ describe("startServer", () => {
               description: null,
               imageUrl: null,
               iconUrls: [OLD_ICON],
+              faviconUrls: [],
+              declaresIcon: false,
             },
             text: "new text",
           };
@@ -1778,7 +1869,14 @@ describe("startServer", () => {
       const iconExtractor: PageExtractor = {
         extract: async () => ({
           kind: "ok",
-          metadata: { title: "New", description: null, imageUrl: CARD, iconUrls: [FLUID] },
+          metadata: {
+            title: "New",
+            description: null,
+            imageUrl: CARD,
+            iconUrls: [FLUID],
+            faviconUrls: [],
+            declaresIcon: false,
+          },
           text: "new text",
         }),
         close: async () => {},

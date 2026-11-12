@@ -3,7 +3,7 @@ import type { PageFetcher } from "./fetch.js";
 import type { IconBackfillStore, IconCandidate } from "./icon-backfill-store.js";
 import { MAX_IMAGE_ATTEMPTS, RETRY_BASE_MS, RETRY_MAX_MS } from "./image-indexer.js";
 import { transientFetch } from "./snapshot-outcome.js";
-import { boundedIconUrls } from "./snapshot-store.js";
+import { boundedFaviconUrls, boundedIconUrls } from "./snapshot-store.js";
 import { isWordPictureHost, keptPreview } from "./word-picture-host.js";
 
 export type IconBackfillOptions = {
@@ -52,7 +52,8 @@ type Failure = { attempts: number; retryAt: number };
 /** A link to read for its icons, and how what was found is recorded. */
 type Job = {
   c: IconCandidate;
-  write: (icons: string[]) => Promise<boolean>;
+  /** `favicons` is null when no page metadata was read (#272). */
+  write: (icons: string[], favicons: string[] | null) => Promise<boolean>;
   /** Back off, recording nothing, after a fetch failure that may pass (`transientFetch`). */
   keepOnTransient: boolean;
 };
@@ -67,8 +68,10 @@ const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
  * - First, a link on a word-picture host whose snapshot still names a preview (#193): saved before
  *   that rule, or restored by a delete's Undo. Its page is read afresh, so its icons are the
  *   page's current ones; the preview and its fetched picture are dropped, and the icons recorded.
+ *   When its page's metadata was read, its favicon candidates are rewritten in the same write (#272).
  * - Then, a link snapshotted before icons were looked for (#149). It records the page's icons
- *   when it names no preview, else none.
+ *   when it names no preview, else none. It writes no favicon: such a link never had its page's
+ *   metadata recorded, so it has no favicon row to go stale; it is left to #272's favicon backfill.
  *
  * The image pass then fetches a recorded icon. Every attempt either records the link, which ends
  * its candidacy for good, or backs it off, so no sweep fetches the same page as the last. A link
@@ -97,9 +100,9 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
 
   const keyOf = (c: IconCandidate) => JSON.stringify([c.owner, c.linkId]);
 
-  async function record(job: Job, icons: string[]): Promise<Attempt> {
+  async function record(job: Job, icons: string[], favicons: string[] | null): Promise<Attempt> {
     try {
-      return (await job.write(icons))
+      return (await job.write(icons, favicons))
         ? { kind: "recorded" }
         : { kind: "failed", why: "the store refused the check" };
     } catch (error) {
@@ -123,7 +126,7 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
       if (job.keepOnTransient && transientFetch(page)) {
         return { kind: "failed", why: `fetch:${page.kind}` };
       }
-      return record(job, []);
+      return record(job, [], null);
     }
     const out = await extractor.extract(page.html, page.finalUrl, signal);
     if (signal.aborted) return { kind: "stopped" };
@@ -134,7 +137,8 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     if (job.keepOnTransient && out.kind !== "ok" && out.metadata === null) {
       return { kind: "failed", why: `extract:${out.kind}` };
     }
-    return record(job, iconsToRecord(c.url, out.metadata));
+    const favicons = out.metadata ? boundedFaviconUrls(out.metadata.faviconUrls) : null;
+    return record(job, iconsToRecord(c.url, out.metadata), favicons);
   }
 
   /** Attempts one candidate and books the result: done, a backoff, or the end of its budget. */
@@ -194,7 +198,8 @@ export function createIconBackfill(o: IconBackfillOptions): IconBackfill {
     const tookOne = await scanFor(
       (afterId, limit) => store.wordPictureCandidates(afterId, limit),
       (c) => isWordPictureHost(c.url),
-      (c) => (icons) => store.recordWordPictureCheck(c.owner, c.linkId, c.imageUrl, icons),
+      (c) => (icons, favicons) =>
+        store.recordWordPictureCheck(c.owner, c.linkId, c.imageUrl, icons, favicons),
       true,
     );
     if (tookOne) return;

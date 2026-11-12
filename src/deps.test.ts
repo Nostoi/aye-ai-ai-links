@@ -196,6 +196,7 @@ describe("the vector indexer on createDeps' index store", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: null,
       text: "the page body",
       lastError: null,
     });
@@ -305,6 +306,7 @@ describe("the digest on createDeps", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: null,
       text: "all about the quokka",
       lastError: null,
     });

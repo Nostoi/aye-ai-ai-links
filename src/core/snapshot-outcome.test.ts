@@ -19,6 +19,8 @@ const meta: PageMetadata = {
   description: "D",
   imageUrl: "https://x.test/i.png",
   iconUrls: ["https://x.test/a.png", "https://x.test/b.png"],
+  faviconUrls: ["https://x.test/a.png", "https://x.test/b.png", "https://x.test/c.png"],
+  declaresIcon: true,
 };
 
 type FailedFetch = Exclude<FetchOutcome, { kind: "ok" }>;
@@ -117,6 +119,7 @@ describe("retry schedule", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: null,
       text: null,
       lastError: "lease:expired",
     });
@@ -156,6 +159,7 @@ describe("snapshotRecord", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: null,
       text: null,
       lastError,
     });
@@ -191,6 +195,7 @@ describe("snapshotRecord", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
+      faviconUrls: null,
       text: null,
       lastError,
     });
@@ -208,6 +213,7 @@ describe("snapshotRecord", () => {
       description: "D",
       imageUrl: "https://x.test/i.png",
       iconUrls: meta.iconUrls,
+      faviconUrls: meta.faviconUrls,
       text: "body",
       lastError: null,
     });
@@ -258,6 +264,22 @@ describe("snapshotRecord", () => {
     },
   );
 
+  it("★ keeps at most MAX_FAVICON_URLS favicons, string ones only, apart from the icons (#272)", () => {
+    // [Handing the store a record it refuses, or trusting the child's unvalidated list.]
+    const five = [1, 2, 3, 4, 5].map((n) => `https://x.test/f${n}.png`);
+    const r = map(extractOf({ kind: "ok", metadata: { ...meta, faviconUrls: five }, text: "b" }));
+    expect(r.faviconUrls).toEqual(five.slice(0, 4));
+    expect(r.iconUrls).toEqual(meta.iconUrls);
+    for (const bad of [5, {}, "abc", null, undefined]) {
+      const metadata = { ...meta, faviconUrls: bad } as unknown as PageMetadata;
+      expect(map(extractOf({ kind: "ok", metadata, text: "b" })).faviconUrls).toEqual([]);
+    }
+    const mixed = { ...meta, faviconUrls: [1, "https://a/x.png"] } as unknown as PageMetadata;
+    expect(map(extractOf({ kind: "ok", metadata: mixed, text: "b" })).faviconUrls).toEqual([
+      "https://a/x.png",
+    ]);
+  });
+
   it("ok with no text stores null text", () => {
     expect(map(extractOf({ kind: "ok", metadata: meta, text: null })).text).toBeNull();
   });
@@ -290,6 +312,7 @@ describe("snapshotRecord", () => {
         description: "D",
         imageUrl: "https://x.test/i.png",
         iconUrls: meta.iconUrls,
+        faviconUrls: meta.faviconUrls,
         text: null,
         lastError,
       });
@@ -308,6 +331,7 @@ describe("snapshotRecord", () => {
         description: null,
         imageUrl: null,
         iconUrls: [],
+        faviconUrls: null,
       });
     },
   );

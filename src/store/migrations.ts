@@ -403,6 +403,34 @@ export const MIGRATIONS: Migration[] = [
     PRIMARY KEY (owner_id, key_a, key_b)
   );
   `,
+  // Site favicons (#272), apart from the link's one picture in link_images. A row is written when a
+  // page is read: its candidates (a JSON array), and pending until the favicon pass stores one or
+  // ends. `generation` moves on with every rewrite, so a fetch begun before one writes nothing.
+  // `discovery` is the way of finding candidates that wrote them. The bytes belong to the current
+  // candidates, so a rewrite clears them. The byte cap is the image fetcher's 2 MiB. Additive.
+  `
+  CREATE TABLE link_favicons (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    candidates TEXT NOT NULL CHECK (json_valid(candidates) AND json_type(candidates) = 'array'),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'ok', 'none', 'refused')),
+    generation INTEGER NOT NULL CHECK (generation >= 1),
+    discovery INTEGER NOT NULL CHECK (discovery >= 1),
+    content_type TEXT
+      CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    bytes BLOB,
+    sha256 TEXT,
+    fetched_at INTEGER,
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+    CHECK ((status = 'ok') = (bytes IS NOT NULL)),
+    CHECK ((bytes IS NULL) = (content_type IS NULL) AND (bytes IS NULL) = (sha256 IS NULL)
+      AND (bytes IS NULL) = (fetched_at IS NULL)),
+    CHECK (bytes IS NULL OR (typeof(bytes) = 'blob' AND length(bytes) <= 2097152)),
+    CHECK (status <> 'pending' OR json_array_length(candidates) > 0)
+  );
+  CREATE INDEX link_favicons_pending ON link_favicons (link_id) WHERE status = 'pending';
+  `,
 ];
 
 /**

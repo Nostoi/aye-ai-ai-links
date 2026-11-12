@@ -12,6 +12,12 @@ export type SnapshotRecord = {
   imageUrl: string | null;
   /** The site's icon candidates, best first; at most MAX_ICON_URLS. */
   iconUrls: string[];
+  /**
+   * The favicon candidates (#272), best first; at most MAX_FAVICON_URLS. Null when no page
+   * metadata was read, which leaves the link's favicon as it was; a list, even an empty one,
+   * rewrites it.
+   */
+  faviconUrls: string[] | null;
   text: string | null;
   lastError: string | null;
 };
@@ -89,18 +95,33 @@ export function hasConsistentSchedule(r: SnapshotRecord): boolean {
 /** The most icon candidates a record may name. */
 export const MAX_ICON_URLS = 2;
 
+/** The most favicon candidates a record may name (#272): its own list, apart from the icons above. */
+export const MAX_FAVICON_URLS = 4;
+
 /**
  * The icon candidates in an extraction's metadata, as a record may carry them: the strings, in
  * order, at most MAX_ICON_URLS; none for anything but an array. The extraction child's messages
  * are not validated, so every reader of `PageMetadata.iconUrls` goes through this.
  */
 export function boundedIconUrls(value: unknown): string[] {
+  return boundedUrls(value, MAX_ICON_URLS);
+}
+
+/** The favicon candidates in an extraction's metadata, read as `boundedIconUrls` reads icons, at most MAX_FAVICON_URLS. */
+export function boundedFaviconUrls(value: unknown): string[] {
+  return boundedUrls(value, MAX_FAVICON_URLS);
+}
+
+function boundedUrls(value: unknown, max: number): string[] {
   return Array.isArray(value)
-    ? value.filter((u): u is string => typeof u === "string").slice(0, MAX_ICON_URLS)
+    ? value.filter((u): u is string => typeof u === "string").slice(0, max)
     : [];
 }
 
-/** True when the record names at most MAX_ICON_URLS icons; both stores refuse a record that fails this. */
+/**
+ * True when the record names at most MAX_ICON_URLS icons and MAX_FAVICON_URLS favicons; both
+ * stores refuse a record that fails this.
+ */
 export function hasValidIcons(r: SnapshotRecord): boolean {
-  return r.iconUrls.length <= MAX_ICON_URLS;
+  return r.iconUrls.length <= MAX_ICON_URLS && (r.faviconUrls?.length ?? 0) <= MAX_FAVICON_URLS;
 }

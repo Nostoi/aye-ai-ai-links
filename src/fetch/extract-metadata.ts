@@ -1,4 +1,4 @@
-import { MAX_ICON_URLS } from "../core/snapshot-store.ts";
+import { MAX_FAVICON_URLS, MAX_ICON_URLS } from "../core/snapshot-store.ts";
 import { capCodePoints } from "./cap.ts";
 
 const TITLE_MAX = 500;
@@ -88,12 +88,18 @@ function keptType(link: Element, url: URL): boolean {
   return !/\.(svg|ico)$/i.test(url.pathname);
 }
 
-/** The site's icon candidates, best first: sized largest first, then unsized; the later declaration wins a tie. */
-function iconUrls(doc: Document, base: string): string[] {
+/**
+ * Every usable icon the page declares, best first: sized largest first, then unsized; the later
+ * declaration wins a tie. `declared` is whether it declares any icon at all, usable or not.
+ */
+function rankedIcons(doc: Document, base: string): { urls: string[]; declared: boolean } {
   const found: { href: string; size: number; order: number }[] = [];
+  let declared = false;
   for (const [order, link] of [...doc.querySelectorAll("link")].entries()) {
     const rel = (link.getAttribute("rel") ?? "").toLowerCase().split(ASCII_SPACE);
-    if (!rel.some((t) => ICON_RELS.includes(t)) || link.hasAttribute("media")) continue;
+    if (!rel.some((t) => ICON_RELS.includes(t))) continue;
+    declared = true;
+    if (link.hasAttribute("media")) continue;
     const href = urlValue(link.getAttribute("href"));
     const url = href === null ? null : usableUrl(href, base);
     if (!url || !keptType(link, url)) continue;
@@ -101,14 +107,19 @@ function iconUrls(doc: Document, base: string): string[] {
     found.push({ href: url.href, size: declaredSize(link.getAttribute("sizes")) ?? 0, order });
   }
   found.sort((a, b) => b.size - a.size || b.order - a.order);
-  return [...new Set(found.map((f) => f.href))].slice(0, MAX_ICON_URLS);
+  return { urls: [...new Set(found.map((f) => f.href))], declared };
 }
 
 export type Metadata = {
   title: string | null;
   description: string | null;
   imageUrl: string | null;
+  /** The large picture's icon candidates (#149): the best MAX_ICON_URLS. */
   iconUrls: string[];
+  /** The favicon candidates (#272): the best MAX_FAVICON_URLS, chosen as `iconUrls` are. */
+  faviconUrls: string[];
+  /** Whether the page declares any icon, usable or not (#272). */
+  declaresIcon: boolean;
 };
 
 export function extractMetadata(doc: Document, finalUrl: string): Metadata {
@@ -123,10 +134,13 @@ export function extractMetadata(doc: Document, finalUrl: string): Metadata {
     text,
   );
   const base = documentBase(doc, finalUrl);
+  const icons = rankedIcons(doc, base);
   return {
     title: title && capCodePoints(title, TITLE_MAX),
     description: description && capCodePoints(description, DESCRIPTION_MAX),
     imageUrl: imageUrl(doc, base),
-    iconUrls: iconUrls(doc, base),
+    iconUrls: icons.urls.slice(0, MAX_ICON_URLS),
+    faviconUrls: icons.urls.slice(0, MAX_FAVICON_URLS),
+    declaresIcon: icons.declared,
   };
 }

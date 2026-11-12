@@ -129,7 +129,7 @@ describe("the Your spaces section", () => {
     ]);
     expect(all.map((a) => a?.textContent?.replace(/\s+/g, " ").trim())).toEqual([
       "See all 12 Home batteries →",
-      "See all 0 Kitchen →",
+      "Open Kitchen →",
     ]);
     expect(all[0]?.querySelector(".visually-hidden")?.textContent?.trim()).toBe("Home batteries");
     expect(cards.map((c) => c.querySelectorAll("a").length)).toEqual([2, 2]);

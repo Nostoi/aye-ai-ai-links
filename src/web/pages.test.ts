@@ -327,7 +327,7 @@ describe("the menu", () => {
       expect(
         html.replaceAll(' aria-current="page"', "").replace(/<a class="menu-search".*?<\/a>/, ""),
       ).toContain(
-        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><a class="menu-page" href="/save">+ Save</a><details class="account-menu" name="menu">',
+        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/">Home</a><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><a class="menu-page" href="/save">+ Save</a><details class="account-menu" name="menu">',
       );
       expect(html).toContain(
         '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out"',
@@ -599,8 +599,8 @@ describe("which section each menu page marks as current", () => {
     ["menu-phone-only", href],
   ];
 
-  it("Home marks Home in the phone menu only", () => {
-    expect(marked(homePage(EMPTY_HOME))).toEqual([["menu-phone-only", "/"]]);
+  it("Home marks Home in the bar and the phone menu", () => {
+    expect(marked(homePage(EMPTY_HOME))).toEqual(bothCopies("/"));
   });
 
   it("Spaces and tags marks /tags on the Tags page and on space pages, live and done", () => {

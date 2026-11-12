@@ -56,7 +56,7 @@ describe("the copy page's frame", () => {
     const d = dom(render());
     expect(
       [...d.querySelectorAll("nav.menu .menu-page")].map((a) => a.getAttribute("href")),
-    ).toEqual(["/all", "/tags", "/save"]);
+    ).toEqual(["/", "/all", "/tags", "/save"]);
     expect(d.querySelector("nav.menu [aria-current]")).toBeNull();
     expect(d.querySelector("#sign-out")).not.toBeNull();
     expect(d.querySelector("#ask-open, #ask-panel")).toBeNull();

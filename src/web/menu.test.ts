@@ -18,12 +18,13 @@ const nav = (html: string) => parseHTML(html).document.querySelector("nav") as H
 const own = (html: string, selector: string) => [...nav(html).querySelectorAll(selector)];
 
 describe("the navigation bar", () => {
-  it("holds three page links and an account menu, not the old flat list of six", () => {
+  it("holds four page links and an account menu, not the old flat list of six", () => {
     const bar = nav(plain());
     expect(bar.getAttribute("aria-label")).toBe("Main");
     const top = [...bar.children];
-    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "A", "A", "DETAILS"]);
-    expect(top.slice(0, 3).map((a) => [text(a), a.getAttribute("href")])).toEqual([
+    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "A", "A", "A", "DETAILS"]);
+    expect(top.slice(0, 4).map((a) => [text(a), a.getAttribute("href")])).toEqual([
+      ["Home", "/"],
       ["All links", "/all"],
       ["Spaces and tags", "/tags"],
       ["+ Save", "/save"],
@@ -68,7 +69,7 @@ describe("the navigation bar", () => {
   });
 
   it.each([
-    ["home", "/", false, true],
+    ["home", "/", true, true],
     ["all", "/all", true, true],
     ["tags", "/tags", true, true],
   ] as const)(
@@ -115,6 +116,7 @@ describe("the navigation bar", () => {
   it("puts Ask AI outside the account menu, between the page links and it, only with the AI set up", () => {
     const withAI = nav(withAsk());
     expect([...withAI.children].map((e) => text(e) ?? "")).toEqual([
+      "Home",
       "All links",
       "Spaces and tags",
       "+ Save",

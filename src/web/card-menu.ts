@@ -2,9 +2,10 @@ import { escapeHtml } from "./page.js";
 
 /**
  * One row of a card's menu: its `data-act` for the page's script, its stroke icon and its words.
- * A `hidden` row is there for the script to show later.
+ * A `hidden` row is there for the script to show later. A `hint` is a small grey line under the
+ * words saying what happens (#284).
  */
-export type MenuItem = { act: string; icon: string; text: string; hidden?: boolean };
+export type MenuItem = { act: string; icon: string; text: string; hint?: string; hidden?: boolean };
 
 /** A thin line between a menu's groups. */
 export const DIVIDER = "divider" as const;
@@ -22,7 +23,11 @@ export function cardMenu(label: string, items: (MenuItem | typeof DIVIDER)[]): s
     .map((i) =>
       i === DIVIDER
         ? "<hr>"
-        : `<button type="button" data-act="${escapeHtml(i.act)}"${i.hidden ? " hidden" : ""}>${i.icon}${escapeHtml(i.text)}</button>`,
+        : `<button type="button" data-act="${escapeHtml(i.act)}"${i.hidden ? " hidden" : ""}>${i.icon}${
+            i.hint
+              ? `<span>${escapeHtml(i.text)}<small>${escapeHtml(i.hint)}</small></span>`
+              : escapeHtml(i.text)
+          }</button>`,
     )
     .join("");
   return `<details class="card-menu" name="menu">

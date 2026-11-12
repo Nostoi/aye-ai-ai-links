@@ -149,9 +149,9 @@ describe("Worth a look today", () => {
     ]);
     const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
     expect(menuRows(d.querySelector(".worth-row"))).toEqual([
-      "archive",
-      "put-away",
       "snooze",
+      "put-away",
+      "archive",
       "keep",
       "not-handy (hidden)",
       "edit",
@@ -1094,7 +1094,7 @@ describe("the Worth a look gone row (#128)", () => {
     expect(last.classList.contains("worth-gone")).toBe(true);
     expect(last.querySelector("[data-gone] p.small")?.textContent).toBe("This page seems gone");
     expect(shownButtons(last)).toEqual(["still-works It still works", "gone-done Done with it"]);
-    expect(menuRows(last)[0]).toBe("archive");
+    expect(menuRows(last).slice(0, 3)).toEqual(["snooze", "put-away", "archive"]);
     expect(menuRows(last)).toHaveLength(7);
     expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
     expect(last.querySelector(".ask")).toBeNull();

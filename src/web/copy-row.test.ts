@@ -76,10 +76,13 @@ describe("the card menu", () => {
     const d = dom(editMenu(link("7"), { copy: INFO }));
     expect(d.querySelector("a")).toBeNull();
     expect(
-      [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => e.textContent),
+      [...d.querySelectorAll(".card-menu-list > :not([hidden], hr)")].map((e) => {
+        e.querySelector("small")?.remove();
+        return e.textContent;
+      }),
     ).toEqual([
-      "Done with it",
       "Put it away",
+      "Done with it",
       "Keep handy",
       "Edit link…",
       "Remove saved copy",

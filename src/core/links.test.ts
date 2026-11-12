@@ -280,7 +280,6 @@ describe("saveLink with the real snapshot runner", () => {
       imageUrl: null,
       iconUrls: [],
       faviconUrls: [],
-      declaresIcon: false,
     },
     text: "page text",
   };

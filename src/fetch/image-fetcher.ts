@@ -21,7 +21,7 @@ const headersFor = (version: string) => ({
 });
 
 /** Servers label images loosely, so a generic binary type is read too; the bytes decide. */
-const READABLE_TYPE =
+export const READABLE_TYPE =
   /^\s*(image\/[^\s;]+|application\/octet-stream|binary\/octet-stream)\s*(;|$)/i;
 
 /**

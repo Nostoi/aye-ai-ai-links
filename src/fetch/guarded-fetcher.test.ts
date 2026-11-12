@@ -85,6 +85,10 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       return res.end(html("status"));
     case "r":
       return redirect(res, Number(arg), "/ok");
+    case "r-pdf":
+      return Number(arg) > 0
+        ? redirect(res, 302, `/r-pdf/${Number(arg) - 1}`)
+        : redirect(res, 301, "/pdf");
     case "r-no-location":
       return redirect(res, 302);
     case "r-bad-location":
@@ -444,13 +448,27 @@ describe("what comes back", () => {
   it.each([
     ["/pdf", "application/pdf"],
     ["/notype", ""],
-  ])("returns not_html for %s", async (path, contentType) => {
-    expect(await fetcherWith().fetch(siteUrl(path))).toEqual({ kind: "not_html", contentType });
+  ])("returns not_html for %s, with its address", async (path, contentType) => {
+    expect(await fetcherWith().fetch(siteUrl(path))).toEqual({
+      kind: "not_html",
+      finalUrl: siteUrl(path),
+      contentType,
+    });
+  });
+
+  it("★ returns not_html with the address after every redirect (#272)", async () => {
+    // [Dropping the final address, so a short link to a PDF cannot get its destination's icon.]
+    expect(await fetcherWith().fetch(siteUrl("/r-pdf/3"))).toEqual({
+      kind: "not_html",
+      finalUrl: siteUrl("/pdf"),
+      contentType: "application/pdf",
+    });
   });
 
   it("returns not_html for a Content-Encoding it cannot decode", async () => {
     expect(await fetcherWith().fetch(siteUrl("/zstd"))).toEqual({
       kind: "not_html",
+      finalUrl: siteUrl("/zstd"),
       contentType: "text/html",
     });
   });
@@ -458,6 +476,7 @@ describe("what comes back", () => {
   it("returns not_html for two stacked Content-Encodings, without decoding", async () => {
     expect(await fetcherWith().fetch(siteUrl("/stacked"))).toEqual({
       kind: "not_html",
+      finalUrl: siteUrl("/stacked"),
       contentType: "text/html",
     });
   });
@@ -465,6 +484,7 @@ describe("what comes back", () => {
   it("returns not_html for two codings sent on separate header lines, without decoding", async () => {
     expect(await fetcherWith().fetch(siteUrl("/lines-gzip-gzip"))).toEqual({
       kind: "not_html",
+      finalUrl: siteUrl("/lines-gzip-gzip"),
       contentType: "text/html",
     });
   });

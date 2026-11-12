@@ -106,3 +106,43 @@ export const svg = Buffer.from(
 
 /** The start of an AVIF file: an ISO-BMFF `ftyp` box naming the avif brand. */
 export const avif = Buffer.concat([u32be(24), Buffer.from("ftypavif"), Buffer.alloc(12)]);
+
+/** One ICO directory entry: its claimed size (0 means 256), and its data; `offset`/`length` make it lie. */
+export type IcoEntry = {
+  data: Buffer;
+  width?: number;
+  height?: number;
+  offset?: number;
+  length?: number;
+};
+
+/**
+ * An ICO file: reserved 0, `type`, the count, a 16-byte directory entry each, then the data in
+ * order. `count` overrides the header's count; an entry's `offset`/`length` override where its
+ * directory entry points.
+ */
+export const ico = (entries: IcoEntry[], o: { type?: number; count?: number } = {}) => {
+  let at = 6 + 16 * entries.length;
+  const directory = entries.map((e) => {
+    const entry = Buffer.concat([
+      Buffer.from([(e.width ?? 0) & 0xff, (e.height ?? 0) & 0xff, 0, 0]),
+      u16le(1),
+      u16le(32),
+      u32le(e.length ?? e.data.length),
+      u32le(e.offset ?? at),
+    ]);
+    at += e.data.length;
+    return entry;
+  });
+  return Buffer.concat([
+    u16le(0),
+    u16le(o.type ?? 1),
+    u16le(o.count ?? entries.length),
+    ...directory,
+    ...entries.map((e) => e.data),
+  ]);
+};
+
+/** The start of a BMP (DIB) icon entry, what an ICO's non-PNG entries hold: a BITMAPINFOHEADER. */
+export const dib = (width: number, height: number) =>
+  Buffer.concat([u32le(40), u32le(width), u32le(height * 2), Buffer.alloc(28)]);

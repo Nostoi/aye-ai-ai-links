@@ -13,9 +13,9 @@ export type SnapshotRecord = {
   /** The site's icon candidates, best first; at most MAX_ICON_URLS. */
   iconUrls: string[];
   /**
-   * The favicon candidates (#272), best first; at most MAX_FAVICON_URLS. Null when no page
-   * metadata was read, which leaves the link's favicon as it was; a list, even an empty one,
-   * rewrites it.
+   * The favicon candidates (#272), best first; at most MAX_FAVICON_URLS. A list, even an empty
+   * one, rewrites the link's favicon; an empty one says it was looked for and none found. Null
+   * leaves it as it was (`snapshotRecord` says when).
    */
   faviconUrls: string[] | null;
   text: string | null;
@@ -96,7 +96,7 @@ export function hasConsistentSchedule(r: SnapshotRecord): boolean {
 export const MAX_ICON_URLS = 2;
 
 /** The most favicon candidates a record may name (#272): its own list, apart from the icons above. */
-export const MAX_FAVICON_URLS = 4;
+export const MAX_FAVICON_URLS = 6;
 
 /**
  * The icon candidates in an extraction's metadata, as a record may carry them: the strings, in
@@ -105,6 +105,21 @@ export const MAX_FAVICON_URLS = 4;
  */
 export function boundedIconUrls(value: unknown): string[] {
   return boundedUrls(value, MAX_ICON_URLS);
+}
+
+/**
+ * The site root's favicon guesses (#272, owner): `/apple-touch-icon.png` then `/favicon.ico` at
+ * the origin of `finalUrl`, the address after redirects, so a short link gets its destination's.
+ */
+export function rootFaviconUrls(finalUrl: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(finalUrl);
+  } catch {
+    return [];
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return [];
+  return ["/apple-touch-icon.png", "/favicon.ico"].map((path) => new URL(path, url.origin).href);
 }
 
 /** The favicon candidates in an extraction's metadata, read as `boundedIconUrls` reads icons, at most MAX_FAVICON_URLS. */

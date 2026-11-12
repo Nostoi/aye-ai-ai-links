@@ -27,7 +27,6 @@ const META = {
   imageUrl: null,
   iconUrls: [],
   faviconUrls: [],
-  declaresIcon: false,
 };
 const okPage = (url: string): FetchOutcome => ({
   kind: "ok",

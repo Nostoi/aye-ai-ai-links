@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  FAVICON_DISCOVERY_VERSION,
-  type FaviconReader,
-  type FaviconStore,
-} from "./favicon-store.js";
+import type { FaviconReader, FaviconStore } from "./favicon-store.js";
 import type { IconBackfillStore } from "./icon-backfill-store.js";
 import { type ImageBytes, imageVersion } from "./image-store.js";
 import type { SnapshotRecord, SnapshotStore } from "./snapshot-store.js";
@@ -85,7 +81,8 @@ export function describeFaviconStoreContract(
         candidates: [F1, F2],
         status: "pending",
         generation: 1,
-        discovery: FAVICON_DISCOVERY_VERSION,
+        // Version 2 (#272 PR 2): declared ICOs and the site root's fallbacks.
+        discovery: 2,
         stored: false,
       });
       expect(await h.favicons.pendingFavicons(null, 100)).toEqual([
@@ -125,9 +122,9 @@ export function describeFaviconStoreContract(
       const r = record({ faviconUrls: [F1] });
       expect(await h.links.recordSnapshot(A, link.id, lease.claim + 1, r)).toBe(false);
       expect(await h.row(A, link.id)).toBeNull();
-      const five = [1, 2, 3, 4, 5].map((i) => `https://ex.com/${i}.png`);
+      const tooMany = [1, 2, 3, 4, 5, 6, 7].map((i) => `https://ex.com/${i}.png`);
       expect(
-        await h.links.recordSnapshot(A, link.id, lease.claim, record({ faviconUrls: five })),
+        await h.links.recordSnapshot(A, link.id, lease.claim, record({ faviconUrls: tooMany })),
       ).toBe(false);
       expect(await h.row(A, link.id)).toBeNull();
     });
@@ -214,8 +211,8 @@ export function describeFaviconStoreContract(
         await h.images.recordWordPictureCheck(A, link.id, "https://ex.com/other.png", [], [F2]),
       ).toBe(false);
       expect(await h.row(A, link.id)).toEqual(before);
-      const five = [1, 2, 3, 4, 5].map((i) => `https://ex.com/${i}.png`);
-      expect(await h.images.recordWordPictureCheck(A, link.id, IMG, [], five)).toBe(false);
+      const tooMany = [1, 2, 3, 4, 5, 6, 7].map((i) => `https://ex.com/${i}.png`);
+      expect(await h.images.recordWordPictureCheck(A, link.id, IMG, [], tooMany)).toBe(false);
       expect(await h.row(A, link.id)).toEqual(before);
       expect(await h.images.recordWordPictureCheck(A, link.id, IMG, [], null)).toBe(true);
       expect(await h.row(A, link.id)).toEqual(before);

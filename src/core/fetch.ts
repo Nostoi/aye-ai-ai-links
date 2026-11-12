@@ -20,7 +20,8 @@ export type FetchFailure =
 /** Every way a fetch can end. Programmer errors aside, `fetch()` returns one of these and never throws. */
 export type FetchOutcome =
   | { kind: "ok"; finalUrl: string; contentType: string; html: string }
-  | { kind: "not_html"; contentType: string }
+  /** A 2xx answer that is not a page; `finalUrl` is its address after any redirects. */
+  | { kind: "not_html"; finalUrl: string; contentType: string }
   | FetchFailure;
 
 /**

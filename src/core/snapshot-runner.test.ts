@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExtractOutcome } from "./extract.js";
 import { FakeStore } from "./fake-store.js";
+import { FAVICON_DISCOVERY_VERSION } from "./favicon-store.js";
 import type { FetchOutcome } from "./fetch.js";
 import type { CopyKeeper } from "./keep-copy.js";
 import type { CopyDraft } from "./saved-copy.js";
@@ -17,7 +18,6 @@ const pageOk: ExtractOutcome = {
     imageUrl: null,
     iconUrls: [],
     faviconUrls: [],
-    declaresIcon: false,
   },
   text: "body",
 };
@@ -153,7 +153,6 @@ describe("snapshot runner", () => {
       imageUrl: "https://opengraph.githubassets.com/x/repo",
       iconUrls: ["https://github.com/fluidicon.png"],
       faviconUrls: [],
-      declaresIcon: false,
     };
     s.extract.run = async () => ({ kind: "ok", metadata: page, text: "body" });
     const { link } = await s.store.insertIfAbsent(A, {
@@ -172,6 +171,75 @@ describe("snapshot runner", () => {
         imageUrl: "https://opengraph.githubassets.com/x/repo",
         role: "preview",
       },
+    ]);
+  });
+
+  it("★ a fetch that ends with no page writes a none favicon row: looked, found nothing (#272)", async () => {
+    // [Recording null, which writes no row, so the link reads as never looked at.]
+    const s = setup();
+    const refused = await s.save(A, 1);
+    const gone = await s.save(A, 2);
+    s.fetch.run = async (url) =>
+      url.endsWith("/1")
+        ? { kind: "refused", reason: "address" }
+        : { kind: "http_error", status: 404 };
+    expect(refused.url.endsWith("/1") && gone.url.endsWith("/2")).toBe(true);
+    await s.runner.kick(A, refused.id);
+    await s.runner.kick(A, gone.id);
+    for (const link of [refused, gone]) {
+      expect(s.store.faviconRow(A, link.id)).toEqual({
+        candidates: [],
+        status: "none",
+        generation: 1,
+        discovery: FAVICON_DISCOVERY_VERSION,
+        stored: false,
+      });
+    }
+    expect(await s.store.pendingFavicons(null, 10)).toEqual([]);
+  });
+
+  it("★ an extraction that fails before its metadata writes a none favicon row (#272)", async () => {
+    const s = setup();
+    const link = await s.save(A, 1);
+    s.extract.run = async () => ({ kind: "timeout", metadata: null });
+    await s.runner.kick(A, link.id);
+    expect(s.records.map((r) => r.rec.status)).toEqual(["extract_timeout"]);
+    expect(s.store.faviconRow(A, link.id)).toEqual({
+      candidates: [],
+      status: "none",
+      generation: 1,
+      discovery: FAVICON_DISCOVERY_VERSION,
+      stored: false,
+    });
+  });
+
+  it("★ a PDF reached through a short link stores its destination's root favicons, pending (#272)", async () => {
+    // [Leaving a non-HTML link with no favicon row, or building the guesses from the short link.]
+    const s = setup();
+    const { link } = await s.store.insertIfAbsent(A, {
+      ...newLink(1, at(0)),
+      url: "https://short.example/abc",
+      urlKey: "short.example/abc",
+    });
+    s.fetch.run = async () => ({
+      kind: "not_html",
+      finalUrl: "https://files.example/docs/report.pdf",
+      contentType: "application/pdf",
+    });
+    await s.runner.kick(A, link.id);
+    const candidates = [
+      "https://files.example/apple-touch-icon.png",
+      "https://files.example/favicon.ico",
+    ];
+    expect(s.store.faviconRow(A, link.id)).toEqual({
+      candidates,
+      status: "pending",
+      generation: 1,
+      discovery: 2,
+      stored: false,
+    });
+    expect(await s.store.pendingFavicons(null, 10)).toEqual([
+      { owner: A, linkId: link.id, generation: 1, urls: candidates },
     ]);
   });
 
@@ -484,7 +552,6 @@ describe("snapshot runner", () => {
             imageUrl: null,
             iconUrls: [],
             faviconUrls: [],
-            declaresIcon: false,
           },
           text: `text of ${url}`,
         });

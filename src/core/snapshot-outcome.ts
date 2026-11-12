@@ -1,6 +1,11 @@
 import type { ExtractOutcome, PageMetadata } from "./extract.js";
 import type { FetchOutcome } from "./fetch.js";
-import { boundedFaviconUrls, boundedIconUrls, type SnapshotRecord } from "./snapshot-store.js";
+import {
+  boundedFaviconUrls,
+  boundedIconUrls,
+  rootFaviconUrls,
+  type SnapshotRecord,
+} from "./snapshot-store.js";
 import type { SnapshotStatus } from "./types.js";
 import { keptPreview } from "./word-picture-host.js";
 
@@ -38,7 +43,7 @@ export function pastLastAttemptRecord(attempts: number): SnapshotRecord {
     description: null,
     imageUrl: null,
     iconUrls: [],
-    faviconUrls: null,
+    faviconUrls: [],
     text: null,
     lastError: "lease:expired",
   };
@@ -115,6 +120,14 @@ function judge(outcome: AttemptOutcome): Verdict {
   }
 }
 
+function terminalFavicons(outcome: AttemptOutcome, metadata: PageMetadata | null | undefined) {
+  if (metadata) return boundedFaviconUrls(metadata.faviconUrls);
+  if (outcome.stage === "fetch" && outcome.fetch.kind === "not_html") {
+    return rootFaviconUrls(outcome.fetch.finalUrl);
+  }
+  return [];
+}
+
 /**
  * The record to write for a finished attempt. `attempts` is the lease count (this attempt
  * included) and is written back unchanged. A retry that has no attempts left becomes `failed`.
@@ -142,6 +155,8 @@ export function snapshotRecord(input: {
     const delay = attempts >= MAX_ATTEMPTS ? undefined : RETRY_DELAYS_MS[attempts - 1];
     return {
       ...base,
+      // A retry leaves the favicon as it was; the last one found no page (#272).
+      faviconUrls: delay === undefined ? [] : null,
       status: delay === undefined ? "failed" : "retrying",
       nextFetchAt: delay === undefined ? null : new Date(now.getTime() + delay),
       fetchedAt: null,
@@ -158,8 +173,7 @@ export function snapshotRecord(input: {
     description: v.metadata?.description ?? null,
     imageUrl: keptPreview(url, v.metadata?.imageUrl ?? null),
     iconUrls: boundedIconUrls(v.metadata?.iconUrls),
-    // Null without metadata: the favicon was not looked for, so the link's stays as it was.
-    faviconUrls: v.metadata ? boundedFaviconUrls(v.metadata.faviconUrls) : null,
+    faviconUrls: terminalFavicons(outcome, v.metadata),
     text: v.text ?? null,
     lastError: v.terminal === "ok" ? null : v.error,
   };

@@ -1,11 +1,7 @@
 import type { ImageBytes, ImageEnd, StoredImage } from "./image-store.js";
 import type { OwnerId } from "./types.js";
 
-/**
- * How favicons are found (#272). A row records the version that found its candidates, so a later
- * way of finding them (PR 2's fallbacks) can tell the rows it has not looked at.
- */
-export const FAVICON_DISCOVERY_VERSION = 1;
+export const FAVICON_DISCOVERY_VERSION = 2;
 
 /**
  * A link whose favicon is not fetched yet: its candidates, best first, and the generation they
@@ -21,8 +17,9 @@ export type PendingFavicon = {
 /**
  * Persistence contract for the favicon pass (#272). Any implementation must meet all of it.
  *
- * - A link's favicon candidates are written only by a write that read its page: the snapshot's
- *   record, and the word-picture check. Each rewrite, even to the same list, moves the generation
+ * - A link's favicon candidates are written only by the snapshot's record (from its page, or empty
+ *   when its fetch ended with no page) and the word-picture check, which reads the page afresh.
+ *   Each rewrite, even to the same list, moves the generation
  *   on, drops the stored favicon, and makes it pending (or `none` when the list is empty).
  * - Both writes compare and set on the generation and on the favicon still being pending, so a
  *   fetch that began before its candidates were rewritten changes nothing.

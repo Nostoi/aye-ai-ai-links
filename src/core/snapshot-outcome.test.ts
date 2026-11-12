@@ -20,7 +20,6 @@ const meta: PageMetadata = {
   imageUrl: "https://x.test/i.png",
   iconUrls: ["https://x.test/a.png", "https://x.test/b.png"],
   faviconUrls: ["https://x.test/a.png", "https://x.test/b.png", "https://x.test/c.png"],
-  declaresIcon: true,
 };
 
 type FailedFetch = Exclude<FetchOutcome, { kind: "ok" }>;
@@ -119,7 +118,8 @@ describe("retry schedule", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
-      faviconUrls: null,
+      // Looked, found nothing (#272): an empty list writes a `none` favicon, so it is not looked for again.
+      faviconUrls: [],
       text: null,
       lastError: "lease:expired",
     });
@@ -166,25 +166,28 @@ describe("snapshotRecord", () => {
     expectConsistent(r);
   });
 
-  const terminal: [string, AttemptOutcome, string, string][] = [
+  /** Each terminal fetch outcome: its status, its error and its favicon candidates (#272). */
+  const terminal: [string, AttemptOutcome, string, string, string[] | null][] = [
     [
       "not_html",
-      fetchOf({ kind: "not_html", contentType: "image/png" }),
+      fetchOf({ kind: "not_html", finalUrl: "https://x.test/i.png", contentType: "image/png" }),
       "not_html",
       "fetch:not_html",
+      ["https://x.test/apple-touch-icon.png", "https://x.test/favicon.ico"],
     ],
-    ["too_large", fetchOf({ kind: "too_large" }), "failed", "fetch:too_large"],
-    ["http 404", fetchOf({ kind: "http_error", status: 404 }), "failed", "fetch:http:404"],
-    ["http 403", fetchOf({ kind: "http_error", status: 403 }), "failed", "fetch:http:403"],
-    ["http 301", fetchOf({ kind: "http_error", status: 301 }), "failed", "fetch:http:301"],
-    ...refusedReasons.map((reason): [string, AttemptOutcome, string, string] => [
+    ["too_large", fetchOf({ kind: "too_large" }), "failed", "fetch:too_large", []],
+    ["http 404", fetchOf({ kind: "http_error", status: 404 }), "failed", "fetch:http:404", []],
+    ["http 403", fetchOf({ kind: "http_error", status: 403 }), "failed", "fetch:http:403", []],
+    ["http 301", fetchOf({ kind: "http_error", status: 301 }), "failed", "fetch:http:301", []],
+    ...refusedReasons.map((reason): [string, AttemptOutcome, string, string, string[]] => [
       `refused ${reason}`,
       fetchOf({ kind: "refused", reason }),
       "refused",
       `fetch:refused:${reason}`,
+      [],
     ]),
   ];
-  it.each(terminal)("%s is terminal", (_n, outcome, status, lastError) => {
+  it.each(terminal)("%s is terminal", (_n, outcome, status, lastError, faviconUrls) => {
     const r = map(outcome, 1);
     expect(r).toEqual({
       status,
@@ -195,11 +198,42 @@ describe("snapshotRecord", () => {
       description: null,
       imageUrl: null,
       iconUrls: [],
-      faviconUrls: null,
+      faviconUrls,
       text: null,
       lastError,
     });
     expectConsistent(r);
+  });
+
+  it("★ a link that is not a web page takes the root favicons of its final address, not its saved one (#272)", () => {
+    // [Building them from the saved short link, or leaving the favicon unlooked-for.]
+    const pdf = fetchOf({
+      kind: "not_html",
+      finalUrl: "https://files.example:8443/docs/report.pdf?x=1",
+      contentType: "application/pdf",
+    });
+    expect(map(pdf, 1, "https://short.example/abc").faviconUrls).toEqual([
+      "https://files.example:8443/apple-touch-icon.png",
+      "https://files.example:8443/favicon.ico",
+    ]);
+  });
+
+  it("★ a fetch that ends with no page records no favicon candidates; a retry leaves them (#272)", () => {
+    // [Leaving it null: no favicon row is written, so the link reads as never looked at.]
+    for (const fetch of [
+      { kind: "refused", reason: "address" },
+      { kind: "too_large" },
+      { kind: "http_error", status: 404 },
+    ] as const) {
+      expect(map(fetchOf(fetch)).faviconUrls, fetch.kind).toEqual([]);
+    }
+    const transient = fetchOf({ kind: "http_error", status: 503 });
+    expect(map(transient, MAX_ATTEMPTS - 1)).toMatchObject({
+      status: "retrying",
+      faviconUrls: null,
+    });
+    expect(map(transient, MAX_ATTEMPTS)).toMatchObject({ status: "failed", faviconUrls: [] });
+    expect(pastLastAttemptRecord(MAX_ATTEMPTS + 1).faviconUrls).toEqual([]);
   });
 
   it("ok keeps metadata and text, stamps fetchedAt, and has no error", () => {
@@ -266,9 +300,9 @@ describe("snapshotRecord", () => {
 
   it("★ keeps at most MAX_FAVICON_URLS favicons, string ones only, apart from the icons (#272)", () => {
     // [Handing the store a record it refuses, or trusting the child's unvalidated list.]
-    const five = [1, 2, 3, 4, 5].map((n) => `https://x.test/f${n}.png`);
-    const r = map(extractOf({ kind: "ok", metadata: { ...meta, faviconUrls: five }, text: "b" }));
-    expect(r.faviconUrls).toEqual(five.slice(0, 4));
+    const seven = [1, 2, 3, 4, 5, 6, 7].map((n) => `https://x.test/f${n}.png`);
+    const r = map(extractOf({ kind: "ok", metadata: { ...meta, faviconUrls: seven }, text: "b" }));
+    expect(r.faviconUrls).toEqual(seven.slice(0, 6));
     expect(r.iconUrls).toEqual(meta.iconUrls);
     for (const bad of [5, {}, "abc", null, undefined]) {
       const metadata = { ...meta, faviconUrls: bad } as unknown as PageMetadata;
@@ -321,18 +355,20 @@ describe("snapshotRecord", () => {
   );
 
   it.each(extractFails)(
-    "extract %s without metadata leaves it null, even on the last attempt",
+    "★ extract %s without metadata keeps the page's fields null and records no favicon candidates (#272)",
     (_n, extract, status) => {
-      const r = map(extractOf({ ...extract, metadata: null } as ExtractOutcome), 6);
-      expect(r).toMatchObject({
-        status,
-        nextFetchAt: null,
-        title: null,
-        description: null,
-        imageUrl: null,
-        iconUrls: [],
-        faviconUrls: null,
-      });
+      for (const attempts of [1, 6]) {
+        const r = map(extractOf({ ...extract, metadata: null } as ExtractOutcome), attempts);
+        expect(r).toMatchObject({
+          status,
+          nextFetchAt: null,
+          title: null,
+          description: null,
+          imageUrl: null,
+          iconUrls: [],
+          faviconUrls: [],
+        });
+      }
     },
   );
 

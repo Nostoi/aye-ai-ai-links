@@ -170,11 +170,10 @@ describe("snapshotRecord", () => {
   const terminal: [string, AttemptOutcome, string, string, string[] | null][] = [
     [
       "not_html",
-      fetchOf({ kind: "not_html", contentType: "image/png" }),
+      fetchOf({ kind: "not_html", finalUrl: "https://x.test/i.png", contentType: "image/png" }),
       "not_html",
       "fetch:not_html",
-      // No final address to build the root fallbacks from yet, so the favicon is left as it was.
-      null,
+      ["https://x.test/apple-touch-icon.png", "https://x.test/favicon.ico"],
     ],
     ["too_large", fetchOf({ kind: "too_large" }), "failed", "fetch:too_large", []],
     ["http 404", fetchOf({ kind: "http_error", status: 404 }), "failed", "fetch:http:404", []],
@@ -204,6 +203,19 @@ describe("snapshotRecord", () => {
       lastError,
     });
     expectConsistent(r);
+  });
+
+  it("★ a link that is not a web page takes the root favicons of its final address, not its saved one (#272)", () => {
+    // [Building them from the saved short link, or leaving the favicon unlooked-for.]
+    const pdf = fetchOf({
+      kind: "not_html",
+      finalUrl: "https://files.example:8443/docs/report.pdf?x=1",
+      contentType: "application/pdf",
+    });
+    expect(map(pdf, 1, "https://short.example/abc").faviconUrls).toEqual([
+      "https://files.example:8443/apple-touch-icon.png",
+      "https://files.example:8443/favicon.ico",
+    ]);
   });
 
   it("★ a fetch that ends with no page records no favicon candidates; a retry leaves them (#272)", () => {

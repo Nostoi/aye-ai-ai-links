@@ -107,6 +107,23 @@ export function boundedIconUrls(value: unknown): string[] {
   return boundedUrls(value, MAX_ICON_URLS);
 }
 
+/**
+ * The site root's favicon guesses (#272, owner): `/apple-touch-icon.png` then `/favicon.ico` at
+ * the origin of `finalUrl`, the address after redirects, so a short link gets its destination's.
+ * For a page with no usable icon, and for a link that is not a page. None for anything but an
+ * http or https address.
+ */
+export function rootFaviconUrls(finalUrl: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(finalUrl);
+  } catch {
+    return [];
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return [];
+  return ["/apple-touch-icon.png", "/favicon.ico"].map((path) => new URL(path, url.origin).href);
+}
+
 /** The favicon candidates in an extraction's metadata, read as `boundedIconUrls` reads icons, at most MAX_FAVICON_URLS. */
 export function boundedFaviconUrls(value: unknown): string[] {
   return boundedUrls(value, MAX_FAVICON_URLS);

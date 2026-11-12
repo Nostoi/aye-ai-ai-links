@@ -1,6 +1,11 @@
 import type { ExtractOutcome, PageMetadata } from "./extract.js";
 import type { FetchOutcome } from "./fetch.js";
-import { boundedFaviconUrls, boundedIconUrls, type SnapshotRecord } from "./snapshot-store.js";
+import {
+  boundedFaviconUrls,
+  boundedIconUrls,
+  rootFaviconUrls,
+  type SnapshotRecord,
+} from "./snapshot-store.js";
 import type { SnapshotStatus } from "./types.js";
 import { keptPreview } from "./word-picture-host.js";
 
@@ -116,14 +121,15 @@ function judge(outcome: AttemptOutcome): Verdict {
 }
 
 /**
- * A terminal attempt's favicon candidates (#272): the page's when its metadata was read. A fetch
- * that ended with no page looked and found nothing (`[]`, written as a `none` favicon), except
- * `not_html`, whose outcome carries no final address to build the root fallbacks from, and an
- * extraction that failed before its metadata: both leave the link's favicon as it was (`null`).
+ * A terminal attempt's favicon candidates (#272): the page's when its metadata was read; for a
+ * link that is not a page (a PDF, an image), the site root's at its final address (owner); for a
+ * fetch that ended with no page, none (`[]`, written as a `none` favicon: looked, found nothing).
+ * An extraction that failed before its metadata leaves the link's favicon as it was (`null`).
  */
 function terminalFavicons(outcome: AttemptOutcome, metadata: PageMetadata | null | undefined) {
   if (metadata) return boundedFaviconUrls(metadata.faviconUrls);
-  return outcome.stage === "fetch" && outcome.fetch.kind !== "not_html" ? [] : null;
+  if (outcome.stage !== "fetch") return null;
+  return outcome.fetch.kind === "not_html" ? rootFaviconUrls(outcome.fetch.finalUrl) : [];
 }
 
 /**

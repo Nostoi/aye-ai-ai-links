@@ -1,4 +1,4 @@
-import { MAX_FAVICON_URLS, MAX_ICON_URLS } from "../core/snapshot-store.ts";
+import { MAX_FAVICON_URLS, MAX_ICON_URLS, rootFaviconUrls } from "../core/snapshot-store.ts";
 import { capCodePoints } from "./cap.ts";
 
 const TITLE_MAX = 500;
@@ -141,14 +141,10 @@ function rankedIcons(doc: Document, base: string): { icons: string[]; favicons: 
 
 /**
  * The favicon candidates (#272): the best declared ones, or, when the page has no usable one,
- * the site root's `/apple-touch-icon.png` then `/favicon.ico`. The root is the final URL's
- * origin, after redirects, never the document's `<base href>`.
+ * the site root's (`rootFaviconUrls`), from the final URL, never the document's `<base href>`.
  */
 export function faviconCandidates(declared: string[], finalUrl: string): string[] {
-  if (declared.length > 0) return declared.slice(0, MAX_FAVICON_URLS);
-  return ["/apple-touch-icon.png", "/favicon.ico"]
-    .map((path) => usableUrl(path, finalUrl)?.href)
-    .filter((u): u is string => u !== undefined);
+  return declared.length > 0 ? declared.slice(0, MAX_FAVICON_URLS) : rootFaviconUrls(finalUrl);
 }
 
 export type Metadata = {

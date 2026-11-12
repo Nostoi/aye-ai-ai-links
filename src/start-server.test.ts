@@ -117,6 +117,7 @@ function fakePipeline(
     fetch?: (url: string, signal?: AbortSignal) => Promise<FetchOutcome>;
     extract?: () => Promise<ExtractOutcome>;
     fetchImage?: (url: string, signal?: AbortSignal) => Promise<ImageOutcome>;
+    fetchFavicon?: (url: string, signal?: AbortSignal) => Promise<ImageOutcome>;
   } = {},
 ) {
   const log: string[] = [];
@@ -150,8 +151,12 @@ function fakePipeline(
     fetch: (url, signal) => (o.fetchImage ? o.fetchImage(url, signal) : Promise.resolve(PNG)),
     close: async () => {},
   };
-  // The favicon pass's own fetcher: a fake answering as the image fetcher does, so no test fetches a real favicon.
-  const faviconFetcher: ImageFetcher = { ...imageFetcher };
+  // The favicon pass's own fetcher: a fake of its own, so no test fetches a real favicon and
+  // a pass wired to the wrong fetcher asks the wrong fake.
+  const faviconFetcher: ImageFetcher = {
+    fetch: (url, signal) => (o.fetchFavicon ? o.fetchFavicon(url, signal) : Promise.resolve(PNG)),
+    close: async () => {},
+  };
   const linkChecker: LinkChecker = {
     canResolve: async () => true,
     check: async (url): Promise<LinkCheckOutcome> => ({ kind: "ok", finalUrl: url }),
@@ -1278,6 +1283,26 @@ describe("startServer", () => {
       );
     });
 
+    it("★ fetches a copy's pictures through the image fetcher, never the favicon fetcher's ICO unwrapping (#272)", async () => {
+      // [Wiring the copy pass to the favicon fetcher, which would keep an ICO's PNG in a saved copy.]
+      await seedFetched();
+      const asked = { image: [] as string[], favicon: [] as string[] };
+      const pipeline = fakePipeline({
+        fetchImage: async (url) => {
+          asked.image.push(url);
+          return { kind: "not_image", contentType: "image/x-icon" };
+        },
+        fetchFavicon: async (url) => {
+          asked.favicon.push(url);
+          return PNG;
+        },
+      });
+      await startWith({ ...pipeline, copyExtractor: copyExtractor(async () => WITH_IMAGE) });
+      await until(() => copyRow()[0]?.finished != null, "the finished copy");
+      expect(asked).toEqual({ image: [IMG], favicon: [] });
+      expect(copyRow()[0]?.image).not.toBe("ok");
+    });
+
     it.skipIf(process.getuid?.() === 0)(
       "makes the copy once its folder can be written again, with no restart",
       async () => {
@@ -1425,19 +1450,54 @@ describe("startServer", () => {
       expect(asked).toEqual([ICON_URL]);
     });
 
-    it("★ stores a saved page's 32 px favicon apart from its picture, through the image fetcher (#272)", async () => {
+    it("★ a PDF behind a short link stores its destination's root favicon candidates, at version 2 (#272)", async () => {
+      // [No favicon row for a link that is not a web page, or guesses built from the short link.]
+      await seed("https://short.example/abc");
+      const asked: string[] = [];
+      await start({
+        ...fakePipeline({
+          fetch: async () => ({
+            kind: "not_html",
+            finalUrl: "https://files.example/docs/report.pdf",
+            contentType: "application/pdf",
+          }),
+          fetchFavicon: async (url) => {
+            asked.push(url);
+            return { kind: "http_error", status: 404 };
+          },
+        }),
+        faviconPollMs: 20,
+      });
+      const row = () =>
+        read<{ candidates: string; discovery: number; status: string }>(
+          "SELECT candidates, discovery, status FROM link_favicons",
+        );
+      await until(() => row()[0]?.status === "none", "the favicon pass's verdict");
+      const candidates = [
+        "https://files.example/apple-touch-icon.png",
+        "https://files.example/favicon.ico",
+      ];
+      expect(row()).toEqual([
+        { candidates: JSON.stringify(candidates), discovery: 2, status: "none" },
+      ]);
+      expect(asked).toEqual(candidates);
+    });
+
+    it("★ stores a saved page's 32 px favicon apart from its picture, through the favicon fetcher (#272)", async () => {
       // [A favicon pass left unstarted, or one sharing the large picture's 64 px floor.]
+      const icon32 = async (): Promise<ImageOutcome> => ({
+        kind: "ok",
+        contentType: "image/png",
+        bytes: new Uint8Array(png(32, 32)),
+      });
       const { port } = await start({
         ...fakePipeline({
           extract: async () => ({
             ...PAGE_WITH_ICON,
             metadata: { ...PAGE_WITH_ICON.metadata, faviconUrls: [ICON_URL] },
           }),
-          fetchImage: async () => ({
-            kind: "ok",
-            contentType: "image/png",
-            bytes: new Uint8Array(png(32, 32)),
-          }),
+          fetchImage: icon32,
+          fetchFavicon: icon32,
         }),
         imagePollMs: 20,
         faviconPollMs: 20,

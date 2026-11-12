@@ -57,7 +57,7 @@ export function createGuardedFetcher(options: GuardedFetcherOptions): PageFetche
           const decoders = decodersFor(contentEncoding);
           if (!HTML_TYPE.test(contentType) || !decoders) {
             discard(body);
-            return { kind: "not_html", contentType } as const;
+            return { kind: "not_html", finalUrl, contentType } as const;
           }
           const bytes = await readBody(body, decoders, limits.maxBytes, signal);
           return {

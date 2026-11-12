@@ -214,7 +214,10 @@ describe("icon backfill", () => {
   describe("outcomes", () => {
     it.each<[string, FetchOutcome]>([
       ["refused", { kind: "refused", reason: "address" }],
-      ["not html", { kind: "not_html", contentType: "application/pdf" }],
+      [
+        "not html",
+        { kind: "not_html", finalUrl: "https://ex.com/1", contentType: "application/pdf" },
+      ],
       ["too large", { kind: "too_large" }],
       ["a 404", { kind: "http_error", status: 404 }],
       ["a 500", { kind: "http_error", status: 500 }],

@@ -198,6 +198,36 @@ describe("snapshot runner", () => {
     expect(await s.store.pendingFavicons(null, 10)).toEqual([]);
   });
 
+  it("★ a PDF reached through a short link stores its destination's root favicons, pending (#272)", async () => {
+    // [Leaving a non-HTML link with no favicon row, or building the guesses from the short link.]
+    const s = setup();
+    const { link } = await s.store.insertIfAbsent(A, {
+      ...newLink(1, at(0)),
+      url: "https://short.example/abc",
+      urlKey: "short.example/abc",
+    });
+    s.fetch.run = async () => ({
+      kind: "not_html",
+      finalUrl: "https://files.example/docs/report.pdf",
+      contentType: "application/pdf",
+    });
+    await s.runner.kick(A, link.id);
+    const candidates = [
+      "https://files.example/apple-touch-icon.png",
+      "https://files.example/favicon.ico",
+    ];
+    expect(s.store.faviconRow(A, link.id)).toEqual({
+      candidates,
+      status: "pending",
+      generation: 1,
+      discovery: 2,
+      stored: false,
+    });
+    expect(await s.store.pendingFavicons(null, 10)).toEqual([
+      { owner: A, linkId: link.id, generation: 1, urls: candidates },
+    ]);
+  });
+
   it("runs at most 2 jobs at once across sweeps and kicks, and finishes them all", async () => {
     const s = setup();
     const links = await Promise.all([1, 2, 3, 4, 5].map((n) => s.save(A, n)));

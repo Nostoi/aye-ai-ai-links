@@ -154,9 +154,9 @@ describe("Worth a look today", () => {
     expect(row?.querySelector("a.button")).toBeNull();
   });
 
-  it("orders the featured buttons Open it, Not now, Done with it, each pill with its hint", () => {
+  it("orders the featured buttons Open it, Not now, Done with it; the last two are icon buttons with label and hint (#298)", () => {
     const feature = dom(render([card([])])).querySelector(".worth-feature") as HTMLElement;
-    const controls = [...feature.querySelectorAll("a.button, .feature-quiet button")].filter(
+    const controls = [...feature.querySelectorAll("a.button, button.slide")].filter(
       (e) => !e.closest("details.card-menu"),
     );
     expect(controls.map((e) => (e as HTMLElement).dataset.act ?? "open")).toEqual([
@@ -164,16 +164,29 @@ describe("Worth a look today", () => {
       "snooze",
       "archive",
     ]);
-    const hint = (act: string) =>
-      feature.querySelector(`.feature-quiet button[data-act=${act}] small`)?.textContent;
+    expect(
+      [...(feature.querySelector(".feature-buttons > .feature-quiet")?.children ?? [])].map(
+        (e) => e.className,
+      ),
+    ).toEqual(["slide", "slide"]);
+    const slide = (act: string) => feature.querySelector(`button.slide[data-act=${act}]`);
+    const hint = (act: string) => slide(act)?.querySelector(".slide-words small")?.textContent;
+    const label = (act: string) => slide(act)?.querySelector(".slide-words > span")?.textContent;
+    expect(slide("snooze")?.getAttribute("type")).toBe("button");
     expect(hint("snooze")).toBe(NOT_NOW_HINT);
     expect(hint("archive")).toBe(DONE_HINT);
     expect(hint("snooze")).toBe("Not suggested for two weeks");
     expect(hint("archive")).toBe("Still findable in search");
-    const label = (act: string) =>
-      feature.querySelector(`.feature-quiet button[data-act=${act}] span`)?.textContent;
     expect(label("snooze")).toBe("Not now");
     expect(label("archive")).toBe("Done with it");
+    // Label and hint stay text in the button, so its accessible name carries both.
+    expect(slide("archive")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      `Done with it${DONE_HINT}`,
+    );
+    // A clock leads Not now and an archive box leads Done with it.
+    expect(slide("snooze")?.firstElementChild?.querySelector("circle")).not.toBeNull();
+    expect(slide("archive")?.firstElementChild?.querySelector("rect")).not.toBeNull();
+    expect(slide("snooze")?.firstElementChild?.tagName.toLowerCase()).toBe("svg");
   });
 
   it("gives a row the seven-row menu and the featured card the menu without its visible two", () => {
@@ -324,8 +337,12 @@ describe("Worth a look today", () => {
         const feature = dom(html).querySelector(".worth-feature");
         expect(feature?.classList.contains("space-clay")).toBe(true);
         expect(feature?.querySelector("a.button.primary")?.textContent).toBe("Open it");
-        expect(feature?.querySelector("[data-act=archive] span")?.textContent).toBe("Done with it");
-        expect(feature?.querySelector("[data-act=snooze] span")?.textContent).toBe("Not now");
+        expect(feature?.querySelector("[data-act=archive] .slide-words > span")?.textContent).toBe(
+          "Done with it",
+        );
+        expect(feature?.querySelector("[data-act=snooze] .slide-words > span")?.textContent).toBe(
+          "Not now",
+        );
       });
     });
 

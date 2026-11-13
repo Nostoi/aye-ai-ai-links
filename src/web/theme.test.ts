@@ -32,27 +32,35 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
   it.each([
-    ["at rest", ".feature-quiet button{", ".feature-quiet button small{"],
-    ["on hover", ".feature-quiet button:hover{", ".feature-quiet button:hover small{"],
-  ])("keeps the soft pills' label and hint readable %s", (_state, pill, hint) => {
+    ["at rest, where the words always show (touch screens)", ".slide{"],
+    ["opened by hover or keyboard focus", ".slide:hover,.slide:focus-visible{"],
+  ])("keeps the icon button's label and hint readable %s", (_state, fillRule) => {
     const rule = (start: string) => {
       const at = themeCss.indexOf(start);
       return at < 0 ? "" : themeCss.slice(at, themeCss.indexOf("}", at));
     };
-    const share = Number(/var\(--ink\) (\d+)%,var\(--surface\)/.exec(rule(pill))?.[1]) / 100;
-    expect(share).toBeGreaterThan(0);
-    const hintColor = (/color:var\(--([a-z]+)\)/.exec(rule(hint))?.[1] ??
-      /color:var\(--([a-z]+)\)/.exec(rule(".feature-quiet button small{"))?.[1]) as "ink" | "soft";
-    const fill = `#${[1, 3, 5]
-      .map((i) =>
-        Math.round(
-          Number.parseInt(t.ink.slice(i, i + 2), 16) * share +
-            Number.parseInt(t.surface.slice(i, i + 2), 16) * (1 - share),
-        )
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("")}`;
+    const background = /background:([^;]+)/.exec(rule(fillRule))?.[1] ?? "";
+    const share = Number(/var\(--ink\) (\d+)%,var\(--surface\)/.exec(background)?.[1]) / 100;
+    const fill =
+      background === "var(--fill)"
+        ? t.fill
+        : `#${[1, 3, 5]
+            .map((i) =>
+              Math.round(
+                Number.parseInt(t.ink.slice(i, i + 2), 16) * share +
+                  Number.parseInt(t.surface.slice(i, i + 2), 16) * (1 - share),
+              )
+                .toString(16)
+                .padStart(2, "0"),
+            )
+            .join("")}`;
+    expect(background, "the button must fill with a token or an ink/surface mix").toMatch(
+      /^var\(--fill\)$|color-mix/,
+    );
+    const hintColor = /color:var\(--([a-z]+)\)/.exec(rule(".slide-words small{"))?.[1] as
+      | "ink"
+      | "about";
+    expect(hintColor).toBeDefined();
     expect(contrast(t.ink, fill)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t[hintColor], fill)).toBeGreaterThanOrEqual(4.5);
   });
@@ -632,6 +640,7 @@ function parseCss(css: string): Rule[] {
       const prelude = src.slice(i, open).trim();
       const body = src.slice(open + 1, j - 1);
       if (prelude.startsWith("@media")) walk(body, prelude.slice(6).trim());
+      else if (prelude.startsWith("@container")) walk(body, prelude);
       else if (!prelude.startsWith("@"))
         rules.push({
           media,
@@ -861,28 +870,116 @@ describe("Home's Worth a look cards (#195)", () => {
     expect(computed(open, "justify-content", "phone")).toBe("center");
   });
 
-  it("makes Not now and Done with it soft-filled pills as tall as Open it, at least 44px", () => {
-    const pill = feature(
-      '<div class="feature-quiet"><button data-act="archive"><span>x</span><small>y</small></button></div>',
-      "button",
+  // [#298: Not now and Done with it were soft-filled pills of Open it's height with the hint under
+  // the label; they are now round icon buttons that open to show label and hint.]
+  describe("the sliding icon buttons (#298)", () => {
+    const slide = feature(
+      '<div class="feature-quiet"><button class="slide" data-act="archive"><svg></svg><span class="slide-words"><span>x</span><small>y</small></span></button></div>',
+      ".slide",
     );
-    const open = feature(
-      '<div class="feature-open"><a class="button primary">Open it</a></div>',
-      "a",
-    );
-    for (const width of ["desktop", "phone"] as const) {
-      expect(computed(pill, "background", width), width).toBe(
-        "color-mix(in srgb,var(--ink) 7%,var(--surface))",
-      );
-      expect(computed(pill, "border-radius", width), width).toBe("999px");
-      expect(computed(pill, "border", width), width).toBe("0");
-      for (const el of [pill, open]) {
-        expect(
-          Number.parseInt(computed(el, "min-height", width) ?? "", 10),
-          width,
-        ).toBeGreaterThanOrEqual(48);
+    const px = (v: string | undefined) => Number.parseInt(v ?? "", 10);
+    /** The declarations of the rules whose selector list contains `sel` exactly, in `media`. */
+    const decl = (sel: string, media: string | null, prop: string) =>
+      parseCss(themeCss)
+        .filter((r) => r.media === media && r.selectors.includes(sel))
+        .map((r) => r.decls.get(prop))
+        .filter((v) => v !== undefined)
+        .at(-1);
+
+    it("is a closed 44px-or-taller circle with a soft fill and no border, on both widths", () => {
+      for (const width of ["desktop", "phone"] as const) {
+        expect(px(computed(slide, "height", width)), width).toBeGreaterThanOrEqual(44);
+        expect(px(computed(slide, "min-width", width)), width).toBeGreaterThanOrEqual(44);
+        expect(computed(slide, "max-width", width), width).toBe(
+          computed(slide, "min-width", width),
+        );
+        expect(computed(slide, "border-radius", width), width).toBe("999px");
+        expect(computed(slide, "border", width), width).toBe("0");
+        expect(computed(slide, "background", width), width).toBe("var(--fill)");
+        expect(computed(slide, "overflow", width), width).toBe("hidden");
       }
-    }
+      expect(computed(slide, "transition", "desktop")).toContain("max-width");
+    });
+
+    it("strokes its icon itself, as the SVGs carry no stroke", () => {
+      const svg = el('<button class="slide"><svg></svg></button>', "svg");
+      expect(computed(svg, "stroke", "desktop")).toBe("currentColor");
+      expect(computed(svg, "fill", "desktop")).toBe("none");
+    });
+
+    it("widens on hover and on keyboard focus, shows its words, and keeps a focus outline", () => {
+      const closed = px(computed(slide, "max-width", "desktop"));
+      expect(px(decl(".slide:hover", null, "max-width"))).toBeGreaterThan(closed);
+      expect(px(decl(".slide:focus-visible", null, "max-width"))).toBeGreaterThan(closed);
+      expect(decl(".slide:hover .slide-words", null, "opacity")).toBe("1");
+      expect(decl(".slide:focus-visible .slide-words", null, "opacity")).toBe("1");
+      expect(decl(".slide-words", null, "opacity")).toBe("0");
+      expect(decl(".slide:focus-visible", null, "outline")).toMatch(/^\d+px solid /);
+    });
+
+    it("shows the words at full width where there is no hover", () => {
+      expect(decl(".slide", "(hover:none)", "max-width")).toBe("none");
+      expect(decl(".slide-words", "(hover:none)", "opacity")).toBe("1");
+    });
+
+    it("keeps the pair at the right end of the button row, Done with it rightmost", () => {
+      const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
+      expect(computed(quiet, "display", "desktop")).toBe("flex");
+      expect(computed(quiet, "margin-left", "desktop")).toBe("auto");
+      expect(computed(quiet, "flex-direction", "desktop")).toBeUndefined();
+      expect(themeCss).not.toContain(".feature-quiet button");
+    });
+
+    it("puts the pair side by side on its own row under a full-width Open it on a phone", () => {
+      const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
+      expect(computed(quiet, "flex-wrap", "phone")).toBeUndefined();
+      expect(computed(slide, "flex", "phone")).toBe("1 1 0");
+    });
+
+    it("scopes the phone share-the-row rule to the pair, leaving other slide buttons alone", () => {
+      const alone = el('<button class="slide"></button>', ".slide");
+      expect(computed(alone, "flex", "phone")).toBeUndefined();
+    });
+
+    it("keeps the pair on its own row, right-aligned, whenever the button row is too narrow for Open it and both opened buttons", () => {
+      const narrow = "@container (max-width:540px)";
+      expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
+      expect(decl(".feature-quiet", narrow, "flex")).toBe("1 1 100%");
+      expect(decl(".feature-quiet", narrow, "justify-content")).toBe("flex-end");
+      const viewportRules = parseCss(themeCss).filter(
+        (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
+      );
+      expect(viewportRules.map((r) => r.media)).toEqual([]);
+    });
+
+    it("never reorders or stacks the pair, so Done with it stays rightmost", () => {
+      const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
+      for (const target of [quiet, slide]) {
+        const reflow = parseCss(themeCss).filter(
+          (r) =>
+            ((r.decls.has("flex-direction") && r.decls.get("flex-direction") !== "row") ||
+              r.decls.has("order")) &&
+            r.selectors.some(
+              (s) =>
+                !s.includes("::") && target.matches(s.replace(/:(hover|focus-visible)\b/g, "")),
+            ),
+        );
+        expect(reflow.map((r) => `${r.media ?? ""} ${r.selectors}`)).toEqual([]);
+      }
+    });
+
+    it("lets the words wrap inside a button that cannot hover, keeping it at least 48px tall", () => {
+      const touch = themeCss.match(/@media \(hover:none\)\{\.slide\{([^}]*)\}/)?.[1] ?? "";
+      expect(touch).toContain("white-space:normal");
+      expect(touch).toContain("height:auto");
+      expect(touch).toContain("min-height:48px");
+    });
+
+    it("still loses its transitions under reduced motion", () => {
+      expect(themeCss).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)\{\*\{animation:none!important;transition:none!important/,
+      );
+    });
   });
 
   it.each([

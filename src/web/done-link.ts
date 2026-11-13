@@ -4,7 +4,7 @@ import type { MenuItem } from "./card-menu.js";
 const TRAY = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 13l2.5-6.5h11L20 13"/><path d="M4 13v5.5h16V13h-4.5a3.5 3.5 0 0 1-7 0z"/></svg>`;
 const BACK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 7L4.5 11.5 9 16"/><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H11"/></svg>`;
 /** An archive box for Done with it; a check would read as "selected" (#284). */
-const ARCHIVE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1"/><path d="M5 9v10.5h14V9"/><path d="M10 13h4"/></svg>`;
+export const ARCHIVE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1"/><path d="M5 9v10.5h14V9"/><path d="M10 13h4"/></svg>`;
 
 /** The small line under Done with it and Put it away, saying what happens; one constant each. */
 export const DONE_HINT = "Still findable in search";

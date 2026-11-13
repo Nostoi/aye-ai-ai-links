@@ -1,6 +1,6 @@
 import type { MenuItem } from "./card-menu.js";
 
-const CLOCK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8.25"/><path d="M12 7.5V12l3 2"/></svg>`;
+export const CLOCK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8.25"/><path d="M12 7.5V12l3 2"/></svg>`;
 
 /** The small line under Not now, and its Undo bar (owner, 2026-11-12). */
 export const NOT_NOW_HINT = "Not suggested for two weeks";

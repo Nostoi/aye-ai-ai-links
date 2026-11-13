@@ -124,6 +124,7 @@ import { backTarget, liveFrom } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
 import { shownTags } from "./edit-link.js";
+import { FONTS, fontHeaders } from "./fonts.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { initialsText } from "./initials.js";
@@ -829,6 +830,13 @@ export function webApp({
       lineSpace: line && { name: line.name },
     };
   };
+
+  // The app's own fonts, by exact path and with no sign-in: the login page needs them too.
+  for (const font of FONTS) {
+    app.get(font.path, (c) =>
+      c.body(new Uint8Array(font.bytes), 200, fontHeaders(font, c.req.query("v"))),
+    );
+  }
 
   app.get("/login", (c) =>
     // No Referer, so the return to a long Save address does not carry this whole URL as a header (#129).

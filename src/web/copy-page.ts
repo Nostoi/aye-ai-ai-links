@@ -44,7 +44,7 @@ const hash = (text: string) => `'sha256-${createHash("sha256").update(text).dige
  * requests only to the app itself (the sign-out, the opening it records and the end row's actions).
  */
 export const COPY_HEADERS: Record<string, string> = {
-  "Content-Security-Policy": `default-src 'none'; img-src 'self' data:; style-src ${hash(PAGE_STYLE)}; script-src ${[...new Set(copyScripts)].map(hash).join(" ")}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  "Content-Security-Policy": `default-src 'none'; img-src 'self' data:; font-src 'self'; style-src ${hash(PAGE_STYLE)}; script-src ${[...new Set(copyScripts)].map(hash).join(" ")}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store",

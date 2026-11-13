@@ -148,6 +148,7 @@ function expectCopyHeaders(res: { headers: Headers; bytes: Buffer }, scripts: st
     new Map([
       ["default-src", ["'none'"]],
       ["img-src", ["'self'", "data:"]],
+      ["font-src", ["'self'"]],
       ["style-src", [`'sha256-${sha(style)}'`]],
       ["script-src", [...new Set(scripts.map((s) => `'sha256-${sha(s)}'`))].sort()],
       ["connect-src", ["'self'"]],

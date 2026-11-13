@@ -262,4 +262,4 @@ Contributors and AI agents: start with [AGENTS.md](AGENTS.md). `src/readme.test.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The fonts in `assets/fonts/` are under the SIL Open Font License 1.1; their licences sit beside them.

@@ -255,8 +255,26 @@ describe("the outside-request scan", () => {
     ["meta refresh", '<meta http-equiv="refresh" content="0; url=https://x.example/">'],
     ["css url()", "<style>a{background:url(https://x.example/a.png)}</style>"],
     ["css @import", "<style>@import 'https://x.example/a.css';</style>"],
+    ["css protocol-relative url()", "<style>a{background:url(//x.example/a.png)}</style>"],
+    [
+      "css quoted protocol-relative url()",
+      '<style>@font-face{src:url("//x.example/f.woff2")}</style>',
+    ],
+    ["css http url()", "<style>@font-face{src:url('http://x.example/f.woff2')}</style>"],
+    ["css relative url()", "<style>@font-face{src:url(f.woff2)}</style>"],
+    ["css @import of a root path", "<style>@import '/a.css';</style>"],
+    ["css root path with a backslash", "<style>a{background:url(/\\x.example/a.png)}</style>"],
+    ["css root path with a tab", "<style>a{background:url('/\t/x.example/a.png')}</style>"],
+    ["css root path with a newline", "<style>a{background:url('/\n/x.example/a.png')}</style>"],
   ])("flags %s", (_, html) => {
     expect(outsideRefs(html)).not.toEqual([]);
+  });
+
+  it.each([
+    ["bare", "<style>@font-face{src:url(/fonts/a.woff2?v=1)}</style>"],
+    ["quoted", '<style>@font-face{src:url("/fonts/a.woff2") format("woff2")}</style>'],
+  ])("lets a root-relative css url() through, %s", (_, html) => {
+    expect(outsideRefs(html)).toEqual([]);
   });
 
   it("lets navigation links, namespaces and data: values through", () => {

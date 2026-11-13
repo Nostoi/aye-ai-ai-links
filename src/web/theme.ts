@@ -1,4 +1,5 @@
 import { SPACE_COLORS } from "../core/tag-space.js";
+import { FRAUNCES_QUESTION, fontUrl, OPEN_RUNDE } from "./fonts.js";
 
 /** Light and dark values for every theme token; `page()` inlines them as CSS custom properties. */
 export const tokens = {
@@ -61,11 +62,16 @@ const featureSpaceDot = `${SPACE_COLORS.map((name) => `.worth-feature.space-${na
 /** Bar widths for the profile's Stats section, so it needs no inline `style=`. */
 const pctClasses = Array.from({ length: 101 }, (_, n) => `.pct-${n}{width:${n}%}`).join("");
 
-export const themeCss = `:root{${declarations(tokens.light)}}
+/** The app's own fonts (`assets/fonts/`), each at its versioned address so the browser keeps it. */
+const fontFaces = `${OPEN_RUNDE.map(({ weight, font }) => `@font-face{font-family:"Open Runde";font-weight:${weight};font-style:normal;font-display:swap;src:url(${fontUrl(font)}) format("woff2")}`).join("\n")}
+@font-face{font-family:"Fraunces Question";font-weight:760;font-style:normal;font-display:swap;src:url(${fontUrl(FRAUNCES_QUESTION)}) format("woff2")}`;
+
+export const themeCss = `${fontFaces}
+:root{${declarations(tokens.light)}}
 @media (prefers-color-scheme: dark){:root{${declarations(tokens.dark)}}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
 .column{max-width:980px;margin:0 auto;padding:0 24px}
 .site{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 24px;padding-top:24px;padding-bottom:8px}
 .menu{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px 22px;margin-left:auto;font-size:15.5px}
@@ -179,7 +185,7 @@ ${pctClasses}
 kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);border-radius:6px;padding:2px 8px}
 .home{padding-top:48px}
 .home-search{max-width:620px;margin:0 auto}
-.question{text-align:center;font-size:30px;font-weight:700;letter-spacing:-.3px;margin:0 0 18px}
+.question{text-align:center;font-family:"Fraunces Question", "Open Runde", serif;font-size:30px;font-weight:760;letter-spacing:-.01em;margin:0 0 18px}
 .question label{font:inherit}
 .hint{text-align:center;margin:12px 0 0}
 .search-page{max-width:720px;margin:0 0 36px}
@@ -473,12 +479,12 @@ img.row-pic{display:block}
 .edit-preview{position:relative;flex:none;width:200px;height:140px;border-radius:14px;overflow:hidden;background:var(--pic)}
 .edit-preview img{display:block;width:100%;height:100%;object-fit:cover}
 .edit-preview.dropping{outline:2px dashed var(--field);outline-offset:-2px}
-.edit-initials{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;line-height:1;font-weight:800;color:color-mix(in srgb,var(--field) 55%,var(--ink))}
+.edit-initials{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;line-height:1;font-weight:700;color:color-mix(in srgb,var(--field) 55%,var(--ink))}
 .edit-chip{position:absolute;left:8px;bottom:8px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#fff;background:rgb(20 20 24 / .62)}
 div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:center}
 .site-icon{display:block;width:var(--icon,72px);height:var(--icon,72px);padding:calc(var(--icon,72px) / 9);object-fit:contain;border-radius:22%;background:var(--plate);box-shadow:0 1px 4px rgb(0 0 0 / .12)}
 .edit-preview .site-icon{width:var(--icon,72px);height:var(--icon,72px);min-width:0;min-height:0;object-fit:contain}
-.pic-initials{font-size:var(--initials,34px);line-height:1;font-weight:800;letter-spacing:.02em;color:color-mix(in srgb,var(--field) 55%,var(--ink))}
+.pic-initials{font-size:var(--initials,34px);line-height:1;font-weight:700;letter-spacing:.02em;color:color-mix(in srgb,var(--field) 55%,var(--ink))}
 .tile{--icon:72px;--initials:34px}
 .handy-image{--icon:36px;--initials:20px}
 .handy-image.initials-box{background:var(--pic)}

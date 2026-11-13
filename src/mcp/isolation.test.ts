@@ -36,6 +36,7 @@ import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { rewriteFavicon, SqliteFaviconStore } from "../store/sqlite-favicons.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
+import { FONTS } from "../web/fonts.js";
 import { outsideRefs } from "../web/outside-refs-test-kit.js";
 
 /**
@@ -662,6 +663,12 @@ describe("owner isolation coverage", () => {
     // Entries are stored, so the copy's text and the picture's bytes appear raw in the zip.
     "GET /export.zip": { request: "/export.zip", marker: () => [A_URL, A_COPY_TEXT, A_IMAGE] },
     "GET /login": { noOwnerData: "the sign-in form, served to anyone" },
+    ...Object.fromEntries(
+      FONTS.map((font) => [
+        `GET ${font.path}`,
+        { noOwnerData: "a font file shipped with the app, served to anyone" },
+      ]),
+    ),
     "GET /consent": {
       noOwnerData: "names the client in the signed authorize query, no owner data",
     },

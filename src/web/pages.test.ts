@@ -404,8 +404,8 @@ describe("the search page's cards", () => {
     );
   });
 
-  it("shows a stated or asked why in quotes, an inferred one as a guess, and none as 'No why yet'", () => {
-    const quoted = 'Why: "to compare"';
+  it("shows a stated or asked why as plain text, an inferred one as a guess, and none as 'No why yet'", () => {
+    const quoted = "Why: to compare";
     expect(results([link({ why: { text: "to compare", source: "stated" } })])).toContain(quoted);
     expect(results([link({ why: { text: "to compare", source: "asked" } })])).toContain(quoted);
     expect(results([link({ why: { text: "outage backup", source: "inferred" } })])).toContain(

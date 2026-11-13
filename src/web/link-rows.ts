@@ -25,13 +25,11 @@ export const viewOf = (value: string | undefined): View =>
   value === "pictures" ? "pictures" : "list";
 
 /**
- * The why as a row reads it: the owner's words in quotes, an AI's labelled as a guess. Home's
+ * The why as a row reads it: the owner's words as they are, an AI's labelled as a guess. Home's
  * Worth a look cards read it the same way.
  */
 export const whyText = (why: NonNullable<Link["why"]>) =>
-  why.source === "inferred"
-    ? `Why (a guess): ${escapeHtml(why.text)}`
-    : `"${escapeHtml(why.text)}"`;
+  why.source === "inferred" ? `Why (a guess): ${escapeHtml(why.text)}` : escapeHtml(why.text);
 
 /**
  * One link as a row of the list, which the Pictures view draws as a card: `tile()`'s picture, the
@@ -71,7 +69,7 @@ export function linkRow(
   const why = link.why
     ? `<p class="row-why">${whyText(link.why)}</p>\n`
     : ask
-      ? `${whyAnswer("p", "", "row-why")}\n${askWhy(link)}\n`
+      ? `${whyAnswer("p", "row-why")}\n${askWhy(link)}\n`
       : "";
   return `<li class="link-row${spaceClass(space)}${faded ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture, "row-pic")}

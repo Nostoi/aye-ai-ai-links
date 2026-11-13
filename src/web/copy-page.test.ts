@@ -99,14 +99,14 @@ describe("the copy page's frame", () => {
 
   it("shows the why as an owner's or as a guess, and nothing without one", () => {
     expect(text(render({ why: { text: "for the trip", source: "stated" } }), ".copy-why")).toBe(
-      '"for the trip"',
+      "for the trip",
     );
     expect(text(render({ why: { text: "for the trip", source: "inferred" } }), ".copy-why")).toBe(
       "Why (a guess): for the trip",
     );
     expect(dom(render()).querySelector(".copy-why")).toBeNull();
     expect(text(render({ why: { text: "<b>x</b>", source: "asked" } }), ".copy-why")).toBe(
-      '"<b>x</b>"',
+      "<b>x</b>",
     );
   });
 

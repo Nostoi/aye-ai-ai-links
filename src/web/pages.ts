@@ -130,7 +130,7 @@ export const oauthErrorPage = (message: string) =>
 export function whyLine(why: Link["why"]): string {
   if (!why) return "No why yet";
   const text = escapeHtml(why.text);
-  return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: "${text}"`;
+  return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: ${text}`;
 }
 
 /** The address `FAVICON_ROUTE` (`http.ts`) serves a link's stored site favicon at; `version` busts the cache. */

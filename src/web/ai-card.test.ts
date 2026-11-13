@@ -42,18 +42,25 @@ const KITCHEN: Tag = {
 };
 
 describe("renderCard", () => {
-  it("quotes a stated why and marks an inferred one as a guess", () => {
+  it("shows a stated or asked why as plain text and marks an inferred one as a guess", () => {
     const said = renderCard(
       link({ why: { text: "x", source: "stated" } }),
       undefined,
       undefined,
       [],
     );
-    expect(said).toContain('"x"');
+    expect(said).toContain('<p class="ask-why">x</p>');
     expect(said).not.toContain("(a guess)");
+    const asked = renderCard(
+      link({ why: { text: "x", source: "asked" } }),
+      undefined,
+      undefined,
+      [],
+    );
+    expect(asked).toContain('<p class="ask-why">x</p>');
     expect(
       renderCard(link({ why: { text: "x", source: "inferred" } }), undefined, undefined, []),
-    ).toContain('"x" (a guess)');
+    ).toContain('<p class="ask-why">Why (a guess): x</p>');
   });
 
   it("marks an inferred tag as a dashed guess and leaves a stated one plain", () => {

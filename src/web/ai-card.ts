@@ -3,6 +3,7 @@ import { linkSpace } from "../core/link-space.js";
 import type { LinkStore } from "../core/store.js";
 import type { Link, OwnerId, Tag } from "../core/types.js";
 import { editData } from "./edit-link.js";
+import { whyText } from "./link-rows.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -17,9 +18,7 @@ export function renderCard(
   info: PictureInfo | undefined,
   catalog: Tag[],
 ): string {
-  const why = link.why
-    ? `<p class="ask-why">"${escapeHtml(link.why.text)}"${link.why.source === "inferred" ? " (a guess)" : ""}</p>\n`
-    : "";
+  const why = link.why ? `<p class="ask-why">${whyText(link.why)}</p>\n` : "";
   const space = linkSpace(link, catalog);
   const tags = link.tags
     .map((t) =>

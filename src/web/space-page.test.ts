@@ -205,7 +205,7 @@ describe("a space page", () => {
     expect(a?.getAttribute("target")).toBe("_blank");
     expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
     expect(lineParts(cards[0])).toEqual(["ex.com"]);
-    expect(cards[0]?.querySelector(".row-why")?.textContent).toBe('"because 2"');
+    expect(cards[0]?.querySelector(".row-why")?.textContent).toBe("because 2");
   });
 
   it("groups the rows by the UTC month they were saved, as All links does", () => {
@@ -561,7 +561,7 @@ describe("Tell me why on a space card", () => {
     expect(card.querySelector(".ask")).toBeNull();
     const why = card.querySelector(".row-why") as HTMLElement;
     expect(why.hidden).toBe(false);
-    expect(why.textContent).toBe('"for the <attic>"');
+    expect(why.textContent).toBe("for the <attic>");
   });
 
   it("removes the row's summary when the answer shows the why", async () => {
@@ -574,7 +574,7 @@ describe("Tell me why on a space card", () => {
     const r = await answerWhy(withSummary, { status: 204 }, "for the attic");
     const card = r.document.querySelector('[data-id="7"]') as HTMLElement;
     expect(card.querySelector(".row-about")).toBeNull();
-    expect(card.querySelector(".row-why")?.textContent).toBe('"for the attic"');
+    expect(card.querySelector(".row-why")?.textContent).toBe("for the attic");
   });
 
   it("keeps the summary when the answer is refused", async () => {
@@ -644,7 +644,7 @@ describe("Show older links", () => {
     await settle();
     expect(posted).toEqual(["/home/why"]);
     expect(card.querySelector(".ask")).toBeNull();
-    expect(card.querySelector(".row-why[data-why-answer]")?.textContent).toBe('"for the shed"');
+    expect(card.querySelector(".row-why[data-why-answer]")?.textContent).toBe("for the shed");
   });
 
   it("moves the button on to the page after when there are more", async () => {

@@ -425,15 +425,14 @@ describe("the card menu on every card", () => {
   });
 
   it("puts every card's menu in one place, 4px from the top-right corner, with no column of its own (#297)", () => {
-    const placing = [
-      ...themeCss.matchAll(/(?:^|\})([^{}@]*\.card-menu(?![-\w])[^{}]*)\{([^}]*)\}/gm),
-    ]
-      .filter(
-        ([, sel, body]) =>
-          /(?:^|;)(?:top|right|margin-top|position):/.test(body as string) &&
-          !/summary|card-menu-/.test(sel as string),
-      )
-      .map(([, sel]) => (sel as string).trim());
+    const PLACING = /^(position|top|right|bottom|left|inset.*|margin.*|translate|transform|float)$/;
+    const placing = parseCss(themeCss).flatMap((r) =>
+      [...r.decls.keys()].some((p) => PLACING.test(p))
+        ? r.selectors
+            .filter((s) => /\.card-menu(?![-\w])/.test(s) && !/summary|card-menu-/.test(s))
+            .map((s) => `${r.media ?? ""} ${s}`.trim())
+        : [],
+    );
     expect(placing).toEqual([".card-menu"]);
     expect(rule(".worth-row")).toContain("grid-template-columns:44px minmax(0,1fr);");
     expect(phone).toContain(".worth-row{grid-template-columns:minmax(0,1fr);");
@@ -443,6 +442,35 @@ describe("the card menu on every card", () => {
     expect(rule(".handy-caption")).toMatch(/padding-right:\d+px/);
     expect(rule(".also-body")).toMatch(/padding-right:\d+px/);
   });
+
+  it.each([
+    ["a Handy tile", '<article class="handy-tile">MENU</article>'],
+    [
+      "a List row",
+      '<main data-view="list"><ul class="link-rows"><li class="link-row">MENU</li></ul></main>',
+    ],
+    [
+      "a Pictures row",
+      '<main data-view="pictures"><ul class="link-rows"><li class="link-row">MENU</li></ul></main>',
+    ],
+    [
+      "a search result",
+      '<ol class="results"><li class="result"><div class="result-body">MENU</div></li></ol>',
+    ],
+  ])(
+    "places %s's ⋯ at position:absolute, 4px from the top-right at every width (#297)",
+    (_, card) => {
+      const menu = el(card.replace("MENU", '<details class="card-menu"></details>'), "details");
+      for (const w of ["desktop", "phone"] as const) {
+        expect(computed(menu, "position", w), `${_} position ${w}`).toBe("absolute");
+        expect(computed(menu, "top", w), `${_} top ${w}`).toBe("4px");
+        expect(computed(menu, "right", w), `${_} right ${w}`).toBe("4px");
+        for (const p of ["bottom", "left", "inset", "margin-top", "transform", "translate"]) {
+          expect(computed(menu, p, w), `${_} ${p} ${w}`).toBeUndefined();
+        }
+      }
+    },
+  );
 
   it("draws every card's dot flat and grey, with a soft ink fill on hover or open (#295)", () => {
     const dot = el('<div class="card-menu"><span class="card-menu-dot"></span></div>', "span");

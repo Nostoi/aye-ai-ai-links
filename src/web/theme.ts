@@ -1,4 +1,5 @@
 import { SPACE_COLORS } from "../core/tag-space.js";
+import { FRAUNCES_QUESTION, fontUrl, OPEN_RUNDE } from "./fonts.js";
 
 /** Light and dark values for every theme token; `page()` inlines them as CSS custom properties. */
 export const tokens = {
@@ -61,11 +62,16 @@ const featureSpaceDot = `${SPACE_COLORS.map((name) => `.worth-feature.space-${na
 /** Bar widths for the profile's Stats section, so it needs no inline `style=`. */
 const pctClasses = Array.from({ length: 101 }, (_, n) => `.pct-${n}{width:${n}%}`).join("");
 
-export const themeCss = `:root{${declarations(tokens.light)}}
+/** The app's own fonts (`assets/fonts/`), each at its versioned address so the browser keeps it. */
+const fontFaces = `${OPEN_RUNDE.map(({ weight, font }) => `@font-face{font-family:"Open Runde";font-weight:${weight};font-style:normal;font-display:swap;src:url(${fontUrl(font)}) format("woff2")}`).join("\n")}
+@font-face{font-family:"Fraunces Question";font-weight:760;font-style:normal;font-display:swap;src:url(${fontUrl(FRAUNCES_QUESTION)}) format("woff2")}`;
+
+export const themeCss = `${fontFaces}
+:root{${declarations(tokens.light)}}
 @media (prefers-color-scheme: dark){:root{${declarations(tokens.dark)}}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;font-size:17px;line-height:1.5}
 .column{max-width:980px;margin:0 auto;padding:0 24px}
 .site{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 24px;padding-top:24px;padding-bottom:8px}
 .menu{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px 22px;margin-left:auto;font-size:15.5px}
@@ -179,7 +185,7 @@ ${pctClasses}
 kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);border-radius:6px;padding:2px 8px}
 .home{padding-top:48px}
 .home-search{max-width:620px;margin:0 auto}
-.question{text-align:center;font-size:30px;font-weight:700;letter-spacing:-.3px;margin:0 0 18px}
+.question{text-align:center;font-family:"Fraunces Question", "Open Runde", serif;font-size:30px;font-weight:760;letter-spacing:-.01em;margin:0 0 18px}
 .question label{font:inherit}
 .hint{text-align:center;margin:12px 0 0}
 .search-page{max-width:720px;margin:0 0 36px}

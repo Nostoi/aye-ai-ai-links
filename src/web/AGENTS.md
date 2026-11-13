@@ -19,7 +19,7 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 
 ## Pages
 
-- Pages make no outside requests: no remote images, scripts, stylesheets or fonts. Link navigation is fine.
+- Pages make no outside requests: no remote images, scripts, stylesheets or fonts. Link navigation is fine. The fonts are the app's own, served from `assets/fonts/` by `fonts.ts` at a versioned address, and the saved copy's CSP allows them through `font-src 'self'`.
 - Every page renders through `page()` and the theme tokens in `theme.ts`; no page brings its own colors.
 - Controls are at least 44px tall. Fields are outlined with `--field`.
 - Removing or turning something off shows an Undo bar instead of asking first. The action is done at once, and Undo reverses it with a second request; nothing waits for the bar to close. The bar is `page()`'s `undo` option and its `showUndo`.

@@ -59,6 +59,8 @@ Folders marked *(planned)* don't exist yet; create them in the phase that needs 
 ```
 aye-ai-ai-links/
 ├─ AGENTS.md  README.md  ROADMAP.md  LICENSE
+├─ assets/
+│  └─ fonts/      the fonts the pages use, with their licences
 ├─ docs/
 │  ├─ specs/      dated design records
 │  └─ design/     approved visual references (layout A, and the Ask AI panel)

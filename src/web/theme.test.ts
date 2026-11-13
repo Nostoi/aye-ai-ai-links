@@ -190,20 +190,19 @@ describe("the Handy tiles", () => {
       "grid-template-columns:repeat(auto-fill,minmax(260px,1fr))",
     );
     expect(rule(".handy-tile")).not.toContain("aspect-ratio");
-    expect(rule(".handy-tile")).toContain("grid-template-columns:52px minmax(0,1fr) 44px");
+    expect(rule(".handy-tile")).toContain("grid-template-columns:52px minmax(0,1fr);");
     expect(rule(".handy-image")).toContain("width:52px;height:52px");
     expect(phoneRule(".handy-row")).toContain("grid-template-columns:1fr");
-    expect(phoneRule(".handy-tile")).toContain("grid-template-columns:44px minmax(0,1fr) 44px");
+    expect(phoneRule(".handy-tile")).toContain("grid-template-columns:44px minmax(0,1fr);");
     expect(phoneRule(".handy-image")).toContain("width:44px;height:44px");
   });
 
   it("stretches the title's link over the card, with the menu and the ask above it", () => {
     expect(rule(".handy-tile h3 a::after")).toMatch(/position:absolute;[^}]*inset:0/);
     expect(rule(".card-menu")).toMatch(/position:absolute/);
-    for (const sel of [".handy-tile .card-menu", ".handy-tile .ask"]) {
-      expect(rule(sel), sel).toMatch(/position:relative/);
-      expect(rule(sel), sel).toMatch(/z-index:[2-9]/);
-    }
+    expect(rule(".handy-tile .ask")).toMatch(/position:relative/);
+    expect(rule(".handy-tile .ask")).toMatch(/z-index:[2-9]/);
+    expect(rule(".card-menu")).toMatch(/z-index:[2-9]/);
   });
 
   it("gives the ask its own line across the card, under the picture and words", () => {
@@ -418,12 +417,60 @@ describe("the card menu on every card", () => {
     )?.[1] ?? "";
   const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
 
-  it("is one 44px button holding a 32px dot, 8px in from the card's top-right corner, and the shelf-only styles are gone", () => {
-    expect(rule(".card-menu")).toBe("position:absolute;top:2px;right:2px;z-index:3");
+  it("is one 44px button holding a 32px dot, 4px in from the card's top-right corner, and the shelf-only styles are gone", () => {
+    expect(rule(".card-menu")).toBe("position:absolute;top:4px;right:4px;z-index:3");
     expect(rule(".card-menu-dot")).toContain("width:32px;height:32px");
     expect(rule(".card-menu summary")).toContain("min-height:44px;min-width:44px");
     expect(themeCss).not.toContain("tile-menu");
   });
+
+  it("puts every card's menu in one place, 4px from the top-right corner, with no column of its own (#297)", () => {
+    const PLACING = /^(position|top|right|bottom|left|inset.*|margin.*|translate|transform|float)$/;
+    const placing = parseCss(themeCss).flatMap((r) =>
+      [...r.decls.keys()].some((p) => PLACING.test(p))
+        ? r.selectors
+            .filter((s) => /\.card-menu(?![-\w])/.test(s) && !/summary|card-menu-/.test(s))
+            .map((s) => `${r.media ?? ""} ${s}`.trim())
+        : [],
+    );
+    expect(placing).toEqual([".card-menu"]);
+    expect(rule(".worth-row")).toContain("grid-template-columns:44px minmax(0,1fr);");
+    expect(phone).toContain(".worth-row{grid-template-columns:minmax(0,1fr);");
+    expect(rule(".worth-row")).not.toMatch(
+      /grid-template-columns:[^;]*44px 44px|minmax\(0,1fr\) 44px/,
+    );
+    expect(rule(".handy-caption")).toMatch(/padding-right:\d+px/);
+    expect(rule(".also-body")).toMatch(/padding-right:\d+px/);
+  });
+
+  it.each([
+    ["a Handy tile", '<article class="handy-tile">MENU</article>'],
+    [
+      "a List row",
+      '<main data-view="list"><ul class="link-rows"><li class="link-row">MENU</li></ul></main>',
+    ],
+    [
+      "a Pictures row",
+      '<main data-view="pictures"><ul class="link-rows"><li class="link-row">MENU</li></ul></main>',
+    ],
+    [
+      "a search result",
+      '<ol class="results"><li class="result"><div class="result-body">MENU</div></li></ol>',
+    ],
+  ])(
+    "places %s's ⋯ at position:absolute, 4px from the top-right at every width (#297)",
+    (_, card) => {
+      const menu = el(card.replace("MENU", '<details class="card-menu"></details>'), "details");
+      for (const w of ["desktop", "phone"] as const) {
+        expect(computed(menu, "position", w), `${_} position ${w}`).toBe("absolute");
+        expect(computed(menu, "top", w), `${_} top ${w}`).toBe("4px");
+        expect(computed(menu, "right", w), `${_} right ${w}`).toBe("4px");
+        for (const p of ["bottom", "left", "inset", "margin-top", "transform", "translate"]) {
+          expect(computed(menu, p, w), `${_} ${p} ${w}`).toBeUndefined();
+        }
+      }
+    },
+  );
 
   it("draws every card's dot flat and grey, with a soft ink fill on hover or open (#295)", () => {
     const dot = el('<div class="card-menu"><span class="card-menu-dot"></span></div>', "span");
@@ -870,14 +917,18 @@ describe("Home's Worth a look cards (#195)", () => {
     },
   );
 
-  it("keeps the featured ⋯ in the card's top-right corner and gives a row's ⋯ its own cell", () => {
+  it("puts the featured and the Also today row's ⋯ in the card's top-right corner (#297)", () => {
     const fm = feature('<details class="card-menu"></details>', "details");
     const rm = row('<details class="card-menu"></details>', "details");
     expect(computed(fm, "position", "desktop")).toBe("absolute");
     expect(computed(fm, "position", "phone")).toBe("absolute");
     expect(computed(fm, "top", "phone")).toBe("4px");
     expect(computed(fm, "right", "phone")).toBe("4px");
-    expect(computed(rm, "position", "desktop")).toBe("relative");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(rm, "position", w)).toBe("absolute");
+      expect(computed(rm, "top", w)).toBe("4px");
+      expect(computed(rm, "right", w)).toBe("4px");
+    }
   });
 
   it.each([

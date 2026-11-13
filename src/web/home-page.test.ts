@@ -408,7 +408,7 @@ describe("Worth a look today", () => {
     );
     const rows = [...d.querySelectorAll(".worth-row")];
     expect(rows[0]?.querySelector(".also-why")?.textContent).toBe("Why (a guess): x");
-    expect(rows[1]?.querySelector(".also-why")?.textContent).toBe('"y"');
+    expect(rows[1]?.querySelector(".also-why")?.textContent).toBe("y");
     expect(rows[2]?.querySelector(".also-why")).toBeNull();
     expect(
       [...(rows[2]?.querySelectorAll(".card-line > *") ?? [])].map((p) => p.textContent),

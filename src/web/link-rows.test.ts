@@ -51,7 +51,7 @@ describe("a link row", () => {
       "row-why",
       "card-line",
     ]);
-    expect(d.querySelector(".row-why")?.textContent).toBe('"for <the> shed"');
+    expect(d.querySelector(".row-why")?.textContent).toBe("for <the> shed");
     expect(d.querySelector(".link-row")?.lastElementChild?.className).toBe("card-menu");
     expect(d.querySelector(".link-row > [data-pic]")?.className).toContain("row-pic");
     expect(d.querySelector("h3[data-card-title] a")?.getAttribute("target")).toBe("_blank");
@@ -89,7 +89,7 @@ describe("a link row", () => {
   it("shows no summary on a row with a why, and none on a row with neither", () => {
     const withWhy = row(link({ summary: "A summary", why: { text: "w", source: "stated" } }));
     expect(withWhy.querySelector(".row-about")).toBeNull();
-    expect(withWhy.querySelector(".row-why")?.textContent).toBe('"w"');
+    expect(withWhy.querySelector(".row-why")?.textContent).toBe("w");
     expect(row(link()).querySelector(".row-about")).toBeNull();
     const guess = row(link({ summary: "A summary", why: { text: "w", source: "inferred" } }));
     expect(guess.querySelector(".row-about")).toBeNull();

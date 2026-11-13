@@ -22,6 +22,10 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-11-12:** Plain whys and one place for every card's ⋯ (owner rulings in #297).
+  - **No quotation marks on a stated or asked why** anywhere it shows: rows, search results (read `Why: …`), the saved-copy page, Tidy up, and the Ask AI card. A guess still reads `Why (a guess): …`.
+  - **Every card's ⋯ sits in one place**, 4px from the top-right corner (a search result's body, on a phone too). The Pictures view keeps its frosted circle.
+
 - **2026-11-12:** Plainer words for letting a link go, and a calmer Worth a look (owner rulings in #283–#287).
   - **Done with it** replaces It's stale (#283). The stored state, event kind and routes are unchanged.
   - **Not now says "Not suggested for two weeks"** (#283), not "Hidden from Home", since a snoozed link still shows on space cards.

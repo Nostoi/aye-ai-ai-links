@@ -236,7 +236,7 @@ describe("web door", () => {
     const html = await (await t.get("/search?q=quokka", await t.signIn())).text();
     expect(html).toContain("Best matches first");
     expect(html).toContain("Why (a guess): for the zoo trip");
-    expect(html).not.toContain('Why: "for the zoo trip"');
+    expect(html).not.toContain("Why: for the zoo trip");
   });
 
   it("does not make a stored non-web URL clickable", async () => {

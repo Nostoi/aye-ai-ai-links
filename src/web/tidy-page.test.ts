@@ -78,7 +78,7 @@ describe("the Tidy up page", () => {
     const section = first([t]);
     expect(section.textContent).toContain("Home batteries");
     expect(section.textContent).toContain("Why you saved it");
-    expect(section.textContent).toContain('"to compare"');
+    expect(section.textContent).toContain("to compare");
     expect(section.querySelector("[data-pic]")).not.toBeNull();
   });
 

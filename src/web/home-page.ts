@@ -82,7 +82,7 @@ function featured(d: DigestLink, cards: WorthCards): string {
     : "";
   const said = link.why
     ? `<p>${link.why.source === "inferred" ? whyText(link.why) : `<span class="why-label">${WHY_LABEL}</span>${escapeHtml(link.why.text)}`}</p>`
-    : `${askWhy(link)}\n${whyAnswer("p", "", undefined, WHY_LABEL)}`;
+    : `${askWhy(link)}\n${whyAnswer("p", undefined, WHY_LABEL)}`;
   return `${opening(`worth-card worth-feature${link.why ? "" : " needs-you"}`, link, cards)}
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>

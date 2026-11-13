@@ -71,12 +71,13 @@ export function linkRow(
     : ask
       ? `${whyAnswer("p", "row-why")}\n${askWhy(link)}\n`
       : "";
+  const warning = goneLine(link, gone);
   return `<li class="link-row${spaceClass(space)}${faded ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture, "row-pic")}
 <div class="row-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-${about}${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from })}${goneLine(link, gone)}</div>
-${editMenu(link, { copy, handy })}
+${about}${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from })}</div>
+${editMenu(link, { copy, handy })}${warning ? `\n${warning}` : ""}
 </li>`;
 }
 

@@ -5,6 +5,7 @@ import type { Link, Tag } from "../core/types.js";
 import { cardMenu } from "./card-menu.js";
 import { displayTitle } from "./display-title.js";
 import { DONE_ITEM, DONE_LABEL, DONE_UNDO } from "./done-link.js";
+import { goneBand } from "./gone-line.js";
 import { hostOf } from "./host.js";
 import { NOT_HANDY } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
@@ -31,17 +32,6 @@ const STILL_USING = `<div class="ask">
 <p class="small">Still using?</p>
 <div class="actions small-actions">
 <button type="button" data-act="still-using">Yes</button>
-<button type="button" data-act="done">${DONE_LABEL}</button>
-</div>
-</div>`;
-
-/** The tile's words for a gone link (#128), short to fit the square; cards say GONE_TEXT. */
-const SEEMS_GONE = "Seems gone";
-
-const GONE_ASK = `<div class="ask">
-<p class="small">${SEEMS_GONE}</p>
-<div class="actions small-actions">
-<button type="button" data-act="still-works">It works</button>
 <button type="button" data-act="done">${DONE_LABEL}</button>
 </div>
 </div>`;
@@ -87,13 +77,16 @@ ${after}
 </article>`;
 }
 
-/** A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A gone or due one needs you. */
+/**
+ * A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A due one needs you; a gone
+ * one carries the gone band instead (#298), whose Done with it is this shelf's `done`.
+ */
 const keptTile = (item: ShelfItem, shelf: Shelf, more: boolean) =>
   card(
     item,
     shelf,
-    item.due || item.gone ? " needs-you" : "",
-    `${item.gone ? `${GONE_ASK}\n` : item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
+    item.due && !item.gone ? " needs-you" : "",
+    `${item.gone ? `${goneBand(item.link, { done: "done" })}\n` : item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
     more ? " data-more hidden" : "",
   );
 
@@ -136,7 +129,7 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
 
 /**
  * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure`,
- * `cardBusy` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
+ * `cardBusy`, `collapseBand` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
  * until the action, its shelf refresh and its Undo are done, and kept while the refresh was
  * dropped for a newer one, whose swap replaces the tile.
  * - `refreshShelf(from)` reads home again and swaps in its `#handy-shelf`, so the server decides the
@@ -145,7 +138,9 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`).
  * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
  *   on the same button, else the same tile's first control, else the next tile's, else the heading. * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
- *   It works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
+ *   It still works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
+ * - A button on the gone band collapses the band once the server agrees (`collapseBand`), inside
+ *   the tile's mark, and only then refreshes the shelf, which draws the tile as the server decides.
  */
 export const SHELF_SCRIPT = `const showAll = (shelf) => {
   for (const tile of shelf.querySelectorAll("[data-more]")) tile.hidden = false;
@@ -216,6 +211,7 @@ if (handy) {
     const done = act === "done" || act === "archive";
     if (!make && !done && act !== "still-works") return;
     const tile = button.closest("[data-id]");
+    const gone = button.closest("[data-gone]");
     if (cardBusy.has(tile)) return;
     const id = tile.dataset.id;
     const after = tile.nextElementSibling;
@@ -231,6 +227,7 @@ if (handy) {
           handyError.textContent = await failure(res);
           return;
         }
+        if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from);
         offerUndo(${JSON.stringify(DONE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(DONE_UNDO.title)});
         return;
@@ -242,6 +239,7 @@ if (handy) {
           handyError.textContent = await failure(res);
           return;
         }
+        if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from);
         offerUndo("Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
         return;

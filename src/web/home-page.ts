@@ -99,7 +99,7 @@ ${tile(link, cards.images.get(link.id), "feature-pic")}
 }
 
 /** An Also today row: a small picture (hidden on a phone), the title, `line`, and the six-row ⋯. */
-function row(link: Link, cards: WorthCards, classes: string, line: string): string {
+function row(link: Link, cards: WorthCards, classes: string, line: string, band = ""): string {
   const copy = cards.copies?.get(link.id);
   const handy = cards.views?.get(link.id)?.handy;
   return `${opening(`worth-row${classes}`, link, cards)}
@@ -107,7 +107,7 @@ ${tile(link, cards.images.get(link.id), "also-pic")}
 <div class="also-body">
 <h4 data-card-title>${linkTitle(link)}</h4>
 ${line}</div>
-${editMenu(link, { copy, handy, notNow: true })}
+${editMenu(link, { copy, handy, notNow: true })}${band ? `\n${band}` : ""}
 </article>`;
 }
 
@@ -123,19 +123,18 @@ const pickRow = (link: Link, cards: WorthCards) =>
   );
 
 /**
- * The gone link's row: amber while its warning shows (the theme's), with the shared gone line and,
- * when there is a copy, Read the saved copy right after it (owner ruling, #195 comment
- * 6304329071), which the theme hides with the warning once It still works hides it.
+ * The gone link's row: the shared gone band across its bottom and, when there is a copy, Read the
+ * saved copy beside the warning (owner ruling, #195 comment 6304329071), which goes with the band
+ * once It still works hides it.
  */
 function goneRow(link: Link, cards: WorthCards): string {
-  const read = cards.copies?.has(link.id)
-    ? `\n<a class="gone-copy" href="${escapeHtml(copyHref(link.id, "/"))}" data-act="read-copy">Read the saved copy</a>`
-    : "";
+  const read = cards.copies?.has(link.id) ? copyHref(link.id, "/") : undefined;
   return row(
     link,
     cards,
     " worth-gone",
-    `${goneLine(link, cards.views?.get(link.id)?.gone)}${read}\n`,
+    "",
+    goneLine(link, cards.views?.get(link.id)?.gone, { read }),
   );
 }
 

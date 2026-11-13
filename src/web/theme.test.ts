@@ -1050,25 +1050,61 @@ describe("Home's Worth a look cards (#195)", () => {
     },
   );
 
-  it("gives the gone row's buttons a quiet text look, and no other page's", () => {
-    const goneRow = row(
-      '<div class="also-body"><div class="gone-line"><div class="actions small-actions"><button type="button">It still works</button></div></div></div>',
-      "button",
-    );
-    const elsewhere = el(
-      '<div class="gone-line"><div class="actions small-actions"><button type="button">It still works</button></div></div>',
-      "button",
-    );
-    for (const w of ["desktop", "phone"] as const) {
-      expect(computed(goneRow, "color", w), w).toBe("var(--soft)");
-      expect(computed(goneRow, "font-size", w), w).toBe("15px");
-      expect(computed(goneRow, "font-weight", w), w).toBe("600");
-      expect(computed(goneRow, "min-height", w), w).toBe("48px");
-      expect(computed(goneRow, "background", w), w).toBe("none");
-      expect(computed(goneRow, "text-decoration", w), w).toBe("none");
-      expect(computed(elsewhere, "text-decoration", w), w).toBe("underline");
-      expect(computed(elsewhere, "font-size", w), w).toBe("14px");
+  const BAND =
+    '<div class="gone-band" data-gone><p>This page seems gone</p><div class="gone-actions"><button type="button" class="slide"></button></div></div>';
+
+  it("draws the gone band in amber ink on the amber ground, with bare 44px icon buttons, on every card", () => {
+    for (const card of ["worth-row", "link-row", "handy-tile", "result-body"]) {
+      const band = el(`<div class="${card}">${BAND}</div>`, ".gone-band");
+      const warning = el(`<div class="${card}">${BAND}</div>`, ".gone-band > p");
+      const button = el(`<div class="${card}">${BAND}</div>`, "button");
+      for (const w of ["desktop", "phone"] as const) {
+        expect(computed(warning, "color", w), `${card} ${w}`).toBe("var(--amber-ink)");
+        expect(computed(warning, "font-weight", w), `${card} ${w}`).toBe("600");
+        expect(computed(band, "background", w), `${card} ${w}`).toContain("var(--amber-bg)");
+        expect(computed(button, "background", w), `${card} ${w}`).toBe("none");
+        expect(computed(button, "height", w), `${card} ${w}`).toBe("44px");
+      }
     }
+  });
+
+  it("spans the band across its card at the card's own padding, on desktop and phone", () => {
+    const margin = (card: string, w: "desktop" | "phone") =>
+      computed(el(`<div class="${card}">${BAND}</div>`, ".gone-band"), "margin", w);
+    expect(margin("worth-row", "desktop")).toBe("8px -12px -10px");
+    expect(margin("link-row", "desktop")).toBe("0 -60px -14px -16px");
+    expect(margin("link-row", "phone")).toBe("0 -52px -12px -12px");
+    expect(margin("result", "desktop")).toBe("12px -22px -18px");
+    expect(margin("handy-tile", "desktop")).toBe("10px -12px -12px");
+  });
+
+  it("lets the warning fill the band so the icons end at the band's own right padding, on every card", () => {
+    for (const card of ["worth-row", "link-row", "handy-tile", "result"]) {
+      const warning = el(`<main><div class="${card}">${BAND}</div></main>`, ".gone-band > p");
+      for (const w of ["desktop", "phone"] as const) {
+        expect(computed(warning, "max-width", w), `${card} ${w}`).toBe("none");
+      }
+    }
+  });
+
+  it("starts the warning at a Handy tile's own padding, on desktop and phone", () => {
+    const band = el(`<div class="handy-tile">${BAND}</div>`, ".gone-band");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(band, "padding-left", w), w).toBe("12px");
+    }
+  });
+
+  it("fades the warning, not half covers it, when an opened band button would reach it in a narrow band", () => {
+    const band = el(`<div class="handy-tile">${BAND}</div>`, ".gone-band");
+    const warning = el(`<div class="handy-tile">${BAND}</div>`, ".gone-band > p");
+    expect(computed(band, "container-type", "desktop")).toBe("inline-size");
+    expect(computed(warning, "transition", "desktop")).toContain("opacity");
+    const block =
+      /@media \(hover:hover\)\{@container \(max-width:\d+px\)\{([^{}]*\{[^}]*\})\}\}/.exec(
+        themeCss,
+      );
+    expect(block, "a hover-only container rule on the band").not.toBeNull();
+    expect(block?.[1]).toBe(".gone-band:has(.slide:hover,.slide:focus-visible)>p{opacity:0}");
   });
 
   it("drops the grey square from a featured icon and sizes its box to the icon, with no frame", () => {

@@ -32,8 +32,9 @@ const MENU_SCRIPT_START = '\ndocument.getElementById("sign-out")';
  * A page in linkedom with all its scripts but the menu's run in one scope, as a browser shares
  * one global scope across a page's scripts, so two scripts that declare the same name fail.
  * `fetch` records each request (a GET has no body; a JSON body is parsed; any other body (a
- * `FormData`) is kept as sent) and replies with `answer`; timers never fire, so an Undo bar stays
- * up until the test clicks it.
+ * `FormData`) is kept as sent) and replies with `answer`; timers never fire on their own, so an
+ * Undo bar stays up until the test clicks it (`timers.fire()` runs the pending ones), and reduced
+ * motion is on until `motion.reduced` says otherwise.
  */
 export function runPage(
   html: string,
@@ -135,7 +136,30 @@ function start(
     setItem: (k: string, v: string) => void items.set(k, v),
     removeItem: (k: string) => void items.delete(k),
   };
-  const matchMedia = () => ({ matches: phone, addEventListener: () => {} });
+  // A page finishes its animations at once unless a test turns reduced motion off (`motion.reduced`).
+  const motion = { reduced: true };
+  const matchMedia = (query: string) => ({
+    matches: /reduced-motion/.test(query) ? motion.reduced : phone,
+    addEventListener: () => {},
+  });
+  // Timers never fire by themselves; a test runs the ones still pending with `timers.fire()`.
+  const pending = new Map<number, { fn: () => void; ms: number }>();
+  let nextTimer = 1;
+  const setTimer = (fn: () => void, ms = 0) => {
+    pending.set(nextTimer, { fn, ms });
+    return nextTimer++;
+  };
+  const timers = {
+    /** How many timers wait, or how many of them wait `ms`. */
+    pending: (ms?: number) =>
+      [...pending.values()].filter((t) => ms === undefined || t.ms === ms).length,
+    fire: () => {
+      for (const [id, { fn }] of [...pending]) {
+        pending.delete(id);
+        fn();
+      }
+    },
+  };
   new Function(
     "document",
     "fetch",
@@ -155,8 +179,8 @@ function start(
     location,
     () => {},
     DOMParser,
-    () => 0,
-    () => {},
+    setTimer,
+    (id: number) => void pending.delete(id),
     win,
     sessionStorage,
     matchMedia,
@@ -172,7 +196,19 @@ function start(
     for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
-  return { document, sent, names, dispatch, settle, $, location, items, focused: () => focusLog };
+  return {
+    document,
+    sent,
+    names,
+    dispatch,
+    settle,
+    $,
+    location,
+    items,
+    focused: () => focusLog,
+    motion,
+    timers,
+  };
 }
 
 /**

@@ -1,5 +1,6 @@
 import { escapeHtml } from "../core/escape-html.js";
 import type { Link } from "../core/types.js";
+import { BAND_COLLAPSE } from "./band-collapse.js";
 
 /** The amber "needs you" ask on a card with no why, with the field that opens on Tell me why. */
 export const askWhy = (link: Link) =>
@@ -33,6 +34,7 @@ export const whyAnswer = (tag: "p" | "span", className?: string, label?: string)
  * page update and Undo, and released whether it returns or throws. Every action on a card that
  * posts goes through it, so a card takes one action at a time. An Undo goes through
  * `whenFree(card, run)` instead: it waits for the action in flight, then runs under the mark.
+ * It also defines `collapseBand` and `resetBand` (`band-collapse.ts`).
  */
 export const CARD_FETCH = `const post = (url, body, extra) =>
   fetch(url, {
@@ -65,7 +67,8 @@ const whenFree = async (card, run) => {
   while (cardBusy.has(card))
     await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
   return whileBusy(card, run);
-};`;
+};
+${BAND_COLLAPSE}`;
 
 /**
  * Tell me why on the cards inside `#root` (each card has `data-id`): the button opens the field,

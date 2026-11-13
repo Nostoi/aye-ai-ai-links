@@ -10,15 +10,16 @@ import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { DONE_HINT, DONE_LABEL, doneLinkScript } from "./done-link.js";
+import { ARCHIVE, DONE_HINT, DONE_LABEL, doneLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { monthName, whyText } from "./link-rows.js";
-import { NOT_NOW_HINT } from "./not-now.js";
+import { CLOCK, NOT_NOW_HINT } from "./not-now.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
+import { slideButton } from "./slide-button.js";
 import { SPACES_ID } from "./spaces-section.js";
 import { askWhy, CARD_FETCH, tellWhyScript, WHY_LABEL, whyAnswer } from "./tell-why.js";
 
@@ -71,8 +72,8 @@ function opening(classes: string, link: Link, cards: WorthCards): string {
 /**
  * The featured card: a small picture on the left, the title, the why (or Tell me why, in amber),
  * the grey line ending with the reason and Saved copy, then Open it (the page's one filled
- * button), Not now and Done with it, each of those two with a small line saying what happens.
- * The ⋯ is without those two.
+ * button), then Not now and Done with it as icon buttons that open to show their label and a
+ * small line saying what happens (`slideButton`). The ⋯ is without those two.
  */
 function featured(d: DigestLink, cards: WorthCards): string {
   const { link } = d;
@@ -88,18 +89,14 @@ function featured(d: DigestLink, cards: WorthCards): string {
 <div class="feature-why">${said}</div>
 ${cardLine(link, { copy, reason: reason(d, cards.now), from: "/" })}<div class="feature-buttons">
 ${open}<div class="feature-quiet">
-${pill("snooze", "Not now", NOT_NOW_HINT)}
-${pill("archive", DONE_LABEL, DONE_HINT)}
+${slideButton("snooze", CLOCK, "Not now", NOT_NOW_HINT)}
+${slideButton("archive", ARCHIVE, DONE_LABEL, DONE_HINT)}
 </div>
 </div>
 ${editMenu(link, { copy, handy: cards.views?.get(link.id)?.handy, onCard: true })}
 ${tile(link, cards.images.get(link.id), "feature-pic")}
 </article>`;
 }
-
-/** One of the featured card's soft buttons: its label, then a small grey line under it. */
-const pill = (act: string, label: string, hint: string) =>
-  `<button type="button" data-act="${act}"><span>${escapeHtml(label)}</span><small>${escapeHtml(hint)}</small></button>`;
 
 /** An Also today row: a small picture (hidden on a phone), the title, `line`, and the six-row ⋯. */
 function row(link: Link, cards: WorthCards, classes: string, line: string): string {

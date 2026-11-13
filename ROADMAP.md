@@ -22,6 +22,7 @@ Tasks live in GitHub issues under each phase's milestone: https://github.com/Nos
 
 Newest first. Each entry is dated; later entries override earlier ones and the spec.
 
+- **2026-11-12:** The featured card's Not now and Done with it become round icon buttons (owner, #298, mockup card B). They sit at the right end of the button row and open leftward on hover or keyboard focus to show their label and hint; on a touch screen the words always show. One builder, `slideButton`, so the "seems gone" band can reuse it next.
 - **2026-11-12:** Plain whys and one place for every card's ⋯ (owner rulings in #297).
   - **No quotation marks on a stated or asked why** anywhere it shows: rows, search results (read `Why: …`), the saved-copy page, Tidy up, and the Ask AI card. A guess still reads `Why (a guess): …`.
   - **Every card's ⋯ sits in one place**, 4px from the top-right corner (a search result's body, on a phone too). The Pictures view keeps its frosted circle.

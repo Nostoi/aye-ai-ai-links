@@ -640,6 +640,7 @@ function parseCss(css: string): Rule[] {
       const prelude = src.slice(i, open).trim();
       const body = src.slice(open + 1, j - 1);
       if (prelude.startsWith("@media")) walk(body, prelude.slice(6).trim());
+      else if (prelude.startsWith("@container")) walk(body, prelude);
       else if (!prelude.startsWith("@"))
         rules.push({
           media,
@@ -931,15 +932,40 @@ describe("Home's Worth a look cards (#195)", () => {
 
     it("puts the pair side by side on its own row under a full-width Open it on a phone", () => {
       const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
-      expect(decl(".feature-quiet", "(max-width:810px)", "flex")).toBe("1 1 100%");
       expect(computed(quiet, "flex-wrap", "phone")).toBeUndefined();
       expect(computed(slide, "flex", "phone")).toBe("1 1 0");
     });
 
-    it("keeps the pair on its own row, right-aligned, wherever an opened button would not fit beside Open it", () => {
-      const media = "(max-width:810px)";
-      expect(decl(".feature-quiet", media, "flex")).toBe("1 1 100%");
-      expect(decl(".feature-quiet", media, "justify-content")).toBe("flex-end");
+    it("scopes the phone share-the-row rule to the pair, leaving other slide buttons alone", () => {
+      const alone = el('<button class="slide"></button>', ".slide");
+      expect(computed(alone, "flex", "phone")).toBeUndefined();
+    });
+
+    it("keeps the pair on its own row, right-aligned, whenever the button row is too narrow for Open it and both opened buttons", () => {
+      const narrow = "@container (max-width:540px)";
+      expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
+      expect(decl(".feature-quiet", narrow, "flex")).toBe("1 1 100%");
+      expect(decl(".feature-quiet", narrow, "justify-content")).toBe("flex-end");
+      const viewportRules = parseCss(themeCss).filter(
+        (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
+      );
+      expect(viewportRules.map((r) => r.media)).toEqual([]);
+    });
+
+    it("never reorders or stacks the pair, so Done with it stays rightmost", () => {
+      const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
+      for (const target of [quiet, slide]) {
+        const reflow = parseCss(themeCss).filter(
+          (r) =>
+            ((r.decls.has("flex-direction") && r.decls.get("flex-direction") !== "row") ||
+              r.decls.has("order")) &&
+            r.selectors.some(
+              (s) =>
+                !s.includes("::") && target.matches(s.replace(/:(hover|focus-visible)\b/g, "")),
+            ),
+        );
+        expect(reflow.map((r) => `${r.media ?? ""} ${r.selectors}`)).toEqual([]);
+      }
     });
 
     it("lets the words wrap inside a button that cannot hover, keeping it at least 48px tall", () => {

@@ -75,6 +75,8 @@ const STATE_ACTS = {
  * and calls the put-back `takeOut` returned. It sends nothing while another action on the card, or
  * its Undo, is out (`whileBusy`); an Undo clicked meanwhile waits for it (`whenFree`). A refusal, or
  * an Undo that does not succeed, is shown in `#error`.
+ * `doneCard(card, before)` awaits the optional `before` once the server has accepted and before the
+ * card leaves, still under the card's mark; a refusal never calls it.
  * For the page's one script after `CARD_FETCH` and `deleteLinkScript` (it needs `post`, `failure`,
  * `showUndo`, `whileBusy`, `whenFree` and `takeOut`); the menu rows' listener is a block.
  */
@@ -82,7 +84,7 @@ export const doneLinkScript = (
   root: string,
   error: string,
 ) => `const STATE_ACTS = ${JSON.stringify(STATE_ACTS)};
-const stateCard = (card, act) =>
+const stateCard = (card, act, before) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const doneAlert = document.getElementById(${JSON.stringify(error)});
@@ -95,6 +97,7 @@ const stateCard = (card, act) =>
       doneAlert.textContent = await failure(res);
       return;
     }
+    if (before) await before();
     const putBack = takeOut(listRoot, card, false, change);
     showUndo(undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
@@ -102,7 +105,7 @@ const stateCard = (card, act) =>
       else doneAlert.textContent = await failure(back);
     }), undo.title);
   });
-const doneCard = (card) => stateCard(card, "archive");
+const doneCard = (card, before) => stateCard(card, "archive", before);
 {
 const doneRoot = document.getElementById(${JSON.stringify(root)});
 if (doneRoot) {

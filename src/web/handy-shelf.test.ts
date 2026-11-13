@@ -207,27 +207,29 @@ describe("the Handy shelf", () => {
     for (const t of tiles(html)) expect(t.className).not.toMatch(/amber|worth-tile/);
   });
 
-  it("marks a gone tile as needing you with the gone ask in place of Still using?; not gone is unchanged", () => {
+  it("gives a gone tile the gone band in place of Still using?, with no amber outline; not gone is unchanged", () => {
     const [gone, calm] = tiles(render([{ ...kept(), gone: true }, kept()]));
-    expect(gone?.classList.contains("needs-you")).toBe(true);
-    expect(gone?.querySelector(".ask p")?.textContent).toBe("Seems gone");
+    expect(gone?.classList.contains("needs-you")).toBe(false);
+    expect(gone?.querySelector(".ask")).toBeNull();
+    expect(gone?.querySelector(":scope > .gone-band p")?.textContent).toBe("This page seems gone");
     expect(
-      [...(gone?.querySelectorAll(".ask button") ?? [])].map((b) => [
+      [...(gone?.querySelectorAll(".gone-band button") ?? [])].map((b) => [
         (b as HTMLElement).dataset.act,
-        b.textContent,
+        b.querySelector(".slide-words > span")?.textContent,
       ]),
     ).toEqual([
-      ["still-works", "It works"],
+      ["still-works", "It still works"],
       ["done", "Done with it"],
     ]);
     expect(calm?.classList.contains("needs-you")).toBe(false);
     expect(calm?.querySelector(".ask")).toBeNull();
   });
 
-  it("shows a gone and due tile only the gone ask", () => {
+  it("shows a gone and due tile only the gone band", () => {
     const [both] = tiles(render([{ ...kept({}, true), gone: true }]));
-    expect(both?.querySelectorAll(".ask")).toHaveLength(1);
-    expect(both?.querySelector(".ask p")?.textContent).toBe("Seems gone");
+    expect(both?.querySelector(".ask")).toBeNull();
+    expect(both?.querySelectorAll(".gone-band")).toHaveLength(1);
+    expect(both?.classList.contains("needs-you")).toBe(false);
     expect(both?.querySelector("button[data-act=still-using]")).toBeNull();
   });
 
@@ -380,7 +382,7 @@ describe("the shelf's script", () => {
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
-  it("It works posts /links/still-works, refreshes the shelf, and offers Undo with the answer's payload", async () => {
+  it("It still works posts /links/still-works, refreshes the shelf, and offers Undo with the answer's payload", async () => {
     const item = { ...kept(), gone: true };
     const CHECK = { checkedAt: "2026-10-17T00:00:00.000Z", status: "ok" };
     const p = shelfPage(
@@ -394,16 +396,16 @@ describe("the shelf's script", () => {
     p.dispatch(p.$("button[data-act=still-works]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/links/still-works", body: { id: item.link.id } });
-    expect(p.$(".handy-tile").classList.contains("needs-you")).toBe(false);
+    expect(p.$(".handy-tile .gone-band")).toBeNull();
     expect(p.$("#undo-bar span").textContent).toBe("Marked as working.");
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(urls(p)).toEqual(["/links/still-works", "/", "/links/still-works/undo", "/"]);
     expect(p.sent[2]).toMatchObject({ body: { id: item.link.id, check: CHECK, previous: null } });
-    expect(p.$(".handy-tile").classList.contains("needs-you")).toBe(true);
+    expect(p.$(".handy-tile .gone-band")).not.toBeNull();
   });
 
-  it("a refused It works shows the message, leaves the tile and offers no Undo", async () => {
+  it("a refused It still works shows the message, leaves the tile and offers no Undo", async () => {
     const item = { ...kept(), gone: true };
     const message = "This link isn't marked as gone. Reload the page.";
     const p = shelfPage(home([item]), () => ({ status: 409, body: { code: "conflict", message } }));
@@ -417,7 +419,7 @@ describe("the shelf's script", () => {
     expect(urls(p)).toEqual(["/links/still-works", "/links/still-works"]);
   });
 
-  it("an Undo of It works answered 409 shows the message", async () => {
+  it("an Undo of It still works answered 409 shows the message", async () => {
     const item = { ...kept(), gone: true };
     const message = "That link was checked again. Reload the page.";
     const p = shelfPage(

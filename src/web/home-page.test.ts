@@ -1169,7 +1169,7 @@ describe("Keep handy on a Worth a look card", () => {
 describe("the Worth a look gone row (#128)", () => {
   const ROWS = { check: { result: "alive" }, previous: { result: "dead" } };
 
-  it("is the last row, amber while it seems gone, with the gone line and the seven-row menu", () => {
+  it("is the last row, with the gone band across its bottom, no amber outline, and the seven-row menu", () => {
     const g = link({ why: null });
     const d = dom(render([card([]), card([]), card([])], { gone: g }));
     const rows = [...d.querySelectorAll(".worth-row")];
@@ -1177,30 +1177,32 @@ describe("the Worth a look gone row (#128)", () => {
     expect(rows).toHaveLength(3);
     expect(last.dataset.id).toBe(g.id);
     expect(last.classList.contains("worth-gone")).toBe(true);
-    expect(last.querySelector("[data-gone] p.small")?.textContent).toBe("This page seems gone");
-    expect(shownButtons(last)).toEqual(["still-works It still works", "gone-done Done with it"]);
+    expect(last.querySelector(":scope > [data-gone] p")?.textContent).toBe("This page seems gone");
+    expect(
+      [...last.querySelectorAll("[data-gone] button")].map(
+        (b) =>
+          `${(b as HTMLElement).dataset.act} ${b.querySelector(".slide-words > span")?.textContent}`,
+      ),
+    ).toEqual(["still-works It still works", "gone-done Done with it"]);
     expect(menuRows(last).slice(0, 3)).toEqual(["snooze", "put-away", "archive"]);
     expect(menuRows(last)).toHaveLength(7);
     expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
     expect(last.querySelector(".ask")).toBeNull();
-    expect(themeCss).toMatch(
-      /,\.worth-gone:has\(\[data-gone\]:not\(\[hidden\]\)\)\{outline:2px solid var\(--amber\)/,
-    );
   });
 
-  it("keeps Read the saved copy on its warning line when it has a copy, and only then", () => {
+  it("keeps Read the saved copy beside the warning, inside the band, when it has a copy, and only then", () => {
     const g = link();
     const withCopy = dom(render([card([])], { gone: g, copies: new Map([[g.id, COPY]]) }));
     const reads = [...withCopy.querySelectorAll(".worth-gone [data-act=read-copy]")];
     expect(reads.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
       ["Read the saved copy", copyHref(g.id, "/")],
     ]);
-    expect(reads[0]?.previousElementSibling?.hasAttribute("data-gone")).toBe(true);
+    expect(reads[0]?.parentElement?.hasAttribute("data-gone")).toBe(true);
+    expect(reads[0]?.previousElementSibling?.tagName).toBe("P");
     expect(menuRows(withCopy.querySelector(".worth-gone"))).toContain("remove-copy");
     expect(
       dom(render([card([])], { gone: link() })).querySelector("[data-act=read-copy]"),
     ).toBeNull();
-    expect(themeCss).toContain("[data-gone][hidden]+.gone-copy{display:none}");
   });
 
   it("stands alone when there are no reading picks, with no Also today heading", () => {

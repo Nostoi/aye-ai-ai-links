@@ -453,7 +453,7 @@ describe("GET / and the Handy shelf", () => {
     expect(tiles[1]?.classList.contains("guess")).toBe(true);
   });
 
-  it("shows a tool whose link seems gone first, with the gone ask in place of Still using?", async () => {
+  it("shows a tool whose link seems gone first, with the gone band in place of Still using?", async () => {
     const { world, browser, id } = await tools();
     await keepHandy(at(world, daysAgo(31)), A, id, "stated");
     const { link: other } = await saveLink(linkDeps(world), A, {
@@ -472,8 +472,8 @@ describe("GET / and the Handy shelf", () => {
     });
     const tiles = shelf(String((await browser.send("/")).body));
     expect(tiles.map((t) => t.dataset.id)).toEqual([id, other.id]);
-    expect(tiles[0]?.classList.contains("needs-you")).toBe(true);
-    expect(tiles[0]?.textContent).toContain("Seems gone");
+    expect(tiles[0]?.classList.contains("needs-you")).toBe(false);
+    expect(tiles[0]?.textContent).toContain("This page seems gone");
     expect(tiles[0]?.textContent).not.toContain("Still using?");
     expect(tiles[1]?.textContent).toContain("Still using?");
   });

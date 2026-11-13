@@ -52,7 +52,9 @@ const lines = (html: string) =>
     e.closest("[data-id]")?.getAttribute("data-id"),
   );
 const buttons = (html: string) =>
-  [...dom(html).querySelectorAll("[data-gone] button")].map((b) => b.textContent);
+  [...dom(html).querySelectorAll("[data-gone] button")].map(
+    (b) => b.querySelector(".slide-words > span")?.textContent,
+  );
 
 type Builder = (links: Link[], map: Map<string, GoneView | null>, done?: boolean) => string;
 const BUILDERS: [string, Builder][] = [

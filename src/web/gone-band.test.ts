@@ -197,11 +197,11 @@ describe("the band's look", () => {
     expect(rule("[data-view=pictures] .link-row .gone-band")).toMatch(/margin:0/);
   });
 
-  it("never clips a card, so an open menu is not cut off; only the collapsing band clips", () => {
+  it("never clips a card by rule, so an open menu is not cut off; the slide clips it inline, only while it runs", () => {
     for (const sel of [".link-row", ".worth-row", ".handy-tile", ".result", ".result-body"]) {
       expect(rule(sel) ?? "", sel).not.toMatch(/overflow:hidden/);
     }
-    expect(rule(".gone-band.collapsing")).toMatch(/overflow:hidden/);
+    expect(rule(".gone-band.collapsing")).not.toMatch(/overflow|margin|padding|height/);
   });
 
   it("draws the arrow and the shade", () => {
@@ -254,7 +254,7 @@ const click = async (p: ReturnType<typeof runPage>, selector: string) => {
   await p.settle();
 };
 const ended = async (p: ReturnType<typeof runPage>) => {
-  p.dispatch(p.$("[data-gone]"), "transitionend", { propertyName: "height" });
+  p.dispatch(band(p).closest("[data-id]") as Element, "transitionend", { propertyName: "height" });
   await p.settle();
 };
 const band = (p: ReturnType<typeof runPage>) => p.$("[data-gone]");
@@ -407,13 +407,16 @@ describe("the Handy tile's slide-away", () => {
     },
   );
 
-  it("a refused It still works leaves the band as it was", async () => {
+  it.each([
+    ["It still works", "still-works"],
+    ["Done with it", "done"],
+  ])("a refused %s leaves the band as it was", async (_, act) => {
     const p = runPage(tileHome([item(true)]), () => ({
       status: 409,
       body: { code: "conflict", message: "No." },
     }));
     p.motion.reduced = false;
-    await click(p, "[data-gone] button[data-act=still-works]");
+    await click(p, `[data-gone] button[data-act=${act}]`);
     intact(p);
     expect(p.sent).toHaveLength(1);
   });
@@ -422,8 +425,10 @@ describe("the Handy tile's slide-away", () => {
 describe("the collapse helper on its own", () => {
   /** The helper's script run against one band, with timers the test fires by hand. */
   function helper(matchMedia: unknown) {
-    const { document } = parseHTML('<div class="gone-band" data-gone></div>');
+    const { document } = parseHTML('<li data-id="1"><div class="gone-band" data-gone></div></li>');
     const band = document.querySelector("[data-gone]") as HTMLElement;
+    const card = document.querySelector("[data-id]") as HTMLElement;
+    Object.defineProperty(card, "offsetHeight", { get: () => (band.hidden ? 100 : 140) });
     const timers = new Map<number, () => void>();
     let next = 1;
     const make = new Function(
@@ -441,9 +446,9 @@ describe("the collapse helper on its own", () => {
       (id: number) => timers.delete(id),
     ) as { collapseBand(b: Element): Promise<void>; resetBand(b: Element): void };
     const Event = (document.defaultView as unknown as typeof globalThis).Event;
-    const end = () =>
-      band.dispatchEvent(Object.assign(new Event("transitionend"), { propertyName: "height" }));
-    return { band, api, timers, end };
+    const end = (target: Element = card) =>
+      target.dispatchEvent(Object.assign(new Event("transitionend"), { propertyName: "height" }));
+    return { band, card, api, timers, end };
   }
   const animated = () => ({ matches: false });
 
@@ -463,6 +468,33 @@ describe("the collapse helper on its own", () => {
     for (const fn of timers.values()) fn();
     expect(band.hidden).toBe(false);
     expect(band.classList.contains("collapsing")).toBe(false);
+  });
+
+  it("slides the card to the height it has with the band hidden, then hides the band and frees the card", async () => {
+    const { band, card, api, end } = helper(animated);
+    const done = api.collapseBand(band);
+    expect(card.style.height).toBe("100px");
+    expect(card.style.overflow).toBe("hidden");
+    expect(card.style.boxSizing).toBe("border-box");
+    expect(band.hidden).toBe(false);
+    end(band);
+    expect(band.hidden).toBe(false);
+    end();
+    await done;
+    expect(band.hidden).toBe(true);
+    for (const prop of ["height", "overflow", "boxSizing", "transition"] as const) {
+      expect(card.style[prop], prop).toBe("");
+    }
+  });
+
+  it("frees the card when the band comes back before the slide ended", async () => {
+    const { band, card, api } = helper(animated);
+    const done = api.collapseBand(band);
+    api.resetBand(band);
+    await done;
+    for (const prop of ["height", "overflow", "boxSizing", "transition"] as const) {
+      expect(card.style[prop], prop).toBe("");
+    }
   });
 
   it("resolves once and clears its own timer when the transition ends first", async () => {

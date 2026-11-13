@@ -264,6 +264,8 @@ describe("the outside-request scan", () => {
     ["css relative url()", "<style>@font-face{src:url(f.woff2)}</style>"],
     ["css @import of a root path", "<style>@import '/a.css';</style>"],
     ["css root path with a backslash", "<style>a{background:url(/\\x.example/a.png)}</style>"],
+    ["css root path with a tab", "<style>a{background:url('/\t/x.example/a.png')}</style>"],
+    ["css root path with a newline", "<style>a{background:url('/\n/x.example/a.png')}</style>"],
   ])("flags %s", (_, html) => {
     expect(outsideRefs(html)).not.toEqual([]);
   });

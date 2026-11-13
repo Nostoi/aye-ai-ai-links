@@ -16,7 +16,7 @@ export function outsideRefs(html: string): string[] {
   // CSS's url(), not a script call whose name ends in "url" (imageUrl, URL.createObjectURL).
   for (const [, ref = ""] of html.matchAll(/(?<![\w$])url\(\s*['"]?([^)'"]*)/gi)) {
     // data: and root-relative paths (one leading slash, as the app's own fonts) stay on this origin.
-    if (!/^data:/.test(ref) && !/^\/(?!\/)[^\\]*$/.test(ref)) found.push(`url(${ref})`);
+    if (!/^data:/.test(ref) && !/^\/(?!\/)[\w./?=&%~-]*$/.test(ref)) found.push(`url(${ref})`);
   }
   if (/@import\b/i.test(html)) found.push("@import");
   return found;

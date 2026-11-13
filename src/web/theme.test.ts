@@ -931,9 +931,15 @@ describe("Home's Worth a look cards (#195)", () => {
 
     it("puts the pair side by side on its own row under a full-width Open it on a phone", () => {
       const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
-      expect(computed(quiet, "flex", "phone")).toBe("1 1 100%");
+      expect(decl(".feature-quiet", "(max-width:810px)", "flex")).toBe("1 1 100%");
       expect(computed(quiet, "flex-wrap", "phone")).toBeUndefined();
       expect(computed(slide, "flex", "phone")).toBe("1 1 0");
+    });
+
+    it("keeps the pair on its own row, right-aligned, wherever an opened button would not fit beside Open it", () => {
+      const media = "(max-width:810px)";
+      expect(decl(".feature-quiet", media, "flex")).toBe("1 1 100%");
+      expect(decl(".feature-quiet", media, "justify-content")).toBe("flex-end");
     });
 
     it("lets the words wrap inside a button that cannot hover, keeping it at least 48px tall", () => {

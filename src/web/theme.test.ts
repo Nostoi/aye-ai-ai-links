@@ -929,11 +929,18 @@ describe("Home's Worth a look cards (#195)", () => {
       expect(themeCss).not.toContain(".feature-quiet button");
     });
 
-    it("puts the pair on its own row under a full-width Open it on a phone, sharing or wrapping", () => {
+    it("puts the pair side by side on its own row under a full-width Open it on a phone", () => {
       const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
       expect(computed(quiet, "flex", "phone")).toBe("1 1 100%");
-      expect(computed(quiet, "flex-wrap", "phone")).toBe("wrap");
-      expect(computed(slide, "flex", "phone")).toBe("1 1 auto");
+      expect(computed(quiet, "flex-wrap", "phone")).toBeUndefined();
+      expect(computed(slide, "flex", "phone")).toBe("1 1 0");
+    });
+
+    it("lets the words wrap inside a button that cannot hover, keeping it at least 48px tall", () => {
+      const touch = themeCss.match(/@media \(hover:none\)\{\.slide\{([^}]*)\}/)?.[1] ?? "";
+      expect(touch).toContain("white-space:normal");
+      expect(touch).toContain("height:auto");
+      expect(touch).toContain("min-height:48px");
     });
 
     it("still loses its transitions under reduced motion", () => {

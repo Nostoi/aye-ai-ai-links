@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
@@ -82,7 +83,11 @@ describe("the theme's fonts", () => {
   it("changes the address when the file's bytes change", () => {
     const versions = FONTS.map((f) => f.version);
     expect(new Set(versions).size).toBe(FONTS.length);
-    for (const f of FONTS) expect(f.version).toMatch(/^[0-9a-f]{12}$/);
+    for (const f of FONTS) {
+      expect(f.version).toBe(
+        createHash("sha256").update(onDisk(f.file)).digest("hex").slice(0, 12),
+      );
+    }
   });
 
   it("declares each Open Runde weight and the Fraunces face, all swapping", () => {

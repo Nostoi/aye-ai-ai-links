@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Home variants</title>
+<!-- mockup only: the real app would bundle the font files itself -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..800,0..100,0..1&family=Young+Serif&family=Nunito:wght@400..800&family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Varela+Round&family=Rubik:wght@400..800&family=Quicksand:wght@400..700&display=swap">
+<style>
+@font-face{font-family:"Open Runde";font-weight:400;src:url(https://cdn.jsdelivr.net/gh/lauridskern/open-runde@main/src/web/OpenRunde-Regular.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:500;src:url(https://cdn.jsdelivr.net/gh/lauridskern/open-runde@main/src/web/OpenRunde-Medium.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:600;src:url(https://cdn.jsdelivr.net/gh/lauridskern/open-runde@main/src/web/OpenRunde-Semibold.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:700 800;src:url(https://cdn.jsdelivr.net/gh/lauridskern/open-runde@main/src/web/OpenRunde-Bold.woff2) format("woff2")}
+/* section-name options (override the hierarchy preset for h2 only) */
+.s-rounded h2,.s-rule h2,.s-gutter h2,.s-few h2{font-family:var(--body,inherit)!important;font-variation-settings:normal!important;font-weight:700!important;font-size:20px!important;color:var(--ink)!important;letter-spacing:-.01em}
+.s-serifmid h2{font-family:var(--face)!important;font-variation-settings:var(--fvs)!important;font-weight:620!important;font-size:22px!important;color:var(--ink)!important}
+.s-rule h2{padding-bottom:6px;border-bottom:3px solid var(--ink)}
+.s-rule .sec-head{margin-bottom:16px}
+.s-few #s-handy .sec-head h2,.s-few #s-spaces .sec-head h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.s-few #s-handy .sec-head,.s-few #s-spaces .sec-head{margin:0}
+@media (min-width:701px){
+.s-gutter section{display:grid;grid-template-columns:150px minmax(0,1fr);column-gap:28px}
+.s-gutter section>.sec-head{grid-column:1;grid-row:1/span 20;align-self:start;margin:6px 0 0;display:block}
+.s-gutter section>*:not(.sec-head){grid-column:2}
+.s-gutter h2{font-size:18px!important}
+}
+.t-tight{letter-spacing:-.015em;font-weight:500}
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--about:#57534D;--line:#E7E3DA;--field:#8F8A82;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--pic:#F2F2F2;--fill:#EDEAE3}
+@media (prefers-color-scheme:dark){:root{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--about:#C9C5BE;--line:#3A3A40;--field:#77736D;--teal:#4FB3A5;--clay:#E08A63;--violet:#A08BE3;--blue:#7099EA;--green:#6DBB6D;--rose:#DE7E9F;--pic:#323236;--fill:#34343A}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded,"SF Pro Rounded",system-ui,sans-serif;font-size:17px;line-height:1.5}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+
+/* ---------- variant switcher (not part of the design) ---------- */
+.switch{position:sticky;top:0;z-index:50;background:#1f1f24;color:#eee;padding:10px 16px 12px;font-size:14px;line-height:1.35}
+.switch p{margin:0 0 8px;max-width:980px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-height:36px;padding:0 12px;border-radius:18px;border:1px solid #555;background:#2c2c32;color:#eee;cursor:pointer;font-size:14px}
+.chip[aria-pressed=true]{background:#eee;color:#1f1f24;border-color:#eee;font-weight:600}
+.what{margin:8px 0 0;color:#cfcfcf;max-width:980px;min-height:2.7em}
+
+/* ---------- the home page, as it is today ---------- */
+.column{max-width:932px;margin:0 auto;padding:28px 24px 80px}
+.top{display:flex;align-items:center;gap:22px;margin-bottom:56px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;margin-right:auto}
+.nav{display:flex;gap:22px;align-items:center}
+.nav a.on{text-decoration:underline;text-underline-offset:6px;text-decoration-thickness:2px;font-weight:600}
+.ask{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border:1.5px solid var(--line);border-radius:22px;background:var(--surface);font-weight:600}
+.me{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--about)}
+/* today: Save sits with the page links as plain text, before Ask AI */
+.save{display:inline-flex;align-items:center;gap:4px;min-height:44px}
+.save svg{width:14px;height:14px}
+
+/* ===== top bar variants ===== */
+/* N1 split: places beside the logo, actions on the right */
+#home.n-split .brand{margin-right:28px}
+#home.n-split .nav{margin-right:auto;gap:4px}
+#home.n-split .nav a{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border-radius:20px}
+#home.n-split .nav a.on{text-decoration:none;background:color-mix(in srgb,var(--ink) 7%,transparent)}
+#home.n-split .top,#home.n-band .top,#home.n-seg .top{gap:10px}
+#home:is(.n-split,.n-band,.n-seg) .save,#home:is(.n-split,.n-band,.n-seg) .ask{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;border:1.5px solid var(--line);border-radius:22px;background:var(--surface);font-weight:600}
+#home:is(.n-split,.n-band,.n-seg) .save svg{width:18px;height:18px}
+/* N2 band: same split, on a tray-coloured band like the sections below */
+#home.n-band .top,#home.n-seg .top{background:color-mix(in srgb,#8C7350 var(--tray,5%),var(--bg));border-radius:34px;padding:8px 8px 8px 18px;margin-bottom:56px}
+#home.n-band .brand{margin-right:24px}
+#home.n-band .nav{margin-right:auto;gap:4px}
+#home.n-band .nav a{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border-radius:20px}
+#home.n-band .nav a.on{text-decoration:none;background:var(--surface);box-shadow:0 1px 3px #0000000f}
+#home.n-band .save,#home.n-band .ask,#home.n-seg .save,#home.n-seg .ask{border-color:transparent}
+/* N3 segmented: the places become one control, like a switch between pages */
+#home.n-seg .brand{margin-right:24px}
+#home.n-seg .nav{gap:0;padding:4px;border-radius:24px;background:color-mix(in srgb,var(--ink) 6%,transparent);margin-right:auto}
+#home.n-seg .nav a{display:inline-flex;align-items:center;min-height:38px;padding:0 16px;border-radius:20px;color:var(--about)}
+#home.n-seg .nav a.on{text-decoration:none;background:var(--surface);color:var(--ink);box-shadow:0 1px 3px #00000014}
+/* N4 two rows: brand and actions on top, places as a quiet row under them */
+#home.n-rows .top{display:grid;grid-template-columns:1fr auto auto auto;row-gap:14px;column-gap:10px;padding-bottom:12px;border-bottom:1px solid color-mix(in srgb,var(--ink) 8%,transparent)}
+#home.n-rows .brand{grid-column:1;grid-row:1}
+#home.n-rows .save{grid-column:2;grid-row:1}
+#home.n-rows .ask{grid-column:3;grid-row:1}
+#home.n-rows .me{grid-column:4;grid-row:1}
+#home.n-rows .nav{grid-column:1/-1;grid-row:2;gap:24px}
+#home.n-rows .save,#home.n-rows .ask{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 16px;border:1.5px solid var(--line);border-radius:22px;background:var(--surface);font-weight:600}
+#home.n-rows .save svg{width:18px;height:18px}
+/* N2b refined band: capsule (radius = 22 + 8), one 44px height, current page pressed in, actions raised */
+#home.n-band2 .top{gap:10px;background:color-mix(in srgb,#8C7350 var(--tray,5%),var(--bg));border-radius:30px;padding:8px 8px 8px 20px;margin-bottom:56px}
+#home.n-band2 .brand{margin-right:24px}
+#home.n-band2 .nav{margin-right:auto;gap:2px}
+#home.n-band2 .nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:22px;color:var(--about)}
+#home.n-band2 .nav a:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 4%,transparent)}
+#home.n-band2 .nav a.on{text-decoration:none;color:var(--ink);font-weight:650;background:color-mix(in srgb,var(--ink) 8%,transparent);box-shadow:inset 0 1px 2px #00000012}
+#home.n-band2 .save,#home.n-band2 .ask{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 18px;border:0;border-radius:22px;background:var(--surface);font-weight:600;box-shadow:0 1px 3px #0000000f,0 0 0 1px color-mix(in srgb,var(--ink) 7%,transparent)}
+#home.n-band2 .save svg{width:18px;height:18px}
+#home.n-band2 .me{border:0;box-shadow:0 1px 3px #0000000f,0 0 0 1px color-mix(in srgb,var(--ink) 7%,transparent)}
+#home.n-band2 :is(.nav a,.save,.ask,.me):focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+
+/* account initial instead of the generic person */
+#home.n-initial .me svg{display:none}
+#home.n-initial .me::after{content:"M";font-weight:700;color:var(--ink)}
+@media (max-width:700px){#home .top{flex-wrap:wrap}#home .save span,#home .ask span{display:none}}
+
+.hero{text-align:center;margin-bottom:64px}
+.hero h1{font-size:30px;margin:0 0 16px;letter-spacing:-.01em}
+.search{display:flex;align-items:center;gap:8px;max-width:620px;margin:0 auto;padding:5px 5px 5px 24px;border:1.5px solid var(--field);border-radius:30px;background:var(--surface)}
+.search span{flex:1;color:var(--soft);text-align:left}
+.search span.btn{color:var(--bg)}
+#home{font-family:var(--body,inherit)}
+/* hierarchy presets for the heading face */
+.h-quiet .hero h1{font-size:30px!important;--fw:600}
+.h-quiet h2{font-size:20px!important;--fw:600}
+.h-label .hero h1{font-size:34px!important}
+.h-label h2{font-size:17px!important;--fw:600;color:var(--soft)}
+.h-pick .hero h1{font-size:30px!important;--fw:600}
+.h-pick h2{font-size:17px!important;--fw:600;color:var(--soft)}
+.h-pick .feature h3{font-family:var(--face);font-variation-settings:var(--fvs);font-weight:760;font-size:34px;line-height:1.1;margin-bottom:6px}
+.h-quiet .hero h1,.h-quiet h2,.h-label h2,.h-pick .hero h1,.h-pick h2{font-weight:var(--fw)}
+kbd{font-family:inherit;font-size:13px;background:var(--bg);color:var(--soft);border-radius:6px;padding:2px 8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border-radius:24px;border:0;background:var(--ink);color:var(--bg);font-weight:700}
+.hero .hint{color:var(--soft);margin:12px 0 0;font-size:16px}
+
+section{margin-bottom:48px}
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+h2{font-size:21px;margin:0}
+.pill{min-height:44px;padding:0 14px;border:0;border-radius:22px;background:var(--fill);font-weight:600}
+
+.handy-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border-radius:18px;box-shadow:0 2px 10px #0000000b;position:relative}
+.dots{position:absolute;top:4px;right:4px;width:44px;height:44px;display:grid;place-items:center;color:var(--soft);font-size:18px;letter-spacing:1px}
+.handy-tile{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;column-gap:14px;padding:12px 44px 12px 12px}
+.ini{display:grid;place-items:center;background:var(--pic);color:var(--about);font-weight:700;border-radius:12px}
+.handy-tile .ini{width:52px;height:52px;font-size:19px}
+.handy-tile b{display:block;line-height:1.3}
+.site{color:var(--soft)}
+.ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:1px}
+.add-tile{display:none}
+
+.feature{display:grid;grid-template-columns:168px minmax(0,1fr);column-gap:22px;padding:22px 24px 20px}
+.fpic{width:168px;height:168px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(160deg,#141a33,#1e2546);color:#e9ecff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-weight:700;line-height:1.15;overflow:hidden;font-size:17px;padding:0 8px}
+.fpic small{font-size:9px;opacity:.6;font-weight:400;margin-top:8px}
+.feature h3{font-size:23px;margin:0 44px 2px 0}
+.label{color:var(--soft);font-weight:600;font-size:16px}
+.why{margin:2px 0 6px}
+.line{color:var(--soft);font-size:16px;display:flex;flex-wrap:wrap;gap:0 8px;align-items:center}
+.line .dot{width:8px;height:8px;border-radius:50%;background:var(--rose)}
+.line u{color:var(--about);text-underline-offset:3px}
+.fbuttons{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}
+.fbuttons .quiet{display:flex;gap:10px;margin-left:auto;align-self:flex-end;margin-top:12px;flex-basis:100%;justify-content:flex-end}
+.round{width:46px;height:46px;border-radius:50%;border:0;background:var(--fill);display:grid;place-items:center;color:var(--about)}
+
+.also{font-size:16px;color:var(--soft);font-weight:700;margin:22px 0 10px}
+.worth-row{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;column-gap:14px;padding:10px 52px 10px 12px;margin-bottom:10px;border-radius:16px}
+.worth-row .ini{width:44px;height:44px;border-radius:10px;font-size:17px}
+.worth-row b{display:block;line-height:1.35}
+.worth-row p{margin:0;color:var(--about)}
+
+.spaces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.space{padding:18px}
+.space h3{font-size:18px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.space h3::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c)}
+.space ul{list-style:none;margin:0 0 12px;padding:0}
+.space li{display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;color:var(--about);margin:3px 0}
+.space li span{overflow:hidden;text-overflow:ellipsis}
+.fav{flex:none;width:18px;height:18px;border-radius:4px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+.fav.none{background:var(--pic)}
+.all{color:var(--about);font-weight:600}
+.spaces-list{display:none}
+
+/* ---------- A: type sizes do the ranking ---------- */
+.v-type h2{font-size:16px;color:var(--soft);font-weight:600}
+.v-type .feature h3{font-size:32px;letter-spacing:-.015em;line-height:1.15;margin-bottom:6px}
+.v-type .why{font-size:19px}
+.v-type .hero h1{font-size:34px}
+
+/* ---------- B: only the featured card is a card ---------- */
+.v-flat .handy-tile,.v-flat .worth-row,.v-flat .space{background:none;box-shadow:none;border-radius:0}
+.v-flat .handy-tile{padding-left:0;border-top:1px solid var(--line)}
+.v-flat .worth-row{margin:0;border-top:1px solid var(--line);padding-left:0}
+.v-flat .worth-row:last-of-type{border-bottom:1px solid var(--line)}
+.v-flat .space{padding:14px 0 0;border-top:2px solid var(--c)}
+.v-flat .feature{box-shadow:0 6px 28px #00000014}
+
+/* ---------- C: search left-aligned with the page ---------- */
+.v-left .hero{text-align:left}
+.v-left .search{margin:0;max-width:none}
+.v-left .hero h1{font-size:30px}
+
+/* ---------- D: spaces as one quiet list ---------- */
+.v-slist .spaces{display:none}
+.v-slist .spaces-list{display:block;padding:6px 22px}
+.srow{display:grid;grid-template-columns:200px 1fr auto;gap:16px;align-items:baseline;padding:12px 0;border-top:1px solid var(--line)}
+.srow:first-child{border-top:0}
+.srow b{display:flex;align-items:center;gap:8px}
+.srow b::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c)}
+.srow span{color:var(--about);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow em{font-style:normal;color:var(--soft)}
+
+/* ---------- E: featured buttons stay on one row ---------- */
+.v-buttons .fbuttons .quiet{flex-basis:auto;margin-top:0;align-self:center}
+.v-buttons .feature{padding-bottom:22px}
+
+/* ---------- F: no empty icon squares ---------- */
+.v-fav .fav.none{background:var(--pic);color:var(--about)}
+.v-fav .fav.none::after{content:attr(data-i)}
+
+/* ---------- G: Add lives in the shelf ---------- */
+.v-add .sec-head .pill{display:none}
+.v-add .add-tile{display:flex;align-items:center;gap:12px;padding:12px 16px;border:1.5px dashed var(--line);border-radius:18px;color:var(--soft);font-weight:600;min-height:76px;background:none}
+.v-add .add-tile i{font-style:normal;width:44px;height:44px;border-radius:12px;background:var(--fill);display:grid;place-items:center;font-size:22px;color:var(--about)}
+
+/* ================= ROUND 2: whole-page ideas (E, F, G stay on) ================= */
+#home{display:flex;flex-direction:column}
+.space-chips{display:none}
+
+/* H: fewer things */
+.d-few .also,.d-few .worth-row,.d-few .spaces{display:none}
+.d-few .space-chips{display:flex;flex-wrap:wrap;gap:10px}
+.space-chips a{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:22px;background:var(--surface);box-shadow:0 2px 10px #0000000b;font-weight:600}
+.space-chips a::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c)}
+.d-few .hero{margin:40px 0 88px}
+.d-few section{margin-bottom:64px}
+
+/* I: type with character */
+.d-serif .hero h1,.d-serif h2,.d-serif .feature h3,.d-serif .space h3,.d-serif .handy-tile b,.d-serif .worth-row b,.d-serif .srow b,.d-serif .space-chips a,.d-serif .ask,.d-serif .brand{font-family:var(--display,ui-serif),Georgia,serif;letter-spacing:-.01em}
+.d-serif.body-too{font-family:var(--display,ui-serif),Georgia,serif}
+
+/* ================= ROUND 3: anchors for the eye (serif on) ================= */
+/* L crisp edges */
+.r-edges .card{box-shadow:none;border:1px solid color-mix(in srgb,var(--ink) 16%,transparent)}
+.r-edges.v-flat .handy-tile,.r-edges .feature{border-width:1.5px}
+/* M rhythm: tight inside, wide between */
+.r-rhythm section{margin-bottom:84px}
+.r-rhythm .sec-head{margin-bottom:10px}
+.r-rhythm .handy-row{gap:10px}
+.r-rhythm .worth-row{margin-bottom:6px}
+.r-rhythm .also{margin:16px 0 8px}
+.r-rhythm .spaces{gap:12px}
+.r-rhythm .hero{margin-bottom:88px}
+/* N space colors carry */
+.r-color .space{border-top:5px solid var(--c);background:color-mix(in srgb,var(--c) 6%,var(--surface))}
+.r-color .space h3{color:color-mix(in srgb,var(--c) 70%,var(--ink))}
+.r-color .space h3::before{display:none}
+/* O a different shape per section */
+.r-shapes .handy-row{display:flex;flex-wrap:wrap;gap:10px}
+.r-shapes .handy-tile{border-radius:40px;grid-template-columns:36px auto;padding:6px 44px 6px 6px}
+.r-shapes .handy-tile .ini{width:36px;height:36px;border-radius:50%;font-size:13px}
+.r-shapes .handy-tile .site{display:none}
+.r-shapes .add-tile{border-radius:40px;min-height:50px;padding:6px 18px 6px 6px}
+.r-shapes .add-tile i{width:36px;height:36px;border-radius:50%}
+.r-shapes .worth-row{background:none;box-shadow:none;border:0;border-radius:0;border-top:1px solid var(--line);margin:0;padding-left:0}
+.r-shapes .feature{border-radius:26px}
+.r-shapes .space{border-radius:12px}
+/* P contrast between title and the rest */
+.r-ink .handy-tile b,.r-ink .worth-row b,.r-ink .feature h3,.r-ink .space li span{color:var(--ink)}
+.r-ink .worth-row b,.r-ink .handy-tile b{font-weight:700}
+.r-ink .site,.r-ink .line,.r-ink .label,.r-ink .worth-row p,.r-ink .all{font-size:14.5px;color:color-mix(in srgb,var(--soft) 85%,var(--bg))}
+.r-ink .space li span{font-weight:500}
+/* Q one dark anchor */
+.r-dark .feature{background:var(--ink);color:var(--bg);box-shadow:none;border-color:var(--ink)}
+.r-dark .feature .label,.r-dark .feature .line,.r-dark .feature .dots{color:color-mix(in srgb,var(--bg) 70%,var(--ink))}
+.r-dark .feature .line u{color:var(--bg)}
+.r-dark .feature .btn{background:var(--bg);color:var(--ink)}
+.r-dark .feature .round{background:color-mix(in srgb,var(--bg) 16%,var(--ink));color:var(--bg)}
+.d-serif .hero h1{font-size:40px;font-weight:500}
+.d-serif h2{font-size:24px;font-weight:500}
+.d-serif .feature h3{font-size:30px;font-weight:600}
+.d-serif .handy-tile b,.d-serif .worth-row b{font-weight:600;font-size:18px}
+
+/* J: one reading column */
+.d-column{max-width:660px}
+.d-column .handy-row{grid-template-columns:1fr 1fr}
+.d-column .spaces{display:none}
+.d-column .spaces-list{display:block;padding:6px 22px}
+.d-column .srow{grid-template-columns:1fr auto}
+.d-column .srow span{display:none}
+.d-column .feature{grid-template-columns:96px minmax(0,1fr)}
+.d-column .fpic{width:96px;height:96px;font-size:10px}
+.d-column .fpic small{display:none}
+
+/* K: the pick opens the page */
+.d-pick #s-worth{order:1}.d-pick .hero{order:2;margin:0 0 56px}.d-pick #s-handy{order:3}.d-pick #s-spaces{order:4}.d-pick .top{order:0}
+.d-pick .hero h1,.d-pick .hero .hint{display:none}
+.d-pick .search{margin:0;max-width:none}
+.d-pick #s-worth h2{font-size:30px;margin-bottom:6px}
+.d-pick #s-worth{margin-bottom:40px}
+
+/* ================= ROUND 4: softer edges, softer serif (P on) ================= */
+.r4-edge .card{box-shadow:0 2px 10px #0000000b,0 0 0 1px color-mix(in srgb,var(--ink) var(--edge,7%),transparent)}
+.r4-edge .add-tile{border-color:color-mix(in srgb,var(--ink) calc(var(--edge,7%) + 6%),transparent)}
+/* where the display face goes */
+.f-titles .handy-tile b,.f-titles .worth-row b,.f-titles .feature h3,.f-titles .space li span,
+.f-heads .hero h1,.f-heads h2,
+.f-both .handy-tile b,.f-both .worth-row b,.f-both .feature h3,.f-both .space li span,.f-both .hero h1,.f-both h2,.f-both .space h3
+{font-family:var(--face);font-variation-settings:var(--fvs,normal);font-weight:var(--fw,inherit)}
+.f-heads h2,.f-both h2{font-size:23px}
+.f-heads .hero h1,.f-both .hero h1{font-size:34px}
+
+/* anchoring a section name to its section */
+.sec-more{display:none}
+.a-close section{margin-bottom:88px}
+.a-close .sec-head{margin-bottom:8px}
+.a-close .hero{margin-bottom:80px}
+.a-tray section{background:color-mix(in srgb,var(--fill) 60%,var(--bg));border-radius:26px;padding:18px 18px 20px;margin-bottom:28px}
+.a-tray .sec-head{margin:0 4px 12px}
+.a-tray .also{margin-left:4px}
+.a-rule .sec-head{gap:16px}
+.a-rule .sec-head::after{content:"";flex:1;height:1.5px;background:color-mix(in srgb,var(--ink) 14%,transparent);order:1}
+.a-rule .sec-head .pill,.a-rule .sec-head .sec-more{order:2}
+.a-ends .sec-head{align-items:baseline}
+.a-ends .sec-more{display:inline-flex;align-items:center;min-height:44px;margin-left:auto;color:var(--about);font-weight:600;font-size:15px;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:4px}
+.a-ends .sec-head .pill{margin-left:12px}
+.a-ends.v-add .sec-head .pill{display:none}
+.a-joined section>.sec-head{margin-bottom:0;padding:12px 18px 10px;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:0 2px 10px #0000000b,0 0 0 1px color-mix(in srgb,var(--ink) var(--edge,7%),transparent);width:max-content;position:relative;z-index:1}
+.a-joined section>.sec-head h2{font-size:17px!important}
+.a-joined #s-worth .feature{border-top-left-radius:0}
+.a-joined #s-handy .handy-tile:first-child,.a-joined #s-spaces .space:first-child{border-top-left-radius:0}
+
+/* refined tray: nested radius = card radius + padding, even padding, name on the card edge */
+.a-tray2 section{--pad:16px;background:color-mix(in srgb,var(--ink) var(--tray,5%),var(--bg));border-radius:calc(18px + var(--pad));padding:var(--pad);margin-bottom:28px}
+.a-tray2 .sec-head{margin:2px 2px 12px;min-height:30px}
+.a-tray2 .also{margin:20px 2px 10px}
+.a-tray2 .worth-row:last-child{margin-bottom:0}
+.a-tray2 .feature{border-radius:20px}
+.a-tray2 section{margin-bottom:var(--gap,56px);--traybg:color-mix(in srgb,var(--ink) var(--tray,5%),var(--bg));background:var(--traybg)}
+.a-tray2.warm section{--traybg:color-mix(in srgb,#8C7350 var(--tray,5%),var(--bg))}
+
+/* shared warm pastel tray and a shelf lip */
+#home.pastel section{--traybg:var(--pastel)}
+#home.ledge section{box-shadow:inset 0 calc(-1 * var(--lip,3px)) 0 color-mix(in srgb,var(--traybg),var(--ink) 11%)}
+#home.ledge section{padding-bottom:calc(var(--pad) + var(--lip,3px))}
+
+/* heading band: the name's row becomes a warm pastel strip with a light bottom border */
+#home.hband section>.sec-head{--hbc:hsl(var(--hbh,40) 25% var(--hbl,92.5%));margin:calc(-1 * var(--pad)) calc(-1 * var(--pad)) var(--pad);padding:12px calc(var(--pad) + 4px) 10px;background:var(--hbc);border-bottom:0;border-radius:calc(18px + var(--pad)) calc(18px + var(--pad)) 0 0;min-height:0}
+#home.hband.t-big section>.sec-head{padding-top:14px;padding-bottom:12px}
+#home.hband.hfade section>.sec-head{background:linear-gradient(to bottom,var(--hbc) 55%,color-mix(in srgb,var(--hbc) 0%,transparent));padding-bottom:22px;margin-bottom:calc(var(--pad) - 10px)}
+#home.hband.hfade.t-vert section>.sec-head{background:linear-gradient(to right,var(--hbc) 55%,transparent);padding-bottom:14px;margin-bottom:calc(-1 * var(--pad))}
+@media (min-width:701px){
+#home.hband.t-vert section{column-gap:var(--pad)}
+#home.hband.t-vert section>.sec-head{margin:calc(-1 * var(--pad)) 0 calc(-1 * var(--pad)) calc(-1 * var(--pad));padding:14px 0;align-self:stretch;border-bottom:0;border-right:0;border-radius:calc(18px + var(--pad)) 0 0 calc(18px + var(--pad));width:calc(56px + var(--pad))}
+}
+
+/* tuned spacing: one 8-based scale; gaps inside a tray never exceed its padding */
+#home.tune .handy-row,#home.tune .spaces{gap:12px}
+#home.tune .worth-row{margin-bottom:8px}
+#home.tune section .worth-row:last-child{margin-bottom:0}
+#home.tune .space{padding:16px}
+#home.tune.a-tray2 .also{margin:20px 2px 8px}
+
+/* spine: a band down the tray's left side; four ways to put the name in it */
+.spine-ico,.spine-short{display:none}
+@media (min-width:701px){
+#home.t-spine section{display:grid;grid-template-columns:var(--spinew,56px) minmax(0,1fr);column-gap:var(--pad)}
+#home.t-spine section>*:not(.sec-head){grid-column:2}
+#home.t-spine section>.sec-head{--hbc:hsl(var(--hbh,40) 25% var(--hbl,92.5%));grid-column:1;grid-row:1/span 20;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;margin:calc(-1 * var(--pad)) 0 calc(-1 * var(--pad)) calc(-1 * var(--pad));padding:20px 6px;width:calc(var(--spinew,56px) + var(--pad));background:var(--hbc);border:0;border-radius:calc(18px + var(--pad)) 0 0 calc(18px + var(--pad))}
+#home.t-spine .sec-head .pill,#home.t-spine .sec-head .sec-more{display:none}
+#home.t-spine h2{font-size:26px!important;line-height:1;letter-spacing:-.02em;white-space:nowrap}
+/* sideways, reading top to bottom (English book spine) */
+#home.sp-down h2{writing-mode:vertical-rl}
+/* sideways, reading bottom to top, but always starting at the top */
+#home.sp-up section>.sec-head{justify-content:flex-start}
+#home.sp-up h2{writing-mode:vertical-rl;transform:rotate(180deg)}
+/* icon + short upright word */
+#home.sp-icon{--spinew:64px}
+#home.sp-icon .spine-ico{display:block;color:var(--ink);opacity:.75}
+#home.sp-icon .spine-short{display:block;font-weight:700;font-size:13.5px;color:var(--ink);letter-spacing:-.005em}
+#home.sp-icon .sec-head h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* upright name, wrapped, at the top of a wider band */
+#home.sp-wrap{--spinew:104px}
+#home.sp-wrap section>.sec-head{align-items:flex-start;padding:18px 14px 18px calc(var(--pad) + 2px)}
+#home.sp-wrap h2{white-space:normal;font-size:21px!important;line-height:1.12}
+}
+/* phones: the band becomes a strip on top with the short word and icon */
+@media (max-width:700px){
+#home.t-spine section>.sec-head{display:flex;align-items:center;gap:8px;margin:calc(-1 * var(--pad)) calc(-1 * var(--pad)) var(--pad);padding:10px 14px;background:hsl(var(--hbh,40) 25% var(--hbl,92.5%));border-radius:calc(18px + var(--pad)) calc(18px + var(--pad)) 0 0}
+#home.t-spine h2{font-size:20px!important}
+}
+
+/* no heading row: big name beside its content */
+@media (min-width:701px){
+#home.t-side section{display:grid;grid-template-columns:200px minmax(0,1fr);column-gap:calc(var(--pad) + 4px)}
+#home.t-side section>.sec-head{grid-column:1;grid-row:1/span 20;align-self:start;display:block;margin:6px 0 0 8px}
+#home.t-side section>*:not(.sec-head){grid-column:2}
+#home.t-side h2{font-size:30px!important;line-height:1.08;letter-spacing:-.025em}
+#home.t-side .sec-head .pill{display:none}
+#home.t-side .handy-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+#home.t-side .spaces{grid-template-columns:repeat(2,minmax(0,1fr))}
+#home.t-side .also{margin-top:16px}
+#home.t-vert section{display:grid;grid-template-columns:56px minmax(0,1fr);column-gap:var(--pad)}
+#home.t-vert section>.sec-head{grid-column:1;grid-row:1/span 20;align-self:start;display:flex;justify-content:center;margin:4px 0 0}
+#home.t-vert section>*:not(.sec-head){grid-column:2}
+#home.t-vert h2{writing-mode:vertical-rl;transform:rotate(180deg);font-size:30px!important;line-height:1;letter-spacing:-.02em;white-space:nowrap}
+#home.t-vert .sec-head .pill{display:none}
+}
+#home.t-bigout section{background:none;position:relative;padding-top:0}
+#home.t-bigout section::before{content:"";position:absolute;inset:52px 0 0 0;background:var(--traybg);border-radius:calc(18px + var(--pad));z-index:0}
+#home.t-bigout section>*{position:relative;z-index:1}
+#home.t-bigout .sec-head{margin:0 2px;min-height:52px;align-items:center}
+#home.t-bigout .sec-head+*{margin-top:var(--pad)}
+#home.t-bigout h2{font-size:30px!important;letter-spacing:-.025em}
+
+/* heading treatments inside the tray */
+#home.t-big h2{font-size:30px!important;letter-spacing:-.025em;line-height:1.1}
+#home.t-big .sec-head{margin-top:6px;margin-bottom:16px}
+#home.t-small h2{font-size:15px!important;font-weight:600!important;color:var(--about)!important;letter-spacing:0}
+#home.t-small .sec-head{min-height:0;margin-bottom:10px}
+#home.t-outside section{background:none;position:relative;padding-top:0}
+#home.t-outside section::before{content:"";position:absolute;inset:40px 0 0 0;background:var(--traybg);border-radius:calc(18px + var(--pad));z-index:0}
+#home.t-outside section>*{position:relative;z-index:1}
+#home.t-outside .sec-head{margin:0 2px 0;min-height:40px;align-items:center}
+#home.t-outside .sec-head+*{margin-top:var(--pad)}
+#home.t-ends .sec-more{display:inline-flex;align-items:center;min-height:44px;margin-left:auto;color:var(--about);font-weight:600;font-size:15px;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--ink) 25%,transparent);text-underline-offset:4px}
+@media (min-width:701px){
+#home.t-gutter section{display:grid;grid-template-columns:140px minmax(0,1fr);column-gap:var(--pad)}
+#home.t-gutter section>.sec-head{grid-column:1;grid-row:1/span 20;align-self:start;margin:10px 0 0 6px;display:block}
+#home.t-gutter section>*:not(.sec-head){grid-column:2}
+#home.t-gutter h2{font-size:18px!important;line-height:1.25}
+}
+.a-tray2 .also{font-size:15px;color:var(--ink);margin-top:22px}
+.a-tray2 .add-tile i{background:var(--surface)}
+.a-tray2.no-inner-edge section .card{box-shadow:0 1px 3px #0000000d}
+@media (max-width:700px){.a-tray2 section{--pad:10px}}
+
+/* ghost type: huge name a shade darker than the page, content overlapping its foot */
+#home.a-ghost section{position:relative;margin-bottom:64px}
+#home.a-ghost .sec-head{position:relative;z-index:0;margin-bottom:-24px;align-items:flex-end}
+#home.a-ghost.a-tray section{--gbase:color-mix(in srgb,var(--fill) 60%,var(--bg));padding-top:8px;margin-bottom:28px;overflow:hidden}
+#home.a-ghost.a-tray .sec-head{margin-left:4px}
+#home.a-ghost .sec-head h2{font-family:var(--body,inherit)!important;font-variation-settings:normal!important;font-size:clamp(56px,10vw,104px)!important;line-height:1!important;font-weight:800!important;letter-spacing:-.035em!important;color:color-mix(in srgb,var(--ink) var(--ghost,9%),var(--gbase,var(--bg)))!important;margin:0 0 0 -4px;white-space:nowrap;user-select:none}
+#home.a-ghost section>*:not(.sec-head){position:relative;z-index:1}
+#home.a-ghost .sec-head .pill,#home.a-ghost .sec-head .sec-more{position:relative;z-index:2;margin-bottom:44px}
+#home.a-ghost .also{position:relative;z-index:1}
+
+/* live-site sizes from src/web/theme.ts (lines 182-377); last so they win */
+.handy-tile b{font-size:16px}
+.site,.line{font-size:14px}
+.feature h3{font-size:22px}
+.why{font-size:15.5px}
+.also{font-size:17px}
+.worth-row p{font-size:14px}
+.space h3{font-size:15.5px}
+.space li{font-size:14px;line-height:1.6;color:var(--soft);margin:0}
+.space ul{margin-top:10px}
+.all{font-size:13.5px}
+.r-ink .space li span{color:inherit;font-weight:inherit}
+.r-ink .site,.r-ink .line,.r-ink .label,.r-ink .worth-row p,.r-ink .all{font-size:13.5px}
+
+@media (max-width:700px){
+ .column{padding:20px 16px 60px}.nav{display:none}.handy-row{grid-template-columns:1fr}.spaces{grid-template-columns:1fr 1fr;gap:10px}
+ .feature{grid-template-columns:64px minmax(0,1fr);column-gap:12px;padding:16px}.fpic{width:64px;height:64px;font-size:7px}.fpic small{display:none}
+ .srow{grid-template-columns:1fr auto}.srow span{display:none}
+}
+</style>
+</head>
+<body>
+<div class="switch">
+  <p><b>Round 4</b>: P is on. Edges come back faintly, on top of the blur, and the serifs are soft ones that sit next to the rounded text.</p>
+  <div class="chips">
+    <label class="chip" style="display:inline-flex;align-items:center;gap:8px">Edge <input type="range" id="edge" min="0" max="16" step="1" value="7"> <span id="edgev">7%</span></label>
+    <select id="face" class="chip" aria-label="Display face">
+      <option value="cooper" selected>Cooper-ish: Fraunces soft, heavy</option>
+      <option value="soft">Fraunces, soft (rounded serif)</option>
+      <option value="softwonk">Fraunces, soft + quirky</option>
+      <option value="crisp">Fraunces, crisp</option>
+      <option value="young">Young Serif</option>
+      <option value="nunito">No serif: Nunito, a rounded sans with more character</option>
+      <option value="round">No serif: today's rounded, heavier</option>
+    </select>
+    <select id="hier" class="chip" aria-label="Hierarchy">
+      <option value="">Hierarchy: as before (heavy everywhere)</option>
+      <option value="h-quiet" selected>Hierarchy: lighter, smaller headings</option>
+      <option value="h-label">Hierarchy: big question, section names as grey labels</option>
+      <option value="h-pick">Hierarchy: the pick's title is the boldest thing</option>
+    </select>
+    <select id="sect" class="chip" aria-label="Section names">
+      <option value="">Section names: follow the hierarchy menu</option>
+      <option value="s-rounded" selected>Section names: Open Runde bold, full ink (serif only for the question)</option>
+      <option value="s-serifmid">Section names: the serif, medium weight, full ink</option>
+      <option value="s-rule">Section names: rounded bold with a short ink underline</option>
+      <option value="s-gutter">Section names: in a column to the left of their content</option>
+      <option value="s-few">Section names: only "Worth a look today" keeps one</option>
+    </select>
+    <select id="anchor" class="chip" aria-label="Anchor">
+      <option value="">Anchor: none (today)</option>
+      <option value="a-close">Anchor: hug the content, wider gaps between sections</option>
+      <option value="a-tray">Anchor: each section sits on a soft tray</option>
+      <option value="a-rule">Anchor: a line runs from the name to the right edge</option>
+      <option value="a-ends">Anchor: a quiet link at the right end of each name</option>
+      <option value="a-joined">Anchor: the name is a tab on its content</option>
+      <option value="a-tray2" selected>Anchor: refined tray (nested corners, even padding)</option>
+      <option value="a-ghost">Anchor: ghost type, a huge name just darker than the page</option>
+      <option value="a-ghost a-tray">Anchor: ghost type on a soft tray</option>
+    </select>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:8px">Tray tone <input type="range" id="tray" min="2" max="10" step="0.5" value="5"> <span id="trayv">5%</span></label>
+    <select id="theading" class="chip" aria-label="Heading treatment">
+      <option value="">Heading: as now (same size as card titles)</option>
+      <option value="t-spine sp-icon" selected>Spine: icon + short upright word (Handy, Today, Spaces)</option>
+      <option value="t-spine sp-wrap">Spine: upright name, wrapped, at the top of a wider band</option>
+      <option value="t-spine sp-down">Spine: sideways, reading top to bottom, starting at the top</option>
+      <option value="t-spine sp-up">Spine: sideways, bottom to top (like your screenshot), starting at the top</option>
+      <option value="t-big">Heading: big, inside the tray</option>
+      <option value="t-vert">Heading: big, turned sideways up the tray's left edge</option>
+      <option value="t-side">Heading: big, beside its content in the tray (no heading row)</option>
+      <option value="t-bigout">Heading: big, on the page just above the tray</option>
+      <option value="t-small">Heading: clearly smaller, a quiet name tag</option>
+      <option value="t-outside">Heading: sits just above the tray, like a label on a box</option>
+      <option value="t-ends">Heading: shares its row with a link on the right</option>
+      <option value="t-gutter">Heading: in its own column at the tray's left</option>
+    </select>
+    <select id="hb" class="chip" aria-label="Heading band">
+      <option value="">Heading band: off</option>
+      <option value="40,88%" selected>Band: tonal, the tray's own hue, a step darker</option>
+      <option value="220,92.5%">Band: complementary, misty blue-grey (opposite the tray)</option>
+      <option value="190,92.5%">Band: split-complementary, sea mist</option>
+      <option value="250,92.5%">Band: split-complementary, lavender grey</option>
+      <option value="160,92.5%">Band: triadic, pale sage</option>
+      <option value="280,92.5%">Band: triadic, pale lilac</option>
+      <option value="20,92.5%">Band: analogous, warmer (toward clay)</option>
+      <option value="60,92.5%">Band: analogous, straw</option>
+    </select>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:8px">Band hue <input type="range" id="hbh" min="0" max="359" step="5" value="220"> <span id="hbhv">220°</span></label>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="hfade">Fade the band into the tray</label>
+    <select id="pastel" class="chip" aria-label="Tray colour">
+      <option value="" selected>Tray: as before</option>
+      <option value="#F0E6D6">Tray: sand</option>
+      <option value="#EEE8DA">Tray: oat</option>
+    </select>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:8px">Shelf lip <input type="range" id="lip" min="0" max="5" step="1" value="0"> <span id="lipv">0px</span></label>
+    <select id="navv" class="chip" aria-label="Top bar">
+      <option value="">Top bar: today (real icons, nothing else changed)</option>
+      <option value="n-split">Top bar: places by the logo, actions on the right</option>
+      <option value="n-band">Top bar: same split, on a tray-coloured band</option>
+      <option value="n-band2" selected>Top bar: band, refined (pressed-in current page, one height, capsule)</option>
+      <option value="n-seg">Top bar: places as one switch, actions on the right, on a band</option>
+      <option value="n-rows">Top bar: two rows, actions on top, places underneath</option>
+    </select>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="initial">Initial instead of person icon</label>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="tune" checked>Tuned spacing (12 / 8 / 16)</label>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="warm" checked>Warm tray</label>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:8px">Gap between trays <input type="range" id="gap" min="28" max="96" step="4" value="56"> <span id="gapv">56px</span></label>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="inneredge">No outline on cards in trays</label>
+    <label class="chip" style="display:inline-flex;align-items:center;gap:8px">Ghost shade <input type="range" id="ghost" min="3" max="20" step="1" value="9"> <span id="ghostv">9%</span></label>
+    <select id="body" class="chip" aria-label="Body font">
+      <option value="">Body: SF Pro Rounded (Apple only, Safari only)</option>
+      <option value='"Open Runde"'>Body: Open Runde (free, made as a rounded Inter, closest to SF)</option>
+      <option value='"Nunito"'>Body: Nunito (free)</option>
+      <option value='"Nunito"|t-tight'>Body: Nunito, tightened and a touch heavier</option>
+      <option value='"M PLUS Rounded 1c"'>Body: M PLUS Rounded 1c (free)</option>
+      <option value='"Varela Round"'>Body: Varela Round (free)</option>
+      <option value='"Quicksand"'>Body: Quicksand (free, lighter)</option>
+      <option value='"Rubik"'>Body: Rubik (free, slightly rounded)</option>
+    </select>
+    <select id="scope" class="chip" aria-label="Where it goes">
+      <option value="f-titles">on link titles only</option>
+      <option value="f-heads" selected>on headings only</option>
+      <option value="f-both">on titles and headings</option>
+    </select>
+  </div>
+  <p style="margin-top:12px"><b>Round 3</b>: things for the eye to hold on to. The serif is on. Pick a typeface, then add the others one at a time; they combine.</p>
+  <div class="chips"><select id="font" class="chip" aria-label="Typeface">
+    <option value='ui-serif,"New York"'>New York (I)</option>
+    <option value='"Iowan Old Style"'>Iowan Old Style</option>
+    <option value='Charter,"Bitstream Charter"'>Charter</option>
+    <option value='"Palatino","Palatino Linotype"'>Palatino</option>
+    <option value='"Hoefler Text"'>Hoefler Text</option>
+    <option value='Georgia'>Georgia</option>
+    <option value='Optima'>Optima (sans with flair)</option>
+    <option value='"Avenir Next"'>Avenir Next (sans)</option>
+  </select><label class="chip" style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="bodytoo">Body text too</label></div>
+  <div class="chips" id="r3" style="margin-top:6px"></div>
+  <p style="margin-top:12px"><b>Round 2</b>: bigger ideas, one at a time. Each tests a different guess about what's wrong. E, F and G stay on underneath.</p>
+  <div class="chips" id="ideas"></div>
+  <p style="margin-top:12px">Round 1: single small changes (they can be combined)</p>
+  <div class="chips" id="chips"></div>
+  <p class="what" id="what"></p>
+</div>
+
+<div id="home" class="column">
+  <header class="top">
+    <a class="brand" href="#"><svg width="46" height="26" viewBox="0 0 46 26" aria-hidden="true"><rect x="1" y="1" width="44" height="24" rx="12" fill="none" stroke="var(--teal)" stroke-width="2.5"/><circle cx="14" cy="13" r="7" fill="var(--teal)"/><circle cx="32" cy="13" r="7" fill="var(--teal)"/><circle cx="16" cy="12" r="2.5" fill="var(--surface)"/><circle cx="34" cy="12" r="2.5" fill="var(--surface)"/></svg>Aye-AI-AI Links</a>
+    <nav class="nav"><a class="on" href="#" aria-current="page">Home</a><a href="#">All links</a><a href="#">Spaces and tags</a></nav>
+    <a class="save" href="#"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Save</span></a>
+    <a class="ask" href="#"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/></svg><span>Ask AI</span></a>
+    <span class="me" title="Your account"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.4-3.2 4-4.5 7-4.5s5.6 1.3 7 4.5"/></svg></span>
+  </header>
+
+  <div class="hero">
+    <h1>What are you trying to remember?</h1>
+    <div class="search"><span>That article about batteries and the tax credit</span><kbd>/</kbd><span style="flex:none" class="btn">Find it</span></div>
+    <p class="hint">Describe it however you remember it: when, why, what it looked like.</p>
+  </div>
+
+  <section id="s-handy">
+    <div class="sec-head"><span class="spine-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/></svg></span><span class="spine-short" aria-hidden="true">Handy</span><h2>Handy</h2><a class="sec-more" href="#">Show all</a><button class="pill">+ Add</button></div>
+    <div class="handy-row">
+      <a class="card handy-tile" href="#"><span class="ini">SG</span><span><b>Sampo/TBL GitHub CI Billing</b><span class="site ok">github.com</span></span><span class="dots">···</span></a>
+      <a class="card handy-tile" href="#"><span class="ini">N</span><span><b>NostoiOrg/sampo</b><span class="site">github.com</span></span><span class="dots">···</span></a>
+      <a class="add-tile" href="#"><i>+</i>Keep a link handy</a>
+    </div>
+  </section>
+
+  <section id="s-worth">
+    <div class="sec-head"><span class="spine-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg></span><span class="spine-short" aria-hidden="true">Today</span><h2>Worth a look today</h2><a class="sec-more" href="#">Tidy up old links</a></div>
+    <article class="card feature">
+      <div class="fpic">Game-ready pixel art<br>On demand.<small>describe what you need in plain text</small></div>
+      <div>
+        <h3>SpriteCook</h3>
+        <div class="label">You saved it for</div>
+        <p class="why">Used it for Chorequest sprites, but replaced it with Pixellab for better image quality and sprite size control. The subscription is cancelled.</p>
+        <div class="line"><span class="dot"></span>spritecook.ai · fits what you're working on · <u>Saved copy</u></div>
+        <div class="fbuttons">
+          <span class="btn">Open it</span>
+          <span class="quiet"><button class="round" title="Not now: hide it for a while">◷</button><button class="round" title="Done with it: put it away for good">▭</button></span>
+        </div>
+      </div>
+      <span class="dots">···</span>
+    </article>
+    <div class="also">Also today</div>
+    <a class="card worth-row" href="#"><span class="ini">GC</span><span><b>Budgets — github.com</b><p>Where I update my GitHub Actions budget for Sampo and The Blue Line.</p></span><span class="dots">···</span></a>
+    <a class="card worth-row" href="#"><span class="ini" style="background:var(--surface);border:1px solid var(--line)">●</span><span><b>GitHub - canitcode/video2rig</b><p class="site">github.com · saved October 29</p></span><span class="dots">···</span></a>
+  </section>
+
+  <section id="s-spaces">
+    <div class="sec-head"><span class="spine-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></span><span class="spine-short" aria-hidden="true">Spaces</span><h2>Your spaces</h2><a class="sec-more" href="#">Spaces and tags</a></div>
+    <div class="space-chips" id="schips"></div>
+    <div class="spaces" id="spaces"></div>
+    <div class="card spaces-list" id="slist"></div>
+  </section>
+</div>
+
+<script>
+const spaces=[
+ ["Bills","var(--green)",7,[["Mohela — Mark's Student Loans",""],["NTTA — Toll Authority","T","#d4602a"],["GVEC — Electric",""]]],
+ ["Language Arts 8","var(--blue)",3,[["Grammar Unit 1 Handouts",""],["Grammar Unit 1 Lesson Plans",""],["VSA Classroom Departures",""]]],
+ ["Personal finance","var(--teal)",6,[["Mohela — Mark's Student Loans",""],["Trash Pickup Bill payment",""],["Springhill Water District","💧","transparent"]]],
+ ["Sampo","var(--rose)",3,[["Budgets — github.com","●","#24292f"],["Sampo/TBL GitHub CI Billing","●","#24292f"],["HubSpot — CRM","H","#ff5c35"]]],
+ ["start of class","var(--clay)",3,[["VSA Grades — Jupiter Ed","J","#e2683a"],["VSA Lunch Count — Lanyard",""],["VSA Attendance — Ascend","A","#3f8f3f"]]],
+ ["Valor South Austin","var(--violet)",6,[["Grammar Unit 1 Handouts",""],["Grammar Unit 1 Lesson Plans",""],["VSA Grades — Jupiter Ed","J","#e2683a"]]],
+];
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+document.getElementById("spaces").innerHTML=spaces.map(([n,c,k,ls])=>`<a class="card space" href="#" style="--c:${c}"><h3>${esc(n)}</h3><ul>${ls.map(([t,i,bg])=>`<li><span class="fav ${i?"":"none"}" data-i="${esc(t[0])}" ${i?`style="background:${bg}"`:""}>${i||""}</span><span>${esc(t)}</span></li>`).join("")}</ul><span class="all">See all ${k} →</span></a>`).join("");
+document.getElementById("slist").innerHTML=spaces.map(([n,c,k,ls])=>`<a class="srow" href="#" style="--c:${c}"><b>${esc(n)}</b><span>${ls.map(l=>esc(l[0])).join(", ")}</span><em>${k} links</em></a>`).join("");
+
+document.getElementById("schips").innerHTML=spaces.map(([n,c])=>`<a href="#" style="--c:${c}">${esc(n)}</a>`).join("");
+const ideas=[
+ ["d-few","H · Fewer things","Tests: is it just too much? Only the search, Handy and one pick. Also today goes, and spaces shrink to name buttons. About 6 things on screen instead of ~20."],
+ ["d-serif","I · Type with character","Tests: does it feel generic? Headings and link titles switch to the Mac's built-in serif (New York); body text stays rounded. Same layout."],
+ ["d-column","J · One reading column","Tests: is it the dashboard grid? Everything in one narrow column you read top to bottom, with no three-across grids."],
+ ["d-pick","K · The pick opens the page","Tests: does it open on the wrong thing? Today's pick comes first and the search becomes a plain bar under it. (Goes against design rule 5, 'open on a question', which is why it's worth testing.)"],
+];
+const variants=[
+ ["v-type","A · Type does the ranking","Section names shrink to quiet grey; the featured title becomes the biggest text on the page. Nothing else moves."],
+ ["v-flat","B · Only the pick is a card","Handy, Also today and the spaces lose their white boxes and sit on the page as lists with thin lines. The featured card is the only raised card."],
+ ["v-left","C · Search lines up with the page","The question and search box align left with everything below, instead of a centred island above a left-aligned page."],
+ ["v-slist","D · Spaces as one quiet list","Six space cards become one card with a row per space: dot, name, a few titles, a count. Phone shows name and count only."],
+ ["v-buttons","E · Featured buttons on one row","Not now and Done with it sit at the end of the Open it row, as the design rules intend, instead of dropping to a lonely line at the bottom-right. Hover hints unchanged."],
+ ["v-fav","F · No empty icon squares","A link whose site icon didn't load shows its first letter, the way pictures already fall back to initials, instead of a blank grey square."],
+ ["v-add","G · Add lives in the shelf","The far-right + Add pill becomes a dashed tile at the end of the Handy row, filling the gap where a third tile would go."],
+];
+const home=document.getElementById("home"),chips=document.getElementById("chips"),what=document.getElementById("what");
+const r3=[
+ ["r-edges","L · Crisp edges","Cards get a thin visible outline instead of a soft blur shadow, so each one has a hard edge to land on."],
+ ["r-rhythm","M · Tight inside, wide between","Things inside a section move closer; the gaps between sections nearly double. The page reads as four clear groups instead of an even stream."],
+ ["r-color","N · Space colours carry","Each space card gets a band and a faint wash of its own colour, so Bills looks different from Sampo at a glance."],
+ ["r-shapes","O · A shape per section","Handy becomes a row of pill buttons, Also today a plain list, the pick a big soft card, spaces tighter cards. Each section has its own silhouette."],
+ ["r-ink","P · Titles vs. the rest","Titles go full ink and heavier; sites, dates and notes go smaller and lighter. More contrast inside each card."],
+ ["r-dark","Q · One dark anchor","The featured card turns dark. One heavy shape on the page for the eye to start from. Least calm of the set."],
+];
+const on=new Set(),r3on=new Set();let idea=null,round3=true;
+const ideasEl=document.getElementById("ideas"),r3El=document.getElementById("r3"),font=document.getElementById("font"),bodytoo=document.getElementById("bodytoo");
+const faces={
+ soft:['"Fraunces",serif','"SOFT" 100, "WONK" 0, "opsz" 36',"600"],
+ softwonk:['"Fraunces",serif','"SOFT" 100, "WONK" 1, "opsz" 72',"600"],
+ crisp:['"Fraunces",serif','"SOFT" 0, "WONK" 0, "opsz" 36',"600"],
+ young:['"Young Serif",serif',"normal","400"],
+ cooper:['"Fraunces",serif','"SOFT" 100, "WONK" 0, "opsz" 144',"760"],
+ nunito:['"Nunito",ui-rounded,sans-serif',"normal","800"],
+ round:['ui-rounded,"SF Pro Rounded",system-ui,sans-serif',"normal","800"],
+};
+const edge=document.getElementById("edge"),edgev=document.getElementById("edgev"),face=document.getElementById("face"),scope=document.getElementById("scope");
+let round4=true;
+function render4(){
+ const [bf,bcls]=bodyF.value.split("|");
+ home.className="column v-buttons v-fav v-add r-ink r4-edge "+scope.value+" "+hier.value+" "+sect.value+" "+anchor.value+" "+(inneredge.checked?"no-inner-edge":"")+" "+(warm.checked?"warm":"")+" "+theading.value+" "+(tune.checked?"tune":"")+" "+navv.value+" "+(initial.checked?"n-initial":"")+" "+(hb.value?"hband":"")+" "+(pastel.value?"pastel":"")+" "+(+lip.value?"ledge":"")+" "+(bcls||"");
+ home.style.setProperty("--hbh",hbh.value);hbhv.textContent=hbh.value+"°";
+ home.style.setProperty("--hbl",hbl);
+ if(hfade.checked)home.classList.add("hfade");
+ home.style.setProperty("--pastel",pastel.value||"transparent");home.style.setProperty("--lip",lip.value+"px");lipv.textContent=lip.value+"px";
+ home.style.setProperty("--gap",gap.value+"px");gapv.textContent=gap.value+"px";
+ home.style.setProperty("--tray",tray.value+"%");trayv.textContent=tray.value+"%";
+ home.style.setProperty("--body",bf?bf+",ui-rounded,system-ui,sans-serif":"inherit");
+ const [f,v,w]=faces[face.value];
+ home.style.setProperty("--face",f);home.style.setProperty("--fvs",v);home.style.setProperty("--fw",w);
+ home.style.setProperty("--ghost",ghost.value+"%");ghostv.textContent=ghost.value+"%";
+ home.style.setProperty("--edge",edge.value+"%");edgev.textContent=edge.value+"%";
+ what.textContent="P on, edge "+edge.value+"%, "+face.options[face.selectedIndex].text+" "+scope.options[scope.selectedIndex].text+". "+hier.options[hier.selectedIndex].text+". "+bodyF.options[bodyF.selectedIndex].text+".";
+ document.querySelectorAll("[aria-pressed]").forEach(b=>b.setAttribute("aria-pressed","false"));
+}
+const hier=document.getElementById("hier"),bodyF=document.getElementById("body"),sect=document.getElementById("sect"),anchor=document.getElementById("anchor"),ghost=document.getElementById("ghost"),ghostv=document.getElementById("ghostv"),tray=document.getElementById("tray"),trayv=document.getElementById("trayv"),inneredge=document.getElementById("inneredge"),warm=document.getElementById("warm"),gap=document.getElementById("gap"),gapv=document.getElementById("gapv"),theading=document.getElementById("theading"),pastel=document.getElementById("pastel"),lip=document.getElementById("lip"),lipv=document.getElementById("lipv"),hb=document.getElementById("hb"),hbh=document.getElementById("hbh"),hbhv=document.getElementById("hbhv"),hfade=document.getElementById("hfade"),tune=document.getElementById("tune"),navv=document.getElementById("navv"),initial=document.getElementById("initial");
+let hbl="88%";hbh.value=40;
+hb.addEventListener("input",()=>{if(hb.value){const[h,l]=hb.value.split(",");hbh.value=h;hbl=l;}});
+hbh.addEventListener("input",()=>{hbl="92.5%";});
+hier.value="h-label";bodyF.value='"Open Runde"';
+[edge,face,scope,hier,bodyF,sect,anchor,ghost,tray,inneredge,warm,gap,hb,hbh,hfade,tune,navv,initial,theading,pastel,lip].forEach(el=>el.addEventListener("input",()=>{round4=true;render4();}));
+function render(){
+ if(round4)return render4();
+ const cls=round3?["v-buttons","v-fav","v-add","d-serif",...r3on,...(bodytoo.checked?["body-too"]:[])]:idea?["v-buttons","v-fav","v-add",idea]:[...on];
+ home.className="column "+cls.join(" ");
+ home.style.setProperty("--display",font.value);
+ r3El.querySelectorAll("[data-r]").forEach(b=>b.setAttribute("aria-pressed",round3&&r3on.has(b.dataset.r)?"true":"false"));
+ if(round3){what.textContent=r3on.size?r3.filter(r=>r3on.has(r[0])).map(r=>r[2]).join("  +  "):"Serif headings and titles, with E, F and G. Add the anchors below one at a time.";}
+ chips.querySelectorAll("[data-v]").forEach(b=>b.setAttribute("aria-pressed",!idea&&(on.has(b.dataset.v)||(!on.size&&b.dataset.v===""))?"true":"false"));
+ ideasEl.querySelectorAll("[data-d]").forEach(b=>b.setAttribute("aria-pressed",!round3&&b.dataset.d===(idea??"")?"true":"false"));
+ if(!round3)what.textContent=idea?ideas.find(d=>d[0]===idea)[2]:on.size?variants.filter(v=>on.has(v[0])).map(v=>v[2]).join("  +  "):"Today's Home, as in your screenshot (content kept as-is so only the look differs).";
+}
+ideasEl.innerHTML=`<button class="chip" data-d="">Off</button>`+ideas.map(d=>`<button class="chip" data-d="${d[0]}">${d[1]}</button>`).join("");
+ideasEl.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;round4=false;round3=false;idea=b.dataset.d||null;render();});
+r3El.innerHTML=r3.map(r=>`<button class="chip" data-r="${r[0]}">${r[1]}</button>`).join("");
+r3El.addEventListener("click",e=>{const b=e.target.closest("[data-r]");if(!b)return;round4=false;round3=true;r3on.has(b.dataset.r)?r3on.delete(b.dataset.r):r3on.add(b.dataset.r);render();});
+font.addEventListener("change",()=>{round4=false;round3=true;render();});
+bodytoo.addEventListener("change",()=>{round4=false;round3=true;render();});
+chips.innerHTML=`<button class="chip" data-v="">Today</button>`+variants.map(v=>`<button class="chip" data-v="${v[0]}">${v[1]}</button>`).join("");
+chips.addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(!b)return;idea=null;round3=false;round4=false;const v=b.dataset.v;if(!v)on.clear();else on.has(v)?on.delete(v):on.add(v);render();});
+render();
+</script>
+</body>
+</html>

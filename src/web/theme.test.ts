@@ -961,8 +961,11 @@ describe("Home's Worth a look cards (#195)", () => {
       expect(computed(alone, "flex", "phone")).toBeUndefined();
     });
 
-    it("keeps the pair on its own row, right-aligned, whenever the button row is too narrow for Open it and both opened buttons", () => {
-      const narrow = "@container (max-width:540px)";
+    it("keeps the pair on its own row, right-aligned, whenever the button row is too narrow for Open it and both opened buttons (#304)", () => {
+      // Measured in headless Chrome with the app's fonts: Open it 104px, the opened Not now 231px,
+      // the closed Done with it 48px, two 10px gaps: 403px. The old 540px dropped the pair under
+      // Open it on a desktop card that had room, leaving a tall empty area.
+      const narrow = "@container (max-width:410px)";
       expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
       expect(decl(".feature-quiet", narrow, "flex")).toBe("1 1 100%");
       expect(decl(".feature-quiet", narrow, "justify-content")).toBe("flex-end");

@@ -257,7 +257,7 @@ ${featureSpaceDot}
 .slide:hover,.slide:focus-visible{max-width:260px;gap:10px;background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
 .slide:hover .slide-words,.slide:focus-visible .slide-words{opacity:1}
 .slide:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
-@container (max-width:540px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}
+@container (max-width:410px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}
 @media (hover:none){.slide{max-width:none;height:auto;min-height:48px;padding-block:6px;gap:10px;justify-content:center;white-space:normal}.slide-words{opacity:1}}
 .why-label{display:block;margin:0 0 1px;font-size:13px;font-weight:600;color:var(--soft)}
 .feature-pic{grid-area:pic;align-self:start;width:168px;height:168px;border:1px solid var(--line);border-radius:14px;opacity:.92;object-fit:cover;background:var(--pic);--icon:120px;--initials:60px}

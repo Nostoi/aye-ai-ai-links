@@ -11,6 +11,7 @@ import { NOT_HANDY } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
+import { spine } from "./tray-spine.js";
 
 /** Tiles the shelf shows before Show all (#125). */
 export const SHELF_SIZE = 8;
@@ -23,10 +24,8 @@ export type Shelf = {
   images: Map<string, ShownPicture>;
 };
 
-const PLUS = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
-
-/** Add: search results each carry Keep handy, so picking one there keeps it. */
-const ADD = `<a class="handy-add" href="/search?q=&keep=1">${PLUS}Add</a>`;
+/** Add: a dashed tile ending the row (#304). Search results each carry Keep handy, so picking one there keeps it. */
+const ADD = `<a class="add-tile" href="/search?q=&keep=1"><span class="add-plus" aria-hidden="true">+</span>Keep a link handy</a>`;
 
 const STILL_USING = `<div class="ask">
 <p class="small">Still using?</p>
@@ -95,28 +94,26 @@ const suggestion = (item: ToolItem, shelf: Shelf) => card(item, shelf, " guess",
 
 /**
  * The Handy shelf on home: kept tools in core's order (gone and due first), the first SHELF_SIZE shown and
- * Show all for the rest, then up to SUGGESTION_SIZE suggestions; or one line when it holds nothing.
- * The script swaps `#handy-shelf`'s contents for a fresh copy after each action, so Show all and Add
- * sit inside it, in `.handy-head`, which the theme places beside the heading.
+ * Show all for the rest, then up to SUGGESTION_SIZE suggestions, then the Add tile; the tile alone
+ * when it holds nothing. The script swaps `#handy-shelf`'s contents for a fresh copy after each
+ * action, so the Add tile and Show all (a quiet button under the row) sit inside it.
  */
 export function handyShelf(shelf: Shelf): string {
   const { items, suggestions } = shelf;
-  const empty = items.length === 0 && suggestions.length === 0;
   const showAll =
     items.length > SHELF_SIZE
-      ? `<button type="button" class="handy-show-all" data-act="show-all">Show all ${items.length}</button>`
+      ? `\n<button type="button" class="handy-show-all" data-act="show-all">Show all ${items.length}</button>`
       : "";
-  const body = empty
-    ? `<div class="actions handy-empty"><p class="small">Keep links you use often here</p>${ADD}</div>`
-    : `<div class="handy-head">${showAll}${ADD}</div>
-<div class="handy-row">
+  const body = `<div class="handy-row">
 ${[
   ...items.map((item, i) => keptTile(item, shelf, i >= SHELF_SIZE)),
   ...suggestions.map((s) => suggestion(s, shelf)),
+  ADD,
 ].join("\n")}
-</div>`;
+</div>${showAll}`;
   return `<section class="handy" id="handy" aria-labelledby="handy-title">
-<h2 id="handy-title" tabindex="-1">Handy</h2>
+${spine("handy")}
+<h2 id="handy-title" class="visually-hidden" tabindex="-1">Handy</h2>
 <p id="handy-error" role="alert"></p>
 <div id="handy-shelf">
 ${body}

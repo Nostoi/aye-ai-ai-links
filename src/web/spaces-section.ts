@@ -1,9 +1,12 @@
 import type { HomeSpace } from "../core/spaces.js";
+import type { Link } from "../core/types.js";
 import { displayTitle } from "./display-title.js";
+import { initialsOf, initialsText } from "./initials.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { faviconSrc, spaceClass } from "./pages.js";
 import { spaceHref } from "./space-page.js";
+import { spine } from "./tray-spine.js";
 
 /** The id of the cards' grid, for `openedScript`. */
 export const SPACES_ID = "home-spaces";
@@ -38,15 +41,19 @@ function trimmedTitle(title: string, names: string[]): string {
 }
 
 /**
- * The site's icon before a title: the stored favicon, else a faint empty square so titles line
- * up. Decorative (empty alt, hidden square); the title link names the row, and a click on the icon
- * falls through to the card's space link like any click on the card.
+ * The site's icon before a title: the stored favicon, else a square on `--pic` holding the first
+ * letter of the title as shown (`shown`), else the first of the link's own initials (the site's,
+ * when its title has none), else empty so titles still line up. Decorative (empty alt, hidden
+ * square); the title link names the row, and a click on the icon falls through to the card's space
+ * link like any click on the card.
  */
-const favicon = (id: string, versions: Map<string, string>) => {
-  const version = versions.get(id);
-  return version === undefined
-    ? '<span class="home-fav home-fav-none" aria-hidden="true"></span>'
-    : `<img class="home-fav" src="${escapeHtml(faviconSrc(id, version))}" alt="" width="18" height="18" loading="lazy" decoding="async">`;
+const favicon = (link: Link, shown: string, versions: Map<string, string>) => {
+  const version = versions.get(link.id);
+  if (version !== undefined) {
+    return `<img class="home-fav" src="${escapeHtml(faviconSrc(link.id, version))}" alt="" width="18" height="18" loading="lazy" decoding="async">`;
+  }
+  const letter = [...(initialsOf(shown) || initialsText(link))][0] ?? "";
+  return `<span class="home-fav home-fav-none" aria-hidden="true">${escapeHtml(letter)}</span>`;
 };
 
 /** The titles of the space's recent links, one per line; the theme hides them on a phone. */
@@ -54,10 +61,10 @@ const recent = (s: HomeSpace, names: string[], versions: Map<string, string>) =>
   s.recent.length === 0
     ? ""
     : `\n<span class="home-space-recent">${s.recent
-        .map(
-          (l) =>
-            `<span data-id="${escapeHtml(l.id)}">${favicon(l.id, versions)}${linkTitle(l, escapeHtml(trimmedTitle(displayTitle(l), names)))}</span>`,
-        )
+        .map((l) => {
+          const shown = trimmedTitle(displayTitle(l), names);
+          return `<span data-id="${escapeHtml(l.id)}">${favicon(l, shown, versions)}${linkTitle(l, escapeHtml(shown))}</span>`;
+        })
         .join("")}</span>`;
 
 const card = (names: string[], versions: Map<string, string>) => (s: HomeSpace) => {
@@ -79,7 +86,8 @@ export const spacesSection = (
   spaces: HomeSpace[],
   favicons: Map<string, string> = new Map(),
 ) => `<section class="spaces" aria-labelledby="spaces">
-<h2 id="spaces">Your spaces</h2>
+${spine("spaces")}
+<h2 id="spaces" class="visually-hidden">Your spaces</h2>
 ${
   spaces.length === 0
     ? '<p class="small">Pin a tag on the <a href="/tags">Tags page</a> and it shows here as a space.</p>'

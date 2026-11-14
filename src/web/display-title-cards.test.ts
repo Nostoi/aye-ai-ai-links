@@ -181,7 +181,9 @@ describe("a link with no title", () => {
       { key: "kitchen", name: "Kitchen", color: null, count: 1, recent: [link()] },
     ]);
     const { document } = parseHTML(html);
-    expect(document.querySelector(".home-space-recent > *")?.textContent).toBe("Post by @alice");
+    expect(document.querySelector(".home-space-recent a[data-open]")?.textContent).toBe(
+      "Post by @alice",
+    );
     expect(html).not.toMatch(/>https?:\/\//);
   });
 

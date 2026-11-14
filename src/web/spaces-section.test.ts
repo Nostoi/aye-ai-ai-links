@@ -42,6 +42,12 @@ const dom = (html: string) =>
   parseHTML(`<!doctype html><html><body>${html}</body></html>`).document;
 const hrefs = (html: string, selector: string) =>
   [...dom(html).querySelectorAll(selector)].map((a) => a.getAttribute("href") as string);
+/** A recent link's span as its title reads: the text without the icon square's letter. */
+const titleText = (el: Element | null | undefined) => {
+  const copy = el?.cloneNode(true) as Element | undefined;
+  copy?.querySelector(".home-fav")?.remove();
+  return copy?.textContent;
+};
 const tagOf = (href: string) => new URL(href, ORIGIN).searchParams.get("tag");
 
 describe("the Your spaces section", () => {
@@ -51,6 +57,23 @@ describe("the Your spaces section", () => {
     expect(html).toContain("Pin a tag on the");
     expect(hrefs(html, "a")).toEqual(["/tags"]);
   });
+
+  it.each([
+    ["with spaces", [space({ key: "k" })]],
+    ["with nothing pinned", []],
+  ])(
+    "starts with its spine, and keeps the full heading visually hidden (#306), %s",
+    (_, spaces) => {
+      const section = dom(spacesSection(spaces)).querySelector("section.spaces") as Element;
+      expect(section.firstElementChild?.className).toBe("spine");
+      expect(section.querySelector(".spine-word")?.textContent).toBe("Spaces");
+      const h2 = section.querySelector("h2");
+      expect(h2?.id).toBe("spaces");
+      expect(h2?.className).toBe("visually-hidden");
+      expect(h2?.textContent).toBe("Your spaces");
+      expect(section.getAttribute("aria-labelledby")).toBe("spaces");
+    },
+  );
 
   it("shows each space as a card opening its page, in its color, with its dot and name", () => {
     const html = spacesSection([
@@ -79,7 +102,7 @@ describe("the Your spaces section", () => {
     ]);
     const [kitchen, garden] = [...dom(html).querySelectorAll(".home-space")];
     const titles = [...(kitchen?.querySelectorAll(".home-space-recent > *") ?? [])];
-    expect(titles.map((t) => t.textContent)).toEqual(["Bread", "Soup"]);
+    expect(titles.map((t) => titleText(t))).toEqual(["Bread", "Soup"]);
     expect(titles.map((t) => t.getAttribute("data-id"))).toEqual(["7", "3"]);
     const anchors = titles.map((t) => t.querySelector("a[data-open]"));
     expect(anchors.map((a) => a?.getAttribute("href"))).toEqual([
@@ -121,8 +144,52 @@ describe("the Your spaces section", () => {
     const empty = soup?.firstElementChild;
     expect(empty?.className).toBe("home-fav home-fav-none");
     expect(empty?.getAttribute("aria-hidden")).toBe("true");
+    expect(empty?.textContent).toBe("S");
     expect(soup?.querySelector("a[data-open]")?.textContent).toBe("Soup");
     expect(outsideRefs(html)).toEqual([]);
+  });
+
+  describe("the letter in the square of a link with no site icon (#304)", () => {
+    const squareOf = (l: Link, names: string[] = []) => {
+      const html = spacesSection(
+        names.map((n) => space({ key: n, name: n })).concat(space({ key: "k", recent: [l] })),
+      );
+      return dom(html).querySelector(".home-fav-none") as Element;
+    };
+
+    it("is the first letter of the title as the card shows it, after a space's name is cut", () => {
+      const square = squareOf(link("1", { title: "Bills — Gas company" }), ["Bills"]);
+      expect(square.textContent).toBe("G");
+      expect(square.getAttribute("aria-hidden")).toBe("true");
+      expect(square.className).toBe("home-fav home-fav-none");
+    });
+
+    it("uppercases, and skips leading punctuation and emoji", () => {
+      expect(squareOf(link("1", { title: "  ✨ (draft) notes" })).textContent).toBe("D");
+      expect(squareOf(link("1", { title: "water bill" })).textContent).toBe("W");
+    });
+
+    it("falls back to the site's initial when the shown title has no letter or digit", () => {
+      const square = squareOf(link("1", { title: "!!! ???", url: "https://www.zebra.example/x" }));
+      expect(square.textContent).toBe("Z");
+    });
+
+    it("stays the plain square when neither the title nor the site gives a letter", () => {
+      const square = squareOf(link("1", { title: "!!!", url: "mailto:" }));
+      expect(square.textContent).toBe("");
+      expect(square.getAttribute("aria-hidden")).toBe("true");
+    });
+
+    it("shows no letter beside a site icon, and escapes what it shows", () => {
+      const html = spacesSection([space({ key: "k", recent: [link("1", { title: "<b>x</b>" })] })]);
+      expect(dom(html).querySelector(".home-fav-none")?.textContent).toBe("B");
+      expect(html).not.toContain("<b>x");
+      const withIcon = spacesSection(
+        [space({ key: "k", recent: [link("2", { title: "Soup" })] })],
+        new Map([["2", "v1"]]),
+      );
+      expect(dom(withIcon).querySelector(".home-fav-none")).toBeNull();
+    });
   });
 
   it("gives the grid an id for the opening script", () => {
@@ -140,7 +207,7 @@ describe("the Your spaces section", () => {
     ]);
     const [mail, web] = [...dom(html).querySelectorAll(".home-space-recent > *")];
     expect(mail?.querySelector("a")).toBeNull();
-    expect(mail?.textContent).toBe("Mail");
+    expect(titleText(mail)).toBe("Mail");
     expect(mail?.getAttribute("data-id")).toBe("1");
     expect(web?.querySelector("a[data-open]")).not.toBeNull();
   });
@@ -173,12 +240,14 @@ describe("the Your spaces section", () => {
 
   it("cuts the name of any pinned space from the front, longest first, one cut only", () => {
     const shown = (own: string, title: string, others: string[]) =>
-      dom(
-        spacesSection([
-          space({ key: own, name: own, recent: [link("1", { title })] }),
-          ...others.map((name) => space({ key: name, name })),
-        ]),
-      ).querySelector(".home-space-recent > *")?.textContent;
+      titleText(
+        dom(
+          spacesSection([
+            space({ key: own, name: own, recent: [link("1", { title })] }),
+            ...others.map((name) => space({ key: name, name })),
+          ]),
+        ).querySelector(".home-space-recent > *"),
+      );
     const arts = ["Art", "Art History"];
     expect(shown("Valor", "Language Arts 8 — Grammar Unit 1", ["Language Arts 8"])).toBe(
       "Grammar Unit 1",
@@ -202,9 +271,11 @@ describe("the Your spaces section", () => {
 
   it("drops the space's name from the front of a title only at a clear label break", () => {
     const shown = (name: string, title: string) =>
-      dom(
-        spacesSection([space({ key: name, name, recent: [link("1", { title })] })]),
-      ).querySelector(".home-space-recent > *")?.textContent;
+      titleText(
+        dom(
+          spacesSection([space({ key: name, name, recent: [link("1", { title })] })]),
+        ).querySelector(".home-space-recent > *"),
+      );
     expect(shown("Language Arts 8", "Language Arts 8 — Grammar")).toBe("Grammar");
     expect(shown("Language Arts 8", "language arts 8 – Grammar")).toBe("Grammar");
     expect(shown("Language Arts 8", "Language Arts 8 - Grammar")).toBe("Grammar");
@@ -227,7 +298,7 @@ describe("the Your spaces section", () => {
     ]);
     expect(html).not.toContain("<img src=x");
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
-    expect(dom(html).querySelector(".home-space-recent > *")?.textContent).toBe(HOSTILE);
+    expect(titleText(dom(html).querySelector(".home-space-recent > *"))).toBe(HOSTILE);
     expect(hrefs(html, "a.home-space-name").map(tagOf)).toEqual([ODD_KEY]);
   });
 });

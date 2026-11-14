@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SPACE_COLORS } from "../core/tag-space.js";
 import { editDialog } from "./edit-link.js";
 import { tile } from "./pages.js";
-import { askCss, themeCss, tokens } from "./theme.js";
+import { askCss, themeCss, tokens, WORTH_EMPTY } from "./theme.js";
 
 const channel = (n: number) => {
   const c = n / 255;
@@ -28,6 +28,7 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
     ["ink", "fill"],
     ["about", "surface"],
     ["amber-ink", "amber-bg"],
+    ["about", "pic"],
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
@@ -390,25 +391,44 @@ describe("the Handy tiles", () => {
     }
   });
 
-  it("puts Show all and Add beside the heading: a grid in which the swapped shelf's head takes row 1, column 2", () => {
-    expect(rule(".handy")).toContain("display:grid;grid-template-columns:1fr auto");
-    expect(rule("#handy-shelf")).toBe("display:contents");
-    expect(rule(".handy-head")).toContain("grid-row:1;grid-column:2");
-    expect(rule(".handy>h2")).toContain("grid-row:1;grid-column:1");
-    expect(themeCss).toMatch(/(?:^|\})\.handy-row,\.handy-empty,#handy-error\{grid-column:1\/-1/m);
-    expect(themeCss).not.toContain(".handy-foot");
+  it("has no header beside the heading any more: the pill, its head and the empty line are gone (#304)", () => {
+    for (const gone of [".handy-head", ".handy-add", ".handy-empty", ".handy-foot"]) {
+      expect(themeCss, gone).not.toContain(gone);
+    }
+    expect(rule(".handy>h2")).toBe("");
   });
 
-  it("makes Add a tinted 44px pill and Show all a quiet 44px text button", () => {
-    const add = rule(".handy-add");
-    for (const part of ["min-height:44px", "border-radius:999px", "text-decoration:none"]) {
+  it("makes Add a dashed 44px-or-taller tile like a Handy tile, whose plus sits in a 44px square", () => {
+    const add = rule(".add-tile");
+    for (const part of [
+      "border:1.5px dashed var(--line)",
+      "border-radius:18px",
+      "text-decoration:none",
+      "min-height:76px",
+    ]) {
       expect(add).toContain(part);
     }
-    expect(add).toContain("background:color-mix(in srgb,var(--ink) 5%,transparent)");
+    const plus = rule(".add-plus");
+    expect(plus).toContain("width:44px;height:44px");
+    expect(plus).toContain("background:var(--surface)");
+  });
+
+  it("makes Show all a quiet 44px text button under the row", () => {
     const showAll = rule(".handy-show-all");
-    for (const part of ["min-height:44px", "color:var(--soft)", "background:none", "border:0"]) {
+    for (const part of [
+      "min-height:44px",
+      "color:var(--soft)",
+      "background:none",
+      "border:0",
+      "display:block",
+    ]) {
       expect(showAll).toContain(part);
     }
+  });
+
+  it("gaps the Handy row by 12px on a wide screen and keeps 8px on a phone", () => {
+    expect(rule(".handy-row")).toContain("gap:12px");
+    expect(phoneRule(".handy-row")).toContain("gap:8px");
   });
 
   it("drops the postcard's squeeze rules for asks laid over a small square", () => {
@@ -941,15 +961,76 @@ describe("Home's Worth a look cards (#195)", () => {
       expect(computed(alone, "flex", "phone")).toBeUndefined();
     });
 
-    it("keeps the pair on its own row, right-aligned, whenever the button row is too narrow for Open it and both opened buttons", () => {
-      const narrow = "@container (max-width:540px)";
-      expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
-      expect(decl(".feature-quiet", narrow, "flex")).toBe("1 1 100%");
-      expect(decl(".feature-quiet", narrow, "justify-content")).toBe("flex-end");
-      const viewportRules = parseCss(themeCss).filter(
-        (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
-      );
-      expect(viewportRules.map((r) => r.media)).toEqual([]);
+    describe("the pair on the Open it row (#304)", () => {
+      const hoverBlock = (inner: string) => `@media (hover:hover) and (min-width:601px){${inner}`;
+      const has = (css: string) => expect(themeCss).toContain(css);
+      const hoverStart = themeCss.indexOf("@media (hover:hover) and (min-width:601px){");
+      const hoverEnd = (() => {
+        let depth = 0;
+        for (let i = themeCss.indexOf("{", hoverStart); i < themeCss.length; i++) {
+          if (themeCss[i] === "{") depth++;
+          else if (themeCss[i] === "}" && --depth === 0) return i;
+        }
+        return -1;
+      })();
+      const inHover = (css: string) => {
+        const at = themeCss.indexOf(css, hoverStart);
+        expect(hoverStart, css).toBeGreaterThan(-1);
+        expect(at, css).toBeGreaterThan(hoverStart);
+        expect(at + css.length, css).toBeLessThanOrEqual(hoverEnd);
+        expect(themeCss.indexOf(css), css).toBe(at);
+      };
+      const FADE = "opacity:0;pointer-events:none";
+
+      it("on a screen with hover above 600px, keeps the closed pair at the row's right end in a box of its own width", () => {
+        has(hoverBlock(".feature-quiet{position:relative;flex:none;width:106px;height:48px}"));
+        inHover(".feature-quiet .slide{position:absolute;top:0;right:0}");
+        inHover(".feature-quiet .slide:first-child{right:58px}");
+        expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
+      });
+
+      it("grows an opened button leftward over the row, never past the row's left edge", () => {
+        inHover(
+          ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:1;max-width:min(260px,100cqw)}",
+        );
+        inHover(
+          ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible{max-width:min(260px,calc(100cqw - 58px))}",
+        );
+      });
+
+      it("wraps the pair onto its own row only when Open it and the closed pair no longer fit", () => {
+        inHover("@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}");
+      });
+
+      it("fades Open it per button, only in a row its opened button reaches, never in a wrapped row", () => {
+        inHover(
+          `@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible)>.feature-open{${FADE}}}`,
+        );
+        inHover(
+          `@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible)>.feature-open{${FADE}}}`,
+        );
+        expect(decl(".feature-open", null, "transition")).toContain("opacity");
+        expect(themeCss).not.toMatch(/\.feature-open\{[^}]*visibility:hidden/);
+      });
+
+      it("wraps the pair below 540px on every input, as before, with the hover rules coming after so they win above 600px", () => {
+        const wrap =
+          "@container (max-width:540px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}";
+        has(wrap);
+        expect(themeCss.indexOf(wrap)).toBeLessThan(
+          themeCss.indexOf("@media (hover:hover) and (min-width:601px)"),
+        );
+        expect(themeCss).not.toContain("@media (hover:none){@container");
+        const viewportRules = parseCss(themeCss).filter(
+          (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
+        );
+        expect(viewportRules.map((r) => r.media)).toEqual([]);
+      });
+
+      it("leaves the phone block's stacked layout alone: the hover rules start above 600px", () => {
+        expect(themeCss).not.toMatch(/@media \(hover:hover\)\{[^@]*\.feature-quiet/);
+        expect(decl(".feature-open", "(max-width:600px)", "flex")).toBe("1 1 100%");
+      });
     });
 
     it("never reorders or stacks the pair, so Done with it stays rightmost", () => {
@@ -1341,5 +1422,237 @@ describe("the end of the saved copy", () => {
     const back = rule(".copy-nav .back-link,.copy-end .back-link");
     expect(back).toContain("gap:8px");
     expect(back).toContain("color:var(--soft)");
+  });
+});
+
+describe("Home's space-card icon squares (#304)", () => {
+  const square = (inner: string) =>
+    el(`<span class="home-fav home-fav-none" aria-hidden="true">${inner}</span>`, "span");
+
+  it("draws the letter on --pic in a readable colour, centred in the 18px square", () => {
+    const letter = square("S");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(letter, "background", w), w).toBe("var(--pic)");
+      expect(computed(letter, "color", w), w).toBe("var(--about)");
+      expect(computed(letter, "text-align", w), w).toBe("center");
+      expect(computed(letter, "opacity", w), w).toBeUndefined();
+    }
+  });
+
+  it("keeps today's faint plain square when there is no letter", () => {
+    const plain = square("");
+    expect(computed(plain, "background", "desktop")).toBe("var(--line)");
+    expect(computed(plain, "opacity", "desktop")).toBe(".55");
+  });
+});
+
+describe("Home's trays, spine and spacing (#306)", () => {
+  const home = (inner: string, pick: string) => el(`<main class="home">${inner}</main>`, pick);
+  const BOTH = ["desktop", "phone"] as const;
+  const hex = (rgb: number[]) =>
+    `#${rgb.map((n) => Math.round(n).toString(16).padStart(2, "0")).join("")}`;
+  /** The tray colour as hex: a hex mixed at a percentage into a token. */
+  const trayHex = (mode: "light" | "dark") => {
+    const mix = /^color-mix\(in srgb,(#[0-9A-Fa-f]{6}) (\d+)%,var\(--(\w+)\)\)$/.exec(
+      tokens[mode].tray,
+    );
+    const [from, share, into] = [mix?.[1] as string, Number(mix?.[2]) / 100, mix?.[3] as string];
+    const rgb = (h: string) => [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16));
+    const base = rgb((tokens[mode] as Record<string, string>)[into] as string);
+    return hex(rgb(from).map((c, i) => c * share + (base[i] as number) * (1 - share)));
+  };
+  /** `hsl(40 25% 88%)` as hex. */
+  const hslHex = (value: string) => {
+    const [h, s, l] = (/^hsl\((\d+) (\d+)% (\d+)%\)$/.exec(value)?.slice(1) ?? []).map(Number) as [
+      number,
+      number,
+      number,
+    ];
+    const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      return (l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255;
+    };
+    return hex([f(0), f(8), f(4)]);
+  };
+
+  describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
+    const t = tokens[mode] as Record<string, string>;
+    it("keeps ink readable on the spine, and the spine apart from the tray", () => {
+      const spineHex = hslHex(t.spine as string);
+      expect(contrast(t.ink as string, spineHex)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(spineHex, trayHex(mode))).toBeGreaterThan(1.1);
+    });
+    it.each(["ink", "soft"])("keeps %s text readable straight on the tray", (name) => {
+      expect(contrast(t[name] as string, trayHex(mode))).toBeGreaterThanOrEqual(4.5);
+    });
+  });
+
+  it("defines the light spine as hsl(40 25% 88%)", () => {
+    expect(tokens.light.spine).toBe("hsl(40 25% 88%)");
+  });
+
+  it.each(["handy", "worth", "spaces"])("lays the %s section on the --tray colour", (name) => {
+    const section = home(`<section class="${name}"></section>`, "section");
+    for (const w of BOTH) {
+      expect(computed(section, "background", w), w).toBe("var(--tray)");
+      expect(computed(section, "border-radius", w), w).toBe("calc(18px + var(--tray-pad))");
+      expect(computed(section, "margin", w), w).toBe("var(--space-8) 0 0");
+      expect(computed(section, "position", w), w).toBe("relative");
+    }
+    expect(computed(section, "--tray-pad", "desktop")).toBe("16px");
+    expect(computed(section, "--tray-pad", "phone")).toBe("10px");
+    expect(themeCss).not.toContain("var(--tray,");
+  });
+
+  it("leaves Tidy up's start line off a tray", () => {
+    const tidy = home('<section class="tidy-start"></section>', "section");
+    expect(computed(tidy, "background", "desktop")).toBeUndefined();
+    expect(computed(tidy, "border-radius", "desktop")).toBeUndefined();
+  });
+
+  it("never lets a tray be shorter than its absolute spine's content on a wide screen", () => {
+    const section = home('<section class="spaces"></section>', "section");
+    // Tray padding twice, the 26px icon, the 6px gap and one 13.5px word line (21px).
+    expect(computed(section, "min-height", "desktop")).toBe(
+      "calc(2*var(--tray-pad) + 26px + 6px + 21px)",
+    );
+    // On a phone the spine is a strip in the flow, so the tray needs no floor.
+    expect(computed(section, "min-height", "phone")).toBe("0");
+  });
+
+  it("pads the tray past the spine on a wide screen, and evenly on a phone", () => {
+    const section = home('<section class="handy"></section>', "section");
+    expect(computed(section, "padding", "desktop")).toBe(
+      "var(--tray-pad) var(--tray-pad) var(--tray-pad) calc(var(--spine-w) + 2*var(--tray-pad))",
+    );
+    expect(computed(section, "padding", "phone")).toBe("var(--tray-pad)");
+  });
+
+  describe("the spine", () => {
+    const spine = home('<section class="worth"><div class="spine"></div></section>', ".spine");
+    it("is a band down the tray's left side, its icon starting on the cards' top line", () => {
+      expect(computed(spine, "position", "desktop")).toBe("absolute");
+      expect(computed(spine, "top", "desktop")).toBe("0");
+      expect(computed(spine, "bottom", "desktop")).toBe("0");
+      expect(computed(spine, "left", "desktop")).toBe("0");
+      expect(computed(spine, "width", "desktop")).toBe("calc(var(--spine-w) + var(--tray-pad))");
+      expect(computed(spine, "padding", "desktop")).toBe("var(--tray-pad) 6px");
+      expect(computed(spine, "background", "desktop")).toBe("var(--spine)");
+      expect(computed(spine, "color", "desktop")).toBe("var(--ink)");
+      expect(computed(spine, "flex-direction", "desktop")).toBe("column");
+    });
+
+    it("is a strip across the top of the tray on a phone, pulled out over the tray's padding", () => {
+      expect(computed(spine, "position", "phone")).toBe("static");
+      expect(computed(spine, "flex-direction", "phone")).toBe("row");
+      expect(computed(spine, "width", "phone")).toBe("auto");
+      expect(computed(spine, "margin", "phone")).toBe(
+        "calc(-1*var(--tray-pad)) calc(-1*var(--tray-pad)) var(--tray-pad)",
+      );
+      expect(computed(spine, "border-radius", "phone")).toBe(
+        "calc(18px + var(--tray-pad)) calc(18px + var(--tray-pad)) 0 0",
+      );
+    });
+
+    it("shows a focus ring when the tray's hidden heading has focus, at every width", () => {
+      const ring = parseCss(themeCss).filter(
+        (r) =>
+          r.selectors.some((s) => /h2:focus\)>\.spine$/.test(s)) &&
+          !r.selectors.some((s) => s.includes("focus-visible")),
+      );
+      expect(ring.map((r) => [r.media, r.decls.get("outline")])).toEqual([
+        [null, "3px solid var(--blue)"],
+      ]);
+      expect(ring[0]?.selectors).toContain(".handy:has(>h2:focus)>.spine");
+    });
+
+    it("hides the heading with the page's own clip pattern, at every width", () => {
+      const h2 = home('<section class="handy"><h2 class="visually-hidden"></h2></section>', "h2");
+      for (const w of BOTH) {
+        expect(computed(h2, "position", w), w).toBe("absolute");
+        expect(computed(h2, "clip", w), w).toBe("rect(0 0 0 0)");
+        expect(computed(h2, "width", w), w).toBe("1px");
+      }
+    });
+  });
+
+  it("gives the alerts inside a tray an 8px bottom margin, not the paragraph's 16px", () => {
+    for (const id of ["handy-error", "home-error"]) {
+      const alert = home(`<section class="handy"><p id="${id}" role="alert"></p></section>`, "p");
+      expect(computed(alert, "margin", "desktop"), id).toBe("0 0 var(--space-2)");
+    }
+  });
+
+  it("spaces the cards by 12px on a wide screen, keeping a phone's 8px and 10px", () => {
+    const grid = home(
+      '<section class="spaces"><div class="home-spaces"></div></section>',
+      ".home-spaces",
+    );
+    expect(computed(grid, "gap", "desktop")).toBe("12px");
+    expect(computed(grid, "gap", "phone")).toBe("10px");
+    const handy = home(
+      '<section class="handy"><div class="handy-row"></div></section>',
+      ".handy-row",
+    );
+    expect(computed(handy, "gap", "desktop")).toBe("12px");
+    expect(computed(handy, "gap", "phone")).toBe("8px");
+    const card = home(
+      '<section class="spaces"><div class="home-space"></div></section>',
+      ".home-space",
+    );
+    expect(computed(card, "padding", "desktop")).toBe("16px");
+    const rows = home(
+      '<section class="worth"><div class="worth-rows"></div></section>',
+      ".worth-rows",
+    );
+    for (const w of BOTH) expect(computed(rows, "gap", w), w).toBe("8px");
+  });
+
+  it("sets Also today as a 15px ink label, 20px above and 8px below", () => {
+    const also = el('<div id="worth-cards"><h3 class="also-today">Also today</h3></div>', "h3");
+    for (const w of BOTH) {
+      expect(computed(also, "font-size", w), w).toBe("15px");
+      expect(computed(also, "color", w), w).toBe("var(--ink)");
+      expect(computed(also, "margin", w), w).toBe("20px 0 8px");
+    }
+  });
+
+  describe("an emptied Worth tray", () => {
+    const worth = (inner: string, error = "") =>
+      el(
+        `<main class="home"><section class="worth"><p id="home-error" role="alert">${error}</p><div id="worth-cards">${inner}</div></section></main>`,
+        "section",
+      );
+    const FEATURE = (hidden: boolean) =>
+      `<article class="worth-feature"${hidden ? " hidden" : ""}></article>`;
+    const ROW = (hidden: boolean) =>
+      `<div class="worth-rows"><article class="worth-row"${hidden ? " hidden" : ""}></article></div>`;
+
+    it("collapses when every card is hidden or removed and the alert is empty", () => {
+      for (const inner of [FEATURE(true), `${FEATURE(true)}${ROW(true)}`, ROW(true), ""]) {
+        expect(computed(worth(inner), "display", "desktop"), inner).toBe("none");
+        expect(computed(worth(inner), "display", "phone"), inner).toBe("none");
+      }
+    });
+
+    it("stays while a card or row shows, or while the alert has words", () => {
+      for (const [inner, error] of [
+        [FEATURE(false), ""],
+        [`${FEATURE(true)}${ROW(false)}`, ""],
+        [ROW(false), ""],
+        [FEATURE(true), "Something went wrong."],
+        ["", "Something went wrong."],
+      ] as const) {
+        expect(computed(worth(inner, error), "display", "desktop"), `${inner} ${error}`).not.toBe(
+          "none",
+        );
+      }
+    });
+
+    it("is the one rule WORTH_EMPTY names", () => {
+      const rules = parseCss(themeCss).filter((r) => r.decls.get("display") === "none");
+      expect(rules.some((r) => r.selectors.join(",") === WORTH_EMPTY)).toBe(true);
+    });
   });
 });

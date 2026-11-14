@@ -493,9 +493,11 @@ describe("GET / and the Handy shelf", () => {
     expect(toolRow(world, id)).toEqual(row);
   });
 
-  it("an empty shelf shows its one line, and looking at home with a shelf leaves every row byte-identical", async () => {
+  it("an empty shelf shows the Add tile alone, and looking at home with a shelf leaves every row byte-identical", async () => {
     const { world, browser, id } = await tools();
-    expect(String((await browser.send("/")).body)).toContain("Keep links you use often here");
+    const empty = String((await browser.send("/")).body);
+    expect(empty).toContain("Keep a link handy</a>");
+    expect(empty).not.toContain("Keep links you use often here");
     await keepHandy(at(world, daysAgo(31)), A, id, "stated");
     const before = allRows(world);
     expect((await browser.send("/")).status).toBe(200);

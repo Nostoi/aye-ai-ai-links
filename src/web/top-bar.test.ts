@@ -64,10 +64,30 @@ describe("the band", () => {
     }
   });
 
-  it("drops the name beside the logo below 900px, keeping the logo's own name", () => {
-    expect(themeCss).toMatch(/@media \(max-width:900px\)\{\.bar-band \.brand>span\{display:none\}/);
+  it("drops the name beside the logo below 1000px, keeping the logo's own name", () => {
+    expect(themeCss).toMatch(
+      /@media \(max-width:1000px\)\{\.bar-band \.brand>span\{display:none\}/,
+    );
     const band = doc(page("t", "<main></main>", { menu: true })).querySelector(".bar-band .brand");
     expect(band?.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Aye-AI-AI Links");
+  });
+
+  it("keeps each pill's word in its own span, so the word can hide while the name stays", () => {
+    const html = page("t", "<main></main>", { menu: true, here: "all", ask: ASK });
+    for (const [selector, word] of [
+      ['a[href="/save"]', "Save"],
+      ["#ask-open", "Ask AI"],
+    ] as const) {
+      const pill = bar(html).querySelector(selector) as Element;
+      expect(pill.querySelector(".pill-word")?.textContent).toBe(word);
+      expect(pill.textContent?.trim()).toBe(word);
+    }
+  });
+
+  it("shows the pills as icons only where their words would wrap the bar", () => {
+    const iconOnly =
+      /@media \(min-width:681px\) and \(max-width:820px\),\(max-width:359px\)\{\.bar-pill\{[^}]*width:44px[^}]*\}\.pill-word\{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect\(0 0 0 0\)\}/;
+    expect(themeCss).toMatch(iconOnly);
   });
 });
 

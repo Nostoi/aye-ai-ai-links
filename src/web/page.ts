@@ -32,7 +32,7 @@ const MAGNIFIER = `<a class="menu-search" href="/search" aria-label="Search"><sv
 export type Here = "home" | "all" | "tags";
 
 /** The Save action in the bar: a raised pill, not a place, so it is not in `PAGE_LINKS`. */
-const SAVE = `<a class="bar-pill menu-save" href="/save"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Save</a>`;
+const SAVE = `<a class="bar-pill menu-save" href="/save"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="pill-word">Save</span></a>`;
 
 /** The places, in order, in the bar and again in the phone menu. */
 const PAGE_LINKS: { here?: Here; href: string; label: string }[] = [

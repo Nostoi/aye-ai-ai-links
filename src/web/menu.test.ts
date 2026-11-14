@@ -66,9 +66,9 @@ describe("the navigation bar", () => {
     ]);
     expect(themeCss).toMatch(/\.menu-phone-only\{display:none\}/);
     expect(themeCss).toMatch(
-      /@media \(max-width:600px\)\{[^@]*\.menu-page,\.menu-save\{display:none\}/,
+      /@media \(max-width:680px\)\{[^@]*\.menu-page,\.menu-save\{display:none\}/,
     );
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.menu-phone-only\{display:flex\}/);
+    expect(themeCss).toMatch(/@media \(max-width:680px\)\{[^@]*\.menu-phone-only\{display:flex\}/);
   });
 
   it("marks no page link as current without a section", () => {
@@ -106,8 +106,8 @@ describe("the navigation bar", () => {
     ]);
     expect(summary.querySelector("[aria-hidden=true]")).not.toBeNull();
     expect(themeCss).toMatch(/\.label-phone\{display:none\}/);
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.label-wide[^{]*\{display:none\}/);
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.label-phone\{display:inline\}/);
+    expect(themeCss).toMatch(/@media \(max-width:680px\)\{[^@]*\.label-wide[^{]*\{display:none\}/);
+    expect(themeCss).toMatch(/@media \(max-width:680px\)\{[^@]*\.label-phone\{display:inline\}/);
   });
 
   it("keeps the bar at the right edge when it wraps under the logo, so the open menu stays on screen", () => {

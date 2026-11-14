@@ -964,33 +964,49 @@ describe("Home's Worth a look cards (#195)", () => {
     describe("the pair on the Open it row (#304)", () => {
       const hoverBlock = (inner: string) => `@media (hover:hover) and (min-width:601px){${inner}`;
       const has = (css: string) => expect(themeCss).toContain(css);
+      const hoverStart = themeCss.indexOf("@media (hover:hover) and (min-width:601px){");
+      const hoverEnd = (() => {
+        let depth = 0;
+        for (let i = themeCss.indexOf("{", hoverStart); i < themeCss.length; i++) {
+          if (themeCss[i] === "{") depth++;
+          else if (themeCss[i] === "}" && --depth === 0) return i;
+        }
+        return -1;
+      })();
+      const inHover = (css: string) => {
+        const at = themeCss.indexOf(css, hoverStart);
+        expect(hoverStart, css).toBeGreaterThan(-1);
+        expect(at, css).toBeGreaterThan(hoverStart);
+        expect(at + css.length, css).toBeLessThanOrEqual(hoverEnd);
+        expect(themeCss.indexOf(css), css).toBe(at);
+      };
       const FADE = "opacity:0;pointer-events:none";
 
       it("on a screen with hover above 600px, keeps the closed pair at the row's right end in a box of its own width", () => {
         has(hoverBlock(".feature-quiet{position:relative;flex:none;width:106px;height:48px}"));
-        has(".feature-quiet .slide{position:absolute;top:0;right:0}");
-        has(".feature-quiet .slide:first-child{right:58px}");
+        inHover(".feature-quiet .slide{position:absolute;top:0;right:0}");
+        inHover(".feature-quiet .slide:first-child{right:58px}");
         expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
       });
 
       it("grows an opened button leftward over the row, never past the row's left edge", () => {
-        has(
+        inHover(
           ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:1;max-width:min(260px,100cqw)}",
         );
-        has(
+        inHover(
           ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible{max-width:min(260px,calc(100cqw - 58px))}",
         );
       });
 
       it("wraps the pair onto its own row only when Open it and the closed pair no longer fit", () => {
-        has("@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}");
+        inHover("@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}");
       });
 
       it("fades Open it per button, only in a row its opened button reaches, never in a wrapped row", () => {
-        has(
+        inHover(
           `@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible)>.feature-open{${FADE}}}`,
         );
-        has(
+        inHover(
           `@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible)>.feature-open{${FADE}}}`,
         );
         expect(decl(".feature-open", null, "transition")).toContain("opacity");

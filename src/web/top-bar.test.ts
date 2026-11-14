@@ -88,7 +88,7 @@ describe("the band", () => {
 
   it("sizes its tiers by its own width, above the page's cards", () => {
     expect(rule(".bar-band").join(";")).toMatch(/container:bar\/inline-size/);
-    expect(rule(".bar-band").join(";")).toMatch(/position:relative;z-index:30/);
+    expect(rule(".bar-band").join(";")).toMatch(/position:relative;z-index:var\(--layer-chrome\)/);
     const barParts =
       /\.(bar-band|bar-pill|pill-word|places|menu-page|menu-save|menu-search|menu-phone-only|label-wide|label-phone|icon-wide|icon-phone|brand)\b/;
     const inMedia = mediaSelectors(themeCss + askCss).filter((s) => barParts.test(s));

@@ -12,7 +12,8 @@
       "!.claude",
       "!graft",
       "!docs/design",
-      "!src/web/__ask_off__"
+      "!src/web/__ask_off__",
+      "!src/web/__tokens_expanded__"
     ]
   },
   "linter": {

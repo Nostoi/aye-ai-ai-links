@@ -183,7 +183,7 @@ describe("the band's look", () => {
   it("keeps a Handy tile's band above the whole-tile title link, in the old ask's stacking", () => {
     const body = rule(".handy-tile .gone-band") ?? "";
     expect(body).toMatch(/position:relative/);
-    expect(body).toMatch(/z-index:[2-9]/);
+    expect(body).toMatch(/z-index:var\(--layer-tile-actions\)/);
     expect(body).toContain("grid-column:1/-1");
   });
 

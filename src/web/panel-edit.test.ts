@@ -221,7 +221,7 @@ describe("the AI-on All page's edit dialog", () => {
 describe("the AI-on pages' CSS", () => {
   it("puts the Undo bar above the panel", async () => {
     const { askCss } = await import("./theme.js");
-    expect(askCss).toMatch(/\.undo-bar\{z-index:31\}/);
+    expect(askCss).toMatch(/\.undo-bar\{z-index:var\(--layer-undo\)\}/);
   });
 });
 

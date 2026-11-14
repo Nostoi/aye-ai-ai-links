@@ -152,7 +152,7 @@ describe("the theme css", () => {
     expect(themeCss).toMatch(/\.home-space\{position:relative;/);
     expect(themeCss).toMatch(/\.home-space-name::after\{content:"";position:absolute;inset:0/);
     expect(themeCss).toMatch(
-      /\.home-space-recent a,\.home-space-all\{position:relative;z-index:1;/,
+      /\.home-space-recent a,\.home-space-all\{position:relative;z-index:var\(--layer-lift\);/,
     );
     const phone = /@media \(max-width:600px\)\{(.*)\}$/m.exec(themeCss)?.[1] ?? "";
     const rule = (sel: string) =>
@@ -190,7 +190,7 @@ describe("the Handy tiles", () => {
     "";
 
   it("puts a photo on white, so a transparent logo sits on white, and a picture-less box on the picture shade", () => {
-    expect(rule("img.handy-image")).toBe("background:#fff");
+    expect(rule("img.handy-image")).toBe("background:var(--white)");
     expect(rule(".handy-image.initials-box")).toBe("background:var(--pic)");
   });
 
@@ -210,8 +210,8 @@ describe("the Handy tiles", () => {
     expect(rule(".handy-tile h3 a::after")).toMatch(/position:absolute;[^}]*inset:0/);
     expect(rule(".card-menu")).toMatch(/position:absolute/);
     expect(rule(".handy-tile .ask")).toMatch(/position:relative/);
-    expect(rule(".handy-tile .ask")).toMatch(/z-index:[2-9]/);
-    expect(rule(".card-menu")).toMatch(/z-index:[2-9]/);
+    expect(rule(".handy-tile .ask")).toMatch(/z-index:var\(--layer-tile-actions\)/);
+    expect(rule(".card-menu")).toMatch(/z-index:var\(--layer-card-menu\)/);
   });
 
   it("gives the ask its own line across the card, under the picture and words", () => {
@@ -227,7 +227,7 @@ describe("the Handy tiles", () => {
   it("opens the menu from the ⋯ at the card's right edge, above the next card", () => {
     expect(phone).not.toContain(".handy-tile .card-menu-list");
     expect(themeCss).toContain(
-      ".handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-row:has(.card-menu[open]){z-index:5}",
+      ".handy-tile:has(.card-menu[open]),.result:has(.card-menu[open]),.link-row:has(.card-menu[open]){z-index:var(--layer-open-card)}",
     );
   });
 
@@ -335,7 +335,11 @@ describe("the Handy tiles", () => {
 
   it("gives a Handy tile its own card surface, corners and shadow, shared with no other card", () => {
     const own = rule(".handy-tile");
-    for (const part of ["background:var(--surface)", "border-radius:18px", "box-shadow:"]) {
+    for (const part of [
+      "background:var(--surface)",
+      "border-radius:var(--radius-card)",
+      "box-shadow:",
+    ]) {
       expect(own).toContain(part);
     }
     expect(themeCss).not.toMatch(/(^|\}|,)[^{}]*\.worth[^{}]*,\.handy-tile[ {,]/m);
@@ -402,7 +406,7 @@ describe("the Handy tiles", () => {
     const add = rule(".add-tile");
     for (const part of [
       "border:1.5px dashed var(--line)",
-      "border-radius:18px",
+      "border-radius:var(--radius-card)",
       "text-decoration:none",
       "min-height:76px",
     ]) {
@@ -446,7 +450,9 @@ describe("the card menu on every card", () => {
   const phone = /@media \(max-width:600px\)\{(.*)\}\s*$/m.exec(themeCss)?.[1] ?? "";
 
   it("is one 44px button holding a 32px dot, 4px in from the card's top-right corner, and the shelf-only styles are gone", () => {
-    expect(rule(".card-menu")).toBe("position:absolute;top:4px;right:4px;z-index:3");
+    expect(rule(".card-menu")).toBe(
+      "position:absolute;top:4px;right:4px;z-index:var(--layer-card-menu)",
+    );
     expect(rule(".card-menu-dot")).toContain("width:32px;height:32px");
     expect(rule(".card-menu summary")).toContain("min-height:44px;min-width:44px");
     expect(themeCss).not.toContain("tile-menu");
@@ -540,15 +546,19 @@ describe("the card menu on every card", () => {
       expect(rule(card), card).not.toContain("overflow:hidden");
       expect(rule(card), card).toContain("position:relative");
     }
-    expect(rule(".result>.tile")).toBe("border-radius:18px 0 0 18px");
-    expect(phone).toContain(".result>.tile{border-radius:18px 18px 0 0}");
+    expect(rule(".result>.tile")).toBe("border-radius:var(--radius-card) 0 0 var(--radius-card)");
+    expect(phone).toContain(
+      ".result>.tile{border-radius:var(--radius-card) var(--radius-card) 0 0}",
+    );
     // The list's white card is one box per month; it never clips, so its first and last rows round.
     expect(rule(".link-rows")).not.toContain("overflow:hidden");
     const pic = el(
       '<main data-view="pictures"><ul class="link-rows"><li class="link-row"><img class="row-pic"></li></ul></main>',
       "img",
     );
-    expect(computed(pic, "border-radius", "desktop")).toBe("18px 18px 0 0");
+    expect(computed(pic, "border-radius", "desktop")).toBe(
+      "var(--radius-card) var(--radius-card) 0 0",
+    );
   });
 
   it("wraps a long unbroken title, host or why inside its row, clear of the menu button", () => {
@@ -589,13 +599,13 @@ describe("the edit dialog's look", () => {
     ]) {
       expect(rule(".edit-link")).toContain(part);
     }
-    expect(rule(".edit-link::backdrop")).toBe("background:rgb(20 20 24 / .38)");
+    expect(rule(".edit-link::backdrop")).toBe("background:var(--overlay-scrim)");
     expect(rule(".edit-head h2")).toContain("font-size:20px;font-weight:700");
     expect(rule(".edit-close")).toContain("width:44px;height:44px");
     expect(rule(".edit-title")).toBe("height:46px;padding:0 14px;border-radius:12px");
     expect(rule(".edit-preview")).toContain("width:200px;height:140px;border-radius:14px");
     expect(rule(".edit-chip")).toContain(
-      "font-size:12px;font-weight:600;color:#fff;background:rgb(20 20 24 / .62)",
+      "font-size:12px;font-weight:600;color:var(--white);background:var(--overlay-chip)",
     );
   });
 
@@ -913,7 +923,7 @@ describe("Home's Worth a look cards (#195)", () => {
         expect(computed(slide, "max-width", width), width).toBe(
           computed(slide, "min-width", width),
         );
-        expect(computed(slide, "border-radius", width), width).toBe("999px");
+        expect(computed(slide, "border-radius", width), width).toBe("var(--radius-pill)");
         expect(computed(slide, "border", width), width).toBe("0");
         expect(computed(slide, "background", width), width).toBe("var(--fill)");
         expect(computed(slide, "overflow", width), width).toBe("hidden");
@@ -991,7 +1001,7 @@ describe("Home's Worth a look cards (#195)", () => {
 
       it("grows an opened button leftward over the row, never past the row's left edge", () => {
         inHover(
-          ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:1;max-width:min(260px,100cqw)}",
+          ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:var(--layer-lift);max-width:min(260px,100cqw)}",
         );
         inHover(
           ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible{max-width:min(260px,calc(100cqw - 58px))}",
@@ -1058,7 +1068,7 @@ describe("Home's Worth a look cards (#195)", () => {
 
     it("still loses its transitions under reduced motion", () => {
       expect(themeCss).toMatch(
-        /@media \(prefers-reduced-motion: reduce\)\{\*\{animation:none!important;transition:none!important/,
+        /@media \(prefers-reduced-motion:reduce\)\{\*\{animation:none!important;transition:none!important/,
       );
     });
   });
@@ -1329,8 +1339,8 @@ describe("the saved copy's reading look", () => {
       "margin-top:28px",
       "padding:44px 48px 48px",
       "background:var(--surface)",
-      "border-radius:20px",
-      "box-shadow:0 4px 18px #0000000f",
+      "border-radius:var(--radius-card-large)",
+      "box-shadow:var(--shadow-raised)",
       "font-size:18px",
       "line-height:1.7",
     ]) {
@@ -1408,7 +1418,7 @@ describe("the end of the saved copy", () => {
     const buttons = rule(".copy-end-acts button");
     expect(buttons).toContain("min-height:44px");
     expect(buttons).toContain("background:var(--fill)");
-    expect(buttons).toContain("border-radius:999px");
+    expect(buttons).toContain("border-radius:var(--radius-pill)");
     expect(block).not.toMatch(/#[0-9a-f]{3,6}\b|amber/i);
     expect(rule(".copy-end-line")).toContain("min-height:44px");
   });
@@ -1496,7 +1506,9 @@ describe("Home's trays, spine and spacing (#306)", () => {
     const section = home(`<section class="${name}"></section>`, "section");
     for (const w of BOTH) {
       expect(computed(section, "background", w), w).toBe("var(--tray)");
-      expect(computed(section, "border-radius", w), w).toBe("calc(18px + var(--tray-pad))");
+      expect(computed(section, "border-radius", w), w).toBe(
+        "calc(var(--radius-card) + var(--tray-pad))",
+      );
       expect(computed(section, "margin", w), w).toBe("var(--space-8) 0 0");
       expect(computed(section, "position", w), w).toBe("relative");
     }
@@ -1551,7 +1563,7 @@ describe("Home's trays, spine and spacing (#306)", () => {
         "calc(-1*var(--tray-pad)) calc(-1*var(--tray-pad)) var(--tray-pad)",
       );
       expect(computed(spine, "border-radius", "phone")).toBe(
-        "calc(18px + var(--tray-pad)) calc(18px + var(--tray-pad)) 0 0",
+        "calc(var(--radius-card) + var(--tray-pad)) calc(var(--radius-card) + var(--tray-pad)) 0 0",
       );
     });
 

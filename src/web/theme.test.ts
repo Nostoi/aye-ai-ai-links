@@ -1453,6 +1453,16 @@ describe("Home's trays, spine and spacing (#306)", () => {
     expect(computed(tidy, "border-radius", "desktop")).toBeUndefined();
   });
 
+  it("never lets a tray be shorter than its absolute spine's content on a wide screen", () => {
+    const section = home('<section class="spaces"></section>', "section");
+    // Tray padding twice, the 26px icon, the 6px gap and one 13.5px word line (21px).
+    expect(computed(section, "min-height", "desktop")).toBe(
+      "calc(2*var(--tray-pad) + 26px + 6px + 21px)",
+    );
+    // On a phone the spine is a strip in the flow, so the tray needs no floor.
+    expect(computed(section, "min-height", "phone")).toBe("0");
+  });
+
   it("pads the tray past the spine on a wide screen, and evenly on a phone", () => {
     const section = home('<section class="handy"></section>', "section");
     expect(computed(section, "padding", "desktop")).toBe(

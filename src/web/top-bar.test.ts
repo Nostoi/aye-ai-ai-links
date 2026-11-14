@@ -1,7 +1,7 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { page } from "./page.js";
-import { themeCss } from "./theme.js";
+import { askCss, themeCss } from "./theme.js";
 
 /** The top bar on its band (#305): places, then actions, then the account. */
 
@@ -64,9 +64,15 @@ describe("the band", () => {
     }
   });
 
-  it("drops the name beside the logo below 1000px, keeping the logo's own name", () => {
+  it("sizes its tiers by its own width, above the page's cards", () => {
+    expect(rule(".bar-band").join(";")).toMatch(/container:bar\/inline-size/);
+    expect(rule(".bar-band").join(";")).toMatch(/position:relative;z-index:30/);
+    expect(themeCss).not.toMatch(/@media[^{]*\{[^}]*\.(bar-pill|pill-word|menu-page|menu-save)\{/);
+  });
+
+  it("drops the name beside the logo when the band is narrower than 880px, keeping the logo's own name", () => {
     expect(themeCss).toMatch(
-      /@media \(max-width:1000px\)\{\.bar-band \.brand>span\{display:none\}/,
+      /@container bar \(max-width:879px\)\{\.bar-band \.brand>span\{display:none\}/,
     );
     const band = doc(page("t", "<main></main>", { menu: true })).querySelector(".bar-band .brand");
     expect(band?.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Aye-AI-AI Links");
@@ -84,10 +90,17 @@ describe("the band", () => {
     }
   });
 
-  it("shows the pills as icons only where their words would wrap the bar", () => {
-    const iconOnly =
-      /@media \(min-width:681px\) and \(max-width:820px\),\(max-width:359px\)\{\.bar-pill\{[^}]*width:44px[^}]*\}\.pill-word\{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect\(0 0 0 0\)\}/;
-    expect(themeCss).toMatch(iconOnly);
+  it("shows the pills as icons only, only with Ask AI there, where their words would wrap the bar", () => {
+    for (const range of [
+      String.raw`\(min-width:641px\) and \(max-width:780px\)`,
+      String.raw`\(max-width:335px\)`,
+    ]) {
+      const iconOnly = new RegExp(
+        String.raw`@container bar ${range}\{\.bar-pill\{[^}]*width:44px[^}]*\}\.pill-word\{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect\(0 0 0 0\)\}`,
+      );
+      expect(askCss).toMatch(iconOnly);
+      expect(themeCss).not.toMatch(iconOnly);
+    }
   });
 });
 
@@ -210,6 +223,12 @@ describe("the card outline", () => {
       found.some((s) => s.includes("var(--card-ring)")),
       selector,
     ).toBe(true);
+  });
+
+  it("keeps a guessed note's soft shadow but no ring around its dashed border", () => {
+    const found = shadows(".note.guess");
+    expect(found).toHaveLength(1);
+    expect(found[0]).not.toContain("var(--card-ring)");
   });
 
   it.each(NOT_CARDS)("%s has no ring", (selector) => {

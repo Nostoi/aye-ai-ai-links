@@ -391,25 +391,44 @@ describe("the Handy tiles", () => {
     }
   });
 
-  it("puts Show all and Add beside the heading: a grid in which the swapped shelf's head takes row 1, column 2", () => {
-    expect(rule(".handy")).toContain("display:grid;grid-template-columns:1fr auto");
-    expect(rule("#handy-shelf")).toBe("display:contents");
-    expect(rule(".handy-head")).toContain("grid-row:1;grid-column:2");
-    expect(rule(".handy>h2")).toContain("grid-row:1;grid-column:1");
-    expect(themeCss).toMatch(/(?:^|\})\.handy-row,\.handy-empty,#handy-error\{grid-column:1\/-1/m);
-    expect(themeCss).not.toContain(".handy-foot");
+  it("has no header beside the heading any more: the pill, its head and the empty line are gone (#304)", () => {
+    for (const gone of [".handy-head", ".handy-add", ".handy-empty", ".handy-foot"]) {
+      expect(themeCss, gone).not.toContain(gone);
+    }
+    expect(rule(".handy>h2")).toBe("");
   });
 
-  it("makes Add a tinted 44px pill and Show all a quiet 44px text button", () => {
-    const add = rule(".handy-add");
-    for (const part of ["min-height:44px", "border-radius:999px", "text-decoration:none"]) {
+  it("makes Add a dashed 44px-or-taller tile like a Handy tile, whose plus sits in a 44px square", () => {
+    const add = rule(".add-tile");
+    for (const part of [
+      "border:1.5px dashed var(--line)",
+      "border-radius:18px",
+      "text-decoration:none",
+      "min-height:76px",
+    ]) {
       expect(add).toContain(part);
     }
-    expect(add).toContain("background:color-mix(in srgb,var(--ink) 5%,transparent)");
+    const plus = rule(".add-plus");
+    expect(plus).toContain("width:44px;height:44px");
+    expect(plus).toContain("background:var(--surface)");
+  });
+
+  it("makes Show all a quiet 44px text button under the row", () => {
     const showAll = rule(".handy-show-all");
-    for (const part of ["min-height:44px", "color:var(--soft)", "background:none", "border:0"]) {
+    for (const part of [
+      "min-height:44px",
+      "color:var(--soft)",
+      "background:none",
+      "border:0",
+      "display:block",
+    ]) {
       expect(showAll).toContain(part);
     }
+  });
+
+  it("gaps the Handy row by 12px on a wide screen and keeps 8px on a phone", () => {
+    expect(rule(".handy-row")).toContain("gap:12px");
+    expect(phoneRule(".handy-row")).toContain("gap:8px");
   });
 
   it("drops the postcard's squeeze rules for asks laid over a small square", () => {

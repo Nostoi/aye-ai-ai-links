@@ -68,9 +68,11 @@ describe("the Handy shelf", () => {
     expect(ids(tiles(html))).toEqual(items.map((i) => i.link.id));
     expect(tiles(html).map((t) => t.hidden)).toEqual([...Array(8).fill(false), true, true]);
     expect(tiles(html).filter((t) => t.hasAttribute("data-more"))).toHaveLength(2);
-    expect(
-      dom(html).querySelector("#handy-shelf .handy-head button[data-act=show-all]")?.textContent,
-    ).toBe("Show all 10");
+    // Show all is a quiet button under the row, inside the swapped shelf (#306).
+    const showAll = dom(html).querySelector("#handy-shelf > button[data-act=show-all]");
+    expect(showAll?.textContent).toBe("Show all 10");
+    expect(showAll?.previousElementSibling?.className).toBe("handy-row");
+    expect(dom(html).querySelector(".handy-head")).toBeNull();
     expect(dom(html).querySelector(".handy-foot")).toBeNull();
   });
 
@@ -288,25 +290,27 @@ describe("the Handy shelf", () => {
     ).toBeNull();
   });
 
-  it("offers Add in the header, inside the refreshed shelf: a search over the owner's links", () => {
-    const d = dom(render([kept()]));
-    const add = d.querySelector("#handy-shelf .handy-head a.handy-add");
-    expect(add?.textContent).toBe("Add");
+  it("ends the row with an Add tile, inside the refreshed shelf: a search over the owner's links (#304)", () => {
+    const d = dom(render([kept(), kept()], [suggested()]));
+    const row = d.querySelector("#handy-shelf > .handy-row");
+    const add = row?.lastElementChild;
+    expect(add?.matches("a.add-tile")).toBe(true);
+    expect(add?.textContent?.trim()).toBe("+Keep a link handy");
     expect(add?.getAttribute("href")).toBe("/search?q=&keep=1");
-    expect(add?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
-    expect(d.querySelector(".handy-head button[data-act=show-all]")).toBeNull();
+    expect(add?.querySelector("[aria-hidden=true]")?.textContent).toBe("+");
+    expect(row?.querySelectorAll("a.add-tile")).toHaveLength(1);
+    expect(row?.querySelectorAll(".handy-tile")).toHaveLength(3);
+    // The pill and its header are gone, so no second Add and nothing stale outside the swap.
+    expect(d.querySelector(".handy-add, .handy-head")).toBeNull();
+    expect(d.querySelectorAll("a[href='/search?q=&keep=1']")).toHaveLength(1);
   });
 
-  it("shows one line with Add when there is nothing on it and nothing suggested, and no header buttons", () => {
+  it("is the Add tile alone when there is nothing on the shelf and nothing suggested", () => {
     const d = dom(render([]));
-    expect(d.querySelector(".handy-row")).toBeNull();
-    expect(d.querySelector(".handy-head")).toBeNull();
-    expect(d.querySelector("#handy-shelf .handy-empty p")?.textContent).toBe(
-      "Keep links you use often here",
-    );
-    expect(d.querySelector("#handy-shelf .handy-empty a.handy-add")?.getAttribute("href")).toBe(
-      "/search?q=&keep=1",
-    );
+    const row = d.querySelector("#handy-shelf > .handy-row");
+    expect([...(row?.children ?? [])].map((c) => c.className)).toEqual(["add-tile"]);
+    expect(row?.firstElementChild?.getAttribute("href")).toBe("/search?q=&keep=1");
+    expect(d.querySelector(".handy-empty, .handy-head, .handy-add")).toBeNull();
     expect(d.querySelector("h2")?.textContent).toBe("Handy");
   });
 
@@ -455,21 +459,36 @@ describe("the shelf's script", () => {
     expect(shelfIds(p)).toEqual([a.link.id, b.link.id]);
   });
 
-  it("a refresh re-renders the header with the tiles: emptying swaps it for the empty line, Undo brings it back", async () => {
+  it("a refresh re-renders the Add tile with the tiles: emptying leaves the tile alone, Undo brings the tile back after the card", async () => {
     const only = kept();
     const p = shelfPage(
       home([only]),
       (s) => (s.url === "/tools/undo" ? { status: 204 } : { status: 200, body: MOVED }),
       [home([]), home([only])],
     );
+    const kids = () =>
+      [...p.document.querySelectorAll("#handy-shelf > .handy-row > *")].map((c) =>
+        c.classList.contains("handy-tile") ? "tile" : c.className,
+      );
+    expect(kids()).toEqual(["tile", "add-tile"]);
     p.dispatch(p.$("button[data-act=not-handy]"), "click");
     await p.settle();
-    expect(p.document.querySelector("#handy-shelf .handy-head")).toBeNull();
-    expect(p.document.querySelector("#handy-shelf .handy-empty a.handy-add")).not.toBeNull();
+    expect(kids()).toEqual(["add-tile"]);
+    expect(p.document.querySelectorAll("a.add-tile")).toHaveLength(1);
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
-    expect(p.document.querySelector("#handy-shelf .handy-head a.handy-add")).not.toBeNull();
-    expect(p.document.querySelector("#handy-shelf .handy-empty")).toBeNull();
+    expect(kids()).toEqual(["tile", "add-tile"]);
+    expect(p.document.querySelectorAll("a.add-tile")).toHaveLength(1);
+  });
+
+  it("a refresh drops a Show all that no longer applies, as it sits inside the swapped shelf", async () => {
+    const nine = Array.from({ length: 9 }, () => kept());
+    const p = shelfPage(home(nine), () => ({ status: 200, body: MOVED }), [home(nine.slice(1))]);
+    expect(p.document.querySelectorAll("button[data-act=show-all]")).toHaveLength(1);
+    p.dispatch(p.$("button[data-act=not-handy]"), "click");
+    await p.settle();
+    expect(p.document.querySelectorAll("button[data-act=show-all]")).toHaveLength(0);
+    expect(p.document.querySelectorAll("a.add-tile")).toHaveLength(1);
   });
 
   const STALE_CHANGE = {

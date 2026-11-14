@@ -7,6 +7,28 @@ import { askCss, themeCss } from "./theme.js";
 
 const ASK = { ai: "Fake", place: "Home", owner: "owner-a" };
 const doc = (html: string) => parseHTML(html).document;
+
+/** Every rule's selector inside any `@media` block, at any depth, by walking the braces. */
+const mediaSelectors = (css: string) => {
+  const found: string[] = [];
+  for (const start of css.matchAll(/@media[^{]*\{/g)) {
+    let depth = 1;
+    let prelude = "";
+    for (let i = (start.index ?? 0) + start[0].length; i < css.length && depth > 0; i++) {
+      const c = css[i];
+      if (c === "{") {
+        depth++;
+        const selector = prelude.trim();
+        if (!selector.startsWith("@")) found.push(selector);
+        prelude = "";
+      } else if (c === "}") {
+        depth--;
+        prelude = "";
+      } else prelude += c;
+    }
+  }
+  return found;
+};
 const bar = (html: string) => doc(html).querySelector("nav.menu") as Element;
 const hrefs = (els: Element[]) => els.map((a) => a.getAttribute("href"));
 
@@ -67,7 +89,16 @@ describe("the band", () => {
   it("sizes its tiers by its own width, above the page's cards", () => {
     expect(rule(".bar-band").join(";")).toMatch(/container:bar\/inline-size/);
     expect(rule(".bar-band").join(";")).toMatch(/position:relative;z-index:30/);
-    expect(themeCss).not.toMatch(/@media[^{]*\{[^}]*\.(bar-pill|pill-word|menu-page|menu-save)\{/);
+    const barParts =
+      /\.(bar-band|bar-pill|pill-word|places|menu-page|menu-save|menu-search|menu-phone-only|label-wide|label-phone|icon-wide|icon-phone|brand)\b/;
+    const inMedia = mediaSelectors(themeCss + askCss).filter((s) => barParts.test(s));
+    expect(inMedia).toEqual([]);
+  });
+
+  it("finds a bar part anywhere inside an @media block", () => {
+    const css =
+      "@media (max-width:600px){.a{x:1}.b,.bar-pill{y:2}}@media (hover:none){@container (x){.c{z:3}}}";
+    expect(mediaSelectors(css)).toEqual([".a", ".b,.bar-pill", ".c"]);
   });
 
   it("drops the name beside the logo when the band is narrower than 880px, keeping the logo's own name", () => {

@@ -362,7 +362,7 @@ describe("the Handy tiles", () => {
   it("puts the words in ink on the card itself, with no fade, and the host in the soft grey", () => {
     expect(rule(".handy-caption")).not.toContain("gradient");
     expect(rule(".handy-caption")).toContain("color:var(--ink)");
-    expect(rule(".handy-caption .card-site")).toContain("color:var(--soft)");
+    expect(rule(".handy-caption .card-site")).toContain("color:var(--detail)");
   });
 
   it("keeps the initials to under half the picture's side, with a tight line height", () => {
@@ -377,12 +377,12 @@ describe("the Handy tiles", () => {
     ).toBe("1");
   });
 
-  it("sets the title at 16px bold in at most two lines, and the host at 14px on one line with an ellipsis", () => {
+  it("sets the title at 16px bold in at most two lines, and the host at 13.5px on one line with an ellipsis", () => {
     expect(rule(".handy-tile h3")).toContain("font-size:16px");
     expect(rule(".handy-tile h3")).toContain("font-weight:700");
     expect(rule(".handy-tile h3")).toContain("-webkit-line-clamp:2");
     const site = rule(".handy-caption .card-site");
-    expect(site).toContain("font-size:14px");
+    expect(site).toContain("font-size:13.5px");
     expect(site).toContain("min-width:0");
     const host = rule(".handy-caption .host");
     for (const part of ["white-space:nowrap", "overflow:hidden", "text-overflow:ellipsis"]) {

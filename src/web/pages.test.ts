@@ -345,7 +345,7 @@ describe("the menu", () => {
       expect(
         html.replaceAll(' aria-current="page"', "").replace(/<a class="menu-search".*?<\/a>/, ""),
       ).toContain(
-        '<nav class="menu" aria-label="Main"><a class="menu-page" href="/">Home</a><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a><a class="menu-page" href="/save">+ Save</a><details class="account-menu" name="menu">',
+        '<nav class="menu" aria-label="Main"><span class="places"><a class="menu-page" href="/">Home</a><a class="menu-page" href="/all">All links</a><a class="menu-page" href="/tags">Spaces and tags</a></span><a class="bar-pill menu-save" href="/save">',
       );
       expect(html).toContain(
         '<a href="/profile">Profile</a><a href="/connections">Apps and keys</a><a href="/connections#your-data">Your data</a><button id="sign-out"',

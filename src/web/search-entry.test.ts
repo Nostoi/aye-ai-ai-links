@@ -47,7 +47,8 @@ describe("the magnifier in the bar", () => {
     const a = magnifier(page("t", "<main></main>", { menu: true, ask: ASK })) as Element;
     expect(a.className).not.toContain("menu-page");
     expect(a.className).not.toContain("menu-phone-only");
-    expect(a.nextElementSibling?.id).toBe("ask-open");
+    expect(a.nextElementSibling?.getAttribute("href")).toBe("/save");
+    expect(a.nextElementSibling?.nextElementSibling?.id).toBe("ask-open");
     expect(themeCss).toMatch(/\.menu-search\{[^}]*min-height:44px[^}]*min-width:44px/);
   });
 });

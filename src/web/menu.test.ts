@@ -5,7 +5,7 @@ import { cardMenu, DIVIDER } from "./card-menu.js";
 import { runAskPage, type runPage } from "./opened-test-kit.js";
 import { page } from "./page.js";
 import { olderScript } from "./show-older.js";
-import { askCss, themeCss } from "./theme.js";
+import { themeCss } from "./theme.js";
 
 /** The navigation every signed-in page shares (#196). */
 
@@ -18,16 +18,21 @@ const nav = (html: string) => parseHTML(html).document.querySelector("nav") as H
 const own = (html: string, selector: string) => [...nav(html).querySelectorAll(selector)];
 
 describe("the navigation bar", () => {
-  it("holds four page links and an account menu, not the old flat list of six", () => {
+  it("holds the three places, the Search and Save actions and an account menu", () => {
     const bar = nav(plain());
     expect(bar.getAttribute("aria-label")).toBe("Main");
     const top = [...bar.children];
-    expect(top.map((e) => e.tagName)).toEqual(["A", "A", "A", "A", "A", "DETAILS"]);
-    expect(top.slice(0, 4).map((a) => [text(a), a.getAttribute("href")])).toEqual([
-      ["Home", "/"],
-      ["All links", "/all"],
-      ["Spaces and tags", "/tags"],
-      ["+ Save", "/save"],
+    expect(top.map((e) => e.tagName)).toEqual(["SPAN", "A", "A", "DETAILS"]);
+    expect([...(top[0] as Element).children].map((a) => [text(a), a.getAttribute("href")])).toEqual(
+      [
+        ["Home", "/"],
+        ["All links", "/all"],
+        ["Spaces and tags", "/tags"],
+      ],
+    );
+    expect(top.slice(1, 3).map((a) => [text(a), a.getAttribute("href")])).toEqual([
+      ["", "/search"],
+      ["Save", "/save"],
     ]);
     expect(own(plain(), "nav > button")).toEqual([]);
     expect(text(bar)).not.toContain("Tags");
@@ -57,11 +62,15 @@ describe("the navigation bar", () => {
       ["Home", "/"],
       ["All links", "/all"],
       ["Spaces and tags", "/tags"],
-      ["+ Save", "/save"],
+      ["Save", "/save"],
     ]);
     expect(themeCss).toMatch(/\.menu-phone-only\{display:none\}/);
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.menu-page\{display:none\}/);
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.menu-phone-only\{display:flex\}/);
+    expect(themeCss).toMatch(
+      /@container bar \(max-width:640px\)\{[^@]*\.menu-page,\.menu-save\{display:none\}/,
+    );
+    expect(themeCss).toMatch(
+      /@container bar \(max-width:640px\)\{[^@]*\.menu-phone-only\{display:flex\}/,
+    );
   });
 
   it("marks no page link as current without a section", () => {
@@ -76,7 +85,7 @@ describe("the navigation bar", () => {
     "marks the %s section on its bar link and its phone-menu copy",
     (here, href, inBar, inMenu) => {
       const html = page("t", "<main>body</main>", { menu: true, here });
-      const bar = own(html, 'nav > [aria-current="page"]');
+      const bar = own(html, 'nav .places [aria-current="page"]');
       const menu = own(html, '.menu-phone-only[aria-current="page"]');
       expect(bar.map((a) => a.getAttribute("href"))).toEqual(inBar ? [href] : []);
       expect(menu.map((a) => a.getAttribute("href"))).toEqual(inMenu ? [href] : []);
@@ -84,8 +93,9 @@ describe("the navigation bar", () => {
     },
   );
 
-  it("styles the current page link as a quiet underline, like the sort choices", () => {
-    expect(themeCss).toMatch(/\.menu-page\[aria-current=page\]/);
+  it("styles the current place as pressed in, and the phone menu's copy as an underline", () => {
+    expect(themeCss).toMatch(/\.menu-page\[aria-current=page\]\{[^}]*inset 0 1px 2px/);
+    expect(themeCss).not.toMatch(/\.menu-page\[aria-current=page\]\{[^}]*underline/);
     expect(themeCss).toMatch(/\.menu-phone-only\[aria-current=page\]/);
   });
 
@@ -98,8 +108,12 @@ describe("the navigation bar", () => {
     ]);
     expect(summary.querySelector("[aria-hidden=true]")).not.toBeNull();
     expect(themeCss).toMatch(/\.label-phone\{display:none\}/);
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.label-wide[^{]*\{display:none\}/);
-    expect(themeCss).toMatch(/@media \(max-width:600px\)\{[^@]*\.label-phone\{display:inline\}/);
+    expect(themeCss).toMatch(
+      /@container bar \(max-width:640px\)\{[^@]*\.label-wide[^{]*\{display:none\}/,
+    );
+    expect(themeCss).toMatch(
+      /@container bar \(max-width:640px\)\{[^@]*\.label-phone\{display:inline\}/,
+    );
   });
 
   it("keeps the bar at the right edge when it wraps under the logo, so the open menu stays on screen", () => {
@@ -110,7 +124,7 @@ describe("the navigation bar", () => {
   it("wraps the bar onto a second row, right-aligned, rather than breaking a label", () => {
     expect(themeCss).toMatch(/\.menu\{[^}]*flex-wrap:wrap[^}]*justify-content:flex-end/);
     expect(themeCss).toMatch(/\.menu-page\{[^}]*white-space:nowrap/);
-    expect(askCss).toMatch(/#ask-open\{[^}]*white-space:nowrap/);
+    expect(themeCss).toMatch(/\.bar-pill\{[^}]*white-space:nowrap/);
   });
 
   it("makes the summary and every row at least 44px", () => {
@@ -119,14 +133,12 @@ describe("the navigation bar", () => {
     expect(themeCss).toMatch(/\.menu-page\{[^}]*min-height:44px/);
   });
 
-  it("puts Ask AI outside the account menu, between the page links and it, only with the AI set up", () => {
+  it("puts Ask AI outside the account menu, between Save and it, only with the AI set up", () => {
     const withAI = nav(withAsk());
     expect([...withAI.children].map((e) => text(e) ?? "")).toEqual([
-      "Home",
-      "All links",
-      "Spaces and tags",
-      "+ Save",
+      "HomeAll linksSpaces and tags",
       "",
+      "Save",
       "Ask AI",
       expect.stringContaining("Account"),
     ]);

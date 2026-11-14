@@ -10,8 +10,8 @@ export const ASK_KEY = "aye-ask";
 const BUBBLE = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>`;
 const CROSS = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 
-/** The menu's Ask AI button; it sits between Apps and keys and Sign out. */
-export const ASK_BUTTON = `<button type="button" id="ask-open" aria-pressed="false" aria-controls="ask-panel">${BUBBLE}Ask AI</button>`;
+/** The bar's Ask AI action: a raised pill (`bar-pill`, like Save) after Save and before the account menu. */
+export const ASK_BUTTON = `<button type="button" class="bar-pill" id="ask-open" aria-pressed="false" aria-controls="ask-panel">${BUBBLE}<span class="pill-word">Ask AI</span></button>`;
 
 /** The panel, hidden until the script opens it. */
 export const askPanel = ({

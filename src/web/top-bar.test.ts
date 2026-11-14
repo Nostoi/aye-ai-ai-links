@@ -63,6 +63,12 @@ describe("the band", () => {
       expect(doc(bare).querySelector(".bar-band")).toBeNull();
     }
   });
+
+  it("drops the name beside the logo below 900px, keeping the logo's own name", () => {
+    expect(themeCss).toMatch(/@media \(max-width:900px\)\{\.bar-band \.brand>span\{display:none\}/);
+    const band = doc(page("t", "<main></main>", { menu: true })).querySelector(".bar-band .brand");
+    expect(band?.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Aye-AI-AI Links");
+  });
 });
 
 const rule = (selector: string) =>

@@ -97,6 +97,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde", ui
 .site{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 24px;padding-top:24px;padding-bottom:8px}
 .bar-band{display:flex;flex:1;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-2);padding:var(--space-2) var(--space-2) var(--space-2) 20px;border-radius:30px;background:var(--tray)}
 .bar-band .brand{margin-right:var(--space-5)}
+@media (max-width:900px){.bar-band .brand>span{display:none}.bar-band .brand{margin-right:var(--space-2)}}
 .menu{display:flex;flex:1;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:var(--space-1) var(--space-2);margin-left:auto;font-size:15.5px}
 .places{display:flex;align-items:center;gap:2px;margin-right:auto}
 .menu-page{display:inline-flex;align-items:center;min-height:44px;padding:0 var(--space-4);border-radius:22px;color:var(--about);text-decoration:none;white-space:nowrap}

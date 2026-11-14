@@ -28,6 +28,7 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
     ["ink", "fill"],
     ["about", "surface"],
     ["amber-ink", "amber-bg"],
+    ["about", "pic"],
   ] as const)("has 4.5:1 contrast for %s on %s", (fg, bg) => {
     expect(contrast(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
   });
@@ -1341,5 +1342,26 @@ describe("the end of the saved copy", () => {
     const back = rule(".copy-nav .back-link,.copy-end .back-link");
     expect(back).toContain("gap:8px");
     expect(back).toContain("color:var(--soft)");
+  });
+});
+
+describe("Home's space-card icon squares (#304)", () => {
+  const square = (inner: string) =>
+    el(`<span class="home-fav home-fav-none" aria-hidden="true">${inner}</span>`, "span");
+
+  it("draws the letter on --pic in a readable colour, centred in the 18px square", () => {
+    const letter = square("S");
+    for (const w of ["desktop", "phone"] as const) {
+      expect(computed(letter, "background", w), w).toBe("var(--pic)");
+      expect(computed(letter, "color", w), w).toBe("var(--about)");
+      expect(computed(letter, "text-align", w), w).toBe("center");
+      expect(computed(letter, "opacity", w), w).toBeUndefined();
+    }
+  });
+
+  it("keeps today's faint plain square when there is no letter", () => {
+    const plain = square("");
+    expect(computed(plain, "background", "desktop")).toBe("var(--line)");
+    expect(computed(plain, "opacity", "desktop")).toBe(".55");
   });
 });

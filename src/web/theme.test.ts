@@ -964,30 +964,47 @@ describe("Home's Worth a look cards (#195)", () => {
     describe("the pair on the Open it row (#304)", () => {
       const hoverBlock = (inner: string) => `@media (hover:hover) and (min-width:601px){${inner}`;
       const has = (css: string) => expect(themeCss).toContain(css);
+      const FADE = "opacity:0;pointer-events:none";
 
-      it("on a screen with hover, keeps the closed pair at the row's right end in a box of its own width, whatever opens", () => {
+      it("on a screen with hover above 600px, keeps the closed pair at the row's right end in a box of its own width", () => {
         has(hoverBlock(".feature-quiet{position:relative;flex:none;width:106px;height:48px}"));
         has(".feature-quiet .slide{position:absolute;top:0;right:0}");
         has(".feature-quiet .slide:first-child{right:58px}");
-        has(".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:1}");
         expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
+      });
+
+      it("grows an opened button leftward over the row, never past the row's left edge", () => {
+        has(
+          ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:1;max-width:min(260px,100cqw)}",
+        );
+        has(
+          ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible{max-width:min(260px,calc(100cqw - 58px))}",
+        );
       });
 
       it("wraps the pair onto its own row only when Open it and the closed pair no longer fit", () => {
         has("@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}");
       });
 
-      it("fades Open it while a button is open in a row too narrow to leave it clear", () => {
+      it("fades Open it per button, only in a row its opened button reaches, never in a wrapped row", () => {
         has(
-          "@container (max-width:410px){.feature-buttons:has(.slide:hover,.slide:focus-visible)>.feature-open{opacity:0}}",
+          `@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible)>.feature-open{${FADE}}}`,
+        );
+        has(
+          `@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible)>.feature-open{${FADE}}}`,
         );
         expect(decl(".feature-open", null, "transition")).toContain("opacity");
+        expect(themeCss).not.toMatch(/\.feature-open\{[^}]*visibility:hidden/);
       });
 
-      it("keeps the old wrap, at 540px, where the words always show (no hover)", () => {
-        has(
-          "@media (hover:none){@container (max-width:540px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}}",
+      it("wraps the pair below 540px on every input, as before, with the hover rules coming after so they win above 600px", () => {
+        const wrap =
+          "@container (max-width:540px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}";
+        has(wrap);
+        expect(themeCss.indexOf(wrap)).toBeLessThan(
+          themeCss.indexOf("@media (hover:hover) and (min-width:601px)"),
         );
+        expect(themeCss).not.toContain("@media (hover:none){@container");
         const viewportRules = parseCss(themeCss).filter(
           (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
         );

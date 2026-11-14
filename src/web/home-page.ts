@@ -22,6 +22,7 @@ import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
 import { slideButton } from "./slide-button.js";
 import { SPACES_ID } from "./spaces-section.js";
 import { askWhy, CARD_FETCH, tellWhyScript, WHY_LABEL, whyAnswer } from "./tell-why.js";
+import { spine } from "./tray-spine.js";
 
 /**
  * What "Worth a look today" shows: the picks, the image version of each that has one, now, the
@@ -148,7 +149,8 @@ function worthSection(cards: WorthCards): string {
       ? ""
       : `${first ? `<h3 class="also-today">Also today</h3>\n` : ""}<div class="worth-rows">\n${rows.join("\n")}\n</div>\n`;
   return `<section class="worth" aria-labelledby="worth">
-<h2 id="worth">Worth a look today</h2>
+${spine("today")}
+<h2 id="worth" class="visually-hidden">Worth a look today</h2>
 <p id="home-error" role="alert"></p>
 <div id="worth-cards">
 ${first ? `${featured(first, cards)}\n` : ""}${also}</div>

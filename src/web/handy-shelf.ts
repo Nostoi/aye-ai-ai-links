@@ -11,6 +11,7 @@ import { NOT_HANDY } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
+import { spine } from "./tray-spine.js";
 
 /** Tiles the shelf shows before Show all (#125). */
 export const SHELF_SIZE = 8;
@@ -111,7 +112,8 @@ ${[
 ].join("\n")}
 </div>${showAll}`;
   return `<section class="handy" id="handy" aria-labelledby="handy-title">
-<h2 id="handy-title" tabindex="-1">Handy</h2>
+${spine("handy")}
+<h2 id="handy-title" class="visually-hidden" tabindex="-1">Handy</h2>
 <p id="handy-error" role="alert"></p>
 <div id="handy-shelf">
 ${body}

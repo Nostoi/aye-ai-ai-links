@@ -305,6 +305,19 @@ describe("the Handy shelf", () => {
     expect(d.querySelectorAll("a[href='/search?q=&keep=1']")).toHaveLength(1);
   });
 
+  it("starts with its spine and keeps the full heading for screen readers, visually hidden and focusable (#306)", () => {
+    const section = dom(render([kept()])).querySelector("section.handy") as Element;
+    expect(section.firstElementChild?.className).toBe("spine");
+    expect(section.querySelector(".spine-word")?.textContent).toBe("Handy");
+    const h2 = section.querySelector("h2");
+    expect(h2?.id).toBe("handy-title");
+    expect(h2?.className).toBe("visually-hidden");
+    expect(h2?.getAttribute("tabindex")).toBe("-1");
+    expect(h2?.textContent).toBe("Handy");
+    expect(section.getAttribute("aria-labelledby")).toBe("handy-title");
+    expect(section.querySelectorAll(".spine")).toHaveLength(1);
+  });
+
   it("is the Add tile alone when there is nothing on the shelf and nothing suggested", () => {
     const d = dom(render([]));
     const row = d.querySelector("#handy-shelf > .handy-row");

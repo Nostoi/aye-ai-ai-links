@@ -58,6 +58,23 @@ describe("the Your spaces section", () => {
     expect(hrefs(html, "a")).toEqual(["/tags"]);
   });
 
+  it.each([
+    ["with spaces", [space({ key: "k" })]],
+    ["with nothing pinned", []],
+  ])(
+    "starts with its spine, and keeps the full heading visually hidden (#306), %s",
+    (_, spaces) => {
+      const section = dom(spacesSection(spaces)).querySelector("section.spaces") as Element;
+      expect(section.firstElementChild?.className).toBe("spine");
+      expect(section.querySelector(".spine-word")?.textContent).toBe("Spaces");
+      const h2 = section.querySelector("h2");
+      expect(h2?.id).toBe("spaces");
+      expect(h2?.className).toBe("visually-hidden");
+      expect(h2?.textContent).toBe("Your spaces");
+      expect(section.getAttribute("aria-labelledby")).toBe("spaces");
+    },
+  );
+
   it("shows each space as a card opening its page, in its color, with its dot and name", () => {
     const html = spacesSection([
       space({ key: "home batteries", name: "Home batteries", color: "teal" }),

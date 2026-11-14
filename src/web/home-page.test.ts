@@ -14,7 +14,7 @@ import { NOT_NOW_HINT } from "./not-now.js";
 import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { spacesSection } from "./spaces-section.js";
-import { themeCss } from "./theme.js";
+import { themeCss, WORTH_EMPTY } from "./theme.js";
 
 const NOW = new Date("2026-10-14T10:00:00Z");
 
@@ -554,6 +554,19 @@ describe("Worth a look today", () => {
   });
 });
 
+it("starts Worth a look today with a Today spine and keeps its heading visually hidden (#306)", () => {
+  const html = homePage({ worth: worth([card([])]), shelf: "", spaces: "" });
+  const section = dom(html).querySelector("section.worth") as Element;
+  expect(section.firstElementChild?.className).toBe("spine");
+  expect(section.querySelector(".spine-word")?.textContent).toBe("Today");
+  const h2 = section.querySelector("h2");
+  expect([h2?.id, h2?.className, h2?.textContent]).toEqual([
+    "worth",
+    "visually-hidden",
+    "Worth a look today",
+  ]);
+});
+
 it("orders home: the search, the Handy shelf, Worth a look today, Your spaces", () => {
   const html = homePage({
     worth: worth([card([])]),
@@ -992,6 +1005,63 @@ describe("the home page's script", () => {
     await p.settle();
     expect(urls(p)).toEqual(["/links/delete", "/links/restore"]);
     expect(p.document.querySelector(`[data-id="${id}"]`)).not.toBeNull();
+  });
+
+  describe("the Worth tray when its last card goes (#306)", () => {
+    const collapsed = (p: ReturnType<typeof runPage>) =>
+      p.document.querySelector(WORTH_EMPTY) !== null;
+    const gone =
+      (answer: (s: Post) => Answer = fine) =>
+      (s: Post): Answer =>
+        s.url === "/home/snooze" ? { status: 200, body: SNOOZE } : answer(s);
+
+    it.each([
+      [
+        "Not now",
+        (p: ReturnType<typeof runPage>) =>
+          p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click"),
+      ],
+      [
+        "Done with it",
+        (p: ReturnType<typeof runPage>) =>
+          p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click"),
+      ],
+      [
+        "Delete link, which removes the card",
+        (p: ReturnType<typeof runPage>) =>
+          pick(p, p.$("[data-id]").dataset.id as string, "delete-link"),
+      ],
+    ])("collapses after %s, stays open for an error, and opens again on Undo", async (_, act) => {
+      const p = home([card([])], gone());
+      expect(collapsed(p)).toBe(false);
+      act(p);
+      await p.settle();
+      expect(p.$("#undo-bar span").textContent).not.toBe("");
+      expect(collapsed(p)).toBe(true);
+      p.$("#home-error").textContent = "Something went wrong.";
+      expect(collapsed(p)).toBe(false);
+      p.$("#home-error").textContent = "";
+      expect(collapsed(p)).toBe(true);
+      p.dispatch(p.$("#undo-bar button"), "click");
+      await p.settle();
+      expect(collapsed(p)).toBe(false);
+    });
+
+    it("stays open while any card or row is left, and a refusal never collapses it", async () => {
+      const cards = two();
+      const p = home(cards, gone());
+      p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
+      await p.settle();
+      expect(hidden(p, cards[0]?.link.id as string)).toBe(true);
+      expect(collapsed(p)).toBe(false);
+      pick(p, cards[1]?.link.id as string, "snooze");
+      await p.settle();
+      expect(collapsed(p)).toBe(true);
+      const refused = home([card([])], () => ({ status: 500 }));
+      refused.dispatch(refused.$(".feature-quiet button[data-act=snooze]"), "click");
+      await refused.settle();
+      expect(collapsed(refused)).toBe(false);
+    });
   });
 
   it("Remove saved copy hides the featured card's Saved copy link", async () => {

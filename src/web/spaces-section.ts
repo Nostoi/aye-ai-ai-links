@@ -6,6 +6,7 @@ import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { faviconSrc, spaceClass } from "./pages.js";
 import { spaceHref } from "./space-page.js";
+import { spine } from "./tray-spine.js";
 
 /** The id of the cards' grid, for `openedScript`. */
 export const SPACES_ID = "home-spaces";
@@ -85,7 +86,8 @@ export const spacesSection = (
   spaces: HomeSpace[],
   favicons: Map<string, string> = new Map(),
 ) => `<section class="spaces" aria-labelledby="spaces">
-<h2 id="spaces">Your spaces</h2>
+${spine("spaces")}
+<h2 id="spaces" class="visually-hidden">Your spaces</h2>
 ${
   spaces.length === 0
     ? '<p class="small">Pin a tag on the <a href="/tags">Tags page</a> and it shows here as a space.</p>'

@@ -961,18 +961,43 @@ describe("Home's Worth a look cards (#195)", () => {
       expect(computed(alone, "flex", "phone")).toBeUndefined();
     });
 
-    it("keeps the pair on its own row, right-aligned, whenever the button row is too narrow for Open it and both opened buttons (#304)", () => {
-      // Measured in headless Chrome with the app's fonts: Open it 104px, the opened Not now 231px,
-      // the closed Done with it 48px, two 10px gaps: 403px. The old 540px dropped the pair under
-      // Open it on a desktop card that had room, leaving a tall empty area.
-      const narrow = "@container (max-width:410px)";
-      expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
-      expect(decl(".feature-quiet", narrow, "flex")).toBe("1 1 100%");
-      expect(decl(".feature-quiet", narrow, "justify-content")).toBe("flex-end");
-      const viewportRules = parseCss(themeCss).filter(
-        (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
-      );
-      expect(viewportRules.map((r) => r.media)).toEqual([]);
+    describe("the pair on the Open it row (#304)", () => {
+      const hoverBlock = (inner: string) => `@media (hover:hover) and (min-width:601px){${inner}`;
+      const has = (css: string) => expect(themeCss).toContain(css);
+
+      it("on a screen with hover, keeps the closed pair at the row's right end in a box of its own width, whatever opens", () => {
+        has(hoverBlock(".feature-quiet{position:relative;flex:none;width:106px;height:48px}"));
+        has(".feature-quiet .slide{position:absolute;top:0;right:0}");
+        has(".feature-quiet .slide:first-child{right:58px}");
+        has(".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:1}");
+        expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
+      });
+
+      it("wraps the pair onto its own row only when Open it and the closed pair no longer fit", () => {
+        has("@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}");
+      });
+
+      it("fades Open it while a button is open in a row too narrow to leave it clear", () => {
+        has(
+          "@container (max-width:410px){.feature-buttons:has(.slide:hover,.slide:focus-visible)>.feature-open{opacity:0}}",
+        );
+        expect(decl(".feature-open", null, "transition")).toContain("opacity");
+      });
+
+      it("keeps the old wrap, at 540px, where the words always show (no hover)", () => {
+        has(
+          "@media (hover:none){@container (max-width:540px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}}",
+        );
+        const viewportRules = parseCss(themeCss).filter(
+          (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
+        );
+        expect(viewportRules.map((r) => r.media)).toEqual([]);
+      });
+
+      it("leaves the phone block's stacked layout alone: the hover rules start above 600px", () => {
+        expect(themeCss).not.toMatch(/@media \(hover:hover\)\{[^@]*\.feature-quiet/);
+        expect(decl(".feature-open", "(max-width:600px)", "flex")).toBe("1 1 100%");
+      });
     });
 
     it("never reorders or stacks the pair, so Done with it stays rightmost", () => {
@@ -1506,6 +1531,7 @@ describe("Home's trays, spine and spacing (#306)", () => {
       expect(ring.map((r) => [r.media, r.decls.get("outline")])).toEqual([
         [null, "3px solid var(--blue)"],
       ]);
+      expect(ring[0]?.selectors).toContain(".handy:has(>h2:focus)>.spine");
     });
 
     it("hides the heading with the page's own clip pattern, at every width", () => {

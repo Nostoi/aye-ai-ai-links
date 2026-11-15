@@ -143,14 +143,17 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure`,
  * `cardBusy`, `busyLook`, `collapseBand` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
  * until the action, its shelf refresh and its Undo are done, and kept while the refresh was
- * dropped for a newer one, whose swap replaces the tile. The busy look is not the mark: it is
+ * dropped for a newer refresh that is still running: its swap replaces the tile, and if it ends
+ * without a swap the mark is released. The busy look is not the mark: it is
  * started with it, around the action and its refresh, and cleared when that work settles, so a
  * tile that keeps its mark never keeps the look. A button says its working word and dims the tile;
  * a ⋯ menu row (which closes) only dims it.
  * - `refreshShelf(from)` reads home again and swaps in its `#handy-shelf`, so the server decides the
  *   order, the cut and the due marker after every action. Tiles that were shown stay shown.
  * - A page that is not home (a sign-in redirect) is not swapped in, and the owner is told to reload.
- * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`).
+ * - An answer that arrives after a newer refresh began is dropped (`shelfTurn`). Its tile keeps the
+ *   mark only while the newest refresh has not settled (`settledTurn`); the newest releases the kept
+ *   tiles when it ends without a swap, and forgets them when it swaps.
  * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
  *   on the same button, else the same tile's first control, else the next tile's, else the heading. * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
  *   It still works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
@@ -176,18 +179,28 @@ const focusAfter = (shelf, from) => {
   target.focus();
 };
 let shelfTurn = 0;
-const refreshShelf = async (from) => {
+let settledTurn = 0;
+const keptTiles = new Set();
+const refreshShelf = async (from, tile) => {
   const shelf = document.getElementById("handy-shelf");
   if (!shelf) return;
   const turn = ++shelfTurn;
   const res = await fetch("/", { headers: { accept: "text/html" }, redirect: "manual" }).catch(() => null);
   const text = res && res.ok ? await res.text().catch(() => null) : null;
-  if (turn !== shelfTurn) return true;
+  if (turn !== shelfTurn) {
+    const newerRuns = settledTurn !== shelfTurn;
+    if (newerRuns && tile) keptTiles.add(tile);
+    return newerRuns;
+  }
+  settledTurn = turn;
   const next = text === null ? null : new DOMParser().parseFromString(text, "text/html").getElementById("handy-shelf");
   if (!next) {
     document.getElementById("handy-error").textContent = ${JSON.stringify(SHELF_STALE)};
+    for (const kept of keptTiles) cardBusy.delete(kept);
+    keptTiles.clear();
     return;
   }
+  keptTiles.clear();
   const shown = [...shelf.querySelectorAll("[data-more]")].some((tile) => !tile.hidden);
   shelf.innerHTML = next.innerHTML;
   if (shown) showAll(shelf);
@@ -246,7 +259,7 @@ if (handy) {
           return;
         }
         if (gone) await collapseBand(gone);
-        dropped = await refreshShelf(from);
+        dropped = await refreshShelf(from, tile);
         offerUndo(${JSON.stringify(DONE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(DONE_UNDO.title)});
         return;
       }
@@ -259,7 +272,7 @@ if (handy) {
           return;
         }
         if (gone) await collapseBand(gone);
-        dropped = await refreshShelf(from);
+        dropped = await refreshShelf(from, tile);
         offerUndo("Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
         return;
       }
@@ -271,7 +284,7 @@ if (handy) {
         handyError.textContent = await failure(res);
         return;
       }
-      dropped = await refreshShelf(from);
+      dropped = await refreshShelf(from, tile);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
       look.clear();

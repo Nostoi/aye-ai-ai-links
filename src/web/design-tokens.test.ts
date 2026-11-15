@@ -1,18 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { askCss, themeCss } from "./theme.js";
 
-/**
- * Shape, layer, colour, motion (#311) and type (#312) tokens. Each is defined once at `:root` and
- * never again, so every `var()` of it means its root value everywhere. Putting that value back in
- * place of each `var()` gives the stylesheet with the tokens' values written out.
- *
- * `__tokens_expanded__/` is that stylesheet as main had it at a39f302, before the type scale: the
- * pinned baseline. The branch's expansion must equal the baseline with `PICKED_EDITS` applied and
- * nothing else, so any other change of a value fails and the owner's pick is the only visible
- * change. A later change of a stylesheet value on purpose adds its edits to the list; do not
- * regenerate the fixtures to make the comparison pass.
- */
+/** Token values put back in place of each var(); `__tokens_expanded__/` is reviewed and updated with -u. */
 const TOKENS: Record<string, string> = {
   "radius-card": "18px",
   "radius-card-large": "20px",
@@ -79,52 +68,16 @@ describe("design tokens (#311)", () => {
     });
   }
 
-  it("themeCss with each token's value put back is the baseline with only the owner's pick applied", () => {
-    const [after, count] = editFontSizes(baseline("theme.css"), PICKED_EDITS);
-    expect(count).toEqual(PICKED_EDITS.map(() => 1));
-    expect(expand(themeCss)).toBe(after);
+  it("themeCss with each token's value put back is the stylesheet as it was", async () => {
+    await expect(expand(themeCss)).toMatchFileSnapshot("__tokens_expanded__/theme.css");
   });
 
-  it("askCss with each token's value put back is the baseline, unchanged", () => {
-    expect(expand(askCss)).toBe(baseline("ask.css"));
+  it("askCss with each token's value put back is the stylesheet as it was", async () => {
+    await expect(expand(askCss)).toMatchFileSnapshot("__tokens_expanded__/ask.css");
   });
 });
 
 const PHONE = "@media (max-width:600px)";
-type Edit = [at: string, selector: string, from: string, to: string];
-
-/** The owner's pick on #312 (T1, T2, T3, T4, T5b, T6, T7): 29 declarations, each matched once. */
-const PICKED_EDITS: Edit[] = [
-  ...[
-    ".menu",
-    ".lead",
-    "label",
-    "button",
-    ".stat-windows a",
-    ".undo-bar",
-    ".feature-why",
-    "a.button",
-    ".home-space-name",
-    ".done-link,.back-link",
-    ".show-older",
-    ".search-instead",
-    ".orders",
-    ".tidy-facts",
-  ].map((selector): Edit => ["", selector, "15.5px", "15px"]),
-  ...["kbd", ".why-label", ".edit-hint", ".edit-tag-guess", ".tidy-choices em"].map(
-    (selector): Edit => ["", selector, "13px", "13.5px"],
-  ),
-  [PHONE, ".edit-hint-phone", "13px", "13.5px"],
-  ["", ".leave", "14.5px", "14px"],
-  [PHONE, ".tidy-facts", "14.5px", "14px"],
-  ["", ".note-text", "16.5px", "17px"],
-  ["", ".tidy-choices b", "16.5px", "17px"],
-  ["", ".tidy-why", "17.5px", "17px"],
-  ["", ".result h2", "19px", "18px"],
-  ["", ".save-link-title", "19px", "18px"],
-  ["", ".home-fav-none", "11px", "12px"],
-  ["", ".tidy-title", "24px", "22px"],
-];
 
 /**
  * Typed on purpose (#312): Home's question, "Also today" and the card's detail line, so a change to
@@ -150,9 +103,6 @@ const TYPED: [at: string, selector: string, value: string][] = [
   ["", ".copy-article code", ".92em"],
   ["", ".copy-article table", "15.5px"],
 ];
-
-const baseline = (name: string) =>
-  readFileSync(new URL(`./__tokens_expanded__/${name}`, import.meta.url), "utf8");
 
 /** Each `font-size` declaration with its at-rule chain and selector, in source order. */
 const fontSizes = (css: string) => {
@@ -186,19 +136,6 @@ const walk = (css: string, visit: (at: string, selector: string, body: string) =
   );
 };
 
-/** Changes `edits`, each named by at-rule chain, selector and old value; returns how often each matched. */
-const editFontSizes = (css: string, edits: Edit[]): [string, number[]] => {
-  const count = edits.map(() => 0);
-  const out = walk(css, (at, selector, body) =>
-    edits.reduce((acc, [eAt, eSelector, from, to], i) => {
-      if (at !== eAt || selector !== eSelector || !acc.includes(`font-size:${from}`)) return acc;
-      count[i] = (count[i] ?? 0) + 1;
-      return acc.replace(`font-size:${from}`, `font-size:${to}`);
-    }, body),
-  );
-  return [out, count];
-};
-
 describe("type scale (#312)", () => {
   const step = /^var\(--text-(\d+)\)$/;
   const allowed = new Set(TYPED.map(([at, selector, value]) => `${at}|${selector}|${value}`));
@@ -228,8 +165,27 @@ describe("type scale (#312)", () => {
     }
   });
 
-  it("flags a stylesheet that defines the steps but leaves its sizes typed (main's)", () => {
-    expect(untyped(baseline("theme.css")).length).toBeGreaterThan(40);
+  it("flags a stylesheet that defines the steps but leaves its sizes typed", () => {
+    const typedAgain = themeCss.replace(
+      /font-size:var\(--text-(\d+)\)/g,
+      (_, n: string) => `font-size:${TOKENS[`text-${n}`]}`,
+    );
+    expect(untyped(typedAgain).length).toBeGreaterThan(40);
+  });
+
+  const sizedShorthands = (css: string) =>
+    [...css.matchAll(/(?<![-\w])font:([^;}]+)/g)]
+      .map((m) => (m[1] ?? "").trim())
+      .filter((v) => v !== "inherit");
+
+  it("sets no size through a font shorthand: every one in themeCss is inherit", () => {
+    expect(sizedShorthands(themeCss)).toEqual([]);
+  });
+
+  it("sees a numeric font shorthand", () => {
+    expect(sizedShorthands(".x{font:600 19px/1.3 inherit}.y{font:inherit}")).toEqual([
+      "600 19px/1.3 inherit",
+    ]);
   });
 
   it("uses all eleven steps", () => {

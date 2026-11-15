@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { LONG_MESSAGE, SIGNED_OUT, saveForm } from "./save-form.js";
 
@@ -469,5 +470,48 @@ describe("Save on the page", () => {
     field.value = "nonsense";
     page.fire("#save-url", "input");
     expect(visible(page.$("#save-host"))).toBe(false);
+  });
+});
+
+describe("Bring it back on the Save page, slow to answer (#314)", () => {
+  const ARCHIVED = {
+    id: "9",
+    created: false,
+    savedOn: "March 3",
+    url: "https://news.example/a",
+    title: "A story",
+    why: "to read",
+    whyKept: true,
+    state: "archived",
+    putAwayAt: null,
+  };
+
+  it("dims the button and says Bringing back… after 300ms, then restores both", async () => {
+    vi.stubGlobal("history", { replaceState: () => {} });
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = runPage(saveForm({ url: NEWS, title: "A story", long: false }), (s) =>
+      s.url === "/home/bring-back"
+        ? { status: 200, body: {}, wait: gate }
+        : { status: 200, body: ARCHIVED },
+    );
+    p.dispatch(p.$("#save-form"), "submit");
+    await p.settle();
+    const button = p.$("#bring-back");
+    expect(button.hidden).toBe(false);
+    p.dispatch(button, "click");
+    await p.settle();
+    expect(p.timers.pending(300)).toBe(1);
+    expect(button.hasAttribute("data-busy")).toBe(false);
+    p.timers.fire();
+    expect(button.hasAttribute("data-busy")).toBe(true);
+    expect(button.textContent).toBe("Bringing back…");
+    release();
+    await p.settle();
+    expect(p.document.querySelector("[data-busy]")).toBeNull();
+    expect(button.textContent).toBe("Bring it back");
+    vi.unstubAllGlobals();
   });
 });

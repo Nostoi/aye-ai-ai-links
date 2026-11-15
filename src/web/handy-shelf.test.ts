@@ -805,3 +805,175 @@ describe("the shelf's script", () => {
     expect(p.document.querySelectorAll("#handy-shelf .needs-you")).toHaveLength(0);
   });
 });
+
+describe("a Handy tile that is slow to answer (#314)", () => {
+  const goneItem = (): ShelfItem => ({ ...kept(), gone: true });
+  /** Each visible tile button, the tile that holds it and the word it says while its action is out. */
+  const BUTTONS: [string, () => ShelfItem[], () => ToolItem[], string, string][] = [
+    [
+      "Still using: Yes",
+      () => [kept({}, true)],
+      () => [],
+      "button[data-act=still-using]",
+      "Keeping…",
+    ],
+    [
+      "Still using: Done with it",
+      () => [kept({}, true)],
+      () => [],
+      "button[data-act=done]",
+      "Marking done…",
+    ],
+    ["Keep handy?: Yes", () => [], () => [suggested()], "button[data-act=suggest-yes]", "Adding…"],
+    ["Keep handy?: No", () => [], () => [suggested()], "button[data-act=suggest-no]", "Skipping…"],
+    [
+      "the gone band's It still works",
+      () => [goneItem()],
+      () => [],
+      "[data-gone] button[data-act=still-works]",
+      "Checking…",
+    ],
+    [
+      "the gone band's Done with it",
+      () => [goneItem()],
+      () => [],
+      "[data-gone] button[data-act=done]",
+      "Marking done…",
+    ],
+  ];
+  const held = () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { gate, release };
+  };
+  const answer = (s: Post): Answer =>
+    s.url === "/home/archive"
+      ? { status: 200, body: { before: { state: "active" }, after: { state: "archived" } } }
+      : s.url === "/links/still-works"
+        ? { status: 200, body: { check: { at: 1 }, previous: null } }
+        : { status: 200, body: MOVED };
+  const labelIn = (button: Element) =>
+    (button.querySelector(".slide-words > span") ?? button).textContent?.trim();
+
+  it.each(BUTTONS)(
+    "%s: dims the tile and says its working word when the answer is over 300ms late, until the shelf is refreshed",
+    async (_n, items, sugg, select, word) => {
+      const { gate, release } = held();
+      const p = runPage(home(items(), sugg()), (s) =>
+        s.body === undefined
+          ? { status: 200, text: home(items(), sugg()) }
+          : { ...answer(s), wait: gate },
+      );
+      const button = p.$(`#handy-shelf ${select}`);
+      const tile = button.closest("[data-id]") as Element;
+      const rest = labelIn(button);
+      p.dispatch(button, "click");
+      await p.settle();
+      expect(p.timers.pending(300)).toBe(1);
+      expect(tile.hasAttribute("data-busy")).toBe(false);
+      p.timers.fire();
+      expect(tile.hasAttribute("data-busy")).toBe(true);
+      expect(labelIn(button)).toBe(word);
+      release();
+      await p.settle();
+      expect(tile.hasAttribute("data-busy")).toBe(false);
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(labelIn(button)).toBe(rest);
+    },
+  );
+
+  it.each(BUTTONS)(
+    "%s: a fast answer shows no look while the refresh is slow",
+    async (_n, items, sugg, select) => {
+      const { gate, release } = held();
+      const p = runPage(home(items(), sugg()), (s) =>
+        s.body === undefined ? { status: 200, text: home(items(), sugg()), wait: gate } : answer(s),
+      );
+      p.dispatch(p.$(`#handy-shelf ${select}`), "click");
+      await p.settle();
+      expect(p.sent.some((s) => s.url === "/")).toBe(true);
+      expect(p.timers.pending(300)).toBe(0);
+      p.timers.fire();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(p.document.querySelector("[data-working]")).toBeNull();
+      release();
+      await p.settle();
+    },
+  );
+
+  it("a menu row on a tile only dims it", async () => {
+    const { gate, release } = held();
+    const item = kept();
+    const p = runPage(home([item], []), (s) =>
+      s.body === undefined ? { status: 200, text: home([item], []) } : { ...answer(s), wait: gate },
+    );
+    const row = p.$("#handy-shelf button[data-act=not-handy]");
+    const rest = row.innerHTML;
+    p.dispatch(row, "click");
+    await p.settle();
+    p.timers.fire();
+    expect(p.$(`[data-id="${item.link.id}"]`).hasAttribute("data-busy")).toBe(true);
+    expect(row.innerHTML).toBe(rest);
+    release();
+    await p.settle();
+    expect(p.document.querySelector("[data-busy]")).toBeNull();
+  });
+
+  it("clears the look when the action is refused", async () => {
+    const { gate, release } = held();
+    const p = runPage(home([kept({}, true)], []), () => ({
+      status: 409,
+      body: { message: "no" },
+      wait: gate,
+    }));
+    const button = p.$("#handy-shelf button[data-act=still-using]");
+    p.dispatch(button, "click");
+    await p.settle();
+    p.timers.fire();
+    expect(labelIn(button)).toBe("Keeping…");
+    release();
+    await p.settle();
+    expect(p.document.querySelector("[data-busy]")).toBeNull();
+    expect(labelIn(button)).toBe("Yes");
+  });
+
+  it("clears the look when its refresh was dropped for a newer one, although the tile keeps its mark", async () => {
+    const [a, b] = [kept({}, true), kept({}, true)];
+    const gates: Array<() => void> = [];
+    const hold = () => new Promise<void>((resolve) => gates.push(resolve));
+    const { gate: slowA, release: answerA } = held();
+    const p = runPage(home([a, b], []), (s) =>
+      s.body === undefined
+        ? { status: 200, text: home([], []), wait: hold() }
+        : {
+            status: 200,
+            body: MOVED,
+            wait: (s.body as { id: string }).id === a.link.id ? slowA : undefined,
+          },
+    );
+    const buttonA = p.$(`[data-id="${a.link.id}"] button[data-act=still-using]`);
+    const tileA = p.$(`[data-id="${a.link.id}"]`);
+    p.dispatch(buttonA, "click");
+    await p.settle();
+    p.timers.fire();
+    expect(tileA.hasAttribute("data-busy")).toBe(true);
+    answerA();
+    await p.settle();
+    p.dispatch(p.$(`[data-id="${b.link.id}"] button[data-act=still-using]`), "click");
+    await p.settle();
+    gates[0]?.();
+    await p.settle();
+    expect(tileA.hasAttribute("data-busy")).toBe(false);
+    expect(labelIn(buttonA)).toBe("Yes");
+    // The lock is kept (issue #321), so a click sends nothing, and shows no look either.
+    p.dispatch(buttonA, "click");
+    await p.settle();
+    p.timers.fire();
+    expect(p.sent.filter((s) => s.url === "/tools/still-using")).toHaveLength(2);
+    expect(tileA.hasAttribute("data-busy")).toBe(false);
+    gates[1]?.();
+    await p.settle();
+  });
+});

@@ -5,6 +5,9 @@ export const CLOCK = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidde
 /** The small line under Not now, and its Undo bar (owner, 2026-11-12). */
 export const NOT_NOW_HINT = "Not suggested for two weeks";
 
+/** What Not now says while it waits for the answer (#314). */
+export const NOT_NOW_WORKING = "Setting aside…";
+
 /** Home's menu row that puts a link off for two weeks; Home's script posts it (#195). */
 export const NOT_NOW_ITEM: MenuItem = {
   act: "snooze",

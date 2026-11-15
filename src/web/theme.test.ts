@@ -34,7 +34,11 @@ describe.each(["light", "dark"] as const)("the %s theme", (mode) => {
   });
   it.each([
     ["at rest, where the words always show (touch screens)", ".slide{"],
-    ["opened by hover or keyboard focus", ".slide:hover,.slide:focus-visible{"],
+    [
+      "opened by hover or keyboard focus",
+      ".slide:hover,.slide:focus-visible,.slide[data-working]{",
+    ],
+    ["held down", ".slide:active:not(:disabled),"],
   ])("keeps the icon button's label and hint readable %s", (_state, fillRule) => {
     const rule = (start: string) => {
       const at = themeCss.indexOf(start);
@@ -1002,10 +1006,10 @@ describe("Home's Worth a look cards (#195)", () => {
 
       it("grows an opened button leftward over the row, never past the row's left edge", () => {
         inHover(
-          ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:var(--layer-lift);max-width:min(260px,100cqw)}",
+          ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible,.feature-quiet .slide[data-working]{z-index:var(--layer-lift);max-width:min(260px,100cqw)}",
         );
         inHover(
-          ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible{max-width:min(260px,calc(100cqw - 58px))}",
+          ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible,.feature-quiet .slide:first-child[data-working]{max-width:min(260px,calc(100cqw - 58px))}",
         );
       });
 
@@ -1015,10 +1019,10 @@ describe("Home's Worth a look cards (#195)", () => {
 
       it("fades Open it per button, only in a row its opened button reaches, never in a wrapped row", () => {
         inHover(
-          `@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible)>.feature-open{${FADE}}}`,
+          `@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible,.slide:first-child[data-working])>.feature-open{${FADE}}}`,
         );
         inHover(
-          `@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible)>.feature-open{${FADE}}}`,
+          `@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible,.slide:last-child[data-working])>.feature-open{${FADE}}}`,
         );
         expect(decl(".feature-open", null, "transition")).toContain("opacity");
         expect(themeCss).not.toMatch(/\.feature-open\{[^}]*visibility:hidden/);
@@ -1196,7 +1200,9 @@ describe("Home's Worth a look cards (#195)", () => {
         themeCss,
       );
     expect(block, "a hover-only container rule on the band").not.toBeNull();
-    expect(block?.[1]).toBe(".gone-band:has(.slide:hover,.slide:focus-visible)>p{opacity:0}");
+    expect(block?.[1]).toBe(
+      ".gone-band:has(.slide:hover,.slide:focus-visible,.slide[data-working])>p{opacity:0}",
+    );
   });
 
   it("drops the grey square from a featured icon and sizes its box to the icon, with no frame", () => {
@@ -1667,5 +1673,250 @@ describe("Home's trays, spine and spacing (#306)", () => {
       const rules = parseCss(themeCss).filter((r) => r.decls.get("display") === "none");
       expect(rules.some((r) => r.selectors.join(",") === WORTH_EMPTY)).toBe(true);
     });
+  });
+});
+
+/**
+ * `computed`, but with the named states held on: a rule that carries a state outside `states`
+ * does not apply, and one that carries only those does.
+ */
+function computedHeld(
+  el: Element,
+  prop: string,
+  states: string[],
+  css = themeCss,
+): string | undefined {
+  let best: { spec: number; value: string } | undefined;
+  for (const rule of parseCss(css)) {
+    if (rule.media !== null) continue;
+    const value = rule.decls.get(prop);
+    if (value === undefined) continue;
+    for (const sel of rule.selectors) {
+      const used = sel.match(/:(hover|focus-visible|active)\b/g) ?? [];
+      if (sel.includes("::") || used.some((s) => !states.includes(s))) continue;
+      if (!el.matches(sel.replace(/:(hover|focus-visible|active)\b/g, ""))) continue;
+      const spec = specificity(sel);
+      if (!best || spec >= best.spec) best = { spec, value };
+    }
+  }
+  return best?.value;
+}
+
+describe("a held-down control (#314)", () => {
+  const mix = (share: number, base: string) => `color-mix(in srgb,var(--ink) ${share}%,${base})`;
+  const css = `${themeCss}\n${askCss}`;
+  const CONTROLS: [string, string, string, string][] = [
+    ["a plain button", "<button>Go</button>", "button", mix(8, "var(--surface)")],
+    [
+      "a primary button",
+      '<button class="primary">Go</button>',
+      "button",
+      mix(80, "var(--surface)"),
+    ],
+    ["a primary link", '<a class="button primary" href="/">Go</a>', "a", mix(80, "var(--surface)")],
+    [
+      "an icon button",
+      '<div class="feature-quiet"><button class="slide">Go</button></div>',
+      "button",
+      mix(18, "var(--surface)"),
+    ],
+    [
+      "an icon button in the gone band",
+      '<div class="gone-band"><button class="slide">Go</button></div>',
+      "button",
+      mix(18, "var(--surface)"),
+    ],
+    ["a bar pill", '<a class="bar-pill" href="/save">Save</a>', "a", mix(8, "var(--surface)")],
+    [
+      "the bar's open Ask AI pill",
+      '<button class="bar-pill" id="ask-open" aria-pressed="true">Ask</button>',
+      "button",
+      mix(12, "var(--surface)"),
+    ],
+    [
+      "a Handy tile's action",
+      '<article class="handy-tile"><div class="ask"><div class="actions small-actions"><button>Yes</button></div></div></article>',
+      "button",
+      mix(9, "transparent"),
+    ],
+    [
+      "a card menu row",
+      '<details class="card-menu"><div class="card-menu-list"><button>Done</button></div></details>',
+      "button",
+      mix(13, "transparent"),
+    ],
+    [
+      "a Tidy up choice",
+      '<div class="tidy-choices"><button>Keep</button></div>',
+      "button",
+      mix(8, "var(--surface)"),
+    ],
+    [
+      "Tidy up's safe choice",
+      '<div class="tidy-choices"><button class="safe">Put it away</button></div>',
+      "button",
+      mix(12, "var(--surface)"),
+    ],
+    [
+      "a button on the saved copy's end row",
+      '<div class="copy-end-acts"><button>Done</button></div>',
+      "button",
+      mix(18, "var(--surface)"),
+    ],
+  ];
+
+  it.each(CONTROLS)(
+    "fills %s darker than it rests, even while hovered or focused",
+    (_, html, pick, fill) => {
+      const control = el(html, pick);
+      expect(computedHeld(control, "background", [], css)).not.toBe(fill);
+      for (const held of [[":active"], [":hover", ":active"], [":focus-visible", ":active"]]) {
+        expect(computedHeld(control, "background", held, css), held.join("")).toBe(fill);
+      }
+    },
+  );
+
+  it.each(CONTROLS)("changes %s at once and moves nothing", (_, html, pick) => {
+    const control = el(html, pick);
+    expect(computedHeld(control, "transition", [":hover", ":active"], css)).toBe("none");
+    for (const moving of ["transform", "box-shadow", "margin-top", "top"]) {
+      const held = computedHeld(control, moving, [":hover", ":active"], css);
+      expect(held, moving).toBe(computedHeld(control, moving, [":hover"], css));
+    }
+  });
+
+  it("darkens a primary control's border with its fill", () => {
+    for (const [html, pick] of [
+      ['<button class="primary">Go</button>', "button"],
+      ['<a class="button primary" href="/">Go</a>', "a"],
+    ] as const) {
+      expect(computedHeld(el(html, pick), "border-color", [":active"], css)).toBe(
+        mix(80, "var(--surface)"),
+      );
+    }
+  });
+
+  it("is not drawn on a disabled button", () => {
+    const control = el("<button disabled>Go</button>", "button");
+    expect(computedHeld(control, "background", [":active"], css)).toBe(
+      computedHeld(control, "background", [], css),
+    );
+  });
+});
+
+describe("a selected button, held down (#314)", () => {
+  const mix = (share: number) => `color-mix(in srgb,var(--ink) ${share}%,var(--surface))`;
+  const css = `${themeCss}\n${askCss}`;
+  const SELECTED: [string, string, string, string, string | undefined][] = [
+    [
+      "a selected Tags pill",
+      '<div class="tag"><button class="pill" aria-pressed="true">Done</button></div>',
+      "button",
+      mix(80),
+      mix(80),
+    ],
+    [
+      "a selected Tags pick",
+      '<div class="tag"><button class="pick" aria-pressed="true">Name</button></div>',
+      "button",
+      mix(80),
+      mix(80),
+    ],
+    [
+      "the selected view switch",
+      '<div class="view-switch"><button aria-pressed="true">List</button></div>',
+      "button",
+      mix(8),
+      undefined,
+    ],
+    [
+      "a selected Tags swatch",
+      '<div class="tag"><button class="swatch space-clay" aria-pressed="true"></button></div>',
+      "button",
+      mix(8),
+      undefined,
+    ],
+    [
+      "the open Ask AI pill",
+      '<button class="bar-pill" id="ask-open" aria-pressed="true">Ask</button>',
+      "button",
+      mix(12),
+      undefined,
+    ],
+  ];
+
+  it.each(SELECTED)(
+    "fills %s differently from its resting selected look",
+    (_, html, pick, fill) => {
+      const control = el(html, pick);
+      const rest = computedHeld(control, "background", [], css);
+      expect(computedHeld(control, "background", [":active"], css)).not.toBe(rest);
+      for (const held of [[":active"], [":hover", ":active"], [":focus-visible", ":active"]]) {
+        expect(computedHeld(control, "background", held, css), held.join("")).toBe(fill);
+      }
+    },
+  );
+
+  it.each(SELECTED)("changes %s at once", (_, html, pick) => {
+    const control = el(html, pick);
+    expect(computedHeld(control, "transition", [":hover", ":active"], css)).toBe("none");
+  });
+
+  it.each(SELECTED.filter((s) => s[4] !== undefined))(
+    "darkens %s's border with its fill",
+    (_, html, pick, _fill, border) => {
+      expect(computedHeld(el(html, pick), "border-color", [":active"], css)).toBe(border);
+    },
+  );
+
+  it("gives the selected view switch its own pressed rule, not a win by source order", () => {
+    const rule = parseCss(css).find((r) =>
+      r.selectors.includes(".view-switch button[aria-pressed=true]:active:not(:disabled)"),
+    );
+    expect(rule?.decls.get("background")).toBe(mix(8));
+  });
+
+  it("is not drawn on a disabled selected button", () => {
+    const control = el(SELECTED[0]?.[1] ?? "", "button");
+    control.setAttribute("disabled", "");
+    expect(computedHeld(control, "background", [":active"], css)).toBe(
+      computedHeld(control, "background", [], css),
+    );
+  });
+});
+
+describe("a busy card and a working button (#314)", () => {
+  const css = `${themeCss}\n${askCss}`;
+  const CARD = `<article class="worth-card" data-busy><div class="feature-quiet"><button class="slide" data-working><span class="slide-words"><span>Marking done…</span></span></button></div><details class="card-menu"><summary>m</summary><div class="card-menu-list"><button>Row</button></div></details></article>`;
+  const inside = (pick: string) => el(CARD, pick);
+
+  it("dims what is busy to 60%", () => {
+    expect(computed(inside("article"), "opacity", "desktop", css)).toBe(".6");
+  });
+
+  it("shows the progress cursor on the busy element and everything inside it, over their own cursors", () => {
+    const rule = parseCss(css).find((r) => r.selectors.includes("[data-busy] *"));
+    expect(rule?.selectors).toContain("[data-busy]");
+    // Controls inside, such as the ⋯, set their own cursor at a higher specificity.
+    expect(rule?.decls.get("cursor")).toBe("progress!important");
+    expect(computed(inside(".card-menu summary"), "cursor", "desktop", css)).toBe("pointer");
+  });
+
+  it("leaves aria-busy alone: nothing is dimmed for it", () => {
+    const older = el('<button id="older" aria-busy="true">Show older</button>', "button");
+    expect(computed(older, "opacity", "desktop", css)).toBeUndefined();
+    expect(computed(older, "cursor", "desktop", css)).not.toBe("progress");
+  });
+
+  it("shows a working icon button's words as if it were open, with or without the pointer", () => {
+    const slide = inside(".slide");
+    const words = inside(".slide-words");
+    expect(computedHeld(words, "opacity", [], css)).toBe("1");
+    expect(computedHeld(slide, "max-width", [], css)).toBe("260px");
+    const rest = el(
+      '<div class="feature-quiet"><button class="slide"><span class="slide-words"></span></button></div>',
+      ".slide-words",
+    );
+    expect(computedHeld(rest, "opacity", [], css)).toBe("0");
   });
 });

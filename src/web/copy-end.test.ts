@@ -395,3 +395,60 @@ describe("opening the link from the end-of-copy page", () => {
     expect(row(p).group).toBe("active");
   });
 });
+
+describe("the end of the copy, slow to answer (#314)", () => {
+  const CASES: [string, string, () => string, Answer["body"], string][] = [
+    ["Put it away", "put-away", () => render(), PUT_CHANGE, "Putting away…"],
+    ["Done with it", "archive", () => render(), STALE_CHANGE, "Marking done…"],
+    ["Keep handy", "keep", () => render(), { tool: KEPT_ROW, previous: null }, "Keeping handy…"],
+    ["Bring it back", "bring-back", () => render(PUT_AWAY), BRING_CHANGE, "Bringing back…"],
+    [
+      "Not handy anymore",
+      "not-handy",
+      () => render({}, KEPT),
+      { tool: { ...KEPT_ROW, status: "declined" }, previous: KEPT_ROW },
+      "Taking it off…",
+    ],
+  ];
+
+  it.each(CASES)(
+    "%s: dims the row, not the frame, and says its working word after 300ms",
+    async (_n, act, html, body, word) => {
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const p = runPage(html(), () => ({ status: 200, body, wait: gate }));
+      const button = p.$(ACT(act));
+      const rest = button.textContent;
+      const rowEl = button.closest(".copy-end-acts") as Element;
+      p.dispatch(button, "click");
+      await p.settle();
+      expect(p.timers.pending(300)).toBe(1);
+      expect(rowEl.hasAttribute("data-busy")).toBe(false);
+      p.timers.fire();
+      expect(rowEl.hasAttribute("data-busy")).toBe(true);
+      expect(p.$("#copy-frame").hasAttribute("data-busy")).toBe(false);
+      expect(button.textContent).toBe(word);
+      release();
+      await p.settle();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(button.textContent).toBe(rest);
+    },
+  );
+
+  it("a second press while one is out sends nothing and changes no label", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = runPage(render(), () => ({ status: 200, body: PUT_CHANGE, wait: gate }));
+    await click(p, ACT("put-away"));
+    await click(p, ACT("archive"));
+    p.timers.fire();
+    expect(p.$(ACT("archive")).textContent).toBe("Done with it");
+    expect(p.sent).toHaveLength(1);
+    release();
+    await p.settle();
+  });
+});

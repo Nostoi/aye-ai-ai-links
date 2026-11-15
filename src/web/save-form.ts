@@ -1,5 +1,5 @@
 import { SAVE_PATH } from "../auth/login-return.js";
-import { DONE_MARKER, PUT_AWAY_MARKER } from "./done-link.js";
+import { BRING_BACK_WORKING, DONE_MARKER, PUT_AWAY_MARKER } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { openedScript } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -159,7 +159,7 @@ bringBack.addEventListener("click", () =>
     } else {
       resultError.textContent = await failure(res);
     }
-  }),
+  }, { button: bringBack, word: ${JSON.stringify(BRING_BACK_WORKING)} }),
 );
 
 closeButton.addEventListener("click", () => {

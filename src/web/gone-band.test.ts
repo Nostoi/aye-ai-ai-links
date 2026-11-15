@@ -216,17 +216,21 @@ describe("the band's look", () => {
     expect(rule(".gone-band")).not.toMatch(/flex-wrap/);
     expect(rule(".gone-actions")).toMatch(/position:relative[^}]*width:92px/);
     expect(rule(".gone-band .slide")).toMatch(/position:absolute/);
-    expect(rule(".gone-band .slide:hover,.gone-band .slide:focus-visible")).not.toMatch(
-      /flex|width:(?!260)/,
-    );
+    expect(
+      rule(
+        ".gone-band .slide:hover,.gone-band .slide:focus-visible,.gone-band .slide[data-working]",
+      ),
+    ).not.toMatch(/flex|width:(?!260)/);
     expect(rule(".gone-band>p")).toMatch(/flex:1 1 0;min-width:0/);
   });
 
   it("draws its slide buttons bare at rest and filled on hover or focus", () => {
     expect(rule(".gone-band .slide")).toMatch(/background:none/);
-    expect(rule(".gone-band .slide:hover,.gone-band .slide:focus-visible")).toMatch(
-      /background:var\(--surface\)/,
-    );
+    expect(
+      rule(
+        ".gone-band .slide:hover,.gone-band .slide:focus-visible,.gone-band .slide[data-working]",
+      ),
+    ).toMatch(/background:var\(--surface\)/);
   });
 });
 
@@ -506,4 +510,96 @@ describe("the collapse helper on its own", () => {
     expect(band.hidden).toBe(true);
     expect(timers.size).toBe(0);
   });
+});
+
+describe("the busy look and the slide-away (motion on)", () => {
+  const gate = () => {
+    let release: () => void = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    return { wait, release };
+  };
+  const tileHome = (gone: boolean) =>
+    homePage({
+      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null },
+      shelf: handyShelf({
+        items: [
+          {
+            link: link("1"),
+            tool: {
+              status: "kept",
+              source: "stated",
+              since: new Date("2026-10-01T00:00:00Z"),
+              answeredAt: null,
+              waitDays: 30,
+            },
+            due: false,
+            gone,
+          },
+        ],
+        suggestions: [],
+        catalog: [],
+        images: new Map(),
+      }),
+      spaces: "",
+    });
+  const tile = (answer: (sent: Post) => Answer) => {
+    const p = runPage(tileHome(true), (s) =>
+      s.body === undefined ? { status: 200, text: tileHome(false) } : answer(s),
+    );
+    p.motion.reduced = false;
+    return p;
+  };
+  const CHANGED = { status: 200, body: CHANGE } as const;
+  const SURFACES = [
+    ["It still works", "button[data-act=still-works]", load, "/links/still-works", WORKS],
+    ["the gone band's Done with it", "button[data-act=gone-done]", load, "/home/archive", CHANGED],
+    [
+      "a Handy tile's It still works",
+      "[data-gone] button[data-act=still-works]",
+      tile,
+      "/links/still-works",
+      WORKS,
+    ],
+    [
+      "a Handy tile's Done with it",
+      "[data-gone] button[data-act=done]",
+      tile,
+      "/home/archive",
+      CHANGED,
+    ],
+  ] as const;
+
+  it.each(SURFACES)(
+    "%s: a fast answer shows no busy look, though the slide-away runs",
+    async (_n, select, make, url, ok) => {
+      const p = make((s) => (s.url === url ? ok : { status: 204 }));
+      await click(p, select);
+      expect(band(p).classList.contains("collapsing")).toBe(true);
+      expect(p.timers.pending(300)).toBe(0);
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      p.timers.fire();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(p.document.querySelector("[data-working]")).toBeNull();
+    },
+  );
+
+  it.each(SURFACES)(
+    "%s: a slow answer shows the look, which clears when the work ends",
+    async (_n, select, make, url, ok) => {
+      const { wait, release } = gate();
+      const p = make((s) => (s.url === url ? { ...ok, wait } : { status: 204 }));
+      await click(p, select);
+      expect(p.timers.pending(300)).toBe(1);
+      p.timers.fire();
+      expect(p.document.querySelector("[data-busy]")).not.toBeNull();
+      release();
+      await p.settle();
+      expect(band(p).classList.contains("collapsing")).toBe(true);
+      await ended(p);
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(p.document.querySelector("[data-working]")).toBeNull();
+    },
+  );
 });

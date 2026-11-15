@@ -26,14 +26,25 @@ export const WHY_LABEL = "You saved it for";
 export const whyAnswer = (tag: "p" | "span", className?: string, label?: string) =>
   `<${tag}${className ? ` class="${className}"` : ""} data-why-answer${label ? ` data-label="${escapeHtml(label)}"` : ""} hidden></${tag}>`;
 
+/** How long an action may stay unanswered before its busy look shows (owner, 2026-11-15, #314). */
+const BUSY_LOOK_MS = 300;
+
 /**
  * `post` sends JSON without following a redirect, answering null when the request fails;
  * `failure` is a refusal's own message, or a generic one. `cardBusy` is a card's one busy mark:
- * `whileBusy(card, run)` runs `run` and answers what it answers, unless the card is busy, when it
- * runs nothing and answers nothing. The mark is held until `run` has finished, including its
+ * `whileBusy(card, run, look)` runs `run` and answers what it answers, unless the card is busy,
+ * when it runs nothing and answers nothing. The mark is held until `run` has finished, including its
  * page update and Undo, and released whether it returns or throws. Every action on a card that
  * posts goes through it, so a card takes one action at a time. An Undo goes through
- * `whenFree(card, run)` instead: it waits for the action in flight, then runs under the mark.
+ * `whenFree(card, run, look)` instead: it waits for the action in flight, then runs under the mark.
+ *
+ * The busy look is apart from the mark. `busyLook(el, button, word)` waits 300ms and then sets
+ * `data-busy` on `el` (the theme dims it and shows the progress cursor) and, if `button` is still
+ * on the page, puts `word` in its label node (an icon button's words, a Tidy choice's `<b>`, or
+ * else the button's own text, when it holds no element) and marks it `data-working`. `look` is `{ button, word, el }`:
+ * `el` is the busy element, by default the button's nearest `[data-busy-scope]`, else the card.
+ * An action with no button (a ⋯ menu row, which closes) passes `{}` and only dims; no `look`
+ * shows nothing. `whileBusy` starts the look only once it holds the mark, and clears it first.
  * It also defines `collapseBand` and `resetBand` (`band-collapse.ts`).
  */
 export const CARD_FETCH = `const post = (url, body, extra) =>
@@ -52,21 +63,49 @@ const failure = async (res) => {
 };
 const cardBusy = new WeakSet();
 const cardWaiting = new WeakMap();
-const whileBusy = async (card, run) => {
+const busyLook = (el, button, word) => {
+  let swapped = null;
+  let shown = false;
+  const timer = setTimeout(() => {
+    shown = true;
+    el.setAttribute("data-busy", "");
+    if (!button || !button.isConnected) return;
+    const node = button.querySelector(".slide-words > span, b") || (button.firstElementChild ? null : button);
+    button.setAttribute("data-working", "");
+    if (!node) return;
+    swapped = { node, was: node.textContent };
+    node.textContent = word;
+  }, ${BUSY_LOOK_MS});
+  return {
+    answered: () => clearTimeout(timer),
+    clear: () => {
+      clearTimeout(timer);
+      if (!shown) return;
+      el.removeAttribute("data-busy");
+      if (button) button.removeAttribute("data-working");
+      if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+    },
+  };
+};
+const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const busy = look
+    ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
+    : null;
   try {
-    return await run();
+    return await run(busy ? busy.answered : () => {});
   } finally {
+    if (busy) busy.clear();
     cardBusy.delete(card);
     for (const wake of cardWaiting.get(card) || []) wake();
     cardWaiting.delete(card);
   }
 };
-const whenFree = async (card, run) => {
+const whenFree = async (card, run, look) => {
   while (cardBusy.has(card))
     await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
-  return whileBusy(card, run);
+  return whileBusy(card, run, look);
 };
 ${BAND_COLLAPSE}`;
 

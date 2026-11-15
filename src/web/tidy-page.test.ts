@@ -501,3 +501,85 @@ describe("the Tidy up session", () => {
     expect(phone.some((m) => m.includes(".tidy-choices .key{display:none}"))).toBe(true);
   });
 });
+
+describe("a Tidy up choice that is slow to answer (#314)", () => {
+  const WORDS = [
+    ["keep", "Keeping…", "1"],
+    ["put-away", "Putting away…", "2"],
+    ["stale", "Marking done…", "3"],
+  ] as const;
+
+  const slow = () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = runPage(render(queue(3)), (s) =>
+      s.url === "/tidy/keep" ? { status: 204, wait: gate } : { ...fine(s), wait: gate },
+    );
+    const step = p.$("section[data-id]:not([hidden])");
+    return { p, step, release };
+  };
+  const choice = (step: Element, act: string) =>
+    step.querySelector(`button[data-act=${act}]`) as Element;
+
+  it.each(WORDS)(
+    "%s: after 300ms the step dims and only the choice's title changes, then both clear",
+    async (act, word) => {
+      const { p, step, release } = slow();
+      const button = choice(step, act);
+      const before = button.innerHTML;
+      p.dispatch(button, "click");
+      await p.settle();
+      expect(p.timers.pending(300)).toBe(1);
+      expect(step.hasAttribute("data-busy")).toBe(false);
+      p.timers.fire();
+      expect(step.hasAttribute("data-busy")).toBe(true);
+      expect(p.$("#tidy").hasAttribute("data-busy")).toBe(false);
+      expect(button.querySelector("b")?.textContent).toBe(word);
+      expect(button.innerHTML).toBe(before.replace(/<b>[^<]*<\/b>/, `<b>${word}</b>`));
+      release();
+      await p.settle();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(button.innerHTML).toBe(before);
+    },
+  );
+
+  it.each(WORDS)(
+    "the %s number key does the same, finding the choice from the step and the action",
+    async (act, word, key) => {
+      const { p, step, release } = slow();
+      const button = choice(step, act);
+      const before = button.innerHTML;
+      p.dispatch(p.document.body, "keydown", { key });
+      await p.settle();
+      p.timers.fire();
+      expect(button.querySelector("b")?.textContent).toBe(word);
+      expect(button.innerHTML).toBe(before.replace(/<b>[^<]*<\/b>/, `<b>${word}</b>`));
+      expect(button.querySelector("kbd")?.textContent).toBe(key);
+      expect(step.hasAttribute("data-busy")).toBe(true);
+      for (const other of step.querySelectorAll("button[data-act]")) {
+        if (other !== button) expect(other.querySelector("b")?.textContent).not.toBe(word);
+      }
+      release();
+      await p.settle();
+      expect(button.innerHTML).toBe(before);
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+    },
+  );
+
+  it("a second choice while one is out sends nothing and changes no title", async () => {
+    const { p, step, release } = slow();
+    p.dispatch(choice(step, "keep"), "click");
+    await p.settle();
+    p.dispatch(choice(step, "stale"), "click");
+    p.dispatch(p.document.body, "keydown", { key: "2" });
+    await p.settle();
+    p.timers.fire();
+    expect(choice(step, "stale").querySelector("b")?.textContent).toBe("Done with it");
+    expect(choice(step, "put-away").querySelector("b")?.textContent).toBe("Put it away");
+    expect(p.sent.map((s) => s.url)).toEqual(["/tidy/keep"]);
+    release();
+    await p.settle();
+  });
+});

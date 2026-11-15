@@ -341,3 +341,100 @@ describe.each(DONE_PAGES)("%s: Bring it back takes one action at a time", (_, er
     },
   );
 });
+
+/** The words a card's visible button shows while its action is out; a ⋯ menu row closes and only dims. */
+const GONE_DONE = {
+  name: "Done with it (gone band)",
+  select: "[data-gone] button[data-act=gone-done]",
+  url: "/home/archive",
+  undo: "",
+  json: CHANGE,
+};
+const LOOKS: [string, Action, string | null][] = [
+  ["Done with it", ACTIONS.done, null],
+  ["Put it away", ACTIONS.put, null],
+  ["Delete link", ACTIONS.delete, null],
+  ["Keep handy", ACTIONS.keep, null],
+  ["Remove saved copy", ACTIONS.copy, null],
+  ["It still works", ACTIONS.still, "Checking…"],
+  ["the gone band's Done with it", GONE_DONE, "Marking done…"],
+];
+
+describe.each(PAGES)(
+  "%s: the busy look of an action that is slow to answer (#314)",
+  (_, __, html) => {
+    const labelIn = (button: Element) =>
+      (button.querySelector(".slide-words > span") ?? button).textContent?.trim();
+    const labelOf = (p: ReturnType<typeof runPage>, a: Action) =>
+      labelIn(p.$(`${card("7")} ${a.select}`));
+
+    it.each(LOOKS)(
+      "%s: nothing before 300ms, then the card dims and the button says its working word; both clear on the answer",
+      async (_name, a, word) => {
+        const { gate, release } = held();
+        const p = runPage(html([link("7"), link("8")]), (s) => {
+          const base = fine(s);
+          return s.url === a.url ? { ...base, wait: gate } : base;
+        });
+        const target = p.$(`${card("7")} ${a.select}`);
+        const rest = labelIn(target);
+        p.dispatch(target, "click");
+        await p.settle();
+        expect(p.timers.pending(300)).toBe(1);
+        expect(p.$(card("7")).hasAttribute("data-busy")).toBe(false);
+        expect(labelOf(p, a)).toBe(rest);
+        p.timers.fire();
+        expect(p.$(card("7")).hasAttribute("data-busy")).toBe(true);
+        expect(p.$(card("8")).hasAttribute("data-busy")).toBe(false);
+        expect(labelIn(target)).toBe(word ?? rest);
+        expect(target.hasAttribute("data-working")).toBe(word !== null);
+        release();
+        await p.settle();
+        expect(p.document.querySelector("[data-busy]")).toBeNull();
+        expect(labelIn(target)).toBe(rest);
+        expect(target.hasAttribute("data-working")).toBe(false);
+      },
+    );
+
+    it("a second press on the busy card sends nothing and changes no label", async () => {
+      const { gate, release } = held();
+      const p = runPage(html([link("7"), link("8")]), (s) =>
+        s.url === ACTIONS.still.url ? { ...fine(s), wait: gate } : fine(s),
+      );
+      p.dispatch(p.$(`${card("7")} ${ACTIONS.still.select}`), "click");
+      await p.settle();
+      p.dispatch(p.$(`${card("7")} ${GONE_DONE.select}`), "click");
+      await p.settle();
+      p.timers.fire();
+      expect(labelOf(p, GONE_DONE)).toBe("Done with it");
+      expect(sentUrls(p)).toEqual([ACTIONS.still.url]);
+      release();
+      await p.settle();
+    });
+
+    it("shows nothing for a fast answer: no timer is left to fire", async () => {
+      const p = runPage(html([link("7"), link("8")]), fine);
+      await press(p, "7", ACTIONS.still);
+      expect(p.timers.pending(300)).toBe(0);
+      p.timers.fire();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+    });
+
+    it("clears the look when the action is refused", async () => {
+      const { gate, release } = held();
+      const p = runPage(html([link("7"), link("8")]), (s) =>
+        s.url === ACTIONS.still.url
+          ? { status: 409, body: { message: "no" }, wait: gate }
+          : fine(s),
+      );
+      p.dispatch(p.$(`${card("7")} ${ACTIONS.still.select}`), "click");
+      await p.settle();
+      p.timers.fire();
+      expect(p.$(card("7")).hasAttribute("data-busy")).toBe(true);
+      release();
+      await p.settle();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(labelOf(p, ACTIONS.still)).toBe("It still works");
+    });
+  },
+);

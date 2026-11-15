@@ -27,11 +27,12 @@ if (copyRoot) {
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
     menu.open = false;
-    await whileBusy(card, async () => {
+    await whileBusy(card, async (answered) => {
       const id = card.dataset.id;
       const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
       copyError.textContent = "";
       const res = await post("/links/copy/remove", { id });
+      answered();
       if (!res || res.status !== 204) {
         copyError.textContent = await failure(res);
         return;
@@ -43,7 +44,7 @@ if (copyRoot) {
         if (back && back.status === 204) for (const row of rows) row.hidden = false;
         else copyError.textContent = await failure(back);
       });
-    });
+    }, {});
   });
 }
 }`;

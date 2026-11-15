@@ -13,6 +13,11 @@ export const PUT_AWAY_HINT = "Back when you start something it fits";
 /** The owner's name for taking a link out of their lists; the wire value stays `archived`. */
 export const DONE_LABEL = "Done with it";
 
+/** What each state action's button says while it waits for the answer (#314). */
+export const DONE_WORKING = "Marking done…";
+export const PUT_AWAY_WORKING = "Putting away…";
+export const BRING_BACK_WORKING = "Bringing back…";
+
 /** The name of the list section holding links the owner has let go (the done views). */
 export const DONE_AND_PUT_AWAY = "Done and put away";
 
@@ -60,15 +65,17 @@ export const BRING_BACK_ITEM: MenuItem = { act: "bring-back", icon: BACK, text: 
 
 /** Each state action: its route and the bar its Undo is offered on. */
 const STATE_ACTS = {
-  archive: { route: "/home/archive", undo: DONE_UNDO },
-  "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO },
-  "bring-back": { route: "/home/bring-back", undo: BRING_BACK_UNDO },
+  archive: { route: "/home/archive", undo: DONE_UNDO, word: DONE_WORKING },
+  "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO, word: PUT_AWAY_WORKING },
+  "bring-back": { route: "/home/bring-back", undo: BRING_BACK_UNDO, word: BRING_BACK_WORKING },
 };
 
 /**
  * Done with it, Put it away and Bring it back on the cards inside `#root`, including those Show
  * older links appends. Defines the page-global `stateCard(card, act)` and `doneCard(card)` (Done
- * with it), which the gone line's Done with it and Home's buttons also call. An action posts its
+ * with it), which the gone line's Done with it and Home's buttons also call; each takes the
+ * pressed button as its last argument, which shows the action's working word while it is slow
+ * (`busyLook`); a menu row passes none and the card only dims. An action posts its
  * route and takes the card out with `takeOut(listRoot, card, false, change)` (hidden, not removed;
  * a `takeOut` that keeps the card on the page shows `change.after` itself) once the answer is the
  * `StateChange` as JSON. Its Undo posts `/home/undo-state` with that change, exactly as received,
@@ -84,14 +91,15 @@ export const doneLinkScript = (
   root: string,
   error: string,
 ) => `const STATE_ACTS = ${JSON.stringify(STATE_ACTS)};
-const stateCard = (card, act, before) =>
-  whileBusy(card, async () => {
+const stateCard = (card, act, before, button) =>
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const doneAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
     const { route, undo } = STATE_ACTS[act];
     doneAlert.textContent = "";
     const res = await post(route, { id });
+    answered();
     const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!change || !change.before || !change.after) {
       doneAlert.textContent = await failure(res);
@@ -104,8 +112,8 @@ const stateCard = (card, act, before) =>
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
     }), undo.title);
-  });
-const doneCard = (card, before) => stateCard(card, "archive", before);
+  }, { button, word: STATE_ACTS[act].word });
+const doneCard = (card, before, button) => stateCard(card, "archive", before, button);
 {
 const doneRoot = document.getElementById(${JSON.stringify(root)});
 if (doneRoot) {

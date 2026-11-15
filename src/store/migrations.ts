@@ -431,6 +431,13 @@ export const MIGRATIONS: Migration[] = [
   );
   CREATE INDEX link_favicons_pending ON link_favicons (link_id) WHERE status = 'pending';
   `,
+  // A web search's receipt (#134): the token its results page carries. A unique index (SQLite
+  // cannot add a UNIQUE column) makes writing a receipt twice write one row; agent searches have
+  // none, and NULLs never collide. Additive; rebuilds nothing.
+  `
+  ALTER TABLE search_log ADD COLUMN receipt TEXT;
+  CREATE UNIQUE INDEX search_log_receipt ON search_log (receipt);
+  `,
 ];
 
 /**

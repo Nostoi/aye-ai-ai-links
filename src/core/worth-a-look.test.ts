@@ -48,6 +48,13 @@ class SpySearchLog implements SearchLog {
   async pairOpen() {
     this.calls.push("pairOpen");
   }
+  async receiptRow() {
+    this.calls.push("receiptRow");
+    return null;
+  }
+  async pairReceipt() {
+    this.calls.push("pairReceipt");
+  }
 }
 
 let store: FakeStore;

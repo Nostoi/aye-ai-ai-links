@@ -22,11 +22,23 @@ export function linkTitle(link: Link, label: string = escapeHtml(displayTitle(li
  * Records the openings of the saved links inside `#root`. A click or middle click on an
  * `a[data-open]` posts its card's `data-id` to `route` with keepalive, and the link opens as
  * usual; opening from the browser's context menu is not seen. Listening on `#root` covers cards
- * Show older links appends. A block, so these names cannot clash with another script.
+ * Show older links appends. A block, so these names cannot clash with another script. With
+ * `withReceipt`, the search page's `main[data-receipt]` is sent along as `receipt`, which pairs the
+ * opening with that search; every other list sends none (#134).
  */
-export const openedScript = (root: string, route: string, leaveMarker?: string) => `<script>
+export const openedScript = (
+  root: string,
+  route: string,
+  leaveMarker?: string,
+  withReceipt = false,
+) => `<script>
 {
-const openRoot = document.getElementById(${JSON.stringify(root)});
+const openRoot = document.getElementById(${JSON.stringify(root)});${
+  withReceipt
+    ? `
+const receipt = document.querySelector("main[data-receipt]")?.dataset.receipt;`
+    : ""
+}
 const recordOpen = (event) => {
   const link = event.target.closest("a[data-open]");
   if (!link || (event.type === "auxclick" && event.button !== 1)) return;
@@ -34,7 +46,7 @@ const recordOpen = (event) => {
   fetch(${JSON.stringify(route)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: card.dataset.id }),
+    body: JSON.stringify({ id: card.dataset.id${withReceipt ? ", receipt" : ""} }),
     redirect: "manual",
     keepalive: true,
   })${
@@ -49,6 +61,25 @@ const recordOpen = (event) => {
 if (openRoot) {
   openRoot.addEventListener("click", recordOpen);
   openRoot.addEventListener("auxclick", recordOpen);
+}
+}
+</script>`;
+
+/**
+ * Reports the search the results page showed, once it has loaded, so the log holds searches
+ * nothing was opened from too (#134). Keepalive, and a failure is ignored: the page is already shown.
+ */
+export const searchReportScript = `<script>
+{
+const receipt = document.querySelector("main[data-receipt]")?.dataset.receipt;
+if (receipt) {
+  fetch("/search/log", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ receipt }),
+    redirect: "manual",
+    keepalive: true,
+  }).catch(() => {});
 }
 }
 </script>`;

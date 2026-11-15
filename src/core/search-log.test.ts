@@ -3,7 +3,7 @@ import { FakeSavedCopies } from "./fake-saved-copies.js";
 import { FakeStore } from "./fake-store.js";
 import { getLinkWithText, saveLink } from "./links.js";
 import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
-import { searchLinks } from "./search-links.js";
+import { runSearch, searchLinks } from "./search-links.js";
 import { OPEN_WINDOW_MS, type SearchLog, type SearchLogEntry } from "./search-log.js";
 
 const NOW = new Date("2026-10-12T12:00:00Z");
@@ -29,6 +29,10 @@ class RecordingLog implements SearchLog {
   ) {
     this.paired.push({ owner, by, link, since, at });
   }
+  async receiptRow(): Promise<null> {
+    return null;
+  }
+  async pairReceipt() {}
 }
 
 class ThrowingLog implements SearchLog {
@@ -36,6 +40,12 @@ class ThrowingLog implements SearchLog {
     throw new Error("disk full");
   }
   async pairOpen(): Promise<void> {
+    throw new Error("disk full");
+  }
+  async receiptRow(): Promise<null> {
+    throw new Error("disk full");
+  }
+  async pairReceipt(): Promise<void> {
     throw new Error("disk full");
   }
 }
@@ -79,6 +89,23 @@ async function setup(search: LinkSearch, log: SearchLog | undefined) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("runSearch", () => {
+  it("returns the entry searchLinks would log, and writes nothing itself", async () => {
+    const log = new RecordingLog();
+    const { deps } = await setup(new TracingSearch(["link-1"]), log);
+    const { links, entry } = await runSearch(deps, "a", { query: "solar" });
+    expect(links).toHaveLength(1);
+    expect(log.recorded).toEqual([]);
+    await searchLinks(deps, "a", { query: "solar" }, "claude");
+    expect(log.recorded.map((r) => r.entry)).toEqual([entry]);
+  });
+
+  it("returns no entry when the trace does not fire", async () => {
+    const { deps } = await setup(new TracingSearch(["link-1"]), new RecordingLog());
+    expect((await runSearch(deps, "a", { query: "?!" })).entry).toBeUndefined();
+  });
+});
 
 describe("searchLinks logging", () => {
   it("logs a word search with the trace, the filters and the links returned", async () => {

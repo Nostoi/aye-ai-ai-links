@@ -493,3 +493,111 @@ describe("FtsSearch page text", () => {
     expect(await s.find("!!!")).toEqual([]);
   });
 });
+
+describe("FtsSearch focus matching", () => {
+  type S = ReturnType<typeof setup>;
+  const page = (s: S, id: string, text: string) =>
+    s.db.prepare("UPDATE snapshots SET text = ? WHERE link_id = ?").run(text, Number(id));
+  const hits = async (s: S, text: string, filters: SearchFilters = {}, owner = "a") =>
+    (await s.search.match(owner, text, filters)).map((h) => [h.id, h.words] as const);
+
+  it("does not match a word that only shares a prefix", async () => {
+    const s = setup();
+    await s.save("a", { title: "User research notes" });
+    expect(await hits(s, "using")).toEqual([]);
+  });
+
+  it("does not match a word found only in page text", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "Other" });
+    page(s, id, "using sprites");
+    expect(await hits(s, "using")).toEqual([]);
+  });
+
+  it("matches a whole stemmed word and reports it as the entry spells it", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "Used sprites" });
+    expect(await hits(s, "using")).toEqual([[id, ["using"]]]);
+  });
+
+  it("trims punctuation off a word and collapses repeats case-insensitively", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "Chorequest design" });
+    expect(await hits(s, "Chorequest, chorequest. (CHOREQUEST)")).toEqual([[id, ["Chorequest"]]]);
+  });
+
+  it("lists the words that matched that link, rarest first, ties in entry order", async () => {
+    const s = setup();
+    const both = await s.save("a", { title: "Quokka numbat wombat" });
+    const common = await s.save("a", { title: "Wombat" });
+    const common2 = await s.save("a", { title: "Wombat again", summary: "numbat" });
+    const words = new Map(await hits(s, "wombat numbat quokka"));
+    // quokka matches 1 link, numbat 2, wombat 3
+    expect(words.get(both)).toEqual(["quokka", "numbat", "wombat"]);
+    expect(words.get(common)).toEqual(["wombat"]);
+    expect(words.get(common2)).toEqual(["numbat", "wombat"]);
+    const tie = setup();
+    const t = await tie.save("a", { title: "Zebra yak" });
+    expect(await hits(tie, "yak zebra")).toEqual([[t, ["yak", "zebra"]]]);
+  });
+
+  it("counts rarity over the owner's own live links only", async () => {
+    const s = setup();
+    const mine = await s.save("a", { title: "Quokka numbat" });
+    for (let i = 0; i < 3; i++) await s.save("b", { title: "Numbat" });
+    const gone = await s.save("a", { title: "Quokka" });
+    s.db.prepare("UPDATE links SET deleted_at = 5 WHERE id = ?").run(Number(gone));
+    // Counted wrongly, b's links make numbat commoner and the deleted link makes quokka commoner.
+    expect(await hits(s, "numbat quokka")).toEqual([[mine, ["numbat", "quokka"]]]);
+    expect(await hits(s, "quokka numbat")).toEqual([[mine, ["quokka", "numbat"]]]);
+    expect(await hits(s, "numbat", {}, "b")).toHaveLength(3);
+  });
+
+  it("needs the whole fragment as a phrase: image-editing is not image or editing alone", async () => {
+    const s = setup();
+    const a = await s.save("a", { title: "Image editing tips" });
+    await s.save("a", { title: "Image gallery" });
+    expect(await hits(s, "image-editing")).toEqual([[a, ["image-editing"]]]);
+  });
+
+  it("falls back to stop words when the text has nothing else", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "The way" });
+    expect(await hits(s, "the")).toEqual([[id, ["the"]]]);
+  });
+
+  it("drops stop words when other words are present", async () => {
+    const s = setup();
+    await s.save("a", { title: "The way" });
+    expect(await hits(s, "the quokka")).toEqual([]);
+  });
+
+  it("applies filters to the links but not to rarity", async () => {
+    const s = setup();
+    const done = await s.save("a", { title: "Quokka numbat" });
+    await s.deps.store.update("a", done, { state: "archived" });
+    await s.save("a", { title: "Quokka" });
+    await s.save("a", { title: "Quokka" });
+    // Unfiltered: numbat matches 1 link, quokka 3, so numbat leads even in the archived list.
+    expect(await hits(s, "quokka numbat", { state: "archived" })).toEqual([
+      [done, ["numbat", "quokka"]],
+    ]);
+  });
+
+  it("returns every match in keyword order, and nothing for text with no word", async () => {
+    const s = setup();
+    await addFiller(s);
+    const weak = await s.save("a", { title: "x", summary: "numbat" });
+    const strong = await s.save("a", { title: "numbat" });
+    expect((await hits(s, "numbat")).map(([id]) => id)).toEqual([strong, weak]);
+    expect(await hits(s, "-- ,")).toEqual([]);
+  });
+
+  it("leaves ordinary search matching prefixes and page text", async () => {
+    const s = setup();
+    const prefix = await s.save("a", { title: "User notes" });
+    const text = await s.save("a", { title: "Other" });
+    page(s, text, "using sprites");
+    expect(await s.find("using")).toEqual([prefix, text]);
+  });
+});

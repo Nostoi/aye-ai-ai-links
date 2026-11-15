@@ -40,8 +40,8 @@ export function createDeps(
   const base = {
     store,
     search: new HybridSearch(keywordSearch, new VectorSearch(db, MODEL_KEY), embedder, MODEL_KEY),
-    /** The keyword half of `search` alone, for the digest's focus matching until #68. */
-    keywordSearch,
+    /** The digest's, Tidy up's and came-back's focus matching: whole words in own fields (#302). */
+    focusMatch: keywordSearch,
     /** Counts what a blank listing pages through; blank listings are keyword search's alone. */
     count: keywordSearch,
     /** The blank listing, with each link's sort time from the same read, for paging (#215). */

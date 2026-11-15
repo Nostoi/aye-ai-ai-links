@@ -9,7 +9,9 @@ import { saveLink, updateLink } from "./core/links.js";
 import { addProfile } from "./core/profile.js";
 import type { SearchTrace } from "./core/search.js";
 import { searchLinks } from "./core/search-links.js";
+import { tidyQueue } from "./core/tidy-up.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
+import { putAwayLink } from "./core/worth-a-look.js";
 import { createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
 import { DIMS, MODEL_KEY } from "./search/model.js";
@@ -284,20 +286,33 @@ describe("the digest on createDeps", () => {
     db.close();
   });
 
-  it("matches focus words in page text through the keyword engine, logs nothing, and claims in SQLite", async () => {
+  it("matches focus words in a link's own fields but not its page text, logs nothing, and claims in SQLite", async () => {
     const db = openDatabase(":memory:");
     const now = new Date("2026-06-01T00:00:00Z");
     const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => now };
     deps.store.ensureUser(OWNER, OWNER);
     const why = { text: "w", source: "stated" as const };
     const save = async (n: number) =>
-      (await saveLink(deps, OWNER, { url: `https://ex.com/${n}`, savedBy: "t", why })).link;
+      (
+        await saveLink(deps, OWNER, {
+          url: `https://ex.com/${n}`,
+          savedBy: "t",
+          why,
+          title: n === 7 ? "Quokka field guide" : null,
+        })
+      ).link;
     const links = [];
     for (let n = 1; n <= 7; n++) links.push(await save(n));
     const paged = links[6] as (typeof links)[number];
-    const lease = await deps.store.leaseSnapshot(OWNER, paged.id, now, new Date(now.getTime() + 1));
+    const pageOnly = links[2] as (typeof links)[number];
+    const lease = await deps.store.leaseSnapshot(
+      OWNER,
+      pageOnly.id,
+      now,
+      new Date(now.getTime() + 1),
+    );
     if (!lease) throw new Error("expected a lease");
-    await deps.store.recordSnapshot(OWNER, paged.id, lease.claim, {
+    await deps.store.recordSnapshot(OWNER, pageOnly.id, lease.claim, {
       status: "ok",
       attempts: 1,
       nextFetchAt: null,
@@ -313,11 +328,9 @@ describe("the digest on createDeps", () => {
     const { recentFocus } = await addProfile(deps, OWNER, "t", {
       addFocus: [{ text: "quokka", source: "inferred" }],
     });
-    const traces: SearchTrace[] = [];
-    expect(await deps.keywordSearch.search(OWNER, "quokka", {}, 5, (t) => traces.push(t))).toEqual([
-      paged.id,
+    expect(await deps.focusMatch.match(OWNER, "quokka", {})).toEqual([
+      { id: paged.id, words: ["quokka"] },
     ]);
-    expect(traces.map((t) => t.mode)).toEqual(["keyword"]);
 
     const first = await getDigest(deps, OWNER);
 
@@ -326,14 +339,84 @@ describe("the digest on createDeps", () => {
       ...links.slice(0, 4).map((l) => l.id),
     ]);
     expect(first.links[0]?.reasons).toEqual([
-      { kind: "focus_words", focus: recentFocus[0] },
+      { kind: "focus_words", focus: recentFocus[0], words: ["quokka"] },
       { kind: "never_surfaced" },
     ]);
+    const pageOnlyReasons = first.links.find((l) => l.link.id === pageOnly.id)?.reasons ?? [];
+    expect(pageOnlyReasons.map((r) => r.kind)).not.toContain("focus_words");
     expect(first.links[0]?.link.lastSurfacedAt).toEqual(now);
     expect(db.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
     expect((await getDigest(deps, OWNER)).links.map((l) => l.link.id)).toEqual(
       links.slice(4, 6).map((l) => l.id),
     );
     db.close();
+  });
+});
+
+describe("focus matching through the digest, came back and Tidy up on createDeps", () => {
+  const DAY = 86_400_000;
+  const start = new Date("2026-03-01T00:00:00Z");
+  const world = () => {
+    const db = openDatabase(":memory:");
+    let clock = start;
+    const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => clock };
+    deps.store.ensureUser(OWNER, OWNER);
+    const why = { text: "w", source: "stated" as const };
+    const save = async (title: string) =>
+      (await saveLink(deps, OWNER, { url: `https://ex.com/${title}`, title, why, savedBy: "t" }))
+        .link;
+    const advance = (days: number) => {
+      clock = new Date(clock.getTime() + days * DAY);
+    };
+    const focus = async (text: string) =>
+      (await addProfile(deps, OWNER, "t", { addFocus: [{ text, source: "stated" }] }))
+        .recentFocus[0];
+    return { db, deps, save, advance, focus };
+  };
+
+  it("gives a digest focus reason for a whole-word match and none for a prefix-only one", async () => {
+    const w = world();
+    const used = await w.save("Used sprites");
+    const user = await w.save("User research");
+    w.advance(40);
+    const entry = await w.focus("using");
+    const digest = await getDigest(w.deps, OWNER);
+    const reasons = (id: string) => digest.links.find((l) => l.link.id === id)?.reasons ?? [];
+    expect(reasons(used.id)).toContainEqual({
+      kind: "focus_words",
+      focus: entry,
+      words: ["using"],
+    });
+    expect(reasons(user.id).map((r) => r.kind)).not.toContain("focus_words");
+    w.db.close();
+  });
+
+  it("brings a put-away link back for a whole word, with the word, and not for a prefix", async () => {
+    const w = world();
+    const used = await w.save("Used sprites");
+    const user = await w.save("User research");
+    for (const l of [used, user]) await putAwayLink(w.deps, OWNER, l.id);
+    w.advance(1);
+    const entry = await w.focus("using");
+    const digest = await getDigest(w.deps, OWNER);
+    expect(digest.links.map((l) => [l.link.id, l.reasons.map((r) => r.kind)])).toEqual([
+      [used.id, ["came_back", "never_surfaced"]],
+    ]);
+    expect(digest.links[0]?.reasons[0]).toMatchObject({ focus: entry, words: ["using"] });
+    w.db.close();
+  });
+
+  it("offers a Tidy up fit for a whole word and not for a prefix", async () => {
+    const w = world();
+    const used = await w.save("Used sprites");
+    const user = await w.save("User research");
+    w.advance(40);
+    const entry = await w.focus("using");
+    const queue = await tidyQueue(w.deps, OWNER, 5);
+    expect(queue.map((t) => [t.link.id, t.fit?.id ?? null])).toEqual([
+      [used.id, entry?.id],
+      [user.id, null],
+    ]);
+    w.db.close();
   });
 });

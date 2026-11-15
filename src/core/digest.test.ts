@@ -18,7 +18,7 @@ import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkCheck } from "./link-check-store.js";
 import { recordOpening } from "./links.js";
-import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
+import type { FocusHit, FocusMatch, SearchFilters } from "./search.js";
 import type { LinkStore } from "./store.js";
 import { keepHandy, notHandy, stillUsing } from "./tools.js";
 import type { FocusEntry, Link, NewLink, Source } from "./types.js";
@@ -31,32 +31,30 @@ const NOW = new Date("2026-06-01T00:00:00Z");
 const at = (delta: number) => new Date(NOW.getTime() + delta);
 const CUTOFF = at(-SURFACE_COOLDOWN_MS);
 
-/** Keyword search with hits set per query, honouring `limit` like the real engine. */
-class FakeKeywordSearch implements LinkSearch {
+/** Focus matching with hits set per text; each hit's `words` is the text unless a test sets them. */
+class FakeFocusMatch implements FocusMatch {
   hits = new Map<string, string[]>();
-  calls: { query: string; filters: SearchFilters; limit: number; traced: boolean }[] = [];
-  async search(
-    _owner: string,
-    query: string,
-    filters: SearchFilters,
-    limit: number,
-    trace?: (t: SearchTrace) => void,
-  ) {
-    this.calls.push({ query, filters, limit, traced: trace !== undefined });
-    return (this.hits.get(query) ?? []).slice(0, limit);
+  words = new Map<string, string[]>();
+  calls: { text: string; filters: SearchFilters }[] = [];
+  async match(_owner: string, text: string, filters: SearchFilters): Promise<FocusHit[]> {
+    this.calls.push({ text, filters });
+    return (this.hits.get(text) ?? []).map((id) => ({
+      id,
+      words: this.words.get(id) ?? [text],
+    }));
   }
 }
 
 let store: FakeStore;
 let profile: FakeProfileStore;
-let keyword: FakeKeywordSearch;
+let keyword: FakeFocusMatch;
 let clock: Date;
 const deps = (over: { store?: LinkStore } = {}) => ({
   store,
   tools: store,
   checks: store,
   profile,
-  keywordSearch: keyword,
+  focusMatch: keyword,
   now: () => clock,
   ...over,
 });
@@ -64,7 +62,7 @@ const deps = (over: { store?: LinkStore } = {}) => ({
 beforeEach(() => {
   store = new FakeStore();
   profile = new FakeProfileStore();
-  keyword = new FakeKeywordSearch();
+  keyword = new FakeFocusMatch();
   clock = NOW;
 });
 
@@ -108,7 +106,11 @@ async function focus(text: string, created: Date, source: Source = "stated"): Pr
 const digestIds = async () => (await getDigest(deps(), OWNER)).links.map((l) => l.link.id);
 const reasonsOf = async (id: string) =>
   (await getDigest(deps(), OWNER)).links.find((l) => l.link.id === id)?.reasons;
-const focusWords = (entry: FocusEntry): DigestReason => ({ kind: "focus_words", focus: entry });
+const focusWords = (entry: FocusEntry, words = [entry.text]): DigestReason => ({
+  kind: "focus_words",
+  focus: entry,
+  words,
+});
 
 /** A row as two dead checks a week apart leave it: flagged as gone a day ago. */
 const goneCheck = (): LinkCheck => ({
@@ -243,12 +245,12 @@ describe("getDigest focus", () => {
     expect(await digestIds()).toEqual([behind.id]);
   });
 
-  it("asks the keyword engine directly, unfiltered and untraced, so nothing is logged", async () => {
+  it("asks the focus matcher directly and unfiltered, so nothing is logged", async () => {
     await link({ why: null });
     await link({ state: "archived" });
     await focus("topic", at(-DAY));
     await getDigest(deps(), OWNER);
-    expect(keyword.calls).toEqual([{ query: "topic", filters: {}, limit: 2, traced: false }]);
+    expect(keyword.calls).toEqual([{ text: "topic", filters: {} }]);
   });
 });
 
@@ -767,10 +769,11 @@ describe("getDigest's still_using_check", () => {
 
 describe("came back", () => {
   const AWAY = at(-3 * DAY);
-  const cameBack = (entry: FocusEntry, putAwayAt = AWAY): DigestReason => ({
+  const cameBack = (entry: FocusEntry, putAwayAt = AWAY, words = [entry.text]): DigestReason => ({
     kind: "came_back",
     focus: entry,
     putAwayAt,
+    words,
   });
   /** A put-away link: archived with its marker, surfaced (if ever) before it was put away. */
   const away = (over: Partial<NewLink> = {}) =>
@@ -791,12 +794,7 @@ describe("came back", () => {
     await focus("solar", at(-DAY));
     keyword.hits.set("solar", [l.id]);
     await getDigest(deps(), OWNER);
-    expect(keyword.calls).toContainEqual({
-      query: "solar",
-      filters: { state: "archived" },
-      limit: 2,
-      traced: false,
-    });
+    expect(keyword.calls).toContainEqual({ text: "solar", filters: { state: "archived" } });
     expect((await store.get(OWNER, l.id))?.lastSurfacedAt).toEqual(NOW);
   });
 

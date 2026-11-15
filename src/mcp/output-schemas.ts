@@ -207,9 +207,16 @@ export const mergeTagsOutput = z.strictObject({
 export const deleteTagOutput = z.strictObject({ links: z.number().int(), undoId: z.string() });
 
 // Adding a reason is a breaking change for a client holding an earlier tools/list (ROADMAP #39).
+// The focus entry's words that matched the link's own fields, rarest first.
+const matchedWords = z.array(z.string().regex(/\S/)).nonempty();
 const digestReasonOutput = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput }),
-  z.strictObject({ kind: z.literal("came_back"), focus: focusEntryOutput, putAwayAt: timestamp }),
+  z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput, words: matchedWords }),
+  z.strictObject({
+    kind: z.literal("came_back"),
+    focus: focusEntryOutput,
+    putAwayAt: timestamp,
+    words: matchedWords,
+  }),
   z.strictObject({ kind: z.literal("no_why") }),
   z.strictObject({ kind: z.literal("not_opened_recently") }),
   z.strictObject({ kind: z.literal("never_surfaced") }),

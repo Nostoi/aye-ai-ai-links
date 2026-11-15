@@ -48,6 +48,27 @@ export interface LinkSearch {
   ): Promise<string[]>;
 }
 
+/** A link a focus entry matches, with the entry's words that matched it. */
+export type FocusHit = { id: string; words: string[] };
+
+/**
+ * The one rule for whether a focus entry's text matches a link (#302). A link matches when a
+ * word of the text matches the link's own title, summary, why or tags as a whole stemmed word:
+ * not as a prefix, and never through page text. Words are the text's whitespace fragments under
+ * `LinkSearch`'s stop-word rule; a fragment matches as a phrase, so "image-editing" needs "image
+ * editing". Owner-scoped, deleted links left out, filters as for `LinkSearch`.
+ *
+ * - Every matching link is returned, best first: keyword order over the own fields.
+ * - `words` is the fragments that matched that link, as the text spells them with leading and
+ *   trailing punctuation trimmed. Repeats collapse case-insensitively, first spelling kept. They
+ *   are rarest first (fewest of the owner's links match the fragment in their own fields; ties
+ *   keep the text's order). Never empty.
+ * - Text with no searchable word returns [].
+ */
+export interface FocusMatch {
+  match(owner: OwnerId, text: string, filters: SearchFilters): Promise<FocusHit[]>;
+}
+
 /**
  * Counts the owner's links that pass the filters and are in the order's list (for opened, the
  * links with a recorded opening): the links a blank query pages through, all pages together.

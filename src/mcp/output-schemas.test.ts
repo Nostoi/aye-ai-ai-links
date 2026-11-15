@@ -311,6 +311,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
       ["12", [{ kind: "still_using_check", daysSinceOpened: 45 }]],
     ]);
     expect(digest.links[0].reasons[0].focus).toMatchObject({ text: "quokka", source: "inferred" });
+    expect(digest.links[0].reasons[0].words).toEqual(["quokka"]);
 
     const links: Json[] = outputs
       .flatMap((o) => [
@@ -834,8 +835,17 @@ describe.each(ERAS)("put-away on the wire, %s era", (era) => {
       kind: "came_back",
       putAwayAt: AWAY.toISOString(),
       focus: { text: "quokka", source: "inferred" },
+      words: ["quokka"],
     });
     expect(digest.links[0].link.putAwayAt).toBe(AWAY.toISOString());
+    const validate = new AjvJsonSchemaValidator().getValidator(tools.get_digest.outputSchema);
+    const withWords = (words: unknown) => ({
+      links: [{ ...digest.links[0], reasons: [{ ...digest.links[0].reasons[0], words }] }],
+    });
+    expect(validate(withWords(["quokka"])).valid).toBe(true);
+    for (const bad of [[], [" "], [""], undefined]) {
+      expect(validate(withWords(bad)).valid).toBe(false);
+    }
   });
 });
 

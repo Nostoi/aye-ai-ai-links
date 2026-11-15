@@ -4,7 +4,7 @@ import { isGone } from "./link-check.js";
 import type { LinkCheckStore } from "./link-check-store.js";
 import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
-import type { LinkSearch } from "./search.js";
+import type { FocusMatch } from "./search.js";
 import type { LinkStore, SurfacedClaim } from "./store.js";
 import type { ToolStore } from "./tool-store.js";
 import { isDue } from "./tools.js";
@@ -26,15 +26,18 @@ export const FOCUS_MATCHES_PER_ENTRY = 3;
 export const FOCUS_SLOTS = 3;
 
 /**
- * Why a link is in the digest. `focus_words`: the link shares words with that focus entry, which
- * is a keyword match, not proof of relevance. `still_using_check`: a kept tool that is due, asked
- * about alone, with whole days since its last recorded opening (null: none recorded).
- * `came_back`: the owner put the link away at `putAwayAt` and that focus entry, written after,
- * keyword-matches it; it shows while the entry is in the window.
+ * Why a link is in the digest. `focus_words`: the link's own title, summary, why or tags share
+ * `words` with that focus entry, which is a keyword match, not proof of relevance. `words` are
+ * the entry's words that matched, rarest first and never empty, as they were when the digest or
+ * page was built: an edit can make them stale until it is reloaded. `still_using_check`: a kept
+ * tool that is due, asked about alone, with whole days since its last recorded opening (null:
+ * none recorded). `came_back`: the owner put the link away at `putAwayAt` and that focus entry,
+ * written after, matches it the same way (`words` as for `focus_words`); it shows while the
+ * entry is in the window.
  */
 export type DigestReason =
-  | { kind: "focus_words"; focus: FocusEntry }
-  | { kind: "came_back"; focus: FocusEntry; putAwayAt: Date }
+  | { kind: "focus_words"; focus: FocusEntry; words: string[] }
+  | { kind: "came_back"; focus: FocusEntry; putAwayAt: Date; words: string[] }
   | { kind: "no_why" }
   | { kind: "not_opened_recently" }
   | { kind: "never_surfaced" }
@@ -50,7 +53,7 @@ export type DigestDeps = {
   checks: LinkCheckStore;
   profile: ProfileStore;
   /** Keyword matching only: with no similarity floor yet (#68), any link can come back as a meaning match. */
-  keywordSearch: LinkSearch;
+  focusMatch: FocusMatch;
   now: () => Date;
 };
 
@@ -117,20 +120,21 @@ function rotation(a: Link, b: Link): number {
 /**
  * Focus reasons by link id. Entries are taken newest first and hits in rank order, so the map's
  * order is the focus links' digest order: by their newest matching entry, then rank in it.
- * Each search is the keyword engine's whole answer (limit = every link), untraced, so not logged.
+ * Each match is the keyword engine's whole answer, untraced, so not logged.
  */
 async function focusReasons(
   deps: DigestDeps,
   owner: OwnerId,
   entries: FocusEntry[],
-  linkCount: number,
   isEligible: (id: string) => boolean,
 ): Promise<Map<string, DigestReason[]>> {
   const found = new Map<string, DigestReason[]>();
   for (const focus of entries) {
-    const hits = await deps.keywordSearch.search(owner, focus.text, {}, linkCount);
-    for (const id of hits.filter(isEligible).slice(0, FOCUS_MATCHES_PER_ENTRY)) {
-      found.set(id, [...(found.get(id) ?? []), { kind: "focus_words", focus }]);
+    const hits = await deps.focusMatch.match(owner, focus.text, {});
+    for (const { id, words } of hits
+      .filter((h) => isEligible(h.id))
+      .slice(0, FOCUS_MATCHES_PER_ENTRY)) {
+      found.set(id, [...(found.get(id) ?? []), { kind: "focus_words", focus, words }]);
     }
   }
   return found;
@@ -147,29 +151,27 @@ async function cameBackReasons(
   owner: OwnerId,
   entries: FocusEntry[],
   now: Date,
-  linkCount: number,
   candidates: ReadonlyMap<string, Link>,
 ): Promise<Map<string, DigestReason[]>> {
   const found = new Map<string, DigestReason[]>();
   if (candidates.size === 0) return found;
   const day = Math.floor(now.getTime() / DAY_MS);
   for (const focus of entries) {
-    const hits = await deps.keywordSearch.search(
-      owner,
-      focus.text,
-      { state: "archived" },
-      linkCount,
-    );
+    const hits = await deps.focusMatch.match(owner, focus.text, { state: "archived" });
     const fits = hits
-      .map((id) => candidates.get(id))
-      .filter((l): l is Link => l !== undefined && focus.createdAt > (l.putAwayAt as Date))
-      .map((l) => ({ l, rank: dayRank(day, l.id) }))
+      .map((h) => ({ l: candidates.get(h.id), words: h.words }))
+      .filter(
+        (f): f is { l: Link; words: string[] } =>
+          f.l !== undefined && focus.createdAt > (f.l.putAwayAt as Date),
+      )
+      .map((f) => ({ ...f, rank: dayRank(day, f.l.id) }))
       .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
-    for (const { l } of fits.slice(0, FOCUS_MATCHES_PER_ENTRY)) {
+    for (const { l, words } of fits.slice(0, FOCUS_MATCHES_PER_ENTRY)) {
       const reason: DigestReason = {
         kind: "came_back",
         focus,
         putAwayAt: l.putAwayAt as Date,
+        words,
       };
       found.set(l.id, [...(found.get(l.id) ?? []), reason]);
     }
@@ -212,8 +214,8 @@ async function select(
   if (candidates.size === 0 && cameBack.size === 0) return { picked: [], focus: new Map() };
 
   const entries = await focusEntries(deps, owner, now);
-  const focus = await cameBackReasons(deps, owner, entries, now, all.length, cameBack);
-  for (const [id, reasons] of await focusReasons(deps, owner, entries, all.length, (id) =>
+  const focus = await cameBackReasons(deps, owner, entries, now, cameBack);
+  for (const [id, reasons] of await focusReasons(deps, owner, entries, (id) =>
     candidates.has(id),
   )) {
     focus.set(id, reasons);

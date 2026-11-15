@@ -233,9 +233,19 @@ describe("the All links page", () => {
   it("shows the phone the select in place of the text choices (#218)", () => {
     const phone = themeCss.slice(themeCss.indexOf("@media (max-width:600px)"));
     expect(phone).toMatch(/\.all>\.orders\{display:none\}/);
-    expect(phone).toMatch(/\.order-select\{display:block\}/);
-    expect(phone).toMatch(/\.all-tools\{display:grid;/);
-    expect(phone).toMatch(/\.all-tools \.search-instead\{grid-column:1\/-1;/);
+    expect(phone).toMatch(/\.order-select\{display:block;/);
+    expect(phone).toMatch(/\.all-tools\{display:flex;/);
+    expect(phone).toMatch(/\.all-tools \.search-instead\{[^}]*justify-content:center/);
+  });
+
+  it("wraps the phone's tools row instead of squeezing the order select (#310)", () => {
+    const phone = themeCss.slice(themeCss.indexOf("@media (max-width:600px)"));
+    expect(phone).toMatch(/\.all-tools\{display:flex;flex-wrap:wrap;/);
+    expect(phone).toMatch(/\.order-select\{[^}]*flex:1 1 auto/);
+    expect(phone).toMatch(/\.view-switch\{[^}]*flex:none/);
+    expect(phone).toMatch(/\.all-tools \.search-instead\{[^}]*flex-basis:100%/);
+    expect(phone).not.toMatch(/\.order-select select\{[^}]*max-width/);
+    expect(phone).not.toMatch(/\.all-tools\{display:grid/);
   });
 
   it("offers Search instead, and puts All links after Home in the menu", () => {

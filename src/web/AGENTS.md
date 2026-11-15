@@ -59,7 +59,7 @@ The catalogue for a new page. Where a rule already exists above, this names it; 
 **Where each pattern is written down**
 - Tray and spine: "Home's trays and spines". Top bar band: "The top bar sits on the `--tray` band". Round sliding buttons and the gone band: "The seems-gone band" and Home's featured card (`slideButton`, #298).
 - Card with a ring: `--card-ring` after a `--shadow-*` (below). Pictures, initials and the letter square: design rule 4 and the tray's last bullet (#304).
-- Text hierarchy: the card's grey line bullet (`cardLine`) and `ROADMAP.md` 2026-11-13 (#305, part 2). Spacing scale: the `--space-*` bullet. Contrast floors: the spine bullet (`theme.test.ts`).
+- Text hierarchy: the card's grey line bullet (`cardLine`) and `ROADMAP.md` 2026-11-13 (#305, part 2). Type sizes: "Type steps" (below). Spacing scale: the `--space-*` bullet. Contrast floors: the spine bullet (`theme.test.ts`).
 
 **Buttons** (*new*). `button` is a `--radius-pill` pill on `--surface` with a `--line` border; `button.primary` and `a.button.primary` fill `--ink` and mark a form's or dialog's main action (Find it, Sign in, Save, Allow), one per form; the saved copy's end has none. A round icon button that opens sideways is `slideButton`; the bar's raised pills are `.bar-pill`. States: hover is a tint of `--ink` or the border moving to `--field`; keyboard focus is the focus ring (below); `button:disabled` is dimmed with the default cursor; busy is the page's busy mark (`whileBusy`, `cardBusy`). There is no pressed state yet (#314).
 
@@ -79,12 +79,26 @@ The catalogue for a new page. Where a rule already exists above, this names it; 
 - `--white` is white in both themes (a picture's backing, a chip's text); a page's own white is `--surface`. `--overlay-chip` is the dark layer over a picture. A `::backdrop` takes no `var()`: before Safari 17.4 and Chrome 122 it does not inherit the page's variables, so the edit dialog's backdrop colour is typed (`theme.test.ts` checks).
 - Motion: `--motion-pop` (a menu appearing), `--motion-hover` (a fill changing), `--motion-fade` (opacity), `--motion-leave` (a band going), `--motion-slide` (a button opening) and `--motion-label-delay`; easings `--ease-standard` and `--ease-out`. The one `prefers-reduced-motion:reduce` block that ends in `*{…!important}` turns all of it off, so new motion adds nothing there.
 
+**Type steps** (*new*, #312, `shared` in `theme.ts`). Text sizes are eleven ordered steps, `--text-1` smallest to `--text-11` largest, and every `font-size` in `themeCss` is one of them. They are numbered, not named for a role: one role spans several sizes (card titles), so a step has no single meaning, and this is the exception to "a token names a meaning". Pick the step for the text's weight in the page's hierarchy; do not add a step or a typed size for one rule. Roles that use each step today:
+- 1: the smallest labels: a slide button's hint, the dialog's picture chip, a keycap, the letter on a space's favicon.
+- 2: grey small text: `.small`, hints, "You saved it for", the spine's word, the dialog's page title.
+- 3: secondary text and menu rows: tag counts, note meta, the gone band's words, dialog field labels, Tidy up's choice lines.
+- 4: controls and everyday lines: buttons, `label`, the top bar's menu, `.lead`, a row's why and summary, links beside a title, the Undo bar.
+- 5: a small card's title: a Handy tile, an Also today row.
+- 6: the page text (`body`), a list row's title, a small heading inside a card, Tidy up's why and its choice titles, a note.
+- 7: a result's or Save link's title; a heading inside a card (a tag, a suggestion, the Stats).
+- 8: a panel's, dialog's or month's heading; the phone's featured card title.
+- 9: a page's section heading (`h2`), the featured card's title, Tidy up's title and its head.
+- 10: a page title on a phone, Tidy up's done heading.
+- 11: a page title (`h1`).
+Typed on purpose, so changing a step can't move them (`design-tokens.test.ts` lists them): Home's question, "Also today" and the card's 13.5px grey detail line (the three rules `.card-line`, `.card-site`, `.also-why`), the saved copy's reading sizes, the initials' figures, and every `.ask-*` rule. Text that sets no size inherits one from its parent, so a new rule that resets `font` to `inherit` follows its container's step.
+
 **Names for new work** (*new*; no existing class is renamed). A picture box is `-pic` (`feature-pic`, `row-pic`). The grey text roles `--about`, `--soft` and `--detail` stay distinct. Grey secondary text takes `.small`, or `.card-line` inside a card, and a new class is named for what the text is (`copy-notice`), never its colour.
 
 **Ask AI** (*new*). Its `.ask-*` families repeat the button, card and label ideas above. When Ask AI is next touched, reuse the shared families instead of writing more `.ask-*` copies.
 
 **A new page, in order** (*new*)
-1. Render through `page()`; colours, `--space-*`, corners, shadows, layers and motion use a token where one fits; anything else is typed to match the nearest existing element of its kind.
+1. Render through `page()`; colours, type (`--text-N`), `--space-*`, corners, shadows, layers and motion use a token where one fits; anything else is typed to match the nearest existing element of its kind.
 2. A card is `--surface`, a corner token and a shadow token with the ring. A group's gaps stay within its padding.
 3. Controls are at least 44px tall; a form's main action is its one `.primary`; hover, focus and disabled are the shared ones.
 4. Give it its empty state and its `role=alert`.

@@ -82,7 +82,6 @@ const shared = {
   "layer-chrome": "30",
   "layer-undo": "31",
   white: "#fff",
-  "overlay-scrim": "rgb(20 20 24 / .38)",
   "overlay-chip": "rgb(20 20 24 / .62)",
   "motion-pop": ".12s",
   "motion-hover": ".15s",
@@ -524,7 +523,7 @@ img.row-pic{display:block}
 .copy-notice{flex-basis:100%;margin:0;color:var(--soft);font-size:14px}
 .copy-notice.needs-you{padding:10px 14px;border-radius:12px}
 .edit-link{width:min(520px,calc(100% - 32px));max-height:calc(100% - 32px);padding:8px 24px 20px;border:0;border-radius:22px;background:var(--surface);color:var(--ink);box-shadow:0 24px 64px rgb(0 0 0 / .28)}
-.edit-link::backdrop{background:var(--overlay-scrim)}
+.edit-link::backdrop{background:rgb(20 20 24 / .38)}
 .edit-grabber,.edit-top,.edit-hint-phone{display:none}
 .edit-head{display:flex;align-items:center;gap:8px;margin:0 -12px 8px 0}
 .edit-head h2{flex:1;margin:0;font-size:20px;font-weight:700}

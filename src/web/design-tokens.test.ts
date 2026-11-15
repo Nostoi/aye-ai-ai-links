@@ -25,7 +25,6 @@ const TOKENS: Record<string, string> = {
   "layer-chrome": "30",
   "layer-undo": "31",
   white: "#fff",
-  "overlay-scrim": "rgb(20 20 24 / .38)",
   "overlay-chip": "rgb(20 20 24 / .62)",
   "motion-pop": ".12s",
   "motion-hover": ".15s",

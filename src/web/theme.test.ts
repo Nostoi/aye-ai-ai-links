@@ -599,7 +599,8 @@ describe("the edit dialog's look", () => {
     ]) {
       expect(rule(".edit-link")).toContain(part);
     }
-    expect(rule(".edit-link::backdrop")).toBe("background:var(--overlay-scrim)");
+    expect(rule(".edit-link::backdrop")).toBe("background:rgb(20 20 24 / .38)");
+    expect(themeCss).not.toMatch(/::backdrop\{[^}]*var\(/);
     expect(rule(".edit-head h2")).toContain("font-size:20px;font-weight:700");
     expect(rule(".edit-close")).toContain("width:44px;height:44px");
     expect(rule(".edit-title")).toBe("height:46px;padding:0 14px;border-radius:12px");

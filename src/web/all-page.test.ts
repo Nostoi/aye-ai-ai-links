@@ -233,17 +233,19 @@ describe("the All links page", () => {
   it("shows the phone the select in place of the text choices (#218)", () => {
     const phone = themeCss.slice(themeCss.indexOf("@media (max-width:600px)"));
     expect(phone).toMatch(/\.all>\.orders\{display:none\}/);
-    expect(phone).toMatch(/\.order-select\{display:block\}/);
-    expect(phone).toMatch(/\.all-tools\{display:grid;/);
-    expect(phone).toMatch(/\.all-tools \.search-instead\{grid-column:1\/-1;/);
+    expect(phone).toMatch(/\.order-select\{display:block;/);
+    expect(phone).toMatch(/\.all-tools\{display:flex;/);
+    expect(phone).toMatch(/\.all-tools \.search-instead\{[^}]*justify-content:center/);
   });
 
-  it("lets the phone's order select shrink so the tools row fits a 320px window (#310)", () => {
+  it("wraps the phone's tools row instead of squeezing the order select (#310)", () => {
     const phone = themeCss.slice(themeCss.indexOf("@media (max-width:600px)"));
-    // `1fr` is minmax(auto,1fr): the select's widest option (144px) plus the view switch (158px)
-    // and the gap came to 314px, past the 288px a 320px window leaves under the column padding.
-    expect(phone).toMatch(/\.all-tools\{display:grid;grid-template-columns:minmax\(0,1fr\) auto;/);
-    expect(phone).toMatch(/\.order-select select\{[^}]*max-width:100%/);
+    expect(phone).toMatch(/\.all-tools\{display:flex;flex-wrap:wrap;/);
+    expect(phone).toMatch(/\.order-select\{[^}]*flex:1 1 auto/);
+    expect(phone).toMatch(/\.view-switch\{[^}]*flex:none/);
+    expect(phone).toMatch(/\.all-tools \.search-instead\{[^}]*flex-basis:100%/);
+    expect(phone).not.toMatch(/\.order-select select\{[^}]*max-width/);
+    expect(phone).not.toMatch(/\.all-tools\{display:grid/);
   });
 
   it("offers Search instead, and puts All links after Home in the menu", () => {

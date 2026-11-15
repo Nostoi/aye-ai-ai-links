@@ -43,7 +43,7 @@ if (copyRoot) {
         if (back && back.status === 204) for (const row of rows) row.hidden = false;
         else copyError.textContent = await failure(back);
       });
-    });
+    }, {});
   });
 }
 }`;

@@ -4,7 +4,7 @@ import { TIDY_SESSION, type TidyLink } from "../core/tidy-up.js";
 import type { FocusEntry, Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 import { cardLine } from "./card-line.js";
-import { DONE_UNDO, PUT_AWAY_UNDO } from "./done-link.js";
+import { DONE_UNDO, DONE_WORKING, PUT_AWAY_UNDO, PUT_AWAY_WORKING } from "./done-link.js";
 import { monthName, whyText } from "./link-rows.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page } from "./page.js";
@@ -87,11 +87,14 @@ function finish(count: number): string {
 </section>`;
 }
 
-/** What each choice posts, and the bar its Undo is offered on (Keep has none). */
+/** What Keep says while it waits for the answer (#314). */
+const KEEP_WORKING = "Keeping…";
+
+/** What each choice posts, the bar its Undo is offered on (Keep has none), and its working word. */
 const ACTS = {
-  keep: { route: "/tidy/keep", undo: null },
-  "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO },
-  stale: { route: "/home/archive", undo: DONE_UNDO },
+  keep: { route: "/tidy/keep", undo: null, word: KEEP_WORKING },
+  "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO, word: PUT_AWAY_WORKING },
+  stale: { route: "/home/archive", undo: DONE_UNDO, word: DONE_WORKING },
 };
 const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
 
@@ -103,7 +106,9 @@ const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
  * Done with it answer the `StateChange` that their Undo posts back to `/home/undo-state` exactly as
  * received, then shows that link again as undecided. A refusal is shown in `#tidy-error`.
  * Keys 1, 2 and 3 press the shown link's choices, except in a field, with a modifier, or on the
- * finish screen.
+ * finish screen. A choice that is slow to answer dims its link's step, not the whole session, and
+ * its title says its working word (`busyLook`); a key finds the choice's button from the step and
+ * the action.
  */
 const SESSION_SCRIPT = `<script>
 ${CARD_FETCH}
@@ -149,7 +154,7 @@ const choose = (step, act) =>
         decided.delete(step);
         showStep(step);
       }), undo.title);
-  });
+  }, { el: step, button: step.querySelector('button[data-act="' + act + '"]'), word: tidyActs[act].word });
 tidyRoot.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-act]");
   if (button) choose(button.closest("section[data-id]"), button.dataset.act);

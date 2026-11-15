@@ -177,11 +177,11 @@ div#worth-cards:not(:has(>.worth-rows>:not([hidden])))>.also-today,div#worth-car
 .slide-words{display:flex;flex-direction:column;align-items:flex-start;text-align:left;line-height:1.2;opacity:0;transition:opacity var(--motion-fade) var(--ease-standard) var(--motion-label-delay)}
 .slide-words>span{font-size:var(--text-4);font-weight:600}
 .slide-words small{font-size:var(--text-1);font-weight:400;color:var(--about)}
-.slide:hover,.slide:focus-visible{max-width:260px;gap:10px;background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
-.slide:hover .slide-words,.slide:focus-visible .slide-words{opacity:1}
+.slide:hover,.slide:focus-visible,.slide[data-working]{max-width:260px;gap:10px;background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
+.slide:hover .slide-words,.slide:focus-visible .slide-words,.slide[data-working] .slide-words{opacity:1}
 .slide:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 @container (max-width:540px){.feature-quiet{flex:1 1 100%;min-width:0;justify-content:flex-end}}
-@media (hover:hover) and (min-width:601px){.feature-quiet{position:relative;flex:none;width:106px;height:48px}.feature-quiet .slide{position:absolute;top:0;right:0}.feature-quiet .slide:first-child{right:58px}.feature-quiet .slide:hover,.feature-quiet .slide:focus-visible{z-index:var(--layer-lift);max-width:min(260px,100cqw)}.feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible{max-width:min(260px,calc(100cqw - 58px))}@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible)>.feature-open{opacity:0;pointer-events:none}}@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible)>.feature-open{opacity:0;pointer-events:none}}}
+@media (hover:hover) and (min-width:601px){.feature-quiet{position:relative;flex:none;width:106px;height:48px}.feature-quiet .slide{position:absolute;top:0;right:0}.feature-quiet .slide:first-child{right:58px}.feature-quiet .slide:hover,.feature-quiet .slide:focus-visible,.feature-quiet .slide[data-working]{z-index:var(--layer-lift);max-width:min(260px,100cqw)}.feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible,.feature-quiet .slide:first-child[data-working]{max-width:min(260px,calc(100cqw - 58px))}@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible,.slide:first-child[data-working])>.feature-open{opacity:0;pointer-events:none}}@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible,.slide:last-child[data-working])>.feature-open{opacity:0;pointer-events:none}}}
 @media (hover:none){.slide{max-width:none;height:auto;min-height:48px;padding-block:6px;gap:10px;justify-content:center;white-space:normal}.slide-words{opacity:1}}
 .why-label{display:block;margin:0 0 1px;font-size:var(--text-2);font-weight:600;color:var(--soft)}
 .feature-pic{grid-area:pic;align-self:start;width:168px;height:168px;border:1px solid var(--line);border-radius:14px;opacity:.92;object-fit:cover;background:var(--pic);--icon:120px;--initials:60px}
@@ -239,10 +239,10 @@ img.handy-image{background:var(--white)}
 .gone-actions{position:relative;flex:none;width:92px;height:44px}
 .gone-band .slide{position:absolute;top:0;right:0;height:44px;min-width:44px;max-width:44px;padding:0 13px;background:none;color:var(--amber-ink)}
 .gone-band .slide:first-child{right:48px}
-.gone-band .slide:hover,.gone-band .slide:focus-visible{z-index:var(--layer-lift);max-width:260px;background:var(--surface)}
+.gone-band .slide:hover,.gone-band .slide:focus-visible,.gone-band .slide[data-working]{z-index:var(--layer-lift);max-width:260px;background:var(--surface)}
 .gone-band .slide-words small{color:var(--about)}
 @media (hover:none){.gone-band{flex-wrap:wrap}.gone-band>p{flex:1 1 auto}.gone-actions{flex:0 1 auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;width:auto;height:auto;margin-left:auto}.gone-band .slide{position:static;flex:none;max-width:none;height:auto;min-height:44px;padding:6px 13px}}
-@media (hover:hover){@container (max-width:420px){.gone-band:has(.slide:hover,.slide:focus-visible)>p{opacity:0}}}
+@media (hover:hover){@container (max-width:420px){.gone-band:has(.slide:hover,.slide:focus-visible,.slide[data-working])>p{opacity:0}}}
 .gone-band.collapsing{opacity:0;transition:opacity var(--motion-leave) var(--ease-standard)}
 .worth-row .gone-band{grid-column:1/-1;margin:8px -12px -10px;padding-left:70px;border-radius:0 0 16px 16px}
 .handy-tile .gone-band{position:relative;z-index:var(--layer-tile-actions);grid-row:2;grid-column:1/-1;margin:10px -12px -12px;padding-left:12px;border-radius:0 0 var(--radius-card) var(--radius-card)}
@@ -556,6 +556,15 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 @media (max-width:600px){.copy-article{padding:24px 20px;font-size:17.5px;line-height:1.65}.copy-article h2{font-size:22px}.copy-article>.copy-band{margin-left:-20px;margin-right:-20px}.copy-band-note{padding:18px 20px}}
 @media (max-width:600px){.stat-tag{grid-template-columns:minmax(0,1fr) auto}.stat-bar{grid-column:1/-1;order:3}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+button:active:not(:disabled),.bar-pill:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
+button.primary:active:not(:disabled),a.button.primary:active{background:color-mix(in srgb,var(--ink) 80%,var(--surface));border-color:color-mix(in srgb,var(--ink) 80%,var(--surface));transition:none}
+.slide:active:not(:disabled),.gone-band .slide:active:not(:disabled),.copy-end-acts button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 18%,var(--surface));transition:none}
+.small-actions button:active:not(:disabled),.small-actions a:active{background:color-mix(in srgb,var(--ink) 9%,transparent);transition:none}
+.card-menu-list button:active:not(:disabled),.account-list a:active,.account-list button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 13%,transparent);transition:none}
+.tidy-choices button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
+.tidy-choices button.safe:active:not(:disabled){background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
+[data-busy]{opacity:.6}
+[data-busy],[data-busy] *{cursor:progress!important}
 .copy-end{margin-top:28px}
 .copy-end-acts{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .copy-end-label{font-size:var(--text-4);color:var(--soft);margin-right:6px}
@@ -644,21 +653,46 @@ const failure = async (res) => {
 };
 const cardBusy = new WeakSet();
 const cardWaiting = new WeakMap();
-const whileBusy = async (card, run) => {
+const busyLook = (el, button, word) => {
+  let swapped = null;
+  let shown = false;
+  const timer = setTimeout(() => {
+    shown = true;
+    el.setAttribute("data-busy", "");
+    if (!button || !button.isConnected) return;
+    const node = button.querySelector(".slide-words > span, b") || (button.firstElementChild ? null : button);
+    button.setAttribute("data-working", "");
+    if (!node) return;
+    swapped = { node, was: node.textContent };
+    node.textContent = word;
+  }, 300);
+  return () => {
+    clearTimeout(timer);
+    if (!shown) return;
+    el.removeAttribute("data-busy");
+    if (button) button.removeAttribute("data-working");
+    if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+  };
+};
+const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const clear = look
+    ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
+    : null;
   try {
     return await run();
   } finally {
+    if (clear) clear();
     cardBusy.delete(card);
     for (const wake of cardWaiting.get(card) || []) wake();
     cardWaiting.delete(card);
   }
 };
-const whenFree = async (card, run) => {
+const whenFree = async (card, run, look) => {
   while (cardBusy.has(card))
     await new Promise((wake) => cardWaiting.set(card, [...(cardWaiting.get(card) || []), wake]));
-  return whileBusy(card, run);
+  return whileBusy(card, run, look);
 };
 const resetBand = (band) => {
   if (band._cancel) band._cancel();
@@ -744,7 +778,7 @@ if (keepRoot) {
           else keepError.textContent = await failure(back);
         }),
       );
-    });
+    }, { button: menu ? null : button, word: button.dataset.act === "keep" ? "Keeping handy…" : "Taking it off…" });
   });
 }
 }
@@ -762,7 +796,7 @@ if (goneRoot) {
     buttons.forEach((b) => (b.disabled = true));
     try {
       if (button.dataset.act !== "still-works") {
-        await doneCard(card, () => collapseBand(line));
+        await doneCard(card, () => collapseBand(line), button);
         return resetBand(line);
       }
       const id = card.dataset.id;
@@ -782,7 +816,7 @@ if (goneRoot) {
           if (back && back.status === 204) resetBand(line);
           else goneError.textContent = await failure(back);
         });
-      });
+      }, { button, word: "Checking…" });
     } finally {
       buttons.forEach((b) => (b.disabled = false));
     }
@@ -815,7 +849,7 @@ if (copyRoot) {
         if (back && back.status === 204) for (const row of rows) row.hidden = false;
         else copyError.textContent = await failure(back);
       });
-    });
+    }, {});
   });
 }
 }
@@ -1357,7 +1391,7 @@ const deleteCard = (card) =>
       if (back && back.status === 204) putBack();
       else deleteAlert.textContent = await failure(back);
     });
-  });
+  }, {});
 {
 const deleteRoot = document.getElementById("results");
 if (deleteRoot) {
@@ -1369,8 +1403,8 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."}},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."}},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""}}};
-const stateCard = (card, act, before) =>
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Marking done…"},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."},"word":"Putting away…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
+const stateCard = (card, act, before, button) =>
   whileBusy(card, async () => {
     const listRoot = document.getElementById("results");
     const doneAlert = document.getElementById("results-error");
@@ -1390,8 +1424,8 @@ const stateCard = (card, act, before) =>
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
     }), undo.title);
-  });
-const doneCard = (card, before) => stateCard(card, "archive", before);
+  }, { button, word: STATE_ACTS[act].word });
+const doneCard = (card, before, button) => stateCard(card, "archive", before, button);
 {
 const doneRoot = document.getElementById("results");
 if (doneRoot) {
@@ -1426,6 +1460,7 @@ if (openRoot) {
 }
 </script>
 </div>
+<script>document.addEventListener("touchstart",()=>{},{passive:true});</script>
 <div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>
 <script>
 const showUndo = (() => {

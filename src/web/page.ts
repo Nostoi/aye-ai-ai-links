@@ -229,11 +229,19 @@ type ScriptOptions = {
 
 const scriptTag = (js: string) => `<script>${js}</script>`;
 
+/**
+ * Every page's first script: an empty, passive `touchstart` listener on the document. iOS Safari
+ * is reported to apply `:active` (the pressed look, #314) only on a page that has one; an inline
+ * `ontouchstart` attribute would not do, as the copy page's CSP refuses inline handlers.
+ */
+const TOUCH_JS = 'document.addEventListener("touchstart",()=>{},{passive:true});';
+
 /** The text between the tags of a script a builder returns whole, as `openedScript` does. */
 export const scriptText = (tag: string) => tag.replace(/^<script>([\s\S]*)<\/script>$/, "$1");
 
 /** What `page()` writes as script for these options, each as the text between its tags. */
 const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
+  touch: TOUCH_JS,
   undo: undo || ask ? UNDO_JS : null,
   menu: menu ? MENU_JS : null,
   ask: ask
@@ -251,8 +259,8 @@ const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
  * CSP hashes this list, so the two cannot drift. None reads request data.
  */
 export const pageScripts = (options: ScriptOptions): string[] => {
-  const { undo, menu, ask } = scriptsFor(options);
-  return [undo, menu, ...(ask ?? [])].filter((js): js is string => js !== null);
+  const { touch, undo, menu, ask } = scriptsFor(options);
+  return [touch, undo, menu, ...(ask ?? [])].filter((js): js is string => js !== null);
 };
 
 /**
@@ -288,7 +296,7 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
+${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
 </body>
 </html>
 `;

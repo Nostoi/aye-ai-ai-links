@@ -15,7 +15,7 @@ import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
 import { monthName, whyText } from "./link-rows.js";
-import { CLOCK, NOT_NOW_HINT } from "./not-now.js";
+import { CLOCK, NOT_NOW_HINT, NOT_NOW_WORKING } from "./not-now.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
@@ -191,6 +191,8 @@ const showHandy = (card, kept) => {
   for (const b of card.querySelectorAll(".card-menu button[data-act=keep]")) b.hidden = kept;
   for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
 };
+// What a button says while its action is slow; a ⋯ menu row has none and only dims the card.
+const homeWords = { snooze: ${JSON.stringify(NOT_NOW_WORKING)} };
 const homeActs = {
   snooze: async (card, id) => {
     const res = await post("/home/snooze", { id });
@@ -235,7 +237,7 @@ if (worthCards) {
     if (!button) return;
     const menu = button.closest("details.card-menu");
     const card = button.closest("[data-id]");
-    if (button.dataset.act === "archive" && !menu) return doneCard(card);
+    if (button.dataset.act === "archive" && !menu) return doneCard(card, undefined, button);
     const act = homeActs[button.dataset.act];
     if (!act) return;
     if (menu) menu.open = false;
@@ -243,7 +245,7 @@ if (worthCards) {
       homeError.textContent = "";
       const refused = await act(card, card.dataset.id);
       if (refused) homeError.textContent = refused;
-    });
+    }, { button: menu ? null : button, word: homeWords[button.dataset.act] });
   });
 }
 addEventListener("pageshow", (event) => {

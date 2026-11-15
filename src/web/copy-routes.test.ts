@@ -311,7 +311,7 @@ describe("the copy page's scripts and CSP", () => {
     expect(unreadable.headers.get("content-security-policy")).toBe(csp);
   });
 
-  it("runs only the app's own scripts: the page's menu and Undo bar, the opening script and the end script", async () => {
+  it("runs only the app's own scripts: the touch listener, the page's menu and Undo bar, the opening script and the end script", async () => {
     const { w, id, owner, save } = await world();
     const hostile = await save("owner", "https://a.example/hostile");
     const markdown =

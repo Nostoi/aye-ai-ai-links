@@ -216,17 +216,21 @@ describe("the band's look", () => {
     expect(rule(".gone-band")).not.toMatch(/flex-wrap/);
     expect(rule(".gone-actions")).toMatch(/position:relative[^}]*width:92px/);
     expect(rule(".gone-band .slide")).toMatch(/position:absolute/);
-    expect(rule(".gone-band .slide:hover,.gone-band .slide:focus-visible")).not.toMatch(
-      /flex|width:(?!260)/,
-    );
+    expect(
+      rule(
+        ".gone-band .slide:hover,.gone-band .slide:focus-visible,.gone-band .slide[data-working]",
+      ),
+    ).not.toMatch(/flex|width:(?!260)/);
     expect(rule(".gone-band>p")).toMatch(/flex:1 1 0;min-width:0/);
   });
 
   it("draws its slide buttons bare at rest and filled on hover or focus", () => {
     expect(rule(".gone-band .slide")).toMatch(/background:none/);
-    expect(rule(".gone-band .slide:hover,.gone-band .slide:focus-visible")).toMatch(
-      /background:var\(--surface\)/,
-    );
+    expect(
+      rule(
+        ".gone-band .slide:hover,.gone-band .slide:focus-visible,.gone-band .slide[data-working]",
+      ),
+    ).toMatch(/background:var\(--surface\)/);
   });
 });
 

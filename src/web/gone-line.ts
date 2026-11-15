@@ -10,6 +10,9 @@ export const GONE_TEXT = "This page seems gone";
 /** The small line under It still works. */
 export const STILL_WORKS_HINT = "Clears this warning";
 
+/** What It still works says while it waits for the answer (#314). */
+export const STILL_WORKS_WORKING = "Checking…";
+
 /** A chain link, for It still works. */
 const LINK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>`;
 
@@ -70,7 +73,7 @@ if (goneRoot) {
     buttons.forEach((b) => (b.disabled = true));
     try {
       if (button.dataset.act !== "still-works") {
-        await doneCard(card, () => collapseBand(line));
+        await doneCard(card, () => collapseBand(line), button);
         return resetBand(line);
       }
       const id = card.dataset.id;
@@ -90,7 +93,7 @@ if (goneRoot) {
           if (back && back.status === 204) resetBand(line);
           else goneError.textContent = await failure(back);
         });
-      });
+      }, { button, word: ${JSON.stringify(STILL_WORKS_WORKING)} });
     } finally {
       buttons.forEach((b) => (b.disabled = false));
     }

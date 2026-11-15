@@ -465,3 +465,59 @@ describe("Keep handy on the search that Add opens (keep=1)", () => {
     },
   );
 });
+
+describe("Keep handy, slow to answer (#314)", () => {
+  const CASES: [string, boolean, string, string][] = [
+    ["Keep handy", false, "[data-handy] button[data-act=keep]", "Keeping handy…"],
+    [
+      "Not handy anymore",
+      true,
+      "[data-handy] .handy-on button[data-act=not-handy]",
+      "Taking it off…",
+    ],
+  ];
+
+  it.each(CASES)(
+    "%s: the visible button says its working word after 300ms and the card dims",
+    async (_n, kept, select, word) => {
+      let release: () => void = () => {};
+      const wait = new Promise<void>((r) => {
+        release = r;
+      });
+      const p = runPage(keepSearch(kept), (s) => ({ ...keepAnswer(s), wait }));
+      const button = p.$(select);
+      const rest = button.textContent;
+      p.dispatch(button, "click");
+      await p.settle();
+      expect(p.timers.pending(300)).toBe(1);
+      expect(p.$("[data-id='7']").hasAttribute("data-busy")).toBe(false);
+      p.timers.fire();
+      expect(p.$("[data-id='7']").hasAttribute("data-busy")).toBe(true);
+      expect(button.textContent).toBe(word);
+      release();
+      await p.settle();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(button.textContent).toBe(rest);
+    },
+  );
+
+  it("a ⋯ menu row only dims the card: no label changes", async () => {
+    let release: () => void = () => {};
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const p = runPage(keepSearch(false), (s) => ({ ...keepAnswer(s), wait }));
+    const row = p.$(".card-menu button[data-act=keep]");
+    const control = p.$("[data-handy] button[data-act=keep]");
+    const rest = row.innerHTML;
+    p.dispatch(row, "click");
+    await p.settle();
+    p.timers.fire();
+    expect(p.$("[data-id='7']").hasAttribute("data-busy")).toBe(true);
+    expect(row.innerHTML).toBe(rest);
+    expect(control.textContent).toBe("Keep handy");
+    release();
+    await p.settle();
+    expect(p.document.querySelector("[data-busy]")).toBeNull();
+  });
+});

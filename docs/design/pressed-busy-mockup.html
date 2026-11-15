@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pressed and busy states (#314)</title>
+<style>
+/* Mockup only. Tokens are copied from src/web/theme.ts; fonts load by relative path from assets/fonts. No outside requests. */
+@font-face{font-family:"Open Runde";font-weight:400;src:url(../../assets/fonts/open-runde-400.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:500;src:url(../../assets/fonts/open-runde-500.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:600;src:url(../../assets/fonts/open-runde-600.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:700 800;src:url(../../assets/fonts/open-runde-700.woff2) format("woff2")}
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--about:#57534D;--line:#E7E3DA;--field:#8F8A82;--amber:#E8A33D;--amber-bg:#FFF3DC;--amber-ink:#8A5A0B;--teal:#2F8F83;--clay:#C8683F;--violet:#7B61C9;--blue:#3A6FD8;--green:#4C8F4C;--rose:#C2557A;--plate:#FFFFFF;--pic:#F2F2F2;--fill:#EDEAE3;--detail:color-mix(in srgb,var(--soft) 97%,var(--bg));--tray:color-mix(in srgb,#8C7350 5%,var(--bg));--spine:hsl(40 25% 88%);
+--card-ring:0 0 0 1px color-mix(in srgb,var(--ink) 7%,transparent);--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;
+--text-1:12px;--text-2:13.5px;--text-3:14px;--text-4:15px;--text-5:16px;--text-6:17px;--text-7:18px;--text-8:20px;--text-9:22px;--text-11:30px;
+--radius-card:18px;--radius-card-large:20px;--radius-pill:999px;--shadow-card:0 2px 10px #0000000b;--shadow-raised:0 4px 18px #0000000f;--shadow-menu:0 12px 32px rgb(0 0 0 / .16),0 2px 6px rgb(0 0 0 / .06);
+--motion-pop:.12s;--motion-hover:.15s;--motion-fade:.18s;--motion-leave:.25s;--motion-slide:.28s;--ease-standard:ease;--ease-out:ease-out;
+--inset:rgb(0 0 0 / .22)}
+:root[data-theme=dark]{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--about:#C9C5BE;--line:#3A3A40;--field:#77736D;--amber-bg:#3A2E17;--amber-ink:#F2C374;--teal:#4FB3A5;--clay:#E08A63;--violet:#A08BE3;--blue:#7099EA;--green:#6DBB6D;--rose:#DE7E9F;--plate:#E9E6E0;--pic:#323236;--fill:#34343A;--detail:color-mix(in srgb,var(--soft) 83%,var(--bg));--tray:color-mix(in srgb,#8C7350 9%,var(--bg));--spine:hsl(40 12% 20%);--inset:rgb(0 0 0 / .55)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde",ui-rounded,"SF Pro Rounded",system-ui,sans-serif;font-size:var(--text-6);line-height:1.5}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+svg.i{flex:none;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- mockup chrome (not part of the design) ---------- */
+.bar{position:sticky;top:0;z-index:50;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px}
+.bar-in{max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;font-size:var(--text-3)}
+.tog{display:inline-flex;align-items:center;gap:8px}
+.tog b{font-weight:600}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:var(--radius-pill);overflow:hidden}
+.seg button{min-height:36px;padding:0 12px;border:0;background:none;color:var(--ink);font:inherit;font-size:var(--text-3);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--surface)}
+.wrap{max-width:1200px;margin:0 auto;padding:var(--space-5) 16px 80px}
+h1{font-size:var(--text-11);line-height:1.2;margin:var(--space-5) 0 8px;letter-spacing:-.3px}
+h2{font-size:var(--text-9);line-height:1.25;margin:var(--space-6) 0 6px;letter-spacing:-.2px}
+.lede{max-width:70ch;color:var(--about);margin:0 0 var(--space-4);font-size:var(--text-5)}
+.small{font-size:var(--text-2);color:var(--soft)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:var(--space-4);align-items:start}
+.v{background:var(--surface);border-radius:var(--radius-card-large);padding:var(--space-4) var(--space-4) var(--space-5);box-shadow:var(--shadow-raised),var(--card-ring);min-width:0}
+.v h3{margin:0;font-size:var(--text-7)}
+.v .what{margin:2px 0 var(--space-3);color:var(--about);font-size:var(--text-3)}
+.tag{display:inline-block;margin-right:8px;padding:0 9px;border-radius:var(--radius-pill);background:var(--fill);font-size:var(--text-1);font-weight:700;vertical-align:2px}
+.row{padding:var(--space-3) 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.rl{font-size:var(--text-2);color:var(--soft);margin:0 0 6px}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-3);align-items:start}
+.pair.wide{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.cell{min-width:0}
+.cap{display:block;margin:0 0 4px;font-size:var(--text-1);color:var(--soft)}
+.tray-demo{background:var(--tray);border-radius:30px;padding:var(--space-2)}
+.panel{background:var(--surface);border:1px solid color-mix(in srgb,var(--ink) 9%,transparent);border-radius:14px;padding:4px;box-shadow:var(--shadow-menu)}
+
+/* ---------- the real controls, as theme.ts draws them today ---------- */
+.c{transition:background-color var(--motion-hover),transform var(--motion-hover),box-shadow var(--motion-hover),border-color var(--motion-hover);-webkit-tap-highlight-color:transparent}
+.c:is(:active,.is-pressed){transition:none}
+.c-btn,.c-primary{font:inherit;font-size:var(--text-4);font-weight:600;padding:10px 20px;min-height:44px;border-radius:var(--radius-pill);cursor:pointer;color:var(--ink);background:var(--surface);border:1.5px solid var(--line)}
+.c-primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.c-slide{display:inline-flex;align-items:center;justify-content:center;height:48px;width:48px;padding:0;border:0;border-radius:var(--radius-pill);background:var(--fill);color:var(--ink);cursor:pointer}
+.c-pill{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 18px;border:0;border-radius:22px;font:inherit;font-size:var(--text-4);font-weight:600;white-space:nowrap;cursor:pointer;background:var(--surface);color:var(--ink);box-shadow:0 1px 3px #0000000f,var(--card-ring)}
+.c-act{font:inherit;font-size:var(--text-4);font-weight:600;min-height:44px;min-width:44px;padding:0 8px;border:0;border-radius:10px;background:none;color:var(--ink);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--ink) 35%,transparent);text-underline-offset:3px;cursor:pointer}
+.c-row{display:flex;align-items:center;gap:7px;width:100%;min-height:44px;padding:0 10px 0 8px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;font-size:var(--text-3);font-weight:500;text-align:left;cursor:pointer}
+.c-row svg{stroke:var(--soft)}
+.c-row small{display:block;margin-top:1px;color:var(--soft);font-size:var(--text-1);font-weight:400}
+.c-row.two{padding-top:6px;padding-bottom:6px}
+.c-tidy{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:64px;padding:14px 20px;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.c-tidy b{font-size:var(--text-6)}
+.c-tidy span{font-size:var(--text-3);color:var(--soft)}
+
+/* ---------- PRESSED option a: a subtle tint (hover tints are 7 to 12% ink; pressed goes a step past hover) ---------- */
+.pa :is(.c-btn,.c-tidy,.c-pill):is(:active,.is-pressed){background:color-mix(in srgb,var(--ink) 8%,var(--surface))}
+.pa .c-primary:is(:active,.is-pressed){background:color-mix(in srgb,var(--ink) 80%,var(--surface));border-color:color-mix(in srgb,var(--ink) 80%,var(--surface))}
+.pa .c-slide:is(:active,.is-pressed){background:color-mix(in srgb,var(--ink) 18%,var(--surface))}
+.pa .c-act:is(:active,.is-pressed){background:color-mix(in srgb,var(--ink) 9%,transparent)}
+.pa .c-row:is(:active,.is-pressed){background:color-mix(in srgb,var(--ink) 13%,transparent)}
+/* ---------- PRESSED option b: shrink to 0.97, shadow reduced (only the bar pill has a shadow today) ---------- */
+.pb .c:is(:active,.is-pressed){transform:scale(.97)}
+.pb .c-pill:is(:active,.is-pressed){box-shadow:var(--card-ring)}
+/* ---------- PRESSED option c: press in, shadow goes inset, 1px down ---------- */
+.pc .c:is(:active,.is-pressed){transform:translateY(1px);box-shadow:inset 0 1px 3px var(--inset)}
+.pc .c-pill:is(:active,.is-pressed){box-shadow:inset 0 1px 3px var(--inset),var(--card-ring)}
+.pc .c-primary:is(:active,.is-pressed){box-shadow:inset 0 2px 5px rgb(0 0 0 / .6)}
+
+/* ---------- the subject for the busy section: a featured card, laid out as on a phone (words always shown) ---------- */
+.fc{display:grid;grid-template-columns:96px minmax(0,1fr);column-gap:var(--space-4);padding:var(--space-4);border-radius:var(--radius-card-large);background:var(--surface);box-shadow:var(--shadow-raised),var(--card-ring);transition:opacity var(--motion-fade) var(--ease-standard)}
+.fc-pic{grid-row:1/span 4;width:96px;height:96px;border-radius:14px;background:var(--pic);display:grid;place-items:center;font-weight:700;font-size:26px;color:var(--soft)}
+.fc h4{margin:0;font-size:var(--text-7);line-height:1.3}
+.fc-why{margin:2px 0 0;font-size:var(--text-3)}
+.fc-why small{display:block;font-size:var(--text-1);color:var(--soft)}
+.fc .card-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;margin:6px 0 var(--space-3);font-size:13.5px;color:var(--detail)}
+.fc .dot{width:8px;height:8px;border-radius:50%;background:var(--teal)}
+.fc-btns{grid-column:1/-1;margin-top:var(--space-3);display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.fc-btns .open{display:inline-flex;align-items:center;min-height:48px;padding:0 24px;border-radius:var(--radius-pill);background:var(--ink);color:var(--surface);border:1.5px solid var(--ink);font:inherit;font-size:var(--text-4);font-weight:600;text-decoration:none;cursor:pointer}
+.fc-btns .quiet{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}
+.sl{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:6px 15px;border:0;border-radius:var(--radius-pill);background:var(--fill);color:var(--ink);font:inherit;cursor:pointer;text-align:left;line-height:1.2}
+.sl .w{display:flex;flex-direction:column}
+.sl .w b{font-size:var(--text-4);font-weight:600}
+.sl .w small{font-size:var(--text-1);font-weight:400;color:var(--about)}
+.sl .busy-word,.sl .spin{display:none}
+.stat{min-height:1.5em;margin:var(--space-2) 0 0;font-size:var(--text-2);color:var(--soft)}
+
+/* ---------- BUSY option a: card dims, pointer is progress ---------- */
+.ba .fc[data-busy]{opacity:.6}
+.ba .fc[data-busy],.ba .fc[data-busy] *{cursor:progress}
+/* ---------- BUSY option b: the pressed button says a working word, no motion ---------- */
+.bb .fc[data-busy] .is-working .lbl{display:none}
+.bb .fc[data-busy] .is-working .busy-word{display:block;font-size:var(--text-4);font-weight:600}
+/* ---------- BUSY option c: a small spinner in the pressed button ---------- */
+.bc .fc[data-busy] .is-working .ic{display:none}
+.bc .fc[data-busy] .is-working .spin{display:block;flex:none;width:20px;height:20px;border-radius:50%;border:2.5px solid color-mix(in srgb,var(--ink) 22%,transparent);border-top-color:var(--ink);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* no-motion fallback for c: the app's reduced-motion block stops every animation, which would leave a frozen ring, so c falls back to b's word. */
+.no-motion .bc .fc[data-busy] .is-working .spin,.nm .fc[data-busy] .is-working .spin{display:none!important;animation:none}
+.no-motion .bc .fc[data-busy] .is-working .ic,.nm .fc[data-busy] .is-working .ic{display:block!important}
+.no-motion .bc .fc[data-busy] .is-working .lbl,.nm .fc[data-busy] .is-working .lbl{display:none}
+.no-motion .bc .fc[data-busy] .is-working .busy-word,.nm .fc[data-busy] .is-working .busy-word{display:block;font-size:var(--text-4);font-weight:600}
+@media (prefers-reduced-motion:reduce){
+.bc .fc[data-busy] .is-working .spin{display:none!important;animation:none}
+.bc .fc[data-busy] .is-working .ic{display:block!important}
+.bc .fc[data-busy] .is-working .lbl{display:none}
+.bc .fc[data-busy] .is-working .busy-word{display:block;font-size:var(--text-4);font-weight:600}
+}
+/* the app's own block (theme.ts line 671), so this page behaves the same under it */
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.no-motion *{animation:none!important;transition:none!important}
+
+.line{font-size:var(--text-2);color:var(--soft);margin:var(--space-3) 0 var(--space-2)}
+.timeline{display:flex;align-items:center;gap:0;margin:var(--space-2) 0 var(--space-4);font-size:var(--text-1);color:var(--about);max-width:560px}
+.timeline span{padding:6px 10px;background:var(--fill)}
+.timeline span:first-child{border-radius:var(--radius-pill) 0 0 var(--radius-pill)}
+.timeline span:last-child{border-radius:0 var(--radius-pill) var(--radius-pill) 0;background:color-mix(in srgb,var(--amber) 28%,var(--surface))}
+.notes{margin-top:var(--space-6)}
+.notes li{margin-bottom:10px;max-width:72ch}
+code{overflow-wrap:anywhere}
+.notes code{font-size:.9em;background:var(--fill);padding:1px 6px;border-radius:6px}
+@media (max-width:600px){.fc{grid-template-columns:72px minmax(0,1fr)}.fc-pic{width:72px;height:72px}.fc-btns .quiet{margin-left:0}h1{font-size:26px}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-done" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></symbol>
+<symbol id="i-later" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.5"/></symbol>
+<symbol id="i-away" viewBox="0 0 24 24"><path d="M4 8h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z"/><path d="M3 5h18v3H3zM10 12.5h4"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M7 7l2 2M15 15l2 2M17 7l-2 2M9 15l-2 2"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M7 4h10v17l-5-4-5 4V4Z"/></symbol>
+</svg>
+
+<div class="bar"><div class="bar-in" role="group" aria-label="Page controls">
+  <span class="tog"><b>Theme</b><span class="seg"><button type="button" data-theme-set="light" aria-pressed="true">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></span></span>
+  <span class="tog"><b>Motion</b><span class="seg"><button type="button" data-motion="on" aria-pressed="true">On</button><button type="button" data-motion="off" aria-pressed="false">Off (as reduced-motion)</button></span></span>
+  <span class="tog"><b>300ms delay</b><span class="seg"><button type="button" data-delay="on" aria-pressed="true">On</button><button type="button" data-delay="off" aria-pressed="false">Off</button></span></span>
+  <span class="tog"><b>Answer takes</b><span class="seg"><button type="button" data-speed="150" aria-pressed="false">Fast, 150ms</button><button type="button" data-speed="2500" aria-pressed="true">Slow, 2.5s</button></span></span>
+</div></div>
+
+<div class="wrap">
+<h1>Pressed and busy states</h1>
+<p class="lede">Issue #314. Every card below changes one thing, so compare them one against another. All controls are the real ones from <code>theme.ts</code>, copied in. Nothing here is built; the owner picks one option from each part and then it is built.</p>
+
+<h2>1. Pressed state</h2>
+<p class="lede">Each control is shown twice: at rest, and held down (frozen so you can see it). Press and hold any control on the right of a pair, or the one on the left, to see the real <code>:active</code> look. On a phone, hold your finger on one.</p>
+
+<div class="grid">
+
+<!-- baseline -->
+<section class="v" aria-labelledby="p0"><h3 id="p0"><span class="tag">Today</span>No pressed state</h3>
+<p class="what">Changes nothing. How it is now: only hover and focus exist.</p>
+<div class="pn" data-pressed-card></div></section>
+
+<section class="v pa" aria-labelledby="pa"><h3 id="pa"><span class="tag">A</span>Subtle tint</h3>
+<p class="what">The control's fill darkens a step past its hover tint. Nothing moves.</p>
+<div data-pressed-card></div></section>
+
+<section class="v pb" aria-labelledby="pb"><h3 id="pb"><span class="tag">B</span>Shrink to 0.97</h3>
+<p class="what">The control scales to 97% and its shadow is reduced. Only the bar pill has a shadow today, so the rest only scale.</p>
+<div data-pressed-card></div></section>
+
+<section class="v pc" aria-labelledby="pc"><h3 id="pc"><span class="tag">C</span>Press in</h3>
+<p class="what">The shadow becomes an inset shadow and the control moves down 1px. Unshadowed controls get an inset one.</p>
+<div data-pressed-card></div></section>
+
+</div>
+
+<h2>2. Busy: an action in flight</h2>
+<p class="lede">The subject is a featured card laid out as on a phone, where the buttons always show their words. Press <b>Done with it</b> on a "Try it" card to run a fake action; the toolbar sets how long the answer takes and whether the 300ms delay is on. With the delay on and a fast answer, the busy look never appears.</p>
+<div class="timeline" aria-label="Timeline"><span>0ms: pressed</span><span>300ms: busy look appears</span><span>answer: busy look goes</span></div>
+
+<div class="grid">
+
+<section class="v ba" aria-labelledby="ba"><h3 id="ba"><span class="tag">A</span>Card dims</h3>
+<p class="what">The whole card fades to 60% and the pointer shows progress. The buttons keep their words.</p>
+<p class="line">While busy</p>
+<div data-fc data-frozen></div>
+<p class="line">Try it</p>
+<div data-fc data-live></div><p class="stat" role="status"></p></section>
+
+<section class="v bb" aria-labelledby="bb"><h3 id="bb"><span class="tag">B</span>Working word</h3>
+<p class="what">The pressed button's label changes to a working word. No motion, the card does not dim.</p>
+<p class="line">While busy</p>
+<div data-fc data-frozen></div>
+<p class="line">Try it</p>
+<div data-fc data-live></div><p class="stat" role="status"></p></section>
+
+<section class="v bc" aria-labelledby="bc"><h3 id="bc"><span class="tag">C</span>Spinner in the button</h3>
+<p class="what">A small spinner replaces the pressed button's icon. The words stay. With motion off it falls back to B's working word.</p>
+<p class="line">While busy, motion on</p>
+<div data-fc data-frozen></div>
+<p class="line">While busy, motion off (what <code>prefers-reduced-motion</code> shows)</p>
+<div class="nm" data-fc data-frozen></div>
+<p class="line">Try it</p>
+<div data-fc data-live></div><p class="stat" role="status"></p></section>
+
+</div>
+
+<h2>Notes</h2>
+<ul class="notes">
+<li><b>Busy has no hook today.</b> <code>cardBusy</code> is a <code>WeakSet</code> in <code>tell-why.ts</code>; <code>whileBusy</code> adds the card to it and removes it in <code>finally</code>. It sets no attribute, class or variable on the page, so there is nothing for CSS to match. The only <code>aria-busy</code> write in the app is the Show older link in <code>show-older.ts</code>.</li>
+<li><b>Where the busy style would attach.</b> Inside <code>whileBusy</code>: set <code>aria-busy="true"</code> on the card after a 300ms timer (cancelled if the answer comes first) and remove it in <code>finally</code>; CSS then matches <code>[aria-busy=true]</code>. That is enough for A, which only needs the card. B and C also need the pressed button, and <code>whileBusy(card, run)</code> is not given one, so the call sites (about ten) would pass it in. Reading <code>document.activeElement</code> instead is probably unreliable, since Safari is known not to focus a button when it is tapped (not checked here).</li>
+<li><b>Other buttons on a busy card do nothing.</b> A second press sends nothing while the first is out (<code>whileBusy</code> returns early). Only A shows that. With B or C the other buttons look live but are silent; they could take <code>aria-disabled</code> styling if you want that shown.</li>
+<li><b>Motion.</b> The app's <code>prefers-reduced-motion</code> block ends in <code>*{animation:none!important;transition:none!important}</code>. A spinner under it would sit still as a half-drawn ring, which reads as stuck. So C needs its own fallback: hide the spinner and show B's word. The "motion off" card above, and the Motion switch in the toolbar, show this. The pressed looks in A, B and C use transitions, so under reduced motion they simply jump, which is fine. I made the press itself instant (<code>transition:none</code> while active) so it feels immediate; only the release eases.</li>
+<li><b>300ms.</b> The delay applies to the busy look only, never to the pressed look, which answers the finger at once. A spinner that flashes for 100ms is worse than no spinner.</li>
+<li><b>Pressed on a phone.</b> iOS Safari has been reported to apply <code>:active</code> only when the page has a <code>touchstart</code> listener, for example <code>&lt;body ontouchstart=""&gt;</code> or <code>document.body.addEventListener("touchstart",()=&gt;{})</code>. What I could and could not confirm is in the report that came with this page. The app has no <code>touchstart</code> listener today, so before building any pressed option, test it on a real iPhone; if it does not show, one empty passive listener on <code>document</code> fixes it.</li>
+<li><b>What each option does to each control.</b> A works on all seven. B barely shows on the slide button and the menu row (nothing to shrink against) and is the most visible on the large Tidy choice. C's inset shadow is weak on the dark-filled <code>.primary</code> in light theme, because a dark shadow on dark ink barely shows; the 1px drop carries it there.</li>
+<li>Pressed colours are written as mixes of <code>--ink</code>, as the app's hover tints are, so they follow the theme. They would join <code>themeCss</code> as plain <code>:active</code> rules, with no new tokens needed.</li>
+</ul>
+</div>
+
+<script>
+// ---- mockup only: no part of this is app code ----
+const root = document.documentElement;
+const press = (name, cls) => `<div class="row"><p class="rl">${name}</p>${cls}</div>`;
+const pair = (rest, pressed, wide) => `<div class="pair${wide ? " wide" : ""}"><div class="cell"><span class="cap">Rest</span>${rest}</div><div class="cell"><span class="cap">Pressed (held)</span>${pressed}</div></div>`;
+const both = (html, wide) => pair(html, html.replace(/class="c /, 'class="is-pressed c '), wide);
+const ic = (id) => `<svg class="i" aria-hidden="true"><use href="#${id}"/></svg>`;
+const controls = [
+  ["Button (<code>button</code>)", both('<button class="c c-btn" type="button">Show all</button>')],
+  ["Filled (<code>.primary</code>, Open it / Find it)", both('<button class="c c-primary" type="button">Open it</button>')],
+  ["Round icon (<code>slideButton</code>)", both(`<button class="c c-slide" type="button" aria-label="Done with it">${ic("i-done")}</button>`)],
+  ["Top bar pill (<code>.bar-pill</code>, on the tray band)", `<div class="tray-demo">${both(`<button class="c c-pill" type="button">${ic("i-search")}Search</button>`)}</div>`],
+  ["Handy tile action", both('<button class="c c-act" type="button">Done with it</button>')],
+  ["⋯ menu row", `<div class="panel">${both(`<button class="c c-row two" type="button">${ic("i-away")}<span>Put it away<small>Back when you start something it fits</small></span></button>`, true)}</div>`],
+  ["Tidy up choice", both('<button class="c c-tidy" type="button"><b>Done with it</b><span>Still findable in search</span></button>', true)],
+];
+document.querySelectorAll("[data-pressed-card]").forEach((el) => { el.innerHTML = controls.map(([n, h]) => press(n, h)).join(""); });
+// the baseline card has no pressed rules, so its held copies look like rest
+// ---- fake featured card ----
+const card = (frozen) => `<article class="fc"${frozen ? ' data-busy aria-busy="true"' : ""}>
+  <div class="fc-pic" aria-hidden="true">H</div>
+  <h4>How home batteries actually pay back</h4>
+  <p class="fc-why"><small>You saved it for</small>planning the garage</p>
+  <p class="card-line"><span class="dot"></span><span>Home</span> · <span>energy-notes.example</span> · <span>Saved 3 days ago</span></p>
+  <div class="fc-btns"><a class="open" href="#" onclick="return false">Open it</a>
+  <div class="quiet">
+   <button class="sl" type="button">${ic("i-later").replace('class="i"', 'class="i ic"')}<span class="w"><b class="lbl">Not now</b><b class="busy-word">Working…</b><small>Not suggested for two weeks</small></span></button>
+   <button class="sl act-done${frozen ? " is-working" : ""}" type="button">${ic("i-done").replace('class="i"', 'class="i ic"')}<i class="spin"></i><span class="w"><b class="lbl">Done with it</b><b class="busy-word">Marking done…</b><small>Still findable in search</small></span></button>
+  </div></div></article>`;
+document.querySelectorAll("[data-fc]").forEach((el) => { el.insertAdjacentHTML("afterbegin", card(el.hasAttribute("data-frozen"))); });
+// ---- toolbar ----
+const seg = (attr, fn) => document.querySelectorAll(`[${attr}]`).forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(`[${attr}]`).forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  fn(b.getAttribute(attr));
+}));
+const setTheme = (t) => { root.dataset.theme = t; document.querySelectorAll("[data-theme-set]").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.themeSet === t))); };
+if (matchMedia("(prefers-color-scheme: dark)").matches) setTheme("dark");
+seg("data-theme-set", setTheme);
+seg("data-motion", (v) => document.body.classList.toggle("no-motion", v === "off"));
+let delayOn = true, answerMs = 2500;
+seg("data-delay", (v) => { delayOn = v === "on"; });
+seg("data-speed", (v) => { answerMs = Number(v); });
+// ---- live run: the same shape as whileBusy plus the 300ms delay ----
+const running = new WeakSet();
+document.querySelectorAll("[data-live]").forEach((live) => {
+  const c = live.querySelector(".fc"), btn = live.querySelector(".act-done"), stat = live.parentElement.querySelector(".stat");
+  btn.addEventListener("click", () => {
+    if (running.has(c)) return;
+    running.add(c);
+    const t0 = performance.now();
+    let shown = false;
+    const show = () => { shown = true; c.setAttribute("data-busy", ""); c.setAttribute("aria-busy", "true"); btn.classList.add("is-working"); };
+    const timer = delayOn ? setTimeout(show, 300) : (show(), 0);
+    stat.textContent = "Sent. Waiting for the answer…";
+    setTimeout(() => {
+      clearTimeout(timer);
+      c.removeAttribute("data-busy"); c.removeAttribute("aria-busy"); btn.classList.remove("is-working");
+      running.delete(c);
+      stat.textContent = `Answered after ${Math.round(performance.now() - t0)}ms. Busy look shown: ${shown ? "yes" : "no, the answer beat the delay"}.`;
+    }, answerMs);
+  });
+});
+</script>
+</body>
+</html>

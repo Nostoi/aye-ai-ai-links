@@ -39,13 +39,13 @@ export function copyEnd(link: Link, handy: HandyView | null, back: Back): string
   const out = outOfListsMarker(link);
   const kept = handy?.status === "kept";
   return `<section class="copy-end" id="copy-end" aria-label="${QUESTION}">
-<div class="copy-end-acts" id="${ACTIVE_ID}"${out ? " hidden" : ""}>
+<div class="copy-end-acts" id="${ACTIVE_ID}" data-busy-scope${out ? " hidden" : ""}>
 <span class="copy-end-label" tabindex="-1">${QUESTION}</span>
 ${button(PUT_AWAY_ITEM)}
 ${button(DONE_ITEM)}
 <span data-handy>${button(KEEP_ITEM, kept)}<span class="handy-on"${kept ? "" : " hidden"}>${button(NOT_HANDY)}</span></span>
 </div>
-<div class="copy-end-acts" id="${OUT_ID}"${out ? "" : " hidden"}>
+<div class="copy-end-acts" id="${OUT_ID}" data-busy-scope${out ? "" : " hidden"}>
 <p class="card-line copy-end-line" tabindex="-1"><span>${out ?? PUT_AWAY_MARKER}</span></p>
 ${button(BRING_BACK_ITEM)}
 </div>
@@ -84,6 +84,6 @@ ${keepHandyScript(FRAME_ID, ERROR_ID)}
 const endRoot = document.getElementById("copy-end");
 endRoot.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-act]");
-  if (button && button.dataset.act in STATE_ACTS) stateCard(button.closest("[data-id]"), button.dataset.act);
+  if (button && button.dataset.act in STATE_ACTS) stateCard(button.closest("[data-id]"), button.dataset.act, undefined, button);
 });
 }`;

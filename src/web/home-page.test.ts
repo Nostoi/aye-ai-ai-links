@@ -1417,3 +1417,74 @@ describe("Tidy up's start line", () => {
     expect(rules).not.toMatch(/#[0-9a-f]{3,6}\b|amber/i);
   });
 });
+
+describe("a Home card that is slow to answer (#314)", () => {
+  /** The featured card's visible buttons, which say their working word; the ⋯ rows only dim. */
+  const SLIDES: [string, string, string][] = [
+    ["Not now", "snooze", "Setting aside…"],
+    ["Done with it", "archive", "Marking done…"],
+  ];
+  const slow = (p: ReturnType<typeof home>, id: string, act: string, button: string) => {
+    const target = p.$(`[data-id="${id}"] ${button}`);
+    p.dispatch(target, "click");
+    return { act, target };
+  };
+
+  it.each(SLIDES)(
+    "%s: the button says its working word after 300ms, and both clear",
+    async (_n, act, word) => {
+      const cards = two();
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const p = home(cards, (s) =>
+        s.url === "/home/archive" || s.url === "/home/snooze"
+          ? {
+              ...(s.url === "/home/archive"
+                ? { status: 200, body: CHANGE }
+                : { status: 200, body: SNOOZE }),
+              wait: gate,
+            }
+          : fine(s),
+      );
+      const id = cards[0]?.link.id as string;
+      const { target } = slow(p, id, act, `.feature-quiet button[data-act=${act}]`);
+      const label = target.querySelector(".slide-words > span") as Element;
+      const rest = label.textContent;
+      await p.settle();
+      expect(p.timers.pending(300)).toBe(1);
+      expect(p.$(`[data-id="${id}"]`).hasAttribute("data-busy")).toBe(false);
+      p.timers.fire();
+      expect(p.$(`[data-id="${id}"]`).hasAttribute("data-busy")).toBe(true);
+      expect(label.textContent).toBe(word);
+      expect(target.querySelector("svg")).not.toBeNull();
+      release();
+      await p.settle();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(label.textContent).toBe(rest);
+    },
+  );
+
+  it("a ⋯ menu row only dims the card: no label changes", async () => {
+    const cards = two();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const p = home(cards, (s) =>
+      s.url === "/home/snooze" ? { status: 200, body: SNOOZE, wait: gate } : fine(s),
+    );
+    const id = cards[1]?.link.id as string;
+    const row = p.$(`[data-id="${id}"] .card-menu button[data-act=snooze]`);
+    const rest = row.innerHTML;
+    pick(p, id, "snooze");
+    await p.settle();
+    p.timers.fire();
+    expect(p.$(`[data-id="${id}"]`).hasAttribute("data-busy")).toBe(true);
+    expect(row.innerHTML).toBe(rest);
+    release();
+    await p.settle();
+    expect(p.document.querySelector("[data-busy]")).toBeNull();
+  });
+});

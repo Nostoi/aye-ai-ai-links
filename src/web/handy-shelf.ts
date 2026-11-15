@@ -4,10 +4,10 @@ import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu } from "./card-menu.js";
 import { displayTitle } from "./display-title.js";
-import { DONE_ITEM, DONE_LABEL, DONE_UNDO } from "./done-link.js";
-import { goneBand } from "./gone-line.js";
+import { DONE_ITEM, DONE_LABEL, DONE_UNDO, DONE_WORKING } from "./done-link.js";
+import { goneBand, STILL_WORKS_WORKING } from "./gone-line.js";
 import { hostOf } from "./host.js";
-import { NOT_HANDY } from "./keep-handy.js";
+import { NOT_HANDY, NOT_HANDY_WORKING } from "./keep-handy.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
@@ -42,6 +42,21 @@ const KEEP_HANDY = `<div class="ask">
 <button type="button" data-act="suggest-no">No</button>
 </div>
 </div>`;
+
+/**
+ * What each tile button says while its action waits for the answer (#314), by `data-act`. A ⋯ menu
+ * row has none: the menu closes, and the tile only dims. The yes and no answers are the shelf's
+ * own words; the others are their actions' (`done-link.ts`, `gone-line.ts`, `keep-handy.ts`).
+ */
+const WORKING = {
+  "still-using": "Keeping…",
+  "not-handy": NOT_HANDY_WORKING,
+  "suggest-yes": "Adding…",
+  "suggest-no": "Skipping…",
+  done: DONE_WORKING,
+  archive: DONE_WORKING,
+  "still-works": STILL_WORKS_WORKING,
+};
 
 /** A kept tile's ⋯ menu: the link menu's first group (#192), with Keep handy already done. */
 const menu = (link: Link) => cardMenu(`More for ${displayTitle(link)}`, [DONE_ITEM, NOT_HANDY]);
@@ -126,9 +141,12 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
 
 /**
  * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure`,
- * `cardBusy`, `collapseBand` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
+ * `cardBusy`, `busyLook`, `collapseBand` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
  * until the action, its shelf refresh and its Undo are done, and kept while the refresh was
- * dropped for a newer one, whose swap replaces the tile.
+ * dropped for a newer one, whose swap replaces the tile. The busy look is not the mark: it is
+ * started with it, around the action and its refresh, and cleared when that work settles, so a
+ * tile that keeps its mark never keeps the look. A button says its working word and dims the tile;
+ * a ⋯ menu row (which closes) only dims it.
  * - `refreshShelf(from)` reads home again and swaps in its `#handy-shelf`, so the server decides the
  *   order, the cut and the due marker after every action. Tiles that were shown stay shown.
  * - A page that is not home (a sign-in redirect) is not swapped in, and the owner is told to reload.
@@ -185,6 +203,7 @@ const SHELF_ACTS = {
   "suggest-yes": (id) => ["/tools/suggestion", { id, keep: true }, null],
   "suggest-no": (id) => ["/tools/suggestion", { id, keep: false }, "Not kept handy."],
 };
+const working = ${JSON.stringify(WORKING)};
 const offerUndo = (message, route, body, from, title) =>
   showUndo(message, async () => {
     const back = await post(route, body);
@@ -215,6 +234,7 @@ if (handy) {
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
     cardBusy.add(tile);
+    const clearLook = busyLook(tile, button.closest("details") ? null : button, working[act]);
     let dropped = false;
     try {
       if (done) {
@@ -251,6 +271,7 @@ if (handy) {
       dropped = await refreshShelf(from);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
+      clearLook();
       if (!dropped) cardBusy.delete(tile);
     }
   });

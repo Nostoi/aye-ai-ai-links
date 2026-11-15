@@ -8,6 +8,10 @@ const MINUS = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true
 /** The card menu's Keep handy row. */
 export const KEEP_ITEM: MenuItem = { act: "keep", icon: PLUS, text: "Keep handy" };
 
+/** What Keep handy and Not handy anymore say on a button while they wait for the answer (#314). */
+export const KEEP_WORKING = "Keeping handy…";
+export const NOT_HANDY_WORKING = "Taking it off…";
+
 /** The card menu's row for a kept link, and the Handy tile's. */
 export const NOT_HANDY: MenuItem = { act: "not-handy", icon: MINUS, text: "Not handy anymore" };
 
@@ -34,7 +38,8 @@ export function handyControl(link: Link, view: HandyView | null | undefined): st
  * Undo, which sends back the rows the action answered to `/tools/undo`, then shows the state those
  * rows had (`previous`): an action that changed nothing leaves it as it was. A refusal is shown in
  * `#error`. A card takes no other action while one, or its Undo, is out (`whileBusy`); an Undo clicked
- * meanwhile waits for it (`whenFree`). A block; needs
+ * meanwhile waits for it (`whenFree`). A visible button shows its working word while the answer
+ * is slow, and a ⋯ menu row (which closes) only dims the card (`busyLook`). A block; needs
  * `CARD_FETCH` and `showUndo`.
  */
 export const keepHandyScript = (root: string, error: string) => `{
@@ -77,7 +82,7 @@ if (keepRoot) {
           else keepError.textContent = await failure(back);
         }),
       );
-    });
+    }, { button: menu ? null : button, word: button.dataset.act === "keep" ? ${JSON.stringify(KEEP_WORKING)} : ${JSON.stringify(NOT_HANDY_WORKING)} });
   });
 }
 }`;

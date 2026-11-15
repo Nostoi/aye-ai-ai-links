@@ -239,10 +239,25 @@ describe("pageScripts", () => {
     expect(pageScripts(options)).toEqual(written.map((m) => m[1]));
   });
 
-  it("has no script for a bare page, one for the menu, and the Ask scripts only with ask", () => {
-    expect(pageScripts({})).toEqual([]);
-    expect(pageScripts({ menu: true })).toHaveLength(1);
-    expect(pageScripts({ undo: true })).toHaveLength(1);
-    expect(pageScripts({ menu: true, ask })).toHaveLength(5);
+  it("has only the touch script for a bare page, one more for the menu, and the Ask scripts only with ask", () => {
+    expect(pageScripts({})).toHaveLength(1);
+    expect(pageScripts({ menu: true })).toHaveLength(2);
+    expect(pageScripts({ undo: true })).toHaveLength(2);
+    expect(pageScripts({ menu: true, ask })).toHaveLength(6);
+  });
+
+  it("starts every page's scripts with one passive, empty touchstart listener on the document (#314)", () => {
+    for (const options of [{}, { menu: true }, { undo: true }, { menu: true, undo: true, ask }]) {
+      expect(pageScripts(options)[0]).toBe(
+        'document.addEventListener("touchstart",()=>{},{passive:true});',
+      );
+    }
+    const calls: unknown[][] = [];
+    const document = { addEventListener: (...args: unknown[]) => calls.push(args) };
+    new Function("document", pageScripts({})[0] as string)(document);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toBe("touchstart");
+    expect(String(calls[0]?.[1])).toBe("()=>{}");
+    expect(calls[0]?.[2]).toEqual({ passive: true });
   });
 });

@@ -5,6 +5,7 @@ import { png } from "../core/image-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { mergeTags, renameTag } from "../core/tag-edit.js";
 import { setTagColor, setTagPinned } from "../core/tag-space.js";
+import { snoozeLink } from "../core/worth-a-look.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS, MODEL_KEY } from "../search/model.js";
@@ -309,6 +310,10 @@ describe("Your spaces on the home page", () => {
     const without = await save(world, A, "https://a.example/without", ["Kitchen"], "No icon");
     const theirs = await save(world, B, "https://b.example/theirs", ["Kitchen"], "B's link");
     await setTagPinned(depsOf(world), A, { name: "Kitchen", pinned: true });
+    // Snoozed, so Worth a look doesn't show them: a card skips a link shown above it (#303).
+    for (const id of [withIcon, without]) {
+      await snoozeLink({ ...depsOf(world), now: () => new Date() }, A, id);
+    }
     const favicons = new SqliteFaviconStore(world.links);
     for (const [owner, id] of [
       [A, withIcon],

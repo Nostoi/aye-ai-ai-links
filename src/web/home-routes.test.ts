@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { addSecondUser, allRows, oauthWorld, type World } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
+import { keepHandy } from "../core/tools.js";
 import type { Labelled, LinkPatch } from "../core/types.js";
 import { SNOOZE_MS } from "../core/worth-a-look.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { SqliteImageStore } from "../store/sqlite-image-store.js";
+import { SHELF_SIZE } from "./handy-shelf.js";
 
 const A = "owner";
 const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS));
@@ -70,6 +72,37 @@ describe("GET /", () => {
     expect(html).toMatch(
       new RegExp(`class="worth-card worth-feature[^"]* space-clay" data-id="${link.id}"`),
     );
+  });
+
+  it("shows no link on a space card that Home shows above it: kept (even behind Show all), suggested or picked (#303)", async () => {
+    const world = await oauthWorld();
+    const deps = linkDeps(world);
+    const mk = async (n: string) =>
+      (
+        await saveLink(deps, A, {
+          url: `https://a.example/${n}`,
+          savedBy: "seed",
+          title: `Card ${n}`,
+          tags: [{ name: "Kitchen", source: "stated" }],
+        })
+      ).link.id;
+    // More kept links than the shelf shows at once, so some sit behind Show all.
+    const kept: string[] = [];
+    for (let i = 0; i < SHELF_SIZE + 2; i++) kept.push(await mk(`kept${i}`));
+    for (const id of kept) await keepHandy(deps, A, id, "stated");
+    const suggested = await mk("suggested");
+    await keepHandy(deps, A, suggested, "inferred");
+    const picked = await mk("picked");
+    await deps.store.pinTag(A, "kitchen", { pinned: true, color: "clay" });
+    const browser = world.agent();
+    await browser.signIn();
+    const html = String((await browser.send("/")).body);
+    const spaces = html.slice(html.indexOf('<section class="spaces"'));
+    expect(html).toContain(`data-id="${picked}"`);
+    expect(spaces).toContain("home-space-name");
+    for (const id of [...kept, suggested, picked]) {
+      expect(spaces).not.toContain(`data-id="${id}"`);
+    }
   });
 
   it("refuses another site's Origin or Host with 403, showing no card; a plain GET still shows it", async () => {

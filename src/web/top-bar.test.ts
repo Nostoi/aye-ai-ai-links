@@ -271,16 +271,18 @@ describe("the card outline", () => {
 });
 
 describe("the grey detail text", () => {
+  // The card's detail line is typed at 13.5px so a change to a type step cannot move it (#312);
+  // `.home-space-all` takes the step of the same size.
   it.each([
-    ".card-line",
-    ".also-why",
-    ".also-body .card-line",
-    ".card-site",
-    ".handy-caption .card-site",
-    ".home-space-all",
-  ])("%s is 13.5px in --detail", (selector) => {
+    [".card-line", "13.5px"],
+    [".also-why", "13.5px"],
+    [".also-body .card-line", "13.5px"],
+    [".card-site", "13.5px"],
+    [".handy-caption .card-site", "13.5px"],
+    [".home-space-all", "var(--text-2)"],
+  ])("%s is 13.5px in --detail", (selector, size) => {
     const body = rule(selector).join(";");
-    expect(body, selector).toMatch(/font-size:13\.5px/);
+    expect(body, selector).toContain(`font-size:${size}`);
     expect(body, selector).toMatch(/color:var\(--detail\)/);
   });
 });

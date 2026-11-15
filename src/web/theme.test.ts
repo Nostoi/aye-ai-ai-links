@@ -383,7 +383,7 @@ describe("the Handy tiles", () => {
   });
 
   it("sets the title at 16px bold in at most two lines, and the host at 13.5px on one line with an ellipsis", () => {
-    expect(rule(".handy-tile h3")).toContain("font-size:16px");
+    expect(rule(".handy-tile h3")).toContain("font-size:var(--text-5)");
     expect(rule(".handy-tile h3")).toContain("font-weight:700");
     expect(rule(".handy-tile h3")).toContain("-webkit-line-clamp:2");
     const site = rule(".handy-caption .card-site");
@@ -601,12 +601,12 @@ describe("the edit dialog's look", () => {
     }
     expect(rule(".edit-link::backdrop")).toBe("background:rgb(20 20 24 / .38)");
     expect(themeCss).not.toMatch(/::backdrop\{[^}]*var\(/);
-    expect(rule(".edit-head h2")).toContain("font-size:20px;font-weight:700");
+    expect(rule(".edit-head h2")).toContain("font-size:var(--text-8);font-weight:700");
     expect(rule(".edit-close")).toContain("width:44px;height:44px");
     expect(rule(".edit-title")).toBe("height:46px;padding:0 14px;border-radius:12px");
     expect(rule(".edit-preview")).toContain("width:200px;height:140px;border-radius:14px");
     expect(rule(".edit-chip")).toContain(
-      "font-size:12px;font-weight:600;color:var(--white);background:var(--overlay-chip)",
+      "font-size:var(--text-1);font-weight:600;color:var(--white);background:var(--overlay-chip)",
     );
   });
 
@@ -646,7 +646,7 @@ describe("the edit dialog's look", () => {
     );
     expect(phone).toContain(".edit-grabber{display:block;width:40px;height:5px;");
     expect(phone).toContain(".edit-head{display:grid;grid-template-columns:1fr auto 1fr;");
-    expect(phone).toContain(".edit-head h2{font-size:17px;text-align:center}");
+    expect(phone).toContain(".edit-head h2{font-size:var(--text-6);text-align:center}");
     expect(phone).toMatch(/\.edit-top\{display:inline-flex;[^}]*min-height:44px/);
     expect(phone).toContain(".edit-top-save{justify-self:end;font-weight:700}");
     expect(phone).toContain(".edit-close,.edit-hint,.edit-foot{display:none}");
@@ -1284,7 +1284,7 @@ describe("the quiet list and the Pictures view (#194)", () => {
   it("draws a summary in --about at the why's size: one line on desktop, two on a phone, three on a picture card", () => {
     const about = (view: "list" | "pictures") => inView(view, ".row-about");
     expect(computed(about("list"), "color", "desktop")).toBe("var(--about)");
-    expect(computed(about("list"), "font-size", "desktop")).toBe("15px");
+    expect(computed(about("list"), "font-size", "desktop")).toBe("var(--text-4)");
     expect(computed(about("list"), "white-space", "desktop")).toBe("nowrap");
     expect(computed(about("list"), "text-overflow", "desktop")).toBe("ellipsis");
     expect(computed(about("list"), "-webkit-line-clamp", "phone")).toBe("2");
@@ -1378,7 +1378,7 @@ describe("the saved copy's reading look", () => {
   it("sets Open on the site in the soft colour at 15px, as the mockup does", () => {
     const open = rule(".copy-open");
     expect(open).toContain("color:var(--soft)");
-    expect(open).toContain("font-size:15px");
+    expect(open).toContain("font-size:var(--text-4)");
   });
 
   it("fills code with the page color and rules a quote with a line", () => {
@@ -1396,9 +1396,9 @@ describe("the saved copy's reading look", () => {
     ]) {
       expect(phone).toContain(part);
     }
-    expect(themeCss.indexOf(phone)).toBeGreaterThan(
-      themeCss.indexOf(".tidy-title{font-size:20px}"),
-    );
+    const tidyTitlePhone = themeCss.indexOf(".tidy-title{font-size:var(--text-8)}");
+    expect(tidyTitlePhone).toBeGreaterThan(-1);
+    expect(themeCss.indexOf(phone)).toBeGreaterThan(tidyTitlePhone);
   });
 });
 

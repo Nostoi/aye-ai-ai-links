@@ -34,6 +34,8 @@ const save = async (owner: string, tags: string[], { image = false } = {}) => {
   return link.id;
 };
 
+const none: ReadonlySet<string> = new Set();
+
 const pin = (owner: string, key: string, color: string) =>
   store.pinTag(owner, key, { pinned: true, color });
 
@@ -47,13 +49,13 @@ describe("homeSpaces", () => {
   const shape = (spaces: Awaited<ReturnType<typeof homeSpaces>>["spaces"]) =>
     spaces.map(({ recent, ...s }) => ({ ...s, recent: recent.map((l) => l.id) }));
 
-  it("lists only pinned tags, by key, each with its name, color and recent links", async () => {
+  it("lists only pinned tags, by key, each with its name, color and count; a shared link shows once, on the first card", async () => {
     const both = await save("a", ["Kitchen", "Baking", "Home batteries"]);
     await pin("a", "kitchen", "clay");
     await pin("a", "home batteries", "teal");
-    expect(shape((await homeSpaces(deps(), "a")).spaces)).toEqual([
+    expect(shape((await homeSpaces(deps(), "a", none)).spaces)).toEqual([
       { key: "home batteries", name: "Home batteries", color: "teal", count: 1, recent: [both] },
-      { key: "kitchen", name: "Kitchen", color: "clay", count: 1, recent: [both] },
+      { key: "kitchen", name: "Kitchen", color: "clay", count: 1, recent: [] },
     ]);
   });
 
@@ -61,7 +63,7 @@ describe("homeSpaces", () => {
     await save("a", ["Kitchen"]);
     await save("b", ["Kitchen"]);
     await pin("b", "kitchen", "violet");
-    const { spaces, catalog } = await homeSpaces(deps(), "a");
+    const { spaces, catalog } = await homeSpaces(deps(), "a", none);
     expect(spaces).toEqual([]);
     expect(catalog).toEqual([expect.objectContaining({ key: "kitchen", pinned: false })]);
   });
@@ -77,7 +79,7 @@ describe("homeSpaces", () => {
     await save("b", ["kitchen"]);
     await pin("a", "kitchen", "clay");
     await pin("b", "kitchen", "clay");
-    const [kitchen] = (await homeSpaces(deps(), "a")).spaces;
+    const [kitchen] = (await homeSpaces(deps(), "a", none)).spaces;
     expect(kitchen?.recent.map((l) => l.id)).toEqual([newest, second, third]);
   });
 
@@ -92,7 +94,7 @@ describe("homeSpaces", () => {
     await store.markDeleted("a", gone, new Date(clock++));
     await pin("a", "kitchen", "clay");
     await pin("a", "garden", "teal");
-    const { spaces } = await homeSpaces(deps(), "a");
+    const { spaces } = await homeSpaces(deps(), "a", none);
     expect(spaces.map((s) => [s.key, s.count])).toEqual([
       ["garden", 1],
       ["kitchen", 2],
@@ -108,47 +110,79 @@ describe("homeSpaces", () => {
     const s3 = await save("a", ["alpha", "beta"]);
     await pin("a", "alpha", "clay");
     await pin("a", "beta", "teal");
-    const { spaces } = await homeSpaces(deps(), "a");
+    const { spaces } = await homeSpaces(deps(), "a", none);
     const ids = (key: string) => spaces.find((s) => s.key === key)?.recent.map((l) => l.id);
     expect(ids("alpha")).toEqual([a3, a2, a1]);
     expect(ids("beta")).toEqual([s3, s2, s1]);
   });
 
-  it("fills a card with links another card shows, and lists the card newest first", async () => {
+  it("never fills a card with a link another card shows: it shows fewer rows instead", async () => {
     const old = await save("a", ["alpha", "beta"]);
     const mid = await save("a", ["alpha", "beta"]);
     const own = await save("a", ["beta"]);
     const newest = await save("a", ["alpha", "beta"]);
     await pin("a", "alpha", "clay");
     await pin("a", "beta", "teal");
-    const { spaces } = await homeSpaces(deps(), "a");
+    const { spaces } = await homeSpaces(deps(), "a", none);
+    const ids = (key: string) => spaces.find((s) => s.key === key)?.recent.map((l) => l.id);
     // alpha has the fewest candidates, so it is served first and takes all three of its links.
-    expect(spaces.find((s) => s.key === "alpha")?.recent.map((l) => l.id)).toEqual([
-      newest,
-      mid,
-      old,
-    ]);
-    // beta takes `own` (nobody shows it), then fills with the newest shown ones, and the card
-    // lists them newest first, not in the order they were picked.
-    expect(spaces.find((s) => s.key === "beta")?.recent.map((l) => l.id)).toEqual([
-      newest,
-      own,
-      mid,
-    ]);
+    expect(ids("alpha")).toEqual([newest, mid, old]);
+    // beta is left with `own` alone: no refill with the three alpha shows.
+    expect(ids("beta")).toEqual([own]);
     expect(spaces.map((s) => s.key)).toEqual(["alpha", "beta"]);
+    expect(spaces.find((s) => s.key === "beta")?.count).toBe(4);
+  });
+
+  it("shows each link once when two spaces share all their links", async () => {
+    const x = await save("a", ["alpha", "beta"]);
+    const y = await save("a", ["alpha", "beta"]);
+    await pin("a", "alpha", "clay");
+    await pin("a", "beta", "teal");
+    const { spaces } = await homeSpaces(deps(), "a", none);
+    const all = spaces.flatMap((s) => s.recent.map((l) => l.id));
+    expect(all.sort()).toEqual([x, y].sort());
+  });
+
+  it("replaces an excluded newest link with an older unshown one, and keeps the count", async () => {
+    const older = await save("a", ["kitchen"]);
+    const newest = await save("a", ["kitchen"]);
+    await pin("a", "kitchen", "clay");
+    const { spaces } = await homeSpaces(deps(), "a", new Set([newest]));
+    expect(spaces[0]?.recent.map((l) => l.id)).toEqual([older]);
+    expect(spaces[0]?.count).toBe(2);
+  });
+
+  it("gives a space whose links are all shown above no rows, with its count unchanged", async () => {
+    const x = await save("a", ["kitchen"]);
+    const y = await save("a", ["kitchen"]);
+    await pin("a", "kitchen", "clay");
+    const { spaces } = await homeSpaces(deps(), "a", new Set([x, y]));
+    expect(spaces[0]).toMatchObject({ key: "kitchen", count: 2, recent: [] });
+  });
+
+  it("reads past excluded links to older ones, but only to the pool bound of 48", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 60; i++) ids.push(await save("a", ["kitchen"]));
+    await pin("a", "kitchen", "clay");
+    // 45 shown: pool is 3 + 45 = 48, newest first, so the three left in reach are ids[14..12].
+    const near = await homeSpaces(deps(), "a", new Set(ids.slice(15)));
+    expect(near.spaces[0]?.recent.map((l) => l.id)).toEqual([ids[14], ids[13], ids[12]]);
+    // 50 shown: pool is capped at 48, all of them shown, so the card goes without.
+    const far = await homeSpaces(deps(), "a", new Set(ids.slice(10)));
+    expect(far.spaces[0]?.recent).toEqual([]);
   });
 
   it("gives a space with no active links no recent links", async () => {
     const done = await save("a", ["kitchen"]);
     await store.update("a", done, { state: "archived" });
     await pin("a", "kitchen", "clay");
-    expect((await homeSpaces(deps(), "a")).spaces[0]?.recent).toEqual([]);
+    expect((await homeSpaces(deps(), "a", none)).spaces[0]?.recent).toEqual([]);
   });
 
   it("gives a pinned tag whose stored color is not a space color no color", async () => {
     await save("a", ["kitchen"]);
     await pin("a", "kitchen", "amber");
-    expect((await homeSpaces(deps(), "a")).spaces[0]).toMatchObject({
+    expect((await homeSpaces(deps(), "a", none)).spaces[0]).toMatchObject({
       key: "kitchen",
       color: null,
     });

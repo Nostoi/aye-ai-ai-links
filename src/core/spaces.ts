@@ -18,8 +18,8 @@ export type HomeSpace = {
   /** How many active links it has: a total, not a count of unread ones. */
   count: number;
   /**
-   * Up to three of its active links, newest first. Best effort: a card prefers links no other
-   * card shows (`homeSpaces`), so these are not always the space's three newest.
+   * Up to three of its active links, newest first, none shown above it on Home or on an earlier
+   * card (`homeSpaces`): fewer than three, or none, when the others are shown elsewhere.
    */
   recent: Link[];
 };
@@ -30,44 +30,47 @@ type Deps = {
 };
 
 /** The most newest links fetched for any one space, to choose its card's links from. */
-const POOL_MAX = 24;
+const POOL_MAX = 48;
 
 /**
- * Picks each card's links from its pool (`pools`, newest first), so cards tell spaces apart. Cards
- * are served fewest candidates first (ties: card order); each takes up to three links no card
- * served before it shows, then fills with ones already shown, newest first. A card's picks come
- * back newest first, and the result keeps the order of `pools`.
+ * Picks each card's links from its pool (`pools`, newest first), so no link shows twice on Home.
+ * A link in `shown` (shown higher on the page) is dropped from every pool. Cards are then served
+ * fewest remaining candidates first (counted once; ties: card order); each takes up to three
+ * links no earlier card took, newest first, and never refills with a repeat, so a card may get
+ * fewer than three, or none. The result keeps the order of `pools`.
  */
-function pickRecent(pools: Link[][]): Link[][] {
-  const shown = new Set<string>();
+function pickRecent(pools: Link[][], shown: ReadonlySet<string>): Link[][] {
+  const left = pools.map((pool) => pool.filter((l) => !shown.has(l.id)));
+  const taken = new Set<string>();
   const picked: Link[][] = pools.map(() => []);
-  const serving = pools
+  const serving = left
     .map((_, i) => i)
-    .sort((a, b) => (pools[a]?.length ?? 0) - (pools[b]?.length ?? 0) || a - b);
+    .sort((a, b) => (left[a]?.length ?? 0) - (left[b]?.length ?? 0) || a - b);
   for (const i of serving) {
-    const pool = pools[i] ?? [];
-    const fresh = pool.filter((l) => !shown.has(l.id));
-    const seen = pool.filter((l) => shown.has(l.id));
-    const chosen = new Set([...fresh, ...seen].slice(0, RECENT_SIZE).map((l) => l.id));
-    picked[i] = pool.filter((l) => chosen.has(l.id));
-    for (const l of picked[i] ?? []) shown.add(l.id);
+    const own = (left[i] ?? []).filter((l) => !taken.has(l.id)).slice(0, RECENT_SIZE);
+    picked[i] = own;
+    for (const l of own) taken.add(l.id);
   }
   return picked;
 }
 
 /**
  * The owner's spaces (pinned tags), by key, each with up to three of its active links, newest
- * first. Best effort: a space whose newest links another card also shows takes its other links
- * instead (`pickRecent`), chosen by link identity from its newest `min(3 × spaces, 24)`. The
- * owner's catalog comes too, for `linkSpace`.
+ * first, none in `shown` (the ids Home shows above the spaces: every kept Handy item, the
+ * suggestions, Worth a look and its gone link) or on an earlier card (`pickRecent`). Chosen by
+ * link identity from its newest `min(3 × spaces + shown.size, 48)`, so a card can have fewer than
+ * three links, or none; its count stays every active link. The limit is per page load: after a
+ * shelf action on the page, a card may show a link the refreshed shelf now shows, until Home is
+ * loaded again. The owner's catalog comes too, for `linkSpace`.
  */
 export async function homeSpaces(
   deps: Deps & { count: LinkCount },
   owner: OwnerId,
+  shown: ReadonlySet<string>,
 ): Promise<{ spaces: HomeSpace[]; catalog: Tag[] }> {
   const catalog = await deps.store.listTags(owner);
   const pinned = catalog.filter((t) => t.pinned);
-  const poolSize = Math.min(RECENT_SIZE * pinned.length, POOL_MAX);
+  const poolSize = Math.min(RECENT_SIZE * pinned.length + shown.size, POOL_MAX);
   const pools = await Promise.all(
     pinned.map(
       async (tag) =>
@@ -77,7 +80,7 @@ export async function homeSpaces(
   const counts = await Promise.all(
     pinned.map((tag) => deps.count.count(owner, { tagKey: tag.key, state: "active" })),
   );
-  const recent = pickRecent(pools);
+  const recent = pickRecent(pools, shown);
   const spaces = pinned.map(
     (tag, i): HomeSpace => ({
       key: tag.key,

@@ -48,7 +48,9 @@ import { setProjectStatus } from "../core/project-status.js";
 import { type SavedPage, savePage } from "../core/save-page.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "../core/saved-copy.js";
 import type { LinkCount, LinkListing, LinkOrder } from "../core/search.js";
-import { type SearchLinksDeps, searchLinks } from "../core/search-links.js";
+import { runSearch, type SearchLinksDeps } from "../core/search-links.js";
+import { logOpenFromReceipt, logReceipt } from "../core/search-log.js";
+import { fromOwnPage, isReceiptToken, SearchReceipts } from "../core/search-receipts.js";
 import { findSpaceTag, homeSpaces, openSpace } from "../core/spaces.js";
 import { getStats, parseWindow, statsReading } from "../core/stats.js";
 import type { StatsReadingStore } from "../core/stats-reading-store.js";
@@ -194,6 +196,9 @@ const isId = (value: unknown): value is number => Number.isSafeInteger(value) &&
 /** A link id as the page sends it: digits, as the store issues them. */
 const isLinkId = (value: unknown): value is string =>
   typeof value === "string" && /^[0-9]{1,20}$/.test(value);
+/** A search receipt as the page sends it back; a body may leave it out. */
+const isOptionalReceipt: Check<string | undefined> = (value): value is string | undefined =>
+  value === undefined || isReceiptToken(value);
 const isDate = (value: unknown): value is string =>
   typeof value === "string" && !Number.isNaN(Date.parse(value));
 const isDateOrNull = (value: unknown): value is string | null => value === null || isDate(value);
@@ -716,6 +721,8 @@ export function webApp({
   deps: SearchLinksDeps &
     WorthDeps &
     LinkCheckDeps & {
+      /** The pending search receipts of this server; a fresh set when left out. */
+      receipts?: SearchReceipts | undefined;
       store: LinkRemover;
       /** The blank listing All links and space pages page through. */
       listing: LinkListing;
@@ -774,6 +781,8 @@ export function webApp({
   // The Save page alone sends a signed-out owner to sign in and straight back to it (#129).
   const saveSession = requireSession(auth, withAuthLock, loginRedirect);
   const bookmarklet = bookmarkletCode(baseUrl);
+  const receipts = deps.receipts ?? new SearchReceipts({ now: deps.now });
+  const clock = deps.now ?? (() => new Date());
 
   /** The Ask AI panel's details for a menu page, or nothing while no AI is set up (#159). */
   const askOn = (c: Context<SessionEnv>, place: string): Ask | undefined =>
@@ -927,7 +936,12 @@ export function webApp({
       ...(keep ? { state: "active" as const } : {}),
       ...(space ? { tag: space.key } : {}),
     };
-    const links = await searchLinks(deps, caller.owner, input, caller.savedBy);
+    // The page's own report logs the search (POST /search/log), so a GET writes nothing (#95).
+    const { links, entry } = await runSearch(deps, caller.owner, input);
+    const receipt =
+      entry && !keep && fromOwnPage(c.req.header("sec-fetch-site"))
+        ? receipts.issue(caller.owner, entry)
+        : undefined;
     const images = await deps.images.imageVersions(
       caller.owner,
       links.map((l) => l.id),
@@ -956,6 +970,7 @@ export function webApp({
       keep,
       pictures,
       copies,
+      receipt,
       ask: askOn(c, "Search"),
     });
     return c.html(html, 200, NO_STORE);
@@ -1251,13 +1266,37 @@ export function webApp({
     }),
   );
 
-  // An opening from any other page (search, All links, a space): recorded, but not a nudge.
-  app.post("/links/opened", jsonBody(linkId), session, (c) =>
+  // An opening from any other page (search, All links, a space): recorded, but not a nudge. The
+  // search results page also sends its receipt, which pairs the opening with that search (#134);
+  // a failure there never changes the opening.
+  app.post("/links/opened", jsonBody({ ...linkId, receipt: isOptionalReceipt }), session, (c) =>
     homeAction(c, async () => {
-      await recordOpening(deps, c.get("caller").owner, c.get("body").id);
+      const { owner, savedBy } = c.get("caller");
+      const { id, receipt } = c.get("body");
+      const link = await recordOpening(deps, owner, id);
+      if (receipt !== undefined) {
+        await logOpenFromReceipt(
+          deps.searchLog,
+          owner,
+          savedBy,
+          receipt,
+          receipts.find(owner, receipt),
+          link,
+          clock(),
+        );
+      }
       return done(c);
     }),
   );
+
+  // The results page's report of the search it showed: writes the pending entry for its receipt,
+  // once however often it is sent. An unknown, expired or another owner's receipt writes nothing.
+  app.post("/search/log", jsonBody({ receipt: isReceiptToken }), session, async (c) => {
+    const { owner, savedBy } = c.get("caller");
+    const { receipt } = c.get("body");
+    await logReceipt(deps.searchLog, owner, savedBy, receipt, receipts.find(owner, receipt));
+    return done(c);
+  });
 
   // The owner's edit of a link's title, picture and tags (#145, #239). It answers the card's new
   // state and the edit's id for its Undo (null when nothing changed). A change of tags that the

@@ -26,6 +26,7 @@ import type { FaviconReader } from "./core/favicon-store.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
+import type { SearchReceipts } from "./core/search-receipts.js";
 import type { StatsStore } from "./core/stats-store.js";
 import type { LinkRemover } from "./core/store.js";
 import type { TagEditStore } from "./core/tag-edit-store.js";
@@ -67,6 +68,7 @@ const CHECKED_PAGES = [
   "/consent",
   "/connections",
   "/search",
+  "/search/log",
   "/spaces",
   "/spaces/done",
   "/all",
@@ -169,6 +171,8 @@ export type AppOptions = {
         copyLimitBytes?: number;
         readGate: ReadGate;
         exports: ExportBuilds;
+        /** The web door's pending search receipts; a fresh set when left out. */
+        receipts?: SearchReceipts | undefined;
         /** The in-app AI; `POST /ai/chat` answers NO_AI without one. */
         ai?: ChatModel | undefined;
       };
@@ -238,8 +242,8 @@ export function createApp(options: AppOptions) {
     app.route(
       "/",
       webApp({
-        // Owner ruling on #93: web searches aren't logged until opens are recorded.
-        deps: { ...web.deps, readingOn, searchLog: undefined },
+        // `GET /search` never writes the log; the results page's own POSTs do (#134).
+        deps: { ...web.deps, readingOn },
         auth: betterAuth,
         withAuthLock,
         baseUrl,
@@ -255,8 +259,7 @@ export function createApp(options: AppOptions) {
           turnOff: (owner, id) => turnOffAgentKey(keys, owner, id),
           turnOn: (owner, id) => turnOnAgentKey(keys, owner, id),
         },
-        // The in-app AI is an agent, so its searches are logged as through `/mcp`; the web
-        // door's own searches above are not (#134).
+        // The in-app AI is an agent, so its searches are logged as through `/mcp`.
         ai: web.deps.ai && {
           model: web.deps.ai,
           deps: { ...web.deps, readingOn },

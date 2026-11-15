@@ -1,6 +1,6 @@
 import { CoreError } from "./errors.js";
 import type { LinkSearch, SearchFilters, SearchTrace } from "./search.js";
-import { logSearch, type SearchLog } from "./search-log.js";
+import { logSearch, type SearchLog, type SearchLogEntry } from "./search-log.js";
 import type { LinkStore } from "./store.js";
 import { tagKey } from "./tags.js";
 import type { Link, LinkState, OwnerId } from "./types.js";
@@ -62,15 +62,14 @@ export type SearchLinksDeps = {
 };
 
 /**
- * Find the owner's links, best match first. A blank query lists newest first. A search whose
- * trace fires (a word query) is logged under `by`, the calling agent.
+ * Runs a search: the owner's links, best match first (a blank query lists newest first), and the
+ * log entry for it when its trace fires (a word query). Writes nothing.
  */
-export async function searchLinks(
-  { store, search, searchLog, now = () => new Date() }: SearchLinksDeps,
+export async function runSearch(
+  { store, search }: Pick<SearchLinksDeps, "store" | "search">,
   owner: OwnerId,
   input: SearchLinksInput,
-  by: string,
-): Promise<Link[]> {
+): Promise<{ links: Link[]; entry: SearchLogEntry | undefined }> {
   const filters: SearchFilters = checkedFilters(input);
   if (input.state !== undefined) filters.state = input.state;
   const limit = checkedLimit(input.limit);
@@ -80,26 +79,36 @@ export async function searchLinks(
     (l): l is Link => l !== null,
   );
   const [trace] = traces;
-  if (trace) {
-    const { similarity, ranks, ...rest } = trace;
-    await logSearch(
-      searchLog,
-      owner,
-      by,
-      {
-        ...rest,
-        query: input.query,
-        filters,
-        limit,
-        results: links.map((l) => ({
-          id: l.id,
-          urlKey: l.urlKey,
-          similarity: similarity[l.id] ?? null,
-          ranks: ranks[l.id] ?? {},
-        })),
-      },
-      now(),
-    );
-  }
+  if (!trace) return { links, entry: undefined };
+  const { similarity, ranks, ...rest } = trace;
+  return {
+    links,
+    entry: {
+      ...rest,
+      query: input.query,
+      filters,
+      limit,
+      results: links.map((l) => ({
+        id: l.id,
+        urlKey: l.urlKey,
+        similarity: similarity[l.id] ?? null,
+        ranks: ranks[l.id] ?? {},
+      })),
+    },
+  };
+}
+
+/**
+ * Find the owner's links, best match first. A blank query lists newest first. A search whose
+ * trace fires (a word query) is logged under `by`, the calling agent.
+ */
+export async function searchLinks(
+  deps: SearchLinksDeps,
+  owner: OwnerId,
+  input: SearchLinksInput,
+  by: string,
+): Promise<Link[]> {
+  const { links, entry } = await runSearch(deps, owner, input);
+  if (entry) await logSearch(deps.searchLog, owner, by, entry, (deps.now ?? (() => new Date()))());
   return links;
 }

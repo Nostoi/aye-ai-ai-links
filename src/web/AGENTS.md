@@ -52,6 +52,45 @@ Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.
 - The end of the saved copy (`copy-end.ts`, #223) is "Finished with this link?" with the card menu's items as buttons (no icons, none `.primary`), or Bring it back for a link done or put away. It runs `doneLinkScript` and `keepHandyScript` on the frame's `data-id` busy mark, with the copy page's own `takeOut`, which draws the row from the `StateChange` the route returned and never hides the frame. The Undo bar is the only announcer of successes; errors go to the row's `role=alert`.
 - Page designs: #12 comment 6158134489.
 
+## Patterns (#311)
+
+The catalogue for a new page. Where a rule already exists above, this names it; only the entries marked *new* are written here. Owner decisions are in `ROADMAP.md`'s dated log (2026-11-13 #305, 2026-11-14 #306) and the issues named.
+
+**Where each pattern is written down**
+- Tray and spine: "Home's trays and spines". Top bar band: "The top bar sits on the `--tray` band". Round sliding buttons and the gone band: "The seems-gone band" and Home's featured card (`slideButton`, #298).
+- Card with a ring: `--card-ring` after a `--shadow-*` (below). Pictures, initials and the letter square: design rule 4 and the tray's last bullet (#304).
+- Text hierarchy: the card's grey line bullet (`cardLine`) and `ROADMAP.md` 2026-11-13 (#305, part 2). Spacing scale: the `--space-*` bullet. Contrast floors: the spine bullet (`theme.test.ts`).
+
+**Buttons** (*new*). `button` is a `--radius-pill` pill on `--surface` with a `--line` border; `button.primary` and `a.button.primary` fill `--ink` and mark a form's or dialog's main action (Find it, Sign in, Save, Allow), one per form; the saved copy's end has none. A round icon button that opens sideways is `slideButton`; the bar's raised pills are `.bar-pill`. States: hover is a tint of `--ink` or the border moving to `--field`; keyboard focus is the focus ring (below); `button:disabled` is dimmed with the default cursor; busy is the page's busy mark (`whileBusy`, `cardBusy`). There is no pressed state yet (#314).
+
+**Inputs** (*new*). `input` is a pill and `textarea` a rounded rectangle (its corner typed, not a card token), both `--surface` with a `--field` outline, under a `label`, and at least 44px tall. The search box is `.search-box`.
+
+**Alerts** (*new*). A form or action reports its failure in a `role=alert` element, empty until something fails (`[role=alert]:empty` is hidden), filled with plain words. On a card and at the saved copy's end the Undo bar announces successes and the alert only errors (the bullet above). Amber is for "needs you", not for error text.
+
+**Empty states** (*new*). One plain sentence in the page's voice saying what is missing and how it fills ("Nothing opened yet. Links you open from this site show here."), no picture and no counter (design rule 6). A group that can empty by hiding hides through a `:has()` rule, as `WORTH_EMPTY` and `.done-empty` do, not a script.
+
+**Focus ring** (*new*). `:focus-visible` is the one `--blue` ring on everything; a new control adds no outline of its own and removes this one only to draw it elsewhere: a whole-card link draws it on its `::after`, inside the card, with an inner `--surface` ring (`.handy-tile h3 a`, `.home-space-name`); a tray's spine shows it on `:focus` (the spine bullet).
+
+**Layers** (*new*). `z-index` takes a `--layer-*` token, never a number; a new role adds its own token to `shared`, placed against the others. Lowest first: `lift` (an opening slide button, the gone band's pointer, a link above its card's whole-card link), `tile-actions` (a Handy tile's actions and gone band over its whole-tile link), `card-menu`, `open-card` (a card whose ⋯ is open, so its menu covers the next card), `menu` (the account menu), `chrome` (the top bar band and the Ask AI panel) and `undo` (the Undo bar, above the panel, set in `askCss` only). A `<dialog>` opened with `showModal()` is in the top layer and takes no number.
+
+**Shape, colour and motion tokens** (*new*, `shared` in `theme.ts`; each holds the value the stylesheet had when it was added, which `design-tokens.test.ts` proves).
+- Corners: `--radius-card` for a content card or tile, `--radius-card-large` for a page's main card and a list's card, `--radius-pill` for a pill control. Every other corner is typed and matches the nearest element of its kind (pictures, menus, alerts, the dialog, the bar's pills, `.worth-row`, `textarea`, Tidy's choice buttons), even where its number equals a token's. A tray's corner is `calc(var(--radius-card) + var(--tray-pad))` written in its own rule, as `--tray-pad` is set on the tray.
+- Shadows name depth only: `--shadow-card`, `--shadow-raised`, `--shadow-menu`. A ringed card writes `var(--shadow-card),var(--card-ring)`; a card with no ring (`.note.guess`) leaves it out.
+- `--white` is white in both themes (a picture's backing, a chip's text); a page's own white is `--surface`. `--overlay-chip` is the dark layer over a picture. A `::backdrop` takes no `var()`: before Safari 17.4 and Chrome 122 it does not inherit the page's variables, so the edit dialog's backdrop colour is typed (`theme.test.ts` checks).
+- Motion: `--motion-pop` (a menu appearing), `--motion-hover` (a fill changing), `--motion-fade` (opacity), `--motion-leave` (a band going), `--motion-slide` (a button opening) and `--motion-label-delay`; easings `--ease-standard` and `--ease-out`. The one `prefers-reduced-motion:reduce` block that ends in `*{…!important}` turns all of it off, so new motion adds nothing there.
+
+**Names for new work** (*new*; no existing class is renamed). A picture box is `-pic` (`feature-pic`, `row-pic`). The grey text roles `--about`, `--soft` and `--detail` stay distinct. Grey secondary text takes `.small`, or `.card-line` inside a card, and a new class is named for what the text is (`copy-notice`), never its colour.
+
+**Ask AI** (*new*). Its `.ask-*` families repeat the button, card and label ideas above. When Ask AI is next touched, reuse the shared families instead of writing more `.ask-*` copies.
+
+**A new page, in order** (*new*)
+1. Render through `page()`; colours, `--space-*`, corners, shadows, layers and motion use a token where one fits; anything else is typed to match the nearest existing element of its kind.
+2. A card is `--surface`, a corner token and a shadow token with the ring. A group's gaps stay within its padding.
+3. Controls are at least 44px tall; a form's main action is its one `.primary`; hover, focus and disabled are the shared ones.
+4. Give it its empty state and its `role=alert`.
+5. Look at it in light and dark, at 390px and 1280px, and with `hover:none`; check the contrast floors.
+6. A route joins the route guard ("New routes"); a user-visible change updates `README.md`.
+
 ## New routes
 
 A new web route must pass the route guard in `src/mcp/isolation.test.ts` ("owner isolation coverage"). Every signed-in read path needs a `READ_ROUTES` entry: a sample request with A's marker (A gets 200 with it; a second owner gets no A marker and, for bytes, not A's body), or a `noOwnerData` reason. Every write path needs a `WRITE_ROUTES_TESTED` entry naming its two-owner test, and a signed-in POST joins `CHECKED_PAGES` in `src/app.ts`. The guard also fails any HTML page A receives that makes an outside request.

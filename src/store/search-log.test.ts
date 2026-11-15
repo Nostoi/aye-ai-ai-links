@@ -230,3 +230,59 @@ describe("a deleted link's id", () => {
     expect(logged?.urlKey).not.toBe(second.urlKey);
   });
 });
+
+describe("receipts (#134)", () => {
+  const withIds = (...ids: string[]): SearchLogEntry => ({
+    ...entry(),
+    results: ids.map((id) => ({ id, urlKey: `ex.com/${id}`, similarity: null, ranks: {} })),
+  });
+
+  it("writing a receipt twice writes one row; searches without one never collide", async () => {
+    const { db, log } = fresh();
+    await log.record("a", "web", entry(), T(0), "r1");
+    await log.record("a", "web", entry("other"), T(1), "r1");
+    await log.record("a", "agent", entry(), T(2));
+    await log.record("a", "agent", entry(), T(3));
+    expect(rows(db)).toHaveLength(3);
+    expect(db.prepare("SELECT query FROM search_log WHERE receipt = 'r1'").all()).toEqual([
+      { query: "solar" },
+    ]);
+  });
+
+  it("reads a receipt's row for its owner only, with the ids it showed", async () => {
+    const { log } = fresh();
+    await log.record("a", "web", withIds("4", "5"), T(0), "r1");
+    expect(await log.receiptRow("b", "r1")).toBeNull();
+    expect(await log.receiptRow("a", "nope")).toBeNull();
+    expect(await log.receiptRow("a", "r1")).toEqual({
+      by: "web",
+      createdAt: T(0),
+      openedLinkId: null,
+      resultIds: ["4", "5"],
+    });
+  });
+
+  it("pairs the owner's unpaired row once; another owner's pair and a second pair change nothing", async () => {
+    const { db, log } = fresh();
+    await log.record("a", "web", withIds("4", "5"), T(0), "r1");
+    await log.pairReceipt("b", "r1", { id: "4", urlKey: "ex.com/4" }, T(1));
+    expect(opened(db)).toEqual([null]);
+    await log.pairReceipt("a", "r1", { id: "4", urlKey: "ex.com/4" }, T(1));
+    await log.pairReceipt("a", "r1", { id: "5", urlKey: "ex.com/5" }, T(2));
+    expect(opened(db)).toEqual([4]);
+    expect(rows(db)[0]).toMatchObject({ opened_url_key: "ex.com/4", opened_at: T(1).getTime() });
+  });
+
+  it("the receipt migration keeps an existing row, with no receipt", () => {
+    const db = new Database(":memory:");
+    open.push(db);
+    db.pragma("foreign_keys = ON");
+    migrate(db, MIGRATIONS.slice(0, MIGRATIONS.length - 1));
+    db.prepare("INSERT INTO users (id, display_name, created_at) VALUES ('a', 'a', 0)").run();
+    db.prepare(
+      "INSERT INTO search_log (owner_id, searched_by, query, filters, mode, meaning_candidates, result_limit, results, created_at) VALUES ('a', 'x', 'q', '{}', 'keyword', 0, 20, '[]', 0)",
+    ).run();
+    migrate(db);
+    expect(db.prepare("SELECT receipt FROM search_log").all()).toEqual([{ receipt: null }]);
+  });
+});

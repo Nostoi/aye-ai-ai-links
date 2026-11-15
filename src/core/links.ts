@@ -383,7 +383,8 @@ export async function updateLinkWithReceipt(
 
 /**
  * The owner opened the link: records when, and only that. It is not a nudge, so it never marks
- * the link surfaced, and it is not a search's open, so it is never logged.
+ * the link surfaced, and it never touches the search log itself: a click on a web results page is
+ * paired with its search by the door, through `logOpenFromReceipt` (#134).
  */
 export async function recordOpening(deps: Deps, owner: OwnerId, id: string): Promise<Link> {
   return updateLink(deps, owner, id, { opened: true });

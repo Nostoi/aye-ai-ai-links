@@ -9,10 +9,11 @@ import {
 import type Database from "better-sqlite3";
 import type { ChatModel } from "../ai/model.js";
 import { createApp } from "../app.js";
+import type { SearchReceipts } from "../core/search-receipts.js";
 import type { NameVectors } from "../core/tag-suggest.js";
 import { createDeps } from "../deps.js";
 import type { RateLimitOptions } from "../http/rate-limit.js";
-import { FakeEmbedder } from "../search/embedder.js";
+import { type Embedder, FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 import { openDatabase } from "../store/database.js";
 import { SqliteKeyStore } from "../store/key-store.js";
@@ -235,6 +236,8 @@ export async function oauthWorld({
   ai,
   names,
   tagSuggestWaitMs,
+  embedder = new FakeEmbedder(DIMS),
+  receipts,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -255,6 +258,10 @@ export async function oauthWorld({
   names?: NameVectors;
   /** Shortens the Tags page's wait for its suggestions. */
   tagSuggestWaitMs?: number;
+  /** Replaces the query embedder, to count or fail its calls. */
+  embedder?: Embedder;
+  /** Replaces the web door's pending search receipts, for a fixed clock and tokens. */
+  receipts?: SearchReceipts;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -264,7 +271,7 @@ export async function oauthWorld({
     ...(now && { now }),
     ...(authDb && { db: authDb }),
   });
-  const deps = createDeps(links, new FakeEmbedder(DIMS), savedCopyDir ?? null, exportDir ?? null);
+  const deps = createDeps(links, embedder, savedCopyDir ?? null, exportDir ?? null);
   if (savedCopyDir !== undefined) {
     const folder = await deps.savedCopies.checkFolder();
     if (folder.state !== "ready")
@@ -273,7 +280,14 @@ export async function oauthWorld({
   if (exportDir !== undefined) await deps.exportFolder.reset();
   deps.store.ensureUser("owner", "Owner");
   const { app } = createApp({
-    deps: { ...deps, copyLimitBytes, ai, ...(names && { names }), tagSuggestWaitMs },
+    deps: {
+      ...deps,
+      copyLimitBytes,
+      ai,
+      ...(names && { names }),
+      ...(receipts && { receipts }),
+      tagSuggestWaitMs,
+    },
     identify: auth.identify,
     auth: { ...auth, keys: keyStore, limits },
     allowedHosts: ["links.example"],

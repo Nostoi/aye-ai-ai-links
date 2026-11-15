@@ -46,8 +46,8 @@ const put = (r: Row = {}) => {
 };
 
 describe("link_favicons migration", () => {
-  it("is the last entry and adds an empty table keyed by owner and link", () => {
-    expect(MIGRATIONS).toHaveLength(FAVICONS + 1);
+  it("is followed by the search receipt entry and adds an empty table keyed by owner and link", () => {
+    expect(MIGRATIONS).toHaveLength(FAVICONS + 2);
     expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
     expect(
       db

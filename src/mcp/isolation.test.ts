@@ -896,6 +896,8 @@ describe("owner isolation coverage", () => {
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
     "POST /tidy/keep": "the two-owner test of POST /tidy/keep in web/tidy-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
+    "POST /search/log":
+      "the another-owner's-receipt tests of POST /search/log in web/search-receipt-routes.test.ts",
     "POST /links/edit":
       "the two-owner tests of POST /links/edit in web/edit-routes.test.ts and, for tags, web/edit-tags-routes.test.ts",
     "POST /links/edit/undo":

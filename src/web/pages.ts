@@ -14,7 +14,7 @@ import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { initialsText } from "./initials.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
-import { linkTitle, openedScript } from "./open-link.js";
+import { linkTitle, openedScript, searchReportScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { CARD_FETCH } from "./tell-why.js";
 
@@ -232,10 +232,13 @@ export const searchPage = ({
   pictures = new Map(),
   copies = new Map(),
   space,
+  receipt,
   ask,
 }: {
   ask?: Ask | undefined;
   space?: Tag | undefined;
+  /** The search's receipt (#134): the page reports the search with it, and sends it with a click. */
+  receipt?: string | undefined;
   query: string;
   links: Link[];
   now: Date;
@@ -249,7 +252,7 @@ export const searchPage = ({
 }) =>
   page(
     "Search · Aye-AI-AI Links",
-    `<main>
+    `<main${receipt ? ` data-receipt="${escapeHtml(receipt)}"` : ""}>
 <form class="search-page" action="/search" method="get" role="search">
 <label class="visually-hidden" for="q">Search your links</label>
 <div class="search-box">
@@ -274,6 +277,6 @@ ${removeCopyScript("results", "results-error")}
 ${ask ? "" : `${editLinkScript("results", "results-error")}\n`}${deleteLinkScript("results", "results-error")}
 ${doneLinkScript("results", "results-error")}
 </script>
-${openedScript("results", "/links/opened")}`,
+${openedScript("results", "/links/opened", undefined, receipt !== undefined)}${receipt ? `\n${searchReportScript}` : ""}`,
     { menu: true, undo: true, ask, edits: { root: "results", error: "results-error" } },
   );

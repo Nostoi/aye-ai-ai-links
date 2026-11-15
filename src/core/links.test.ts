@@ -438,6 +438,11 @@ describe("recordOpening", () => {
     const searchLog = {
       record: async () => void logged.push("record"),
       pairOpen: async () => void logged.push("pairOpen"),
+      receiptRow: async () => {
+        logged.push("receiptRow");
+        return null;
+      },
+      pairReceipt: async () => void logged.push("pairReceipt"),
     };
     return { store, logged, deps: { store, searchLog, now: () => T0 } };
   };

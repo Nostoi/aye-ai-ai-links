@@ -24,8 +24,8 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("summary source migration", () => {
-  it("is followed by the link_events, stats_readings, tag edits, tag merge dismissals and link favicons entries", () => {
-    expect(LATEST_VERSION).toBe(SUMMARY_SOURCE + 6);
+  it("is followed by the link_events, stats_readings, tag edits, tag merge dismissals, link favicons and search receipt entries", () => {
+    expect(LATEST_VERSION).toBe(SUMMARY_SOURCE + 7);
   });
 
   it("leaves an old summary unlabelled", () => {

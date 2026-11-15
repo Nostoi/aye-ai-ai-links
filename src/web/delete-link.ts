@@ -52,12 +52,13 @@ export const deleteLinkScript = (
   };
 };
 const deleteCard = (card) =>
-  whileBusy(card, async () => {
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const deleteAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
     deleteAlert.textContent = "";
     const res = await post("/links/delete", { id });
+    answered();
     if (!res || res.status !== 204) {
       deleteAlert.textContent = await failure(res);
       return;

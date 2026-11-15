@@ -41,8 +41,7 @@ const BUSY_LOOK_MS = 300;
  * The busy look is apart from the mark. `busyLook(el, button, word)` waits 300ms and then sets
  * `data-busy` on `el` (the theme dims it and shows the progress cursor) and, if `button` is still
  * on the page, puts `word` in its label node (an icon button's words, a Tidy choice's `<b>`, or
- * else the button's own text, when it holds no element) and marks it `data-working`; it answers
- * a `clear()` that undoes only that. A faster answer shows nothing. `look` is `{ button, word, el }`:
+ * else the button's own text, when it holds no element) and marks it `data-working`. `look` is `{ button, word, el }`:
  * `el` is the busy element, by default the button's nearest `[data-busy-scope]`, else the card.
  * An action with no button (a ⋯ menu row, which closes) passes `{}` and only dims; no `look`
  * shows nothing. `whileBusy` starts the look only once it holds the mark, and clears it first.
@@ -77,24 +76,27 @@ const busyLook = (el, button, word) => {
     swapped = { node, was: node.textContent };
     node.textContent = word;
   }, ${BUSY_LOOK_MS});
-  return () => {
-    clearTimeout(timer);
-    if (!shown) return;
-    el.removeAttribute("data-busy");
-    if (button) button.removeAttribute("data-working");
-    if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+  return {
+    answered: () => clearTimeout(timer),
+    clear: () => {
+      clearTimeout(timer);
+      if (!shown) return;
+      el.removeAttribute("data-busy");
+      if (button) button.removeAttribute("data-working");
+      if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+    },
   };
 };
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
-  const clear = look
+  const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run();
+    return await run(busy ? busy.answered : () => {});
   } finally {
-    if (clear) clear();
+    if (busy) busy.clear();
     cardBusy.delete(card);
     for (const wake of cardWaiting.get(card) || []) wake();
     cardWaiting.delete(card);

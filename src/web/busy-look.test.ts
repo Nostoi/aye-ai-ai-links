@@ -22,9 +22,21 @@ function load() {
     setTimeout,
     clearTimeout,
   ) as {
-    whileBusy: (card: Element, run: () => unknown, look?: object) => Promise<unknown>;
-    whenFree: (card: Element, run: () => unknown, look?: object) => Promise<unknown>;
-    busyLook: (el: Element, button: Element | null, word: string) => () => void;
+    whileBusy: (
+      card: Element,
+      run: (answered: () => void) => unknown,
+      look?: object,
+    ) => Promise<unknown>;
+    whenFree: (
+      card: Element,
+      run: (answered: () => void) => unknown,
+      look?: object,
+    ) => Promise<unknown>;
+    busyLook: (
+      el: Element,
+      button: Element | null,
+      word: string,
+    ) => { answered: () => void; clear: () => void };
     cardBusy: WeakSet<Element>;
   };
   const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -113,7 +125,7 @@ describe("busyLook", () => {
     const quick = load();
     const clearQuick = quick.busyLook(quick.$("card"), quick.$("slide"), "Marking done…");
     vi.advanceTimersByTime(100);
-    clearQuick();
+    clearQuick.clear();
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(1000);
     expect(quick.$("card").hasAttribute("data-busy")).toBe(false);
@@ -123,10 +135,41 @@ describe("busyLook", () => {
     const slow = load();
     const clearSlow = slow.busyLook(slow.$("card"), slow.$("slide"), "Marking done…");
     vi.advanceTimersByTime(300);
-    clearSlow();
+    clearSlow.clear();
     expect(slow.$("card").hasAttribute("data-busy")).toBe(false);
     expect(slow.$("label").textContent).toBe("Done with it");
     expect(slow.$("slide").hasAttribute("data-working")).toBe(false);
+  });
+
+  it("answered() stops a look that has not shown, and leaves one that is showing until clear()", () => {
+    const quick = load();
+    const early = quick.busyLook(quick.$("card"), quick.$("slide"), "Marking done…");
+    vi.advanceTimersByTime(100);
+    early.answered();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(1000);
+    expect(quick.$("card").hasAttribute("data-busy")).toBe(false);
+
+    const slow = load();
+    const late = slow.busyLook(slow.$("card"), slow.$("slide"), "Marking done…");
+    vi.advanceTimersByTime(300);
+    late.answered();
+    expect(slow.$("card").hasAttribute("data-busy")).toBe(true);
+    late.clear();
+    expect(slow.$("card").hasAttribute("data-busy")).toBe(false);
+  });
+
+  it("whileBusy hands run an answered that cancels the pending look, and a no-op without a look", async () => {
+    const p = load();
+    await p.whileBusy(
+      p.$("card"),
+      async (answered) => {
+        answered();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+      { button: p.$("slide"), word: "Marking done…" },
+    );
+    await p.whileBusy(p.$("card"), async (answered) => answered());
   });
 
   it("undoes only what it set: words the page wrote meanwhile are kept", () => {
@@ -134,7 +177,7 @@ describe("busyLook", () => {
     const clear = p.busyLook(p.$("card"), p.$("slide"), "Marking done…");
     vi.advanceTimersByTime(300);
     p.$("label").textContent = "Brought back";
-    clear();
+    clear.clear();
     expect(p.$("label").textContent).toBe("Brought back");
     expect(p.$("card").hasAttribute("data-busy")).toBe(false);
   });
@@ -144,7 +187,7 @@ describe("busyLook", () => {
     p.$("card").setAttribute("aria-busy", "true");
     const clear = p.busyLook(p.$("card"), p.$("slide"), "Marking done…");
     vi.advanceTimersByTime(300);
-    clear();
+    clear.clear();
     expect(p.$("card").getAttribute("aria-busy")).toBe("true");
     const other = load();
     other.busyLook(other.$("card"), other.$("slide"), "Marking done…");

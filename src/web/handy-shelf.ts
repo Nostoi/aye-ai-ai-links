@@ -234,11 +234,12 @@ if (handy) {
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
     cardBusy.add(tile);
-    const clearLook = busyLook(tile, button.closest("details") ? null : button, working[act]);
+    const look = busyLook(tile, button.closest("details") ? null : button, working[act]);
     let dropped = false;
     try {
       if (done) {
         const res = await post("/home/archive", { id });
+        look.answered();
         const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!change || !change.before || !change.after) {
           handyError.textContent = await failure(res);
@@ -251,6 +252,7 @@ if (handy) {
       }
       if (act === "still-works") {
         const res = await post("/links/still-works", { id });
+        look.answered();
         const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!moved || !moved.check) {
           handyError.textContent = await failure(res);
@@ -263,6 +265,7 @@ if (handy) {
       }
       const [route, body, undo] = make(id);
       const res = await post(route, body);
+      look.answered();
       const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
       if (!moved || !moved.tool) {
         handyError.textContent = await failure(res);
@@ -271,7 +274,7 @@ if (handy) {
       dropped = await refreshShelf(from);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
-      clearLook();
+      look.clear();
       if (!dropped) cardBusy.delete(tile);
     }
   });

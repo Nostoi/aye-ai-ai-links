@@ -680,24 +680,27 @@ const busyLook = (el, button, word) => {
     swapped = { node, was: node.textContent };
     node.textContent = word;
   }, 300);
-  return () => {
-    clearTimeout(timer);
-    if (!shown) return;
-    el.removeAttribute("data-busy");
-    if (button) button.removeAttribute("data-working");
-    if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+  return {
+    answered: () => clearTimeout(timer),
+    clear: () => {
+      clearTimeout(timer);
+      if (!shown) return;
+      el.removeAttribute("data-busy");
+      if (button) button.removeAttribute("data-working");
+      if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+    },
   };
 };
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
-  const clear = look
+  const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run();
+    return await run(busy ? busy.answered : () => {});
   } finally {
-    if (clear) clear();
+    if (busy) busy.clear();
     cardBusy.delete(card);
     for (const wake of cardWaiting.get(card) || []) wake();
     cardWaiting.delete(card);
@@ -841,11 +844,12 @@ if (keepRoot) {
     const card = button.closest("[data-id]");
     const menu = button.closest("details");
     if (menu) menu.open = false;
-    await whileBusy(card, async () => {
+    await whileBusy(card, async (answered) => {
       const id = card.dataset.id;
       const keep = button.dataset.act === "keep";
       keepError.textContent = "";
       const res = await post(keep ? "/tools/keep" : "/tools/not-handy", { id });
+      answered();
       const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
       if (!moved || !moved.tool) {
         (menu ? menu.querySelector("summary") : button).focus();
@@ -882,9 +886,10 @@ if (goneRoot) {
         return resetBand(line);
       }
       const id = card.dataset.id;
-      await whileBusy(card, async () => {
+      await whileBusy(card, async (answered) => {
         goneError.textContent = "";
         const res = await post("/links/still-works", { id });
+        answered();
         const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!moved || !moved.check) {
           goneError.textContent = await failure(res);
@@ -915,11 +920,12 @@ if (copyRoot) {
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
     menu.open = false;
-    await whileBusy(card, async () => {
+    await whileBusy(card, async (answered) => {
       const id = card.dataset.id;
       const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
       copyError.textContent = "";
       const res = await post("/links/copy/remove", { id });
+      answered();
       if (!res || res.status !== 204) {
         copyError.textContent = await failure(res);
         return;
@@ -1457,12 +1463,13 @@ const takeOut = (listRoot, card, remove) => {
   };
 };
 const deleteCard = (card) =>
-  whileBusy(card, async () => {
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById("space-links");
     const deleteAlert = document.getElementById("space-error");
     const id = card.dataset.id;
     deleteAlert.textContent = "";
     const res = await post("/links/delete", { id });
+    answered();
     if (!res || res.status !== 204) {
       deleteAlert.textContent = await failure(res);
       return;
@@ -1487,13 +1494,14 @@ if (deleteRoot) {
 }
 const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Marking done…"},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."},"word":"Putting away…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
 const stateCard = (card, act, before, button) =>
-  whileBusy(card, async () => {
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById("space-links");
     const doneAlert = document.getElementById("space-error");
     const id = card.dataset.id;
     const { route, undo } = STATE_ACTS[act];
     doneAlert.textContent = "";
     const res = await post(route, { id });
+    answered();
     const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!change || !change.before || !change.after) {
       doneAlert.textContent = await failure(res);

@@ -92,13 +92,14 @@ export const doneLinkScript = (
   error: string,
 ) => `const STATE_ACTS = ${JSON.stringify(STATE_ACTS)};
 const stateCard = (card, act, before, button) =>
-  whileBusy(card, async () => {
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const doneAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
     const { route, undo } = STATE_ACTS[act];
     doneAlert.textContent = "";
     const res = await post(route, { id });
+    answered();
     const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!change || !change.before || !change.after) {
       doneAlert.textContent = await failure(res);

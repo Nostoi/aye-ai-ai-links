@@ -624,24 +624,27 @@ const busyLook = (el, button, word) => {
     swapped = { node, was: node.textContent };
     node.textContent = word;
   }, 300);
-  return () => {
-    clearTimeout(timer);
-    if (!shown) return;
-    el.removeAttribute("data-busy");
-    if (button) button.removeAttribute("data-working");
-    if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+  return {
+    answered: () => clearTimeout(timer),
+    clear: () => {
+      clearTimeout(timer);
+      if (!shown) return;
+      el.removeAttribute("data-busy");
+      if (button) button.removeAttribute("data-working");
+      if (swapped && swapped.node.textContent === word) swapped.node.textContent = swapped.was;
+    },
   };
 };
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
-  const clear = look
+  const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run();
+    return await run(busy ? busy.answered : () => {});
   } finally {
-    if (clear) clear();
+    if (busy) busy.clear();
     cardBusy.delete(card);
     for (const wake of cardWaiting.get(card) || []) wake();
     cardWaiting.delete(card);
@@ -773,11 +776,12 @@ if (handy) {
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
     cardBusy.add(tile);
-    const clearLook = busyLook(tile, button.closest("details") ? null : button, working[act]);
+    const look = busyLook(tile, button.closest("details") ? null : button, working[act]);
     let dropped = false;
     try {
       if (done) {
         const res = await post("/home/archive", { id });
+        look.answered();
         const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!change || !change.before || !change.after) {
           handyError.textContent = await failure(res);
@@ -790,6 +794,7 @@ if (handy) {
       }
       if (act === "still-works") {
         const res = await post("/links/still-works", { id });
+        look.answered();
         const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!moved || !moved.check) {
           handyError.textContent = await failure(res);
@@ -802,6 +807,7 @@ if (handy) {
       }
       const [route, body, undo] = make(id);
       const res = await post(route, body);
+      look.answered();
       const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
       if (!moved || !moved.tool) {
         handyError.textContent = await failure(res);
@@ -810,7 +816,7 @@ if (handy) {
       dropped = await refreshShelf(from);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
-      clearLook();
+      look.clear();
       if (!dropped) cardBusy.delete(tile);
     }
   });
@@ -883,12 +889,13 @@ const takeOut = (listRoot, card, remove) => {
   };
 };
 const deleteCard = (card) =>
-  whileBusy(card, async () => {
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById("worth-cards");
     const deleteAlert = document.getElementById("home-error");
     const id = card.dataset.id;
     deleteAlert.textContent = "";
     const res = await post("/links/delete", { id });
+    answered();
     if (!res || res.status !== 204) {
       deleteAlert.textContent = await failure(res);
       return;
@@ -913,13 +920,14 @@ if (deleteRoot) {
 }
 const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Marking done…"},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."},"word":"Putting away…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
 const stateCard = (card, act, before, button) =>
-  whileBusy(card, async () => {
+  whileBusy(card, async (answered) => {
     const listRoot = document.getElementById("worth-cards");
     const doneAlert = document.getElementById("home-error");
     const id = card.dataset.id;
     const { route, undo } = STATE_ACTS[act];
     doneAlert.textContent = "";
     const res = await post(route, { id });
+    answered();
     const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!change || !change.before || !change.after) {
       doneAlert.textContent = await failure(res);
@@ -963,9 +971,10 @@ if (goneRoot) {
         return resetBand(line);
       }
       const id = card.dataset.id;
-      await whileBusy(card, async () => {
+      await whileBusy(card, async (answered) => {
         goneError.textContent = "";
         const res = await post("/links/still-works", { id });
+        answered();
         const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!moved || !moved.check) {
           goneError.textContent = await failure(res);
@@ -996,11 +1005,12 @@ if (copyRoot) {
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
     menu.open = false;
-    await whileBusy(card, async () => {
+    await whileBusy(card, async (answered) => {
       const id = card.dataset.id;
       const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
       copyError.textContent = "";
       const res = await post("/links/copy/remove", { id });
+      answered();
       if (!res || res.status !== 204) {
         copyError.textContent = await failure(res);
         return;
@@ -1019,7 +1029,7 @@ if (copyRoot) {
 {
 const homeError = document.getElementById("home-error");
 const worthCards = document.getElementById("worth-cards");
-const answered = async (res, field) => {
+const answerOf = async (res, field) => {
   const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
   return data && data[field] ? data : null;
 };
@@ -1034,9 +1044,10 @@ const showHandy = (card, kept) => {
 // What a button says while its action is slow; a ⋯ menu row has none and only dims the card.
 const homeWords = { snooze: "Setting aside…" };
 const homeActs = {
-  snooze: async (card, id) => {
+  snooze: async (card, id, answered) => {
     const res = await post("/home/snooze", { id });
-    const data = await answered(res, "until");
+    answered();
+    const data = await answerOf(res, "until");
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
@@ -1044,9 +1055,10 @@ const homeActs = {
       undoOr(await post("/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }), putBack),
     );
   },
-  keep: async (card, id) => {
+  keep: async (card, id, answered) => {
     const res = await post("/tools/keep", { id });
-    const moved = await answered(res, "tool");
+    answered();
+    const moved = await answerOf(res, "tool");
     if (!moved) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     await refreshShelf();
@@ -1057,9 +1069,10 @@ const homeActs = {
       }),
     );
   },
-  "not-handy": async (card, id) => {
+  "not-handy": async (card, id, answered) => {
     const res = await post("/tools/not-handy", { id });
-    const moved = await answered(res, "tool");
+    answered();
+    const moved = await answerOf(res, "tool");
     if (!moved) return failure(res);
     showHandy(card, false);
     await refreshShelf();
@@ -1081,9 +1094,9 @@ if (worthCards) {
     const act = homeActs[button.dataset.act];
     if (!act) return;
     if (menu) menu.open = false;
-    await whileBusy(card, async () => {
+    await whileBusy(card, async (answered) => {
       homeError.textContent = "";
-      const refused = await act(card, card.dataset.id);
+      const refused = await act(card, card.dataset.id, answered);
       if (refused) homeError.textContent = refused;
     }, { button: menu ? null : button, word: homeWords[button.dataset.act] });
   });

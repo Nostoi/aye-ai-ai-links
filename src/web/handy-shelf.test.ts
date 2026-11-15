@@ -858,11 +858,13 @@ describe("a Handy tile that is slow to answer (#314)", () => {
     (button.querySelector(".slide-words > span") ?? button).textContent?.trim();
 
   it.each(BUTTONS)(
-    "%s: dims the tile and says its working word after 300ms, until the shelf is refreshed",
+    "%s: dims the tile and says its working word when the answer is over 300ms late, until the shelf is refreshed",
     async (_n, items, sugg, select, word) => {
       const { gate, release } = held();
       const p = runPage(home(items(), sugg()), (s) =>
-        s.body === undefined ? { status: 200, text: home(items(), sugg()), wait: gate } : answer(s),
+        s.body === undefined
+          ? { status: 200, text: home(items(), sugg()) }
+          : { ...answer(s), wait: gate },
       );
       const button = p.$(`#handy-shelf ${select}`);
       const tile = button.closest("[data-id]") as Element;
@@ -882,11 +884,30 @@ describe("a Handy tile that is slow to answer (#314)", () => {
     },
   );
 
+  it.each(BUTTONS)(
+    "%s: a fast answer shows no look while the refresh is slow",
+    async (_n, items, sugg, select) => {
+      const { gate, release } = held();
+      const p = runPage(home(items(), sugg()), (s) =>
+        s.body === undefined ? { status: 200, text: home(items(), sugg()), wait: gate } : answer(s),
+      );
+      p.dispatch(p.$(`#handy-shelf ${select}`), "click");
+      await p.settle();
+      expect(p.sent.some((s) => s.url === "/")).toBe(true);
+      expect(p.timers.pending(300)).toBe(0);
+      p.timers.fire();
+      expect(p.document.querySelector("[data-busy]")).toBeNull();
+      expect(p.document.querySelector("[data-working]")).toBeNull();
+      release();
+      await p.settle();
+    },
+  );
+
   it("a menu row on a tile only dims it", async () => {
     const { gate, release } = held();
     const item = kept();
     const p = runPage(home([item], []), (s) =>
-      s.body === undefined ? { status: 200, text: home([item], []), wait: gate } : answer(s),
+      s.body === undefined ? { status: 200, text: home([item], []) } : { ...answer(s), wait: gate },
     );
     const row = p.$("#handy-shelf button[data-act=not-handy]");
     const rest = row.innerHTML;
@@ -922,19 +943,26 @@ describe("a Handy tile that is slow to answer (#314)", () => {
     const [a, b] = [kept({}, true), kept({}, true)];
     const gates: Array<() => void> = [];
     const hold = () => new Promise<void>((resolve) => gates.push(resolve));
+    const { gate: slowA, release: answerA } = held();
     const p = runPage(home([a, b], []), (s) =>
       s.body === undefined
         ? { status: 200, text: home([], []), wait: hold() }
-        : { status: 200, body: MOVED },
+        : {
+            status: 200,
+            body: MOVED,
+            wait: (s.body as { id: string }).id === a.link.id ? slowA : undefined,
+          },
     );
     const buttonA = p.$(`[data-id="${a.link.id}"] button[data-act=still-using]`);
     const tileA = p.$(`[data-id="${a.link.id}"]`);
     p.dispatch(buttonA, "click");
     await p.settle();
-    p.dispatch(p.$(`[data-id="${b.link.id}"] button[data-act=still-using]`), "click");
-    await p.settle();
     p.timers.fire();
     expect(tileA.hasAttribute("data-busy")).toBe(true);
+    answerA();
+    await p.settle();
+    p.dispatch(p.$(`[data-id="${b.link.id}"] button[data-act=still-using]`), "click");
+    await p.settle();
     gates[0]?.();
     await p.settle();
     expect(tileA.hasAttribute("data-busy")).toBe(false);

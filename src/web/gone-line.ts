@@ -77,9 +77,10 @@ if (goneRoot) {
         return resetBand(line);
       }
       const id = card.dataset.id;
-      await whileBusy(card, async () => {
+      await whileBusy(card, async (answered) => {
         goneError.textContent = "";
         const res = await post("/links/still-works", { id });
+        answered();
         const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!moved || !moved.check) {
           goneError.textContent = await failure(res);

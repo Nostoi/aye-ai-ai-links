@@ -130,11 +130,12 @@ const showStep = (step) => {
 };
 const showNext = () => showStep(steps.find((s) => !decided.has(s)) || null);
 const choose = (step, act) =>
-  whileBusy(tidyRoot, async () => {
+  whileBusy(tidyRoot, async (answered) => {
     const id = step.dataset.id;
     const { route, undo } = tidyActs[act];
     tidyAlert.textContent = "";
     const res = await post(route, { id });
+    answered();
     const change = undo && res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (undo ? !change || !change.before || !change.after : !res || res.status !== 204) {
       tidyAlert.textContent = await failure(res);

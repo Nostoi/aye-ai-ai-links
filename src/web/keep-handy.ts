@@ -63,11 +63,12 @@ if (keepRoot) {
     const card = button.closest("[data-id]");
     const menu = button.closest("details");
     if (menu) menu.open = false;
-    await whileBusy(card, async () => {
+    await whileBusy(card, async (answered) => {
       const id = card.dataset.id;
       const keep = button.dataset.act === "keep";
       keepError.textContent = "";
       const res = await post(keep ? "/tools/keep" : "/tools/not-handy", { id });
+      answered();
       const moved = res && res.status === 200 ? await res.json().catch(() => null) : null;
       if (!moved || !moved.tool) {
         (menu ? menu.querySelector("summary") : button).focus();

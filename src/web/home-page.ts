@@ -3,7 +3,7 @@ import type { PictureInfo, ShownPicture } from "../core/image-store.js";
 import { linkSpace } from "../core/link-space.js";
 import type { CopyInfo } from "../core/saved-copy.js";
 import type { LinkView } from "../core/tools.js";
-import type { Link, Tag } from "../core/types.js";
+import type { Link, Source, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 import type { Ask } from "./ask-panel.js";
 import { cardLine } from "./card-line.js";
@@ -41,8 +41,16 @@ export type WorthCards = {
   views?: Map<string, LinkView>;
 };
 
-const FITS = "fits what you're working on";
-const MAY_FIT = "may fit what you're working on (a guess)";
+/**
+ * "mentions X, which you're working on" for the first two matched words, or the guess form for an
+ * entry an agent inferred. Plain text: `cardLine` escapes the reason.
+ */
+function mentions(words: string[], source: Source): string {
+  const named = words.slice(0, 2).join(" and ");
+  return source === "inferred"
+    ? `mentions ${named}, which may be what you're working on (a guess)`
+    : `mentions ${named}, which you're working on`;
+}
 
 /**
  * Why a card is shown, as the end of its grey line (`cardLine`'s `reason`). A link that came back
@@ -54,12 +62,12 @@ function reason({ link, reasons }: DigestLink, now: Date): string {
     (r): r is Extract<DigestReason, { kind: "came_back" }> => r.kind === "came_back",
   );
   if (back) {
-    return `put away in ${monthName(back.putAwayAt, now)}, ${back.focus.source === "inferred" ? MAY_FIT : FITS}`;
+    return `put away in ${monthName(back.putAwayAt, now)}, ${mentions(back.words, back.focus.source)}`;
   }
   const focus = reasons.find(
     (r): r is Extract<DigestReason, { kind: "focus_words" }> => r.kind === "focus_words",
   );
-  if (focus) return focus.focus.source === "inferred" ? MAY_FIT : FITS;
+  if (focus) return mentions(focus.words, focus.focus.source);
   if (reasons.some((r) => r.kind === "not_opened_recently")) return "saved over a month ago";
   return `saved ${savedOn(link.savedAt, now)}`;
 }

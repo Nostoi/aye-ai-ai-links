@@ -1,5 +1,7 @@
 import type { Database } from "better-sqlite3";
 import type {
+  FocusHit,
+  FocusMatch,
   LinkCount,
   LinkListing,
   LinkOrder,
@@ -53,19 +55,29 @@ const tokens = (fragment: string): string[] =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
 
+const quoted = (fragment: string): string => `"${fragment.replaceAll('"', '""')}"`;
+
 /**
- * Words with no letter or digit are dropped, then words made only of stop words; if that leaves
- * nothing, the stop words stay. The rest become OR-ed prefix phrases.
+ * A query's whitespace fragments that count as words: those with no letter or digit are dropped,
+ * then those made only of stop words; if that leaves nothing, the stop words stay.
  */
-function buildMatch(query: string): string {
+function fragments(query: string): string[] {
   const words = withoutControls(query)
     .split(/\s+/)
     .filter((w) => /[\p{L}\p{N}]/u.test(w));
   const content = words.filter((w) => !tokens(w).every((t) => STOP_WORDS.has(t)));
-  return (content.length > 0 ? content : words)
-    .map((w) => `"${w.replaceAll('"', '""')}"*`)
-    .join(" OR ");
+  return content.length > 0 ? content : words;
 }
+
+/** The fragments as OR-ed prefix phrases. */
+const buildMatch = (query: string): string =>
+  fragments(query)
+    .map((w) => `${quoted(w)}*`)
+    .join(" OR ");
+
+/** A fragment as the focus text spells it, without leading or trailing punctuation. */
+const spelled = (fragment: string): string =>
+  fragment.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 
 export type QueryKind = "blank" | "no_words" | "words";
 
@@ -96,8 +108,50 @@ function listing(owner: OwnerId, filters: SearchFilters) {
 }
 
 /** Keyword search over the `link_search` and `snapshot_search` tables that the store's triggers keep current. */
-export class FtsSearch implements LinkSearch, LinkCount, LinkListing {
+export class FtsSearch implements LinkSearch, LinkCount, LinkListing, FocusMatch {
   constructor(private readonly db: Database) {}
+
+  /**
+   * `FocusMatch`: one phrase MATCH per fragment, without the prefix star, over `link_search` only.
+   * Rarity counts a fragment's links under the owner's scope with no filters.
+   */
+  async match(owner: OwnerId, text: string, filters: SearchFilters): Promise<FocusHit[]> {
+    const seen = new Set<string>();
+    const words = fragments(text)
+      .map((fragment) => ({ fragment, name: spelled(fragment) }))
+      .filter(({ name }) => {
+        const key = name.toLowerCase();
+        return !seen.has(key) && seen.add(key);
+      });
+    if (words.length === 0) return [];
+    const live = scope("link_search.owner_id", owner, {});
+    const rarestFirst = words
+      .map(({ fragment, name }, order) => ({
+        name,
+        order,
+        ids: new Set(
+          this.ids(
+            `SELECT l.id FROM link_search JOIN links l ON l.id = link_search.rowid
+             WHERE link_search MATCH ? AND ${live.where}`,
+            quoted(fragment),
+            ...live.params,
+          ),
+        ),
+      }))
+      .sort((a, b) => a.ids.size - b.ids.size || a.order - b.order);
+    const own = scope("link_search.owner_id", owner, filters);
+    const ids = this.ids(
+      `SELECT l.id FROM link_search JOIN links l ON l.id = link_search.rowid
+       WHERE link_search MATCH ? AND ${own.where}
+       ORDER BY bm25(link_search, 0, 3, 1, 2, 3), ${NEWEST}`,
+      words.map((w) => quoted(w.fragment)).join(" OR "),
+      ...own.params,
+    );
+    return ids.map((id) => ({
+      id,
+      words: rarestFirst.filter((m) => m.ids.has(id)).map((m) => m.name),
+    }));
+  }
 
   async search(
     owner: OwnerId,

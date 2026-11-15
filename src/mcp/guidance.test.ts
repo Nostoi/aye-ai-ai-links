@@ -110,6 +110,10 @@ describe("get_digest guidance", () => {
     expect(cameBack).toContain("putAwayAt");
     expect(cameBack).toContain('source is "inferred" as a guess');
     expect(cameBack).toContain('state "active"');
+    expect(cameBack).toContain("`words`");
+    const focusLine = GET_DIGEST.split("\n").find((l) => l.startsWith("- focus_words:")) ?? "";
+    expect(focusLine).toContain("`words`");
+    expect(focusLine).toContain("own title, summary, why or tags");
     expect(GET_DIGEST).toContain("not proof it is relevant");
     expect(GET_DIGEST).toContain('source is "inferred" as a guess');
     expect(GET_DIGEST).toContain('update_link as "asked"');

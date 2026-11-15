@@ -14,10 +14,10 @@ export const TIDY_KEEP_WAIT_MS = 180 * DAY_MS;
 
 export type TidyDeps = Pick<
   DigestDeps,
-  "store" | "tools" | "checks" | "profile" | "keywordSearch" | "now"
+  "store" | "tools" | "checks" | "profile" | "focusMatch" | "now"
 >;
 
-/** `fit`: the newest current focus entry whose keyword search finds the link, if any. */
+/** `fit`: the newest current focus entry whose words match the link, if any. */
 export type TidyLink = { link: Link; fit: FocusEntry | null };
 
 /**
@@ -51,7 +51,7 @@ export async function currentFocus(deps: TidyDeps, owner: OwnerId): Promise<Focu
 
 /**
  * Up to `limit` old links, oldest saved first, then lowest id. Gone links are left out: Home's
- * gone row asks about them. One keyword search per current focus entry, newest first.
+ * gone row asks about them. One focus match per current focus entry, newest first.
  */
 export async function tidyQueue(
   deps: TidyDeps,
@@ -63,9 +63,8 @@ export async function tidyQueue(
   const entries = await currentFocus(deps, owner);
   const fits = new Map<string, FocusEntry>();
   if (picked.length > 0) {
-    const all = await deps.store.listLinks(owner);
     for (const entry of entries) {
-      for (const id of await deps.keywordSearch.search(owner, entry.text, {}, all.length)) {
+      for (const { id } of await deps.focusMatch.match(owner, entry.text, {})) {
         if (!fits.has(id)) fits.set(id, entry);
       }
     }

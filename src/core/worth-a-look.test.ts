@@ -10,7 +10,7 @@ import {
 import type { CoreError } from "./errors.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
-import type { LinkSearch } from "./search.js";
+import type { FocusMatch } from "./search.js";
 import type { SearchLog } from "./search-log.js";
 import { answerSuggestion, keepHandy, listSuggestions, type ToolItem } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
@@ -35,7 +35,9 @@ const NOW = new Date("2026-10-14T09:00:00Z");
 const at = (delta: number) => new Date(NOW.getTime() + delta);
 
 let hits: Map<string, string[]>;
-const keyword: LinkSearch = { search: async (_owner, query) => hits.get(query) ?? [] };
+const keyword: FocusMatch = {
+  match: async (_owner, text) => (hits.get(text) ?? []).map((id) => ({ id, words: [text] })),
+};
 
 /** Records every call, so a test can show nothing was logged. */
 class SpySearchLog implements SearchLog {
@@ -57,7 +59,7 @@ const deps = () => ({
   tools: store,
   checks: store,
   profile,
-  keywordSearch: keyword,
+  focusMatch: keyword,
   searchLog,
   now: () => clock,
 });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
-import type { LinkSearch } from "./search.js";
+import type { FocusMatch } from "./search.js";
 import {
   keepInTidy,
   TIDY_KEEP_WAIT_MS,
@@ -23,10 +23,10 @@ let store: FakeStore;
 let profile: FakeProfileStore;
 let hits: Map<string, string[]>;
 let searches: string[];
-const keywordSearch: LinkSearch = {
-  search: async (_owner, query) => {
-    searches.push(query);
-    return hits.get(query) ?? [];
+const focusMatch: FocusMatch = {
+  match: async (_owner, text) => {
+    searches.push(text);
+    return (hits.get(text) ?? []).map((id) => ({ id, words: [text] }));
   },
 };
 const deps = (): TidyDeps => ({
@@ -34,7 +34,7 @@ const deps = (): TidyDeps => ({
   tools: store,
   checks: store,
   profile,
-  keywordSearch,
+  focusMatch,
   now: () => NOW,
 });
 

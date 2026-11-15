@@ -43,9 +43,10 @@ const link = (over: Partial<Link> = {}): Link => {
   };
 };
 
-const focus = (text: string, source: Source): DigestReason => ({
+const focus = (text: string, source: Source, words = ["Chorequest"]): DigestReason => ({
   kind: "focus_words",
   focus: { id: "f", text, source, writtenBy: "agent", createdAt: NOW } satisfies FocusEntry,
+  words,
 });
 const card = (reasons: DigestReason[], over: Partial<Link> = {}): DigestLink => ({
   link: link(over),
@@ -281,15 +282,35 @@ describe("Worth a look today", () => {
     it("quotes a focus entry the owner gave as what they said", () => {
       for (const source of ["stated", "asked"] as const) {
         expect(reasonOf(render([card([focus("home batteries", source)])]))).toBe(
-          "fits what you're working on",
+          "mentions Chorequest, which you're working on",
         );
       }
     });
 
+    it("never says the old 'fits what you're working on'", () => {
+      for (const source of ["stated", "asked", "inferred"] as const) {
+        expect(reasonOf(render([card([focus("home batteries", source)])]))).not.toMatch(/fit/);
+      }
+    });
+
+    it("names the first two matched words, and no more", () => {
+      const two = reasonOf(render([card([focus("x", "stated", ["Chorequest", "image"])])]));
+      expect(two).toBe("mentions Chorequest and image, which you're working on");
+      const three = reasonOf(render([card([focus("x", "stated", ["a1", "b2", "c3"])])]));
+      expect(three).toBe("mentions a1 and b2, which you're working on");
+    });
+
+    it("escapes a matched word", () => {
+      const html = render([card([focus("x", "stated", ["<b>&"])])]);
+      expect(html).toContain("mentions &lt;b&gt;&amp;, which");
+      expect(html).not.toContain("<b>&,");
+    });
+
     it("never says 'You said' for an inferred focus entry, and calls it a guess", () => {
       const html = render([card([focus("home batteries", "inferred")])]);
-      expect(reasonOf(html)).toBe("may fit what you're working on (a guess)");
-      expect(reasonOf(html)).not.toMatch(/^fits/);
+      expect(reasonOf(html)).toBe(
+        "mentions Chorequest, which may be what you're working on (a guess)",
+      );
     });
 
     describe("a link that came back", () => {
@@ -306,6 +327,7 @@ describe("Worth a look today", () => {
               kind: "came_back",
               focus: { id: "f", text, source, writtenBy: "agent", createdAt: NOW },
               putAwayAt,
+              words: ["Chorequest"],
             },
           ],
           { state: "archived", putAwayAt, ...over },
@@ -314,20 +336,23 @@ describe("Worth a look today", () => {
       it("names the month it was put away and the focus it fits, for a stated or asked focus", () => {
         for (const source of ["stated", "asked"] as const) {
           expect(reasonOf(render([cameBack("home batteries", source)]))).toBe(
-            "put away in August, fits what you're working on",
+            "put away in August, mentions Chorequest, which you're working on",
           );
         }
       });
 
       it("calls an inferred focus a guess and never says 'It fits' flatly", () => {
         const html = render([cameBack("home batteries", "inferred")]);
-        expect(reasonOf(html)).toBe("put away in August, may fit what you're working on (a guess)");
-        expect(reasonOf(html)).not.toMatch(/, fits/);
+        expect(reasonOf(html)).toBe(
+          "put away in August, mentions Chorequest, which may be what you're working on (a guess)",
+        );
       });
 
       it("adds the year when it was put away in another year", () => {
         const html = render([cameBack("x", "stated", new Date("2025-12-03T10:00:00Z"))]);
-        expect(reasonOf(html)).toBe("put away in December 2025, fits what you're working on");
+        expect(reasonOf(html)).toBe(
+          "put away in December 2025, mentions Chorequest, which you're working on",
+        );
       });
 
       it("keeps Open it, Done with it and Not now, and takes its space's colour", () => {
@@ -365,7 +390,7 @@ describe("Worth a look today", () => {
       const html = render([
         card([{ kind: "no_why" }, { kind: "not_opened_recently" }, focus("x", "stated")]),
       ]);
-      expect(reasonOf(html)).toBe("fits what you're working on");
+      expect(reasonOf(html)).toBe("mentions Chorequest, which you're working on");
     });
 
     it("has no separate reason line: the reason ends the grey line, with no dot of its own", () => {
@@ -374,7 +399,7 @@ describe("Worth a look today", () => {
       expect(d.querySelector(".worth-feature .dot")).toBeNull();
       expect(lineParts(render([card([focus("x", "stated")])]))).toEqual([
         "example.com",
-        "fits what you're working on",
+        "mentions Chorequest, which you're working on",
       ]);
       expect(themeCss).not.toMatch(/\.reason[{,.]/);
     });
@@ -669,6 +694,7 @@ describe("the home page's script", () => {
           kind: "came_back",
           focus: { id: "f", text: "x", source: "stated", writtenBy: "agent", createdAt: NOW },
           putAwayAt: away,
+          words: ["x"],
         },
       ],
     };

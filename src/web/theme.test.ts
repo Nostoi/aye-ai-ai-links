@@ -1804,6 +1804,87 @@ describe("a held-down control (#314)", () => {
   });
 });
 
+describe("a selected button, held down (#314)", () => {
+  const mix = (share: number) => `color-mix(in srgb,var(--ink) ${share}%,var(--surface))`;
+  const css = `${themeCss}\n${askCss}`;
+  const SELECTED: [string, string, string, string, string | undefined][] = [
+    [
+      "a selected Tags pill",
+      '<div class="tag"><button class="pill" aria-pressed="true">Done</button></div>',
+      "button",
+      mix(80),
+      mix(80),
+    ],
+    [
+      "a selected Tags pick",
+      '<div class="tag"><button class="pick" aria-pressed="true">Name</button></div>',
+      "button",
+      mix(80),
+      mix(80),
+    ],
+    [
+      "the selected view switch",
+      '<div class="view-switch"><button aria-pressed="true">List</button></div>',
+      "button",
+      mix(8),
+      undefined,
+    ],
+    [
+      "a selected Tags swatch",
+      '<div class="tag"><button class="swatch space-clay" aria-pressed="true"></button></div>',
+      "button",
+      mix(8),
+      undefined,
+    ],
+    [
+      "the open Ask AI pill",
+      '<button class="bar-pill" id="ask-open" aria-pressed="true">Ask</button>',
+      "button",
+      mix(12),
+      undefined,
+    ],
+  ];
+
+  it.each(SELECTED)(
+    "fills %s differently from its resting selected look",
+    (_, html, pick, fill) => {
+      const control = el(html, pick);
+      const rest = computedHeld(control, "background", [], css);
+      expect(computedHeld(control, "background", [":active"], css)).not.toBe(rest);
+      for (const held of [[":active"], [":hover", ":active"], [":focus-visible", ":active"]]) {
+        expect(computedHeld(control, "background", held, css), held.join("")).toBe(fill);
+      }
+    },
+  );
+
+  it.each(SELECTED)("changes %s at once", (_, html, pick) => {
+    const control = el(html, pick);
+    expect(computedHeld(control, "transition", [":hover", ":active"], css)).toBe("none");
+  });
+
+  it.each(SELECTED.filter((s) => s[4] !== undefined))(
+    "darkens %s's border with its fill",
+    (_, html, pick, _fill, border) => {
+      expect(computedHeld(el(html, pick), "border-color", [":active"], css)).toBe(border);
+    },
+  );
+
+  it("gives the selected view switch its own pressed rule, not a win by source order", () => {
+    const rule = parseCss(css).find((r) =>
+      r.selectors.includes(".view-switch button[aria-pressed=true]:active:not(:disabled)"),
+    );
+    expect(rule?.decls.get("background")).toBe(mix(8));
+  });
+
+  it("is not drawn on a disabled selected button", () => {
+    const control = el(SELECTED[0]?.[1] ?? "", "button");
+    control.setAttribute("disabled", "");
+    expect(computedHeld(control, "background", [":active"], css)).toBe(
+      computedHeld(control, "background", [], css),
+    );
+  });
+});
+
 describe("a busy card and a working button (#314)", () => {
   const css = `${themeCss}\n${askCss}`;
   const CARD = `<article class="worth-card" data-busy><div class="feature-quiet"><button class="slide" data-working><span class="slide-words"><span>Marking done…</span></span></button></div><details class="card-menu"><summary>m</summary><div class="card-menu-list"><button>Row</button></div></details></article>`;

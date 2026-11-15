@@ -676,6 +676,8 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 .card-menu-list button:active:not(:disabled),.account-list a:active,.account-list button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 13%,transparent);transition:none}
 .tidy-choices button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
 .tidy-choices button.safe:active:not(:disabled){background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
+.tag .pill[aria-pressed=true]:active:not(:disabled),.tag .pick[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--ink) 80%,var(--surface));border-color:color-mix(in srgb,var(--ink) 80%,var(--surface));transition:none}
+.view-switch button[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
 [data-busy]{opacity:.6}
 [data-busy],[data-busy] *{cursor:progress!important}
 .copy-end{margin-top:28px}

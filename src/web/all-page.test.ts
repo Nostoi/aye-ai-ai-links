@@ -238,6 +238,14 @@ describe("the All links page", () => {
     expect(phone).toMatch(/\.all-tools \.search-instead\{grid-column:1\/-1;/);
   });
 
+  it("lets the phone's order select shrink so the tools row fits a 320px window (#310)", () => {
+    const phone = themeCss.slice(themeCss.indexOf("@media (max-width:600px)"));
+    // `1fr` is minmax(auto,1fr): the select's widest option (144px) plus the view switch (158px)
+    // and the gap came to 314px, past the 288px a 320px window leaves under the column padding.
+    expect(phone).toMatch(/\.all-tools\{display:grid;grid-template-columns:minmax\(0,1fr\) auto;/);
+    expect(phone).toMatch(/\.order-select select\{[^}]*max-width:100%/);
+  });
+
   it("offers Search instead, and puts All links after Home in the menu", () => {
     const html = all();
     expect(dom(html).querySelector("a.search-instead")?.getAttribute("href")).toBe("/search");

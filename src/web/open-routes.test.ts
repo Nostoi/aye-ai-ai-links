@@ -87,14 +87,16 @@ describe("POST /o/:code (#133)", () => {
     expect((await deps.store.get(A, link.id))?.lastOpenedAt).toEqual(expect.any(Date));
   });
 
-  it("refuses a request from another site, or with no Origin, and records nothing", async () => {
+  it("refuses a request from another site, an opaque origin or no Origin, and records nothing", async () => {
     const { world, code, visitor } = await opening();
     const before = allRows(world);
 
     const foreign = await visitor.send(`/o/${code}`, post(code, "https://evil.example"));
+    // A sandboxed frame or a data: page sends "null"; the page's own script sends its origin.
+    const opaque = await visitor.send(`/o/${code}`, post(code, "null"));
     const bare = await visitor.send(`/o/${code}`, post(code, false));
 
-    expect([foreign.status, bare.status]).toEqual([403, 403]);
+    expect([foreign.status, opaque.status, bare.status]).toEqual([403, 403, 403]);
     expect(allRows(world)).toEqual(before);
   });
 

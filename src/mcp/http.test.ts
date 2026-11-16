@@ -346,6 +346,8 @@ describe("MCP door over HTTP", () => {
         },
         handy: null,
         gone: null,
+        // The MCP door alone has no base URL, so no open link (#133).
+        openUrl: null,
       },
       created: true,
       // No runner here, so the page is not fetched and there is no text.
@@ -358,7 +360,12 @@ describe("MCP door over HTTP", () => {
   });
 
   it("every tool equals the direct core call with the same clock", async () => {
-    const plain = ({ tidyKeptAt: _, ...link }: Link) => ({ ...link, handy: null, gone: null });
+    const plain = ({ tidyKeptAt: _, ...link }: Link) => ({
+      ...link,
+      handy: null,
+      gone: null,
+      openUrl: null,
+    });
     const input = {
       url: "https://example.com/p",
       title: "Parity",

@@ -20,11 +20,13 @@ import { SAVE_PATH } from "./auth/login-return.js";
 import type { MetadataStash } from "./auth/metadata-stash.js";
 import type { OAuthClients } from "./auth/oauth-clients.js";
 import { OAUTH_ERROR_PATH } from "./auth/oauth-error.js";
+import type { OpenCodeLookup } from "./auth/open-code.js";
 import type { ReadGate } from "./core/copy-reading.js";
 import type { ExportBuilds } from "./core/export-builds.js";
 import type { FaviconReader } from "./core/favicon-store.js";
 import type { LinkImageReader } from "./core/image-store.js";
 import type { LinkEditStore } from "./core/link-edit-store.js";
+import type { OpenCodeStore } from "./core/open-codes.js";
 import type { SavedCopyReader, SavedCopyRemover, SavedCopyUsage } from "./core/saved-copy.js";
 import type { SearchReceipts } from "./core/search-receipts.js";
 import type { StatsStore } from "./core/stats-store.js";
@@ -47,6 +49,7 @@ import {
   IMAGE_ROUTE,
   webApp,
 } from "./web/http.js";
+import { OPEN_ROUTE, openApp } from "./web/open-routes.js";
 
 /**
  * better-auth, the lock every call into it goes through, the OAuth state around it, and the
@@ -128,6 +131,8 @@ const CHECKED_PAGES = [
   EXPORT_JSON_ROUTE,
   EXPORT_ZIP_ROUTE,
   EXPORT_PREPARE_ROUTE,
+  // An open link (#133) has no session, so its POST must come from its own page.
+  OPEN_ROUTE,
 ];
 
 /** The 401 challenge for `/mcp`: better-auth's, naming the RFC 9728 resource metadata. */
@@ -141,8 +146,11 @@ export function resourceChallenge(baseUrl: string): string {
   return value;
 }
 
-/** What the MCP door needs, less `readingOn`, which `createApp` derives from the AI connection. */
-type AppMcpDeps = Omit<McpDeps, "readingOn">;
+/**
+ * What the MCP door needs, less what `createApp` derives: `readingOn` from the AI connection, and
+ * `openLinks` from the base URL and the web door's `openCodes`.
+ */
+type AppMcpDeps = Omit<McpDeps, "readingOn" | "openLinks">;
 
 export type AppOptions = {
   identify: Identify;
@@ -175,6 +183,8 @@ export type AppOptions = {
         receipts?: SearchReceipts | undefined;
         /** The in-app AI; `POST /ai/chat` answers NO_AI without one. */
         ai?: ChatModel | undefined;
+        /** The codes of the links agents hand the owner (#133): made for `/mcp`, read by `/o/:code`. */
+        openCodes: OpenCodeStore & OpenCodeLookup;
       };
       auth: AuthDeps;
     }
@@ -200,8 +210,10 @@ export function createApp(options: AppOptions) {
   const stopTurns = () => turns.abort();
   // The stats reading is shown only while the server has an AI connection (#161).
   const readingOn = web?.deps.ai !== undefined;
+  // Agents get open links (#133) only here, where `/o/:code` is served; the in-app AI never does.
+  const openLinks = web && baseUrl ? { baseUrl, codes: web.deps.openCodes } : undefined;
   const mcp = mcpApp({
-    deps: { ...deps, readingOn },
+    deps: { ...deps, readingOn, openLinks },
     tracker,
     identify,
     allowedHosts,
@@ -239,6 +251,7 @@ export function createApp(options: AppOptions) {
       }),
     );
     app.route("/.well-known", rootMetadataApp({ handle, withAuthLock, origin }));
+    app.route("/", openApp({ deps: web.deps }));
     app.route(
       "/",
       webApp({
@@ -259,10 +272,11 @@ export function createApp(options: AppOptions) {
           turnOff: (owner, id) => turnOffAgentKey(keys, owner, id),
           turnOn: (owner, id) => turnOnAgentKey(keys, owner, id),
         },
-        // The in-app AI is an agent, so its searches are logged as through `/mcp`.
+        // The in-app AI is an agent, so its searches are logged as through `/mcp`. It shows
+        // cards, not links to click, so it gets no open links and makes no codes (#133).
         ai: web.deps.ai && {
           model: web.deps.ai,
-          deps: { ...web.deps, readingOn },
+          deps: { ...web.deps, readingOn, openLinks: undefined },
           track: tracker.track,
           signal: turns.signal,
         },

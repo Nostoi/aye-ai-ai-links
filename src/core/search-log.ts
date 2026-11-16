@@ -27,6 +27,9 @@ export type ReceiptRow = {
   resultIds: string[];
 };
 
+/** A logged search by its row id, as an agent's open link reads it back (#133). */
+export type LoggedRow = ReceiptRow & { id: string };
+
 export interface SearchLog {
   /** With a `receipt`, a second write of the same receipt writes nothing. */
   record(
@@ -52,11 +55,20 @@ export interface SearchLog {
     since: Date,
     at: Date,
   ): Promise<void>;
+  /** The owner's searches by `by` made at or after `since`, newest first. */
+  agentRows(owner: OwnerId, by: string, since: Date): Promise<LoggedRow[]>;
+  /** Pairs the owner's row `id`, only while it is still unpaired. */
+  pairRow(
+    owner: OwnerId,
+    id: string,
+    link: { id: string; urlKey: string },
+    at: Date,
+  ): Promise<void>;
 }
 
 /**
  * A search is paired with an open of one of its results only within this long: the same agent's
- * next get_link, or a click on its web results page.
+ * next get_link, a click on its web results page, or a click on the agent's open link (#133).
  */
 export const OPEN_WINDOW_MS = 30 * 60 * 1000;
 
@@ -124,14 +136,32 @@ export const logOpenFromReceipt = (
     if (!log) return;
     if (pending) await log.record(owner, by, pending.entry, pending.at, receipt);
     const row = await log.receiptRow(owner, receipt);
-    if (
-      !row ||
-      row.by !== by ||
-      row.openedLinkId !== null ||
-      row.createdAt.getTime() < at.getTime() - OPEN_WINDOW_MS ||
-      !row.resultIds.includes(link.id)
-    ) {
-      return;
-    }
+    if (!row || !showedIt(row, by, link, at) || row.openedLinkId !== null) return;
     await log.pairReceipt(owner, receipt, { id: link.id, urlKey: link.urlKey }, at);
+  });
+
+/** The search was `by`'s, inside the window before `at`, and the link was one of its results. */
+const showedIt = (row: ReceiptRow, by: string, link: { id: string }, at: Date) =>
+  row.by === by &&
+  row.createdAt.getTime() >= at.getTime() - OPEN_WINDOW_MS &&
+  row.resultIds.includes(link.id);
+
+/**
+ * Pairs the owner's click on an agent's open link (#133) with that agent's newest search, inside
+ * the window, whose results held the link, while that search is still unpaired. A newer search
+ * that didn't show the link is passed over, never paired.
+ */
+export const logOpenFromResults = (
+  log: SearchLog | undefined,
+  owner: OwnerId,
+  by: string,
+  link: { id: string; urlKey: string },
+  at: Date,
+): Promise<void> =>
+  bestEffort("pair an opened link with the search that showed it", async () => {
+    if (!log) return;
+    const rows = await log.agentRows(owner, by, new Date(at.getTime() - OPEN_WINDOW_MS));
+    const row = rows.find((r) => showedIt(r, by, link, at));
+    if (!row || row.openedLinkId !== null) return;
+    await log.pairRow(owner, row.id, { id: link.id, urlKey: link.urlKey }, at);
   });

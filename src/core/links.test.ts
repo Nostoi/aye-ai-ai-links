@@ -443,6 +443,11 @@ describe("recordOpening", () => {
         return null;
       },
       pairReceipt: async () => void logged.push("pairReceipt"),
+      agentRows: async () => {
+        logged.push("agentRows");
+        return [];
+      },
+      pairRow: async () => void logged.push("pairRow"),
     };
     return { store, logged, deps: { store, searchLog, now: () => T0 } };
   };

@@ -19,6 +19,7 @@ import {
   updateLinkWithReceipt,
 } from "../core/links.js";
 import { listLinks } from "../core/list-links.js";
+import type { OpenCodeStore } from "../core/open-codes.js";
 import {
   addProfile,
   editProfile,
@@ -107,6 +108,12 @@ export type McpDeps = {
   saveWaitMs?: number | undefined;
   /** What `serverInfo` reports; `dev` when left out. */
   version?: string | undefined;
+  /**
+   * Open links (#133): with them, each web link a tool returns carries `openUrl`, `baseUrl` (the
+   * server's public origin) plus its code for the calling agent. `createApp` sets them for `/mcp`
+   * alone; without them (the in-app AI) `openUrl` is null and no code is made.
+   */
+  openLinks?: { baseUrl: string; codes: OpenCodeStore } | undefined;
 };
 
 /** Wraps each tool call's promise; `mcpApp` uses it to count calls still running. */
@@ -358,7 +365,7 @@ export function buildMcpServer(
       }
       return {
         ...saved,
-        link: await linkWithHandy(at, owner, saved.link),
+        link: await linkWithHandy(at, owner, saved.link, savedBy),
         filingContext: await filingContext(deps, owner),
         profile: await profileContext(deps, owner),
       };
@@ -427,7 +434,7 @@ export function buildMcpServer(
           editId,
         });
       }
-      return { link: await linkWithHandy(at, owner, link) };
+      return { link: await linkWithHandy(at, owner, link, savedBy) };
     },
   );
 
@@ -584,7 +591,7 @@ export function buildMcpServer(
         { ...rest, savedFrom: toDate(savedFrom), savedTo: toDate(savedTo) },
         savedBy,
       );
-      return { links: await linksWithHandy(deps, owner, links) };
+      return { links: await linksWithHandy(deps, owner, links, savedBy) };
     },
   );
 
@@ -607,7 +614,11 @@ export function buildMcpServer(
         savedFrom: toDate(savedFrom),
         savedTo: toDate(savedTo),
       });
-      return { links: await linksWithHandy(deps, owner, links), total, nextCursor: older };
+      return {
+        links: await linksWithHandy(deps, owner, links, savedBy),
+        total,
+        nextCursor: older,
+      };
     },
   );
 
@@ -626,7 +637,7 @@ export function buildMcpServer(
     },
     async ({ id }) => {
       const got = await getLinkWithText(deps, owner, id, savedBy);
-      return { ...got, link: await linkWithHandy(deps, owner, got.link) };
+      return { ...got, link: await linkWithHandy(deps, owner, got.link, savedBy) };
     },
   );
 
@@ -754,6 +765,7 @@ export function buildMcpServer(
         at,
         owner,
         links.map((d) => d.link),
+        savedBy,
       );
       return { links: links.map((d, i) => ({ ...d, link: handied[i] as HandyLink })) };
     },

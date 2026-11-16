@@ -33,6 +33,10 @@ class RecordingLog implements SearchLog {
     return null;
   }
   async pairReceipt() {}
+  async agentRows() {
+    return [];
+  }
+  async pairRow() {}
 }
 
 class ThrowingLog implements SearchLog {
@@ -46,6 +50,12 @@ class ThrowingLog implements SearchLog {
     throw new Error("disk full");
   }
   async pairReceipt(): Promise<void> {
+    throw new Error("disk full");
+  }
+  async agentRows(): Promise<never[]> {
+    throw new Error("disk full");
+  }
+  async pairRow(): Promise<void> {
     throw new Error("disk full");
   }
 }

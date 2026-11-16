@@ -11,6 +11,8 @@ const HIDDEN_WRITES =
 const COPY_PAGE_READS = "copy page reads return nothing for a hidden link";
 const STATS_EVENTS = "stats events leave out a hidden link";
 const FAVICONS = "favicon reads and the favicon pass skip a hidden link, and Undo brings it back";
+const OPEN_CODES =
+  "open codes resolve to nothing for a hidden link, get none made, and Undo brings them back";
 
 type Coverage = { test: string | string[] } | { reason: string };
 
@@ -20,6 +22,7 @@ const HIDDEN_LINK_COVERAGE: Record<string, Coverage> = {
   link_events: { test: [HIDDEN_WRITES, STATS_EVENTS] },
   link_favicons: { test: FAVICONS },
   link_images: { test: RUNNER_AND_BYTE_READS },
+  link_open_codes: { test: OPEN_CODES },
   link_tags: {
     reason: "read only for link rows a guarded links read already returned (TAG_SELECT)",
   },

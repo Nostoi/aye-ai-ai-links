@@ -230,6 +230,10 @@ it("tells the in-app AI how to show a link", () => {
   expect(IN_APP_INSTRUCTIONS).toContain("put [[link:ID]] on its own line");
 });
 
+it("tells the in-app AI that link cards replace openUrl and url", () => {
+  expect(IN_APP_INSTRUCTIONS).toContain("replace openUrl and url, so never write a raw address");
+});
+
 describe("GET /ai/card/:id", () => {
   async function owned() {
     const world = await oauthWorld();

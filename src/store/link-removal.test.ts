@@ -204,6 +204,41 @@ describe("hidden links in the favicon reads (#272)", () => {
   });
 });
 
+describe("hidden links in the open codes (#133)", () => {
+  it("open codes resolve to nothing for a hidden link, get none made, and Undo brings them back", async () => {
+    const { db, deps, save, hide } = setup();
+    const id = await save();
+    let n = 0;
+    const fresh = () => `code-${++n}`.padEnd(22, "x");
+    const issue = async (agent: string) =>
+      (await deps.openCodes.codesFor(A, agent, [id], fresh, at(5))).get(id) ?? null;
+    const code = await issue("claude");
+    expect(code).toEqual(expect.any(String));
+    const rows = () => db.prepare("SELECT * FROM link_open_codes ORDER BY rowid").all();
+    const before = rows();
+    expect(deps.openCodes.findByCode(code as string)).toEqual({
+      owner: A,
+      linkId: id,
+      agent: "claude",
+    });
+
+    await hide(id);
+
+    expect(deps.openCodes.findByCode(code as string)).toBeNull();
+    expect(await issue("claude")).toBeNull();
+    expect(await issue("codex")).toBeNull();
+    expect(rows()).toEqual(before);
+
+    expect(await deps.store.unmarkDeleted(A, id, at(0))).toBe(true);
+    expect(deps.openCodes.findByCode(code as string)).toEqual({
+      owner: A,
+      linkId: id,
+      agent: "claude",
+    });
+    expect(await issue("claude")).toBe(code);
+  });
+});
+
 describe("hidden links in the digest, Handy and the gone pick", () => {
   it("digest, Handy and the gone pick leave out a hidden link", async () => {
     const { deps, save, hide } = setup();
@@ -380,6 +415,7 @@ const LINK_TABLES = [
   "saved_copies",
   "saved_copy_images",
   "link_favicons",
+  "link_open_codes",
 ];
 const SEARCH_TABLES = ["link_search", "snapshot_search"];
 
@@ -414,6 +450,10 @@ function seedChildren(db: Database.Database, owner: string, id: string): void {
   );
   run(
     "INSERT INTO saved_copy_images VALUES (?, ?, 1, 'https://ex.com/i.png', 'none', NULL, NULL, NULL)",
+  );
+  run(
+    "INSERT INTO link_open_codes (owner_id, link_id, agent, code, created_at) VALUES (?, ?, 'claude', ?, 5)",
+    `open-code-${owner}-${n}`,
   );
 }
 

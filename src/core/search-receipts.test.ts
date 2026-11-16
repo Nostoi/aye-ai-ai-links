@@ -101,6 +101,10 @@ class OneRowLog implements SearchLog {
   async pairReceipt(_o: string, _r: string, link: { id: string }) {
     this.paired.push(link.id);
   }
+  async agentRows() {
+    return [];
+  }
+  async pairRow() {}
 }
 
 describe("logOpenFromReceipt", () => {

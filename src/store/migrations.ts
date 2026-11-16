@@ -438,6 +438,19 @@ export const MIGRATIONS: Migration[] = [
   ALTER TABLE search_log ADD COLUMN receipt TEXT;
   CREATE UNIQUE INDEX search_log_receipt ON search_log (receipt);
   `,
+  // Open links (#133): the code in an `/o/<code>` link an agent hands the owner, one per link and
+  // agent, made on first use and kept until the link is deleted. Additive.
+  `
+  CREATE TABLE link_open_codes (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    agent TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL,
+    UNIQUE (owner_id, link_id, agent),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE
+  );
+  `,
 ];
 
 /**

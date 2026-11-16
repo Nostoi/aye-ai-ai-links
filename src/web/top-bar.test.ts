@@ -8,10 +8,14 @@ import { askCss, themeCss } from "./theme.js";
 const ASK = { ai: "Fake", place: "Home", owner: "owner-a" };
 const doc = (html: string) => parseHTML(html).document;
 
-/** Every rule's selector inside any `@media` block, at any depth, by walking the braces. */
-const mediaSelectors = (css: string) => {
+/**
+ * Every rule's selector inside any `@media` block whose condition matches `condition`, at any depth,
+ * by walking the braces.
+ */
+const mediaSelectors = (css: string, condition = /./) => {
   const found: string[] = [];
   for (const start of css.matchAll(/@media[^{]*\{/g)) {
+    if (!condition.test(start[0])) continue;
     let depth = 1;
     let prelude = "";
     for (let i = (start.index ?? 0) + start[0].length; i < css.length && depth > 0; i++) {
@@ -89,9 +93,23 @@ describe("the band", () => {
   it("sizes its tiers by its own width, above the page's cards", () => {
     expect(rule(".bar-band").join(";")).toMatch(/container:bar\/inline-size/);
     expect(rule(".bar-band").join(";")).toMatch(/position:relative;z-index:var\(--layer-chrome\)/);
-    const barParts =
-      /\.(bar-band|bar-pill|pill-word|places|menu-page|menu-save|menu-search|menu-phone-only|label-wide|label-phone|icon-wide|icon-phone|brand)\b/;
-    const inMedia = mediaSelectors(themeCss + askCss).filter((s) => barParts.test(s));
+    // The parts are the classes and ids of the rendered band, so a new part joins the guard itself.
+    const html = page("t", "<main></main>", { menu: true, here: "all", ask: ASK });
+    const names = new Set<string>();
+    for (const el of doc(html).querySelectorAll(".bar-band, .bar-band *")) {
+      for (const c of el.classList) names.add(`.${c}`);
+      if (el.id) names.add(`#${el.id}`);
+    }
+    for (const part of [".menu", ".account-menu", ".account-dot", ".account-list", "#ask-open"]) {
+      expect(names.has(part), part).toBe(true);
+    }
+    const barParts = new RegExp(
+      `(${[...names].map((n) => n.replace(/[.#]/g, "\\$&")).join("|")})(?![\\w-])`,
+    );
+    // Only width and height conditions: `@media (prefers-reduced-motion:reduce)` may style a part.
+    const inMedia = mediaSelectors(themeCss + askCss, /width|height/).filter((s) =>
+      barParts.test(s),
+    );
     expect(inMedia).toEqual([]);
   });
 
@@ -99,6 +117,12 @@ describe("the band", () => {
     const css =
       "@media (max-width:600px){.a{x:1}.b,.bar-pill{y:2}}@media (hover:none){@container (x){.c{z:3}}}";
     expect(mediaSelectors(css)).toEqual([".a", ".b,.bar-pill", ".c"]);
+  });
+
+  it("looks only inside width and height @media blocks", () => {
+    const css =
+      "@media (prefers-reduced-motion:reduce){.account-list{animation:none}}@media (max-width:600px){.menu{x:1}}";
+    expect(mediaSelectors(css, /width|height/)).toEqual([".menu"]);
   });
 
   it("drops the name beside the logo when the band is narrower than 880px, keeping the logo's own name", () => {

@@ -98,7 +98,7 @@ Typed on purpose, so changing a step can't move them (`design-tokens.test.ts` li
 **Ask AI** (*new*). Its `.ask-*` families repeat the button, card and label ideas above. When Ask AI is next touched, reuse the shared families instead of writing more `.ask-*` copies.
 
 **A new page, in order** (*new*)
-1. Render through `page()`; colours, type (`--text-N`), `--space-*`, corners, shadows, layers and motion use a token where one fits; anything else is typed to match the nearest existing element of its kind.
+1. Render through `page()`; colours, type (`--text-N`), `--space-*`, corners, shadows and motion use a token where one fits; anything else is typed to match the nearest existing element of its kind. A `z-index` always takes a `--layer-*` token (Layers, above; `theme.test.ts` fails a number).
 2. A card is `--surface`, a corner token and a shadow token with the ring. A group's gaps stay within its padding.
 3. Controls are at least 44px tall; a form's main action is its one `.primary`; hover, focus and disabled are the shared ones. A new action that posts passes `look` to `whileBusy` to get the busy look, and calls `answered()` when its answer arrives.
 4. Give it its empty state and its `role=alert`.

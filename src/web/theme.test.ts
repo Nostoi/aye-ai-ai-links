@@ -604,7 +604,12 @@ describe("the edit dialog's look", () => {
       expect(rule(".edit-link")).toContain(part);
     }
     expect(rule(".edit-link::backdrop")).toBe("background:rgb(20 20 24 / .38)");
-    expect(themeCss).not.toMatch(/::backdrop\{[^}]*var\(/);
+    // Any rule whose selector list holds a `::backdrop`, in either stylesheet, whichever place it takes.
+    const withVar = [...(themeCss + askCss).matchAll(/[^{};]*::backdrop[^{}]*\{[^}]*var\([^}]*/g)];
+    expect(
+      withVar.map((m) => m[0].trim()),
+      "a ::backdrop rule using var()",
+    ).toEqual([]);
     expect(rule(".edit-head h2")).toContain("font-size:var(--text-8);font-weight:700");
     expect(rule(".edit-close")).toContain("width:44px;height:44px");
     expect(rule(".edit-title")).toBe("height:46px;padding:0 14px;border-radius:12px");
@@ -994,6 +999,7 @@ describe("Home's Worth a look cards (#195)", () => {
         expect(at, css).toBeGreaterThan(hoverStart);
         expect(at + css.length, css).toBeLessThanOrEqual(hoverEnd);
         expect(themeCss.indexOf(css), css).toBe(at);
+        expect(themeCss.lastIndexOf(css), `${css} appears again after this one`).toBe(at);
       };
       const FADE = "opacity:0;pointer-events:none";
 
@@ -1918,5 +1924,14 @@ describe("a busy card and a working button (#314)", () => {
       ".slide-words",
     );
     expect(computedHeld(rest, "opacity", [], css)).toBe("0");
+  });
+});
+
+describe("the layers rule", () => {
+  it("never types a number as a z-index; each takes a --layer-* token", () => {
+    const typed = [...(themeCss + askCss).matchAll(/[^{};]*\{[^{}]*z-index\s*:\s*-?\d[^;}]*/g)].map(
+      (m) => m[0].trim(),
+    );
+    expect(typed, "a z-index typed as a number").toEqual([]);
   });
 });

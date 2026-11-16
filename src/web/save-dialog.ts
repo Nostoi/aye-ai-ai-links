@@ -321,9 +321,11 @@ bringBack.addEventListener("click", () =>
   whileBusy(
     found,
     async (answer) => {
+      const mine = turn;
       saveError.textContent = "";
       const res = await post("/home/bring-back", { id: found.dataset.id });
       answer();
+      if (mine !== turn) return;
       if (res && res.status === 200) {
         heading.textContent = "Brought back";
         bringBack.hidden = true;

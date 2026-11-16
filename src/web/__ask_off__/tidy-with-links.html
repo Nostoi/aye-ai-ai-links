@@ -919,6 +919,8 @@ const showUndo = (() => {
     if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
     if (ticket < newest) return;
     newest = ticket;
+    const stale = document.getElementById("page-alert");
+    if (stale) stale.textContent = "";
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);

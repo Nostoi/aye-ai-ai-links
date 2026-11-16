@@ -223,6 +223,27 @@ describe("saving", () => {
     expect(p.$("#page-alert").getAttribute("role")).toBe("alert");
   });
 
+  it("a failed Undo's alert clears when the next action offers its Undo", async () => {
+    const p = start((sent) =>
+      sent.url === "/save"
+        ? { status: 200, body: SAVED }
+        : sent.url === "/links/delete" && (sent.body as { id: string }).id === "7"
+          ? { status: 404, body: { code: "not_found", message: "Gone." } }
+          : { status: 204 },
+    );
+    p.openIt();
+    p.fill();
+    p.save();
+    await p.settle();
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.$("#page-alert").textContent, "the failed Undo's message").toBe("Gone.");
+    p.dispatch(p.$("[data-id='1'] button[data-act=delete-link]"), "click");
+    await p.settle();
+    expect(p.$("#undo-bar span").textContent, "the next action's Undo").toBe("Link deleted.");
+    expect(p.$("#page-alert").textContent).toBe("");
+  });
+
   it("says Saving… on the Save button after 300ms unanswered, and dims the form", async () => {
     const slow = gate();
     const p = start(answering({ status: 200, body: SAVED, wait: slow.wait }));
@@ -528,6 +549,34 @@ describe("an address already saved", () => {
     expect(p.$("#save-dialog #save-error").textContent).toBe(message);
     expect(p.$("#save-dialog [data-save=bring-back]").hidden).toBe(false);
   });
+
+  it.each([
+    ["a success", { status: 200, body: {} }],
+    ["a refusal", { status: 409, body: { code: "x", message: "Changed." } }],
+  ])(
+    "Bring it back answered with %s after the dialog was closed leaves the reopened dialog clean",
+    async (_name, answer) => {
+      const slow = gate();
+      const p = start(
+        answering(
+          { status: 200, body: ALREADY },
+          { "/home/bring-back": { ...answer, wait: slow.wait } },
+        ),
+      );
+      p.openIt();
+      p.fill();
+      p.save();
+      await p.settle();
+      p.dispatch(p.$("#save-dialog [data-save=bring-back]"), "click");
+      await p.settle();
+      (p.dialog as HTMLElement & { close(): void }).close();
+      slow.open();
+      await p.settle();
+      p.openIt();
+      expect(p.$("#save-dialog-title").textContent).toBe("Save a link");
+      expect(p.$("#save-dialog #save-error").textContent).toBe("");
+    },
+  );
 
   it("Bring it back sends one POST for two clicks, and says Bringing back… after 300ms", async () => {
     const slow = gate();

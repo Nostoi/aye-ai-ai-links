@@ -213,6 +213,7 @@ list.addEventListener("click", async (event) => {
   if (!row || button.disabled) return;
   const id = Number(row.dataset.keyId);
   const name = row.querySelector("strong").textContent;
+  const ticket = showUndo.ticket();
   keysError.textContent = "";
   button.disabled = true;
   const res = await post("/connections/keys/turn-off", { id });
@@ -220,7 +221,7 @@ list.addEventListener("click", async (event) => {
   if (res && res.status === 204) {
     const after = row.nextElementSibling;
     row.remove();
-    showUndo("Key for " + name + " turned off.", async () => {
+    showUndo(ticket, "Key for " + name + " turned off.", async () => {
       const back = await post("/connections/keys/turn-on", { id });
       if (back && back.status === 204) list.insertBefore(row, after && after.parentNode === list ? after : null);
       else keysError.textContent = await failure(back);

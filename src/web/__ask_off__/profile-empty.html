@@ -690,6 +690,7 @@ const startEdit = (card) => {
 };
 
 const remove = async (card, button) => {
+  const ticket = showUndo.ticket();
   error.textContent = "";
   button.disabled = true;
   const res = await post("/profile/notes/remove", version(card));
@@ -700,7 +701,7 @@ const remove = async (card, button) => {
   }
   const after = card.nextElementSibling;
   card.remove();
-  showUndo("Note removed.", async () => {
+  showUndo(ticket, "Note removed.", async () => {
     const back = await post("/profile/notes/restore", { id: card.dataset.noteId });
     if (back && back.status === 204) list.insertBefore(card, after && after.parentNode === list ? after : null);
     else error.textContent = await failure(back);
@@ -802,9 +803,12 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  let offers = 0;
-  const show = (message, undo, title) => {
-    offers++;
+  let taken = 0;
+  let newest = 0;
+  const show = (ticket, message, undo, title) => {
+    if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
+    if (ticket < newest) return;
+    newest = ticket;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -825,7 +829,7 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
-  show.offers = () => offers;
+  show.ticket = () => ++taken;
   return show;
 })();
 </script>

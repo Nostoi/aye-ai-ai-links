@@ -130,7 +130,7 @@ const showStep = (step) => {
 };
 const showNext = () => showStep(steps.find((s) => !decided.has(s)) || null);
 const choose = (step, act) =>
-  whileBusy(tidyRoot, async (answered) => {
+  whileBusy(tidyRoot, async (answered, ticket) => {
     const id = step.dataset.id;
     const { route, undo } = tidyActs[act];
     tidyAlert.textContent = "";
@@ -144,7 +144,7 @@ const choose = (step, act) =>
     decided.add(step);
     showNext();
     if (!undo) return;
-    showUndo(undo.text, () =>
+    showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";
         const back = await post("/home/undo-state", { id, change });

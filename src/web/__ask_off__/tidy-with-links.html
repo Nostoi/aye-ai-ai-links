@@ -699,11 +699,12 @@ const busyLook = (el, button, word) => {
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const ticket = typeof showUndo === "function" ? showUndo.ticket() : null;
   const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run(busy ? busy.answered : () => {});
+    return await run(busy ? busy.answered : () => {}, ticket);
   } finally {
     if (busy) busy.clear();
     cardBusy.delete(card);
@@ -778,7 +779,7 @@ const showStep = (step) => {
 };
 const showNext = () => showStep(steps.find((s) => !decided.has(s)) || null);
 const choose = (step, act) =>
-  whileBusy(tidyRoot, async (answered) => {
+  whileBusy(tidyRoot, async (answered, ticket) => {
     const id = step.dataset.id;
     const { route, undo } = tidyActs[act];
     tidyAlert.textContent = "";
@@ -792,7 +793,7 @@ const choose = (step, act) =>
     decided.add(step);
     showNext();
     if (!undo) return;
-    showUndo(undo.text, () =>
+    showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";
         const back = await post("/home/undo-state", { id, change });
@@ -887,9 +888,12 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  let offers = 0;
-  const show = (message, undo, title) => {
-    offers++;
+  let taken = 0;
+  let newest = 0;
+  const show = (ticket, message, undo, title) => {
+    if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
+    if (ticket < newest) return;
+    newest = ticket;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -910,7 +914,7 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
-  show.offers = () => offers;
+  show.ticket = () => ++taken;
   return show;
 })();
 </script>

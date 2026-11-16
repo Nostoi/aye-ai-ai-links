@@ -118,13 +118,17 @@ export const UNDO_BAR_MAX_MS = 45_000;
 const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>`;
 
 /**
- * Defines `showUndo(message, undo, title)` for the page's own script, which calls it after an action has
- * already been done. The bar shows `message`, after the bold `title` when one is given, and moves focus to its Undo button. It closes
+ * Defines `showUndo(ticket, message, undo, title)` for the page's own script, which calls it after an
+ * action has already been done. Every action takes its ticket, `showUndo.ticket()`, when it starts,
+ * before it sends anything, and passes it with its offer; an offer without one throws.
+ * The bar offers the Undo of the action started last (#324): an offer whose ticket is older than the
+ * newest the bar has shown is dropped and changes nothing, not the bar, its timers or focus, even
+ * once that newer bar has closed. Any other offer replaces the bar.
+ * The bar shows `message`, after the bold `title` when one is given, and moves focus to its Undo button. It closes
  * `UNDO_BAR_MS` after it last had neither focus nor the pointer.
  * Undo runs `undo` once, with the button disabled until it settles, then closes the
- * bar. A new message replaces the bar, and a pending undo only closes the bar if it is still its
- * own. When the bar closes with focus on it, focus goes back to what had it before,
- * if that is still on the page.
+ * bar. A pending undo only closes the bar if it is still its own. When the bar closes with focus on
+ * it, focus goes back to what had it before, if that is still on the page.
  */
 const UNDO_JS = `
 const showUndo = (() => {
@@ -192,9 +196,12 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  let offers = 0;
-  const show = (message, undo, title) => {
-    offers++;
+  let taken = 0;
+  let newest = 0;
+  const show = (ticket, message, undo, title) => {
+    if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
+    if (ticket < newest) return;
+    newest = ticket;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -215,7 +222,7 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
-  show.offers = () => offers;
+  show.ticket = () => ++taken;
   return show;
 })();
 `;

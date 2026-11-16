@@ -73,10 +73,10 @@ export const SHRINK_SIDE = 1600;
  * - Save sends only what changed, as a form. The card shows the server's answer, not what was
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
- *   Save stays off until its answer comes. An answer that comes after the dialog closed or reopened
- *   still updates its own card and offers Undo, unless another action offered its own Undo while the
- *   Save was out (`showUndo.offers()`); it leaves the dialog alone, and a refusal that comes then
- *   shows in the page's alert.
+ *   Save stays off until its answer comes. The Save takes its Undo ticket when it is sent, so its
+ *   Undo gives way only to the Undo of an action started after it (`showUndo`). An answer that comes
+ *   after the dialog closed or reopened still updates its own card and offers Undo; it leaves the
+ *   dialog alone, and a refusal that comes then shows in the page's alert.
  * - With `panel` (the AI on) the page's one instance is built without a list or alert when the page
  *   has none, and its dialog is the page's body child, so every menu page has the same one.
  * - Focus goes back to the card's ⋯ when the dialog closes.
@@ -548,7 +548,7 @@ form.addEventListener("submit", async (event) => {
   ${panel ? "if (editAlert) " : ""}editAlert.textContent = "";
   const target = card;
   const turn = ++saveTurn;
-  const offersAtSave = showUndo.offers();
+  const ticket = showUndo.ticket();
   saving = true;
   syncBusy();
   const res = await fetch("/links/edit", { method: "POST", body, redirect: "manual" }).catch(() => null);
@@ -568,7 +568,7 @@ form.addEventListener("submit", async (event) => {
   ${panel ? "shown" : "showCard"}(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => ${panel ? "(target.isConnected || linked(target.dataset.id))" : "target.isConnected"} && showUndo.offers() === offersAtSave && showUndo(${JSON.stringify("Link updated")}, async () => {
+  const offer = () => ${panel ? "(target.isConnected || linked(target.dataset.id))" : "target.isConnected"} && showUndo(ticket, ${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", {
       id: target.dataset.id,
       editId: answer.editId,

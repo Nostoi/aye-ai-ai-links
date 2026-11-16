@@ -32,8 +32,10 @@ const BUSY_LOOK_MS = 300;
 /**
  * `post` sends JSON without following a redirect, answering null when the request fails;
  * `failure` is a refusal's own message, or a generic one. `cardBusy` is a card's one busy mark:
- * `whileBusy(card, run, look)` runs `run` and answers what it answers, unless the card is busy,
- * when it runs nothing and answers nothing. The mark is held until `run` has finished, including its
+ * `whileBusy(card, run, look)` runs `run(answered, ticket)` and answers what it answers, unless the
+ * card is busy, when it runs nothing and answers nothing. `ticket` is the action's Undo ticket
+ * (`showUndo.ticket()`), taken once it holds the mark and before `run` sends anything, which its
+ * `showUndo` passes on; on a page without the Undo bar there is none. The mark is held until `run` has finished, including its
  * page update and Undo, and released whether it returns or throws. Every action on a card that
  * posts goes through it, so a card takes one action at a time. An Undo goes through
  * `whenFree(card, run, look)` instead: it waits for the action in flight, then runs under the mark.
@@ -90,11 +92,12 @@ const busyLook = (el, button, word) => {
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const ticket = typeof showUndo === "function" ? showUndo.ticket() : null;
   const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run(busy ? busy.answered : () => {});
+    return await run(busy ? busy.answered : () => {}, ticket);
   } finally {
     if (busy) busy.clear();
     cardBusy.delete(card);

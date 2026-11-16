@@ -21,7 +21,7 @@ export const BRING_BACK_WORKING = "Bringing back…";
 /** The name of the list section holding links the owner has let go (the done views). */
 export const DONE_AND_PUT_AWAY = "Done and put away";
 
-/** The Undo bar every Done with it shows: a bold title, then the text (`showUndo(text, undo, title)`). */
+/** The Undo bar every Done with it shows: a bold title, then the text (`showUndo(ticket, text, undo, title)`). */
 export const DONE_UNDO = {
   title: "Done with it.",
   text: "Off Home, All links and your spaces. Still findable in search.",
@@ -92,7 +92,7 @@ export const doneLinkScript = (
   error: string,
 ) => `const STATE_ACTS = ${JSON.stringify(STATE_ACTS)};
 const stateCard = (card, act, before, button) =>
-  whileBusy(card, async (answered) => {
+  whileBusy(card, async (answered, ticket) => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const doneAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
@@ -107,7 +107,7 @@ const stateCard = (card, act, before, button) =>
     }
     if (before) await before();
     const putBack = takeOut(listRoot, card, false, change);
-    showUndo(undo.text, () => whenFree(card, async () => {
+    showUndo(ticket, undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);

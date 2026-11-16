@@ -77,7 +77,7 @@ if (goneRoot) {
         return resetBand(line);
       }
       const id = card.dataset.id;
-      await whileBusy(card, async (answered) => {
+      await whileBusy(card, async (answered, ticket) => {
         goneError.textContent = "";
         const res = await post("/links/still-works", { id });
         answered();
@@ -89,7 +89,7 @@ if (goneRoot) {
         await collapseBand(line);
         const menu = card.querySelector(".card-menu summary");
         if (menu) menu.focus();
-        showUndo("Marked as working.", async () => {
+        showUndo(ticket, "Marked as working.", async () => {
           const back = await post("/links/still-works/undo", { id, check: moved.check, previous: moved.previous });
           if (back && back.status === 204) resetBand(line);
           else goneError.textContent = await failure(back);

@@ -27,7 +27,7 @@ if (copyRoot) {
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
     menu.open = false;
-    await whileBusy(card, async (answered) => {
+    await whileBusy(card, async (answered, ticket) => {
       const id = card.dataset.id;
       const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
       copyError.textContent = "";
@@ -39,7 +39,7 @@ if (copyRoot) {
       }
       for (const row of rows) row.hidden = true;
       menu.querySelector("summary").focus();
-      showUndo("Saved copy removed.", async () => {
+      showUndo(ticket, "Saved copy removed.", async () => {
         const back = await post("/links/copy/restore", { id });
         if (back && back.status === 204) for (const row of rows) row.hidden = false;
         else copyError.textContent = await failure(back);

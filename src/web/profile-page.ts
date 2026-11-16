@@ -157,6 +157,7 @@ const startEdit = (card) => {
 };
 
 const remove = async (card, button) => {
+  const ticket = showUndo.ticket();
   error.textContent = "";
   button.disabled = true;
   const res = await post("/profile/notes/remove", version(card));
@@ -167,7 +168,7 @@ const remove = async (card, button) => {
   }
   const after = card.nextElementSibling;
   card.remove();
-  showUndo("Note removed.", async () => {
+  showUndo(ticket, "Note removed.", async () => {
     const back = await post("/profile/notes/restore", { id: card.dataset.noteId });
     if (back && back.status === 204) list.insertBefore(card, after && after.parentNode === list ? after : null);
     else error.textContent = await failure(back);

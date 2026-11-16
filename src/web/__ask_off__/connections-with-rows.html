@@ -1307,7 +1307,9 @@ const refuse = async (res) => {
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   if (fields.hidden) return;
-  const button = saves.includes(event.submitter) ? event.submitter : media("(max-width: 600px)") ? topSave : primary;
+  // The Save on screen says the working word: the top one on a phone, the foot's elsewhere. Not the
+  // submitter: Chrome's Enter submits through the first Save in the form even while it is hidden.
+  const button = media("(max-width: 600px)") ? topSave : primary;
   whileBusy(
     form,
     async (answer, ticket) => {

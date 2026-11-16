@@ -84,9 +84,15 @@ const answering =
 
 type Dialog = HTMLElement & { open?: boolean };
 
-/** All links with its scripts running; `fill` types into the dialog's three fields. */
-function start(answer: (sent: Post) => Answer = answering({ status: 200, body: SAVED })) {
-  const p = runPage(all(), answer);
+/**
+ * All links with its scripts running; `fill` types into the dialog's three fields. With `phone`,
+ * the page's width queries answer as a phone's (through `runAskPage`, which has that switch).
+ */
+function start(
+  answer: (sent: Post) => Answer = answering({ status: 200, body: SAVED }),
+  { phone = false } = {},
+) {
+  const p = phone ? runAskPage(all(), answer, { phone: true }) : runPage(all(), answer);
   const dialog = p.$("#save-dialog") as Dialog | null;
   const field = (id: string) => p.$(`#save-dialog #${id}`) as HTMLInputElement;
   const pill = p.$("nav.menu a.menu-save");
@@ -235,7 +241,7 @@ describe("saving", () => {
     expect(p.document.querySelector("[data-busy]")).toBeNull();
   });
 
-  it("says Saving… on the top Save when that is the one pressed, as on a phone", async () => {
+  it("on a computer, Enter (which Chrome sends through the hidden top Save) says Saving… on the foot's Save", async () => {
     const slow = gate();
     const p = start(answering({ status: 200, body: SAVED, wait: slow.wait }));
     p.openIt();
@@ -244,7 +250,21 @@ describe("saving", () => {
     p.dispatch(p.$("#save-dialog form"), "submit", { submitter: top });
     await p.settle();
     p.timers.fire();
-    expect(top.querySelector("b")?.textContent).toBe("Saving…");
+    expect(p.$("#save-dialog .edit-foot .primary b").textContent).toBe("Saving…");
+    expect(top.querySelector("b")?.textContent).toBe("Save");
+    slow.open();
+    await p.settle();
+  });
+
+  it("on a phone, says Saving… on the top Save, the one on screen", async () => {
+    const slow = gate();
+    const p = start(answering({ status: 200, body: SAVED, wait: slow.wait }), { phone: true });
+    p.openIt();
+    p.fill();
+    p.save();
+    await p.settle();
+    p.timers.fire();
+    expect(p.$("#save-dialog .edit-head [data-save=save] b").textContent).toBe("Saving…");
     slow.open();
     await p.settle();
   });

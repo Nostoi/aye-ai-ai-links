@@ -88,7 +88,8 @@ export const saveDialog = (fill?: { url: string; title: string }) => {
  * - Save posts `/save` through `whileBusy` (the busy look dims the form and says Saving…). A new
  *   link closes the dialog after its tick, then the Undo bar offers Undo, which posts
  *   `/links/delete`; a failed Undo shows in `#page-alert`. On the `/save` page (`data-page`) the
- *   save shows in place, with Close, which closes the tab or goes Home.
+ *   answer shows in place, with Close, which closes the tab or goes Home; once an answer shows, the
+ *   head's Close and Escape do the same.
  * - An address already saved shows that link in the dialog: its line, its why, Open it (recorded as
  *   an opening) and, for a link done or put away, Bring it back, which works in place.
  * - A refusal shows under its field; a sign-out, no answer or any other failure in the dialog's
@@ -203,8 +204,19 @@ dialog.addEventListener("close", () => {
   heldUndo = null;
   if (held) held();
 });
+// On the /save page, once an answer shows, Close, the head's Cancel and Escape all leave the tab.
+const leavesTab = () => onPage && answered;
+const leave = () => {
+  window.close();
+  if (window.closed) return;
+  location.assign("/");
+};
 dialog.addEventListener("cancel", (event) => {
   if (saving) event.preventDefault();
+  else if (leavesTab()) {
+    event.preventDefault();
+    leave();
+  }
 });
 // A click whose press and release were both on the dialog itself is on the backdrop: the dialog
 // has no padding of its own, so its form covers the whole box.
@@ -216,7 +228,8 @@ dialog.addEventListener("click", (event) => {
   downOnBackdrop = false;
   if (backdrop) closeNow();
 });
-for (const b of dialog.querySelectorAll("[data-save=cancel]")) b.addEventListener("click", closeNow);
+for (const b of dialog.querySelectorAll("[data-save=cancel]"))
+  b.addEventListener("click", () => (leavesTab() ? leave() : closeNow()));
 urlField.addEventListener("input", showHost);
 const drawLine = (data, marker) => {
   const parts = [data.created ? "" : "Already saved on " + data.savedOn, hostName(data.url), marker];
@@ -249,7 +262,7 @@ const showFound = (data, typedWhy) => {
     openIt.setAttribute("data-open", "");
   }
   openIt.hidden = data.created;
-  closeIt.hidden = !data.created;
+  closeIt.hidden = !data.created && !onPage;
   heading.textContent = data.created ? "Saved" : HEADING;
   if (data.created) dialog.setAttribute("data-saved", "");
   show("found");
@@ -335,11 +348,7 @@ bringBack.addEventListener("click", () =>
     { button: bringBack, word: ${JSON.stringify(BRING_BACK_WORKING)} },
   ),
 );
-closeIt.addEventListener("click", () => {
-  window.close();
-  if (window.closed) return;
-  location.assign("/");
-});
+closeIt.addEventListener("click", leave);
 if (onPage) open();
 }
 }`;

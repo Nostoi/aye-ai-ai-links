@@ -680,12 +680,79 @@ describe("the /save page", () => {
     expect(went).toEqual(["/"]);
   });
 
+  describe("after an answer, the head Close and Escape leave like Close", () => {
+    const ALREADY_SAVED = { ...SAVED, created: false };
+
+    /** The page with one answer shown, and the ways out recorded. */
+    const answered = async (body: object) => {
+      vi.stubGlobal("history", { replaceState: () => {} });
+      const p = runPage(bookmarklet(), answering({ status: 200, body }));
+      p.dispatch(p.$("#save-dialog form"), "submit");
+      await p.settle();
+      const went: string[] = [];
+      const win = p.document.defaultView as unknown as { close: () => void; closed: boolean };
+      win.close = () => {};
+      win.closed = false;
+      Object.assign(p.location, { assign: (to: string) => went.push(to) });
+      return { p, went };
+    };
+
+    it("shows Close after Already saved", async () => {
+      const { p } = await answered(ALREADY_SAVED);
+      expect(p.$("#save-dialog [data-save=close]").hidden).toBe(false);
+    });
+
+    it.each(["#save-dialog .edit-top[data-save=cancel]", "#save-dialog .edit-close"])(
+      "%s leaves after Saved",
+      async (selector) => {
+        const { p, went } = await answered(SAVED);
+        p.dispatch(p.$(selector), "click");
+        expect(went).toEqual(["/"]);
+      },
+    );
+
+    it("Escape leaves after an answer", async () => {
+      const { p, went } = await answered(ALREADY_SAVED);
+      const esc = p.dispatch(p.$("#save-dialog"), "cancel");
+      expect(went).toEqual(["/"]);
+      expect(esc.defaultPrevented, "the dialog stays for the tab to go").toBe(true);
+    });
+
+    it("before an answer, Escape and Cancel only close the dialog", () => {
+      vi.stubGlobal("history", { replaceState: () => {} });
+      const p = runPage(bookmarklet(), answering({ status: 200, body: SAVED }));
+      const went: string[] = [];
+      Object.assign(p.location, { assign: (to: string) => went.push(to) });
+      const esc = p.dispatch(p.$("#save-dialog"), "cancel");
+      p.dispatch(p.$("#save-dialog .edit-top[data-save=cancel]"), "click");
+      expect(went).toEqual([]);
+      expect(esc.defaultPrevented).toBe(false);
+      expect((p.$("#save-dialog") as Dialog).open).toBe(false);
+    });
+  });
+
   it("has the menu but no Ask panel and no owner id", () => {
     const html = bookmarklet();
     const d = parseHTML(html).document;
     expect(d.querySelector("nav.menu"), "the menu").not.toBeNull();
     expect(d.getElementById("ask-panel")).toBeNull();
     expect(html).not.toContain("data-owner");
+  });
+
+  it("a page other than /save: after Already saved, the head Close only closes the dialog", async () => {
+    const p = start(answering({ status: 200, body: { ...SAVED, created: false } }));
+    p.openIt();
+    p.fill();
+    p.save();
+    await p.settle();
+    const went: string[] = [];
+    const win = p.document.defaultView as unknown as { close: () => void; closed: boolean };
+    let closed = 0;
+    win.close = () => closed++;
+    Object.assign(p.location, { assign: (to: string) => went.push(to) });
+    p.dispatch(p.$("#save-dialog .edit-top[data-save=cancel]"), "click");
+    expect(p.dialog?.open).toBe(false);
+    expect([went, closed]).toEqual([[], 0]);
   });
 
   it("with a long address, says so and leaves the dialog closed and empty", () => {

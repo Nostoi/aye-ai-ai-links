@@ -1804,8 +1804,19 @@ dialog.addEventListener("close", () => {
   heldUndo = null;
   if (held) held();
 });
+// On the /save page, once an answer shows, Close, the head's Cancel and Escape all leave the tab.
+const leavesTab = () => onPage && answered;
+const leave = () => {
+  window.close();
+  if (window.closed) return;
+  location.assign("/");
+};
 dialog.addEventListener("cancel", (event) => {
   if (saving) event.preventDefault();
+  else if (leavesTab()) {
+    event.preventDefault();
+    leave();
+  }
 });
 // A click whose press and release were both on the dialog itself is on the backdrop: the dialog
 // has no padding of its own, so its form covers the whole box.
@@ -1817,7 +1828,8 @@ dialog.addEventListener("click", (event) => {
   downOnBackdrop = false;
   if (backdrop) closeNow();
 });
-for (const b of dialog.querySelectorAll("[data-save=cancel]")) b.addEventListener("click", closeNow);
+for (const b of dialog.querySelectorAll("[data-save=cancel]"))
+  b.addEventListener("click", () => (leavesTab() ? leave() : closeNow()));
 urlField.addEventListener("input", showHost);
 const drawLine = (data, marker) => {
   const parts = [data.created ? "" : "Already saved on " + data.savedOn, hostName(data.url), marker];
@@ -1850,7 +1862,7 @@ const showFound = (data, typedWhy) => {
     openIt.setAttribute("data-open", "");
   }
   openIt.hidden = data.created;
-  closeIt.hidden = !data.created;
+  closeIt.hidden = !data.created && !onPage;
   heading.textContent = data.created ? "Saved" : HEADING;
   if (data.created) dialog.setAttribute("data-saved", "");
   show("found");
@@ -1936,11 +1948,7 @@ bringBack.addEventListener("click", () =>
     { button: bringBack, word: "Bringing back…" },
   ),
 );
-closeIt.addEventListener("click", () => {
-  window.close();
-  if (window.closed) return;
-  location.assign("/");
-});
+closeIt.addEventListener("click", leave);
 if (onPage) open();
 }
 }

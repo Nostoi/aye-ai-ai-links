@@ -143,7 +143,7 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  * The shelf's script, for home's one script after `CARD_FETCH` (it needs `post`, `failure`,
  * `cardBusy`, `busyLook`, `collapseBand` and `showUndo`). A tile takes one action at a time (`cardBusy`): its mark is held
  * until the action, its shelf refresh and its Undo are done, and kept while the refresh was
- * dropped for a newer refresh that is still running: its swap replaces the tile, and if it ends
+ * dropped and the newest refresh is still running: its swap replaces the tile, and if it ends
  * without a swap the mark is released. The busy look is not the mark: it is
  * started with it, around the action and its refresh, and cleared when that work settles, so a
  * tile that keeps its mark never keeps the look. A button says its working word and dims the tile;

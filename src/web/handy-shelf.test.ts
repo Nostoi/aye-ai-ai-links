@@ -929,6 +929,30 @@ describe("a tile whose refresh was dropped, when the newer refresh does not swap
     expect(posts(p, a)).toBe(2);
   });
 
+  it("keeps the first tile locked when a middle refresh is dropped while the newest still runs", async () => {
+    const [a, b, c] = [kept(), kept(), kept()];
+    const [g1, g2, g3] = [gate(), gate(), gate()];
+    const html = home([a, b, c]);
+    const p = refreshing(html, [
+      { status: 200, text: html, wait: g1.wait },
+      { status: 200, text: html, wait: g2.wait },
+      { status: 500, wait: g3.wait },
+    ]);
+    await press(p, a);
+    await press(p, b);
+    await press(p, c);
+    g1.open();
+    await p.settle();
+    g2.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(1);
+    g3.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(2);
+  });
+
   it("keeps the tile locked while the newer refresh runs, then lets the new tile act after it swaps", async () => {
     const [a, b] = [kept(), kept()];
     const [g1, g2] = [gate(), gate()];

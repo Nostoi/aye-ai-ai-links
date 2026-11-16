@@ -90,8 +90,8 @@ it("outlines every textarea with the field token", () => {
   expect(themeCss).toMatch(/(^|\n)textarea\{[^}]*border:1\.5px solid var\(--field\)/);
 });
 
-it("keeps the Save page's result buttons at least 44px tall", () => {
-  expect(themeCss).toMatch(/(^|\n)\.save-result button\{[^}]*min-height:44px/);
+it("keeps the Save dialog's answer buttons at least 44px tall", () => {
+  expect(themeCss).toMatch(/(^|\n)\.save-found-acts button\{[^}]*min-height:44px/);
 });
 
 it("centres a merge pick's name and count in its 44px button (#255)", () => {

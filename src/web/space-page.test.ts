@@ -4,6 +4,7 @@ import type { Link, Tag } from "../core/types.js";
 import { itRecordsOpenings, openAppended, runPage } from "./opened-test-kit.js";
 import { outsideRefs } from "./outside-refs-test-kit.js";
 import { searchPage } from "./pages.js";
+import { saveDialogScript } from "./save-dialog.js";
 import { spaceHref, spacePage } from "./space-page.js";
 import { tagsPage } from "./tags-page.js";
 import { themeCss } from "./theme.js";
@@ -792,7 +793,8 @@ describe("Keep handy on a space page", () => {
     expect([row("1", "keep").hidden, row("1", "not-handy").hidden]).toEqual([false, true]);
     expect([row("2", "keep").hidden, row("2", "not-handy").hidden]).toEqual([true, false]);
     expect(html).toContain('id="undo-bar"');
-    expect(html.match(/const post = /g)).toHaveLength(1);
+    // The Save dialog's script (#329) is a block with its own CARD_FETCH, apart from the page's.
+    expect(html.replace(saveDialogScript, "").match(/const post = /g)).toHaveLength(1);
     const done = space({ links: [link("1", { state: "archived" })], done: true });
     expect(
       dom(done).querySelector("[data-act=keep], [data-act=not-handy], [data-handy]"),

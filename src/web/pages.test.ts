@@ -17,6 +17,7 @@ import {
   tile,
 } from "./pages.js";
 import { profilePage } from "./profile-page.js";
+import { saveDialogScript } from "./save-dialog.js";
 import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
 import { SPACE_RESTART, spaceMissingPage, spacePage } from "./space-page.js";
@@ -530,11 +531,12 @@ describe("Keep handy on search results", () => {
     expect(parseHTML(html).document.querySelector("[data-handy]")).toBeNull();
   });
 
-  it("has the Undo bar, one error line and one CARD_FETCH, so its scripts run together", () => {
+  it("has the Undo bar, one error line and one CARD_FETCH of its own, so its scripts run together", () => {
     const html = searchPage({ query: "x", links: [link()], now: NOW });
     expect(html).toContain('id="undo-bar"');
     expect(parseHTML(html).document.querySelectorAll("#results-error[role=alert]")).toHaveLength(1);
-    expect(html.match(/const post = /g)).toHaveLength(1);
+    // The Save dialog's script (#329) is a block with its own, apart from the page's.
+    expect(html.replace(saveDialogScript, "").match(/const post = /g)).toHaveLength(1);
     expect(() => runPage(html)).not.toThrow();
   });
 });

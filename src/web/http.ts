@@ -396,7 +396,10 @@ async function homeAction(
   }
 }
 
-/** The Save page's answer: the link as saved, with its date in the page's words. */
+/**
+ * The Save dialog's answer: the link as saved, with its date in the page's words, who gave its why
+ * (an inferred one shows as a guess) and the initials its square shows.
+ */
 const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
   id: link.id,
   created,
@@ -407,7 +410,9 @@ const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
   title: link.title,
   url: link.url,
   why: link.why?.text ?? null,
+  whySource: link.why?.source ?? null,
   putAwayAt: link.putAwayAt?.toISOString() ?? null,
+  initials: initialsText(link),
 });
 
 /** A Keep handy row as the page holds it between an action and its Undo: dates as ISO strings. */

@@ -3,6 +3,7 @@ import { ASK_BUTTON, ASK_SCRIPT, type Ask, askPanel } from "./ask-panel.js";
 import { editDialog, editLinkScript } from "./edit-dialog.js";
 import { faviconHref, inlineLogo } from "./logo.js";
 import { openedScript } from "./open-link.js";
+import { saveDialog, saveDialogScript } from "./save-dialog.js";
 import { CARD_FETCH } from "./tell-why.js";
 import { askCss, themeCss } from "./theme.js";
 
@@ -115,7 +116,12 @@ document.addEventListener("keydown", (event) => {
 export const UNDO_BAR_MS = 10_000;
 export const UNDO_BAR_MAX_MS = 45_000;
 
-const UNDO_BAR = `<div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div>`;
+/**
+ * The Undo bar, and beside it the page's own alert, `#page-alert`, where an action with no alert of
+ * its own (the Save dialog's Undo) says it failed. One body child, so the Ask AI phone sheet leaves
+ * both usable.
+ */
+const UNDO_BAR = `<div class="undo-layer"><div role="status"><div class="undo-bar" id="undo-bar" hidden><span></span><button type="button">Undo</button></div></div><p class="page-alert" id="page-alert" role="alert"></p></div>`;
 
 /**
  * Defines `showUndo(ticket, message, undo, title)` for the page's own script, which calls it after an
@@ -249,8 +255,11 @@ export const scriptText = (tag: string) => tag.replace(/^<script>([\s\S]*)<\/scr
 /** What `page()` writes as script for these options, each as the text between its tags. */
 const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
   touch: TOUCH_JS,
-  undo: undo || ask ? UNDO_JS : null,
+  undo: undo || ask || menu ? UNDO_JS : null,
   menu: menu ? MENU_JS : null,
+  save: menu
+    ? `${saveDialogScript}\n${scriptText(openedScript("save-dialog", "/links/opened"))}`
+    : null,
   ask: ask
     ? [
         scriptText(ASK_SCRIPT),
@@ -266,24 +275,35 @@ const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
  * CSP hashes this list, so the two cannot drift. None reads request data.
  */
 export const pageScripts = (options: ScriptOptions): string[] => {
-  const { touch, undo, menu, ask } = scriptsFor(options);
-  return [touch, undo, menu, ...(ask ?? [])].filter((js): js is string => js !== null);
+  const { touch, undo, menu, save, ask } = scriptsFor(options);
+  return [touch, undo, menu, save, ...(ask ?? [])].filter((js): js is string => js !== null);
 };
 
 /**
  * Every page renders through this. `home` links the header to `/`, for signed-in pages. `menu`
  * adds the menu (and implies `home`), for the pages the owner browses; `here` names the section
- * whose link it marks as current. `undo` adds the Undo bar
- * and `showUndo`. `ask`, given only on menu pages and only when the AI is set up, adds the Ask AI
- * button and panel (#159); without it the page is exactly as it was. With `ask` the page also
- * owns the one edit dialog, as a body child the phone sheet leaves usable, and the one edit script,
- * for the page's own card list and alert named by `edits`; the Undo bar is always there. The
- * script is a block, so its `CARD_FETCH` names stay clear of the page's own.
+ * whose link it marks as current. `undo` adds the Undo bar, with `showUndo` and the page's alert
+ * `#page-alert`; `menu` and `ask` imply it. `menu` also adds the Save dialog (#329) and its script,
+ * which the Save pill opens; `saveFill`, for the `/save` page only, fills it from that page's query
+ * and opens it at load. `ask`, given only on menu pages and only when the AI is set up, adds the
+ * Ask AI button and panel (#159); without it the page is exactly as it was. With `ask` the page
+ * also owns the one edit dialog, and the one edit script, for the page's own card list and alert
+ * named by `edits`. Both dialogs are body children the phone sheet leaves usable, and both scripts
+ * are blocks, so their `CARD_FETCH` names stay clear of the page's own.
  */
 export const page = (
   title: string,
   body: string,
-  { home = false, here, ...options }: { home?: boolean; here?: Here } & ScriptOptions = {},
+  {
+    home = false,
+    here,
+    saveFill,
+    ...options
+  }: {
+    home?: boolean;
+    here?: Here;
+    saveFill?: { url: string; title: string };
+  } & ScriptOptions = {},
 ) => {
   const { menu, ask } = options;
   const scripts = scriptsFor(options);
@@ -303,7 +323,7 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
+${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${menu ? `${saveDialog(saveFill)}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.save === null ? "" : `\n${scriptTag(scripts.save)}`}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
 </body>
 </html>
 `;

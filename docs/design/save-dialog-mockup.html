@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Save a link (#329)</title>
+<style>
+/* Mockup only. Tokens are copied from src/web/theme.ts; fonts load by relative path from assets/fonts. No outside requests. */
+@font-face{font-family:"Open Runde";font-weight:400;src:url(../../assets/fonts/open-runde-400.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:500;src:url(../../assets/fonts/open-runde-500.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:600;src:url(../../assets/fonts/open-runde-600.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:700 800;src:url(../../assets/fonts/open-runde-700.woff2) format("woff2")}
+@font-face{font-family:"Fraunces Question";font-weight:760;src:url(../../assets/fonts/fraunces-question.woff2) format("woff2")}
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--about:#57534D;--line:#E7E3DA;--field:#8F8A82;--blue:#3A6FD8;--teal:#2F8F83;--pic:#F2F2F2;--fill:#EDEAE3;--tray:color-mix(in srgb,#8C7350 5%,var(--bg));
+--card-ring:0 0 0 1px color-mix(in srgb,var(--ink) 7%,transparent);--shadow-card:0 2px 10px #0000000b;--shadow-raised:0 4px 18px #0000000f;
+--text-1:12px;--text-2:13.5px;--text-3:14px;--text-4:15px;--text-5:16px;--text-6:17px;--text-7:18px;--text-8:20px;--text-9:22px;--text-11:30px;
+--radius-card:18px;--radius-pill:999px;--motion-pop:.12s;--motion-fade:.18s;--motion-slide:.28s;--ease-out:ease-out}
+:root[data-theme=dark]{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--about:#C9C5BE;--line:#3A3A40;--field:#77736D;--blue:#7099EA;--teal:#4FB3A5;--pic:#323236;--fill:#34343A;--tray:color-mix(in srgb,#8C7350 9%,var(--bg))}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde",ui-rounded,system-ui,sans-serif;font-size:var(--text-6);line-height:1.5}
+.doc{max-width:1180px;margin:0 auto;padding:32px 16px 96px}
+.doc>h1{font-size:var(--text-11);margin:0 0 8px}
+.doc>p{color:var(--about);max-width:68ch;margin:0 0 16px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:24px 0 8px}
+.controls b{font-size:var(--text-3);color:var(--soft);font-weight:600;margin-right:4px}
+.controls button{font:inherit;font-size:var(--text-4);min-height:40px;padding:0 16px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.controls button[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+h2{font-size:var(--text-9);margin:48px 0 4px}
+.why{color:var(--about);margin:0 0 16px;max-width:70ch}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:24px;align-items:start}
+@media (max-width:980px){.stage{grid-template-columns:minmax(0,1fr)}}
+.label{font-size:var(--text-3);color:var(--soft);margin:0 0 6px}
+
+/* A screen: a fake page under the dialog */
+.screen{position:relative;overflow:hidden;border-radius:16px;background:var(--bg);box-shadow:0 0 0 1px var(--line);height:620px}
+.screen.phone{height:760px;border-radius:36px;box-shadow:0 0 0 8px var(--ink),0 0 0 9px var(--line)}
+.band{display:flex;gap:8px;align-items:center;padding:12px 16px;background:var(--tray)}
+.band .logo{width:34px;height:22px;border-radius:11px;border:3px solid var(--teal);margin-right:4px}
+.band .place{font-size:var(--text-4);padding:6px 12px;border-radius:var(--radius-pill);color:var(--about)}
+.band .place.here{background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--ink);font-weight:600}
+.band .spacer{flex:1}
+.band .pill{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-4);font-weight:600;padding:7px 14px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:var(--shadow-raised),var(--card-ring)}
+.band .pill.on{box-shadow:0 0 0 2px var(--blue)}
+.band .dot{width:30px;height:30px;border-radius:50%;background:var(--fill)}
+.phone .band .place:not(.here),.phone .band .pill .w{display:none}
+.fake{padding:28px 24px}
+.fake .q{font-family:"Fraunces Question","Open Runde",serif;font-weight:760;font-size:26px;text-align:center;margin:12px 0 16px}
+.fake .sb{height:52px;border-radius:var(--radius-pill);background:var(--surface);box-shadow:0 0 0 1.5px var(--field);max-width:520px;margin:0 auto 32px}
+.fake .tray{background:var(--tray);border-radius:34px;padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.phone .fake .tray{grid-template-columns:1fr}
+.fake .tile{height:76px;border-radius:var(--radius-card);background:var(--surface);box-shadow:var(--shadow-card),var(--card-ring)}
+
+/* The backdrop and the dialog (A) */
+.scrim{position:absolute;inset:0;background:rgb(20 20 24 / .38);opacity:0;transition:opacity var(--motion-fade) var(--ease-out);pointer-events:none}
+.open .scrim{opacity:1}
+.dlg{position:absolute;left:50%;top:84px;width:min(520px,calc(100% - 32px));transform:translateX(-50%) scale(.97);opacity:0;background:var(--surface);color:var(--ink);border-radius:22px;box-shadow:0 24px 64px rgb(0 0 0 / .28);padding:20px 24px 20px;transition:opacity var(--motion-fade) var(--ease-out),transform var(--motion-fade) var(--ease-out)}
+.open .dlg{opacity:1;transform:translateX(-50%) scale(1)}
+.closing .dlg{opacity:0;transform:translateX(-50%) scale(.97)}
+.phone .dlg{left:0;right:0;top:auto;bottom:0;width:auto;transform:translateY(100%);opacity:1;border-radius:22px 22px 0 0;padding:0 16px 28px;transition:transform var(--motion-slide) cubic-bezier(.2,.8,.2,1)}
+.phone.open .dlg{transform:translateY(0)}
+.phone.closing .dlg{transform:translateY(100%)}
+.grab{display:none;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}
+.phone .grab{display:block}
+
+/* The drawer (B) */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:400px;background:var(--surface);box-shadow:-12px 0 40px rgb(0 0 0 / .14),-1px 0 0 var(--line);padding:20px 24px;transform:translateX(100%);transition:transform var(--motion-slide) cubic-bezier(.2,.8,.2,1)}
+.open .drawer{transform:none}
+.phone .drawer{width:100%}
+
+/* Inside the dialog */
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
+.head h3{font-family:"Fraunces Question","Open Runde",serif;font-weight:760;font-size:24px;letter-spacing:-.01em;margin:0}
+.x{width:44px;height:44px;border-radius:50%;border:0;background:none;color:var(--soft);font-size:22px;cursor:pointer}
+.x:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.phone .head{display:grid;grid-template-columns:1fr auto 1fr;margin:0 0 10px}
+.phone .head h3{font-family:inherit;font-size:var(--text-6);font-weight:700;text-align:center}
+.phone .head .x{display:none}
+.top{display:none;font:inherit;font-size:var(--text-5);min-height:44px;border:0;background:none;color:var(--ink);padding:0;cursor:pointer}
+.phone .top{display:inline-flex;align-items:center}
+.top.save{justify-self:end;font-weight:700}
+.top.cancel{justify-self:start;color:var(--about)}
+.phone .foot{display:none}
+form{display:grid;gap:6px;transition:opacity var(--motion-fade)}
+label{font-size:var(--text-3);font-weight:600;margin-top:8px}
+label .opt{font-weight:400;color:var(--soft)}
+input,textarea{font:inherit;font-size:var(--text-6);width:100%;min-height:48px;padding:0 18px;border-radius:var(--radius-pill);border:0;box-shadow:0 0 0 1.5px var(--field);background:var(--surface);color:var(--ink)}
+textarea{border-radius:16px;padding:12px 16px;min-height:88px;resize:vertical}
+input:focus,textarea:focus{outline:none;box-shadow:0 0 0 1.5px var(--field),0 0 0 4px color-mix(in srgb,var(--blue) 35%,transparent)}
+.addr{position:relative}
+.addr input{min-height:56px;font-size:var(--text-7);padding-left:52px}
+.fav{position:absolute;left:14px;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:7px;background:var(--pic);display:grid;place-items:center;font-size:var(--text-1);font-weight:700;color:var(--soft);transition:background var(--motion-fade)}
+.fav.known{background:var(--teal);color:#fff}
+.host{font-size:var(--text-2);color:var(--soft);margin:2px 0 0 18px;min-height:20px}
+.err{display:flex;gap:8px;align-items:flex-start;font-size:var(--text-3);margin:2px 0 0;padding:10px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface)}
+.err i{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;font-style:normal;font-weight:700;font-size:12px;margin-top:1px}
+.field-bad input{box-shadow:0 0 0 2px var(--ink)}
+.foot{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.btn{font:inherit;font-size:var(--text-4);font-weight:600;min-height:44px;padding:0 22px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn .tick{display:none;width:16px;height:16px}
+.busy form{opacity:.6;cursor:progress}
+.done .btn.primary .tick,.done .top.save .tick{display:inline-block}
+.top .tick{display:none;width:16px;height:16px;margin-right:4px}
+
+/* Already saved */
+.found{display:grid;grid-template-columns:56px minmax(0,1fr);gap:12px;align-items:center;padding:14px;border-radius:var(--radius-card);background:var(--bg);margin:4px 0 6px}
+.found .p{width:56px;height:56px;border-radius:12px;background:var(--pic);display:grid;place-items:center;font-weight:700;color:var(--soft)}
+.found b{display:block;font-size:var(--text-6)}
+.found span{font-size:var(--text-2);color:var(--soft)}
+.found-why{font-size:var(--text-4);color:var(--about);margin:6px 2px 0}
+.found-why small{display:block;font-size:var(--text-2);color:var(--soft)}
+
+/* The Undo bar */
+.undo{position:absolute;left:50%;bottom:24px;transform:translate(-50%,24px);opacity:0;display:flex;gap:16px;align-items:center;background:var(--ink);color:var(--surface);padding:10px 10px 10px 18px;border-radius:14px;font-size:var(--text-4);box-shadow:0 12px 32px rgb(0 0 0 / .2);white-space:nowrap;transition:transform var(--motion-slide) cubic-bezier(.2,.8,.2,1),opacity var(--motion-fade)}
+.undo.on{transform:translate(-50%,0);opacity:1}
+.undo button{font:inherit;font-weight:700;min-height:36px;padding:0 14px;border-radius:10px;border:0;background:color-mix(in srgb,var(--surface) 14%,transparent);color:var(--surface)}
+.phone .undo{bottom:28px;max-width:calc(100% - 32px)}
+.notes{margin-top:56px;max-width:74ch}
+.notes h2{margin-top:0}
+.notes li{margin:0 0 8px;color:var(--about)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="doc">
+<h1>Save a link</h1>
+<p>Save in the top bar opens the form over the page you're on, instead of sending you to a separate plain page. Both options use the site's fields, buttons, busy look and Undo bar. Pick a state to see it. Each Replay runs the open and save motion.</p>
+
+<div class="controls" id="states">
+<b>State</b>
+<button data-s="ready" aria-pressed="true">Ready</button>
+<button data-s="typed">Typed</button>
+<button data-s="bad">Not an address</button>
+<button data-s="saving">Saving</button>
+<button data-s="saved">Saved</button>
+<button data-s="already">Already saved</button>
+<button data-s="offline">Couldn't reach the server</button>
+<button data-s="signedout">Signed out</button>
+</div>
+<div class="controls">
+<b>Look</b>
+<button id="theme" aria-pressed="false">Dark</button>
+<button id="replay">Replay</button>
+</div>
+
+<h2>A · Dialog (recommended)</h2>
+<p class="why">This is the same family as the edit dialog you already use. On a computer it's a card in the middle that dims the page. On a phone it's a sheet that slides up from the bottom, with Cancel and Save along the top where your thumb is. Saving is a short task you finish and leave, so it gets the whole screen's attention, then gets out of the way.</p>
+<div class="stage">
+<div><p class="label">Computer</p><div class="screen" data-kind="dialog"></div></div>
+<div><p class="label">Phone</p><div class="screen phone" data-kind="dialog"></div></div>
+</div>
+
+<h2>B · Drawer, like Ask AI</h2>
+<p class="why">The form slides in from the right and the page stays visible beside it. That suits Ask AI, where you go back and forth with the page. It's heavier for a 10-second save, and on a phone it covers the whole screen anyway.</p>
+<div class="stage">
+<div><p class="label">Computer</p><div class="screen" data-kind="drawer"></div></div>
+<div><p class="label">Phone</p><div class="screen phone" data-kind="drawer"></div></div>
+</div>
+
+<div class="notes">
+<h2>What changes, either way</h2>
+<ul>
+<li><b>Opening.</b> Save in the top bar (and in the phone menu) opens the form over the page, with the cursor already in Address. Escape, Cancel or a click on the dimmed page closes it. Anything you typed is kept until you save.</li>
+<li><b>Address.</b> As you type or paste, a small square at the start of the field shows the site's first letter, and the line below says where it's from, so a mistyped address shows before you save. An address that isn't a web address is pointed out under the field when you press Save. Your words stay where they were.</li>
+<li><b>Saving.</b> Nothing changes for the first 300ms, so a quick save never flickers. After that, the form dims and the button says Saving…, the same busy look as every other button on the site.</li>
+<li><b>Saved.</b> The button shows a tick for a moment, the dialog closes, and the Undo bar says <i>Saved "Title".</i> Undo deletes the link you just saved. The Undo bar announces successes everywhere else on the site, so this stays consistent.</li>
+<li><b>Already saved.</b> The dialog stays open and shows the link you already have: when you saved it, why, and Open it. If it was done or put away, it also offers Bring it back. If your new reason wasn't used because the link already had one, it says so.</li>
+<li><b>Errors.</b> These show in the dialog's message box above the buttons, in plain words. Everything you typed stays, so Save can simply be pressed again. Error text is never amber, since amber means "needs you".</li>
+<li><b>The bookmarklet still opens the page</b> at <code>/save</code>, because it starts from another site in a new tab. That page gets the same form in a card under the usual top bar, instead of the bare page in the screenshot.</li>
+<li><b>Motion</b> only answers what you did: the dialog fades and grows slightly as it opens (the sheet slides up on a phone), the tick appears, and the Undo bar slides in. With reduced motion turned on, all of it is instant.</li>
+</ul>
+</div>
+</div>
+
+<template id="tpl">
+<div class="band"><span class="logo"></span><span class="place here">Home</span><span class="place">All links</span><span class="place">Spaces and tags</span><span class="spacer"></span><span class="pill on">＋ <span class="w">Save</span></span><span class="pill">✦ <span class="w">Ask AI</span></span><span class="dot"></span></div>
+<div class="fake"><p class="q">What are you looking for?</p><div class="sb"></div><div class="tray"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
+<div class="scrim"></div>
+<div class="SHELL">
+<div class="grab"></div>
+<div class="head"><button class="top cancel" type="button">Cancel</button><h3>Save a link</h3><button class="top save" type="button"><svg class="tick" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Save</button><button class="x" aria-label="Close" type="button">×</button></div>
+<div class="body"></div>
+</div>
+<div class="undo"><span>Saved “The quiet cost of meetings”.</span><button type="button">Undo</button></div>
+</template>
+
+<script>
+const S = {
+  ready:{url:"",title:"",why:""},
+  typed:{url:"https://hbr.org/2026/03/the-quiet-cost-of-meetings",title:"The quiet cost of meetings",why:"For the team retro on Thursday"},
+  bad:{url:"hbr dot org meetings",title:"",why:"",bad:"That isn't a web address. Paste the whole address, starting with https://"},
+  saving:{url:"https://hbr.org/2026/03/the-quiet-cost-of-meetings",title:"The quiet cost of meetings",why:"For the team retro on Thursday",busy:true},
+  saved:{url:"https://hbr.org/2026/03/the-quiet-cost-of-meetings",title:"The quiet cost of meetings",why:"For the team retro on Thursday",done:true},
+  already:{already:true},
+  offline:{url:"https://hbr.org/2026/03/the-quiet-cost-of-meetings",title:"The quiet cost of meetings",why:"For the team retro on Thursday",alert:"Couldn't reach Aye-AI-AI Links. Check your connection, then press Save again. Nothing was saved."},
+  signedout:{url:"https://hbr.org/2026/03/the-quiet-cost-of-meetings",title:"The quiet cost of meetings",why:"For the team retro on Thursday",alert:"You were signed out. Sign in in another tab, then press Save again. What you typed is still here."},
+};
+const esc = (s) => s.replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./,""); } catch { return ""; } };
+const form = (d) => {
+  if (d.already) return `<div class="found"><div class="p">HB</div><div><b>The quiet cost of meetings</b><span>Already saved on Oct 3 · hbr.org · Put away</span></div></div>
+<p class="found-why"><small>You saved it for</small>Ideas for fewer status meetings</p>
+<p class="err" role="alert"><i>i</i><span>It already had a reason, so yours wasn't saved: “For the team retro on Thursday”.</span></p>
+<div class="foot"><button class="btn" type="button">Bring it back</button><button class="btn primary" type="button">Open it</button></div>`;
+  const host = hostOf(d.url);
+  return `<form>
+<label for="u">Address</label>
+<div class="addr ${d.bad ? "field-bad" : ""}"><span class="fav ${host ? "known" : ""}">${host ? esc(host[0].toUpperCase()) : ""}</span><input id="u" value="${esc(d.url)}" placeholder="Paste a link"></div>
+${d.bad ? `<p class="err" role="alert"><i>!</i><span>${esc(d.bad)}</span></p>` : `<p class="host">${host ? "Saving a page from " + esc(host) : ""}</p>`}
+<label>Title <span class="opt">(optional)</span></label>
+<input value="${esc(d.title)}">
+<label>Why are you saving it? <span class="opt">(optional)</span></label>
+<textarea>${esc(d.why)}</textarea>
+${d.alert ? `<p class="err" role="alert" style="margin-top:12px"><i>!</i><span>${esc(d.alert)}</span></p>` : ""}
+</form>
+<div class="foot"><button class="btn" type="button">Cancel</button><button class="btn primary" type="button"><svg class="tick" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>${d.busy ? "Saving…" : d.done ? "Saved" : "Save"}</button></div>`;
+};
+let state = "ready";
+const screens = [...document.querySelectorAll(".screen")];
+const draw = (animate) => {
+  const d = S[state];
+  for (const sc of screens) {
+    const shell = sc.dataset.kind === "dialog" ? "dlg" : "drawer";
+    sc.innerHTML = document.getElementById("tpl").innerHTML.replace("SHELL", shell);
+    sc.querySelector(".body").innerHTML = form(d);
+    const top = sc.querySelector(".top.save");
+    if (d.busy) top.lastChild.textContent = "Saving…";
+    sc.classList.remove("open","closing","busy","done");
+    if (d.busy) sc.classList.add("busy");
+    const open = () => sc.classList.add("open");
+    if (d.done) {
+      sc.classList.add("open","done");
+      if (animate) {
+        setTimeout(() => { sc.classList.add("closing"); sc.classList.remove("open"); }, 450);
+        setTimeout(() => sc.querySelector(".undo").classList.add("on"), 650);
+      } else { sc.classList.add("closing"); sc.classList.remove("open"); sc.querySelector(".undo").classList.add("on"); }
+    } else if (animate) requestAnimationFrame(() => requestAnimationFrame(open));
+    else open();
+  }
+};
+document.getElementById("states").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-s]"); if (!b) return;
+  for (const x of document.querySelectorAll("[data-s]")) x.setAttribute("aria-pressed", x === b);
+  state = b.dataset.s; draw(true);
+});
+document.getElementById("replay").addEventListener("click", () => draw(true));
+document.getElementById("theme").addEventListener("click", (e) => {
+  const dark = document.documentElement.dataset.theme !== "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  e.currentTarget.setAttribute("aria-pressed", dark);
+});
+draw(false);
+</script>
+</body>
+</html>

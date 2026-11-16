@@ -211,10 +211,12 @@ describe("with no AI set up", () => {
     }
   });
 
-  it("the Ask AI pieces the check looks for are all there when the AI is on, and the Undo bar only then", () => {
+  it("the Ask AI pieces the check looks for are all there when the AI is on; the Undo bar comes with the menu", () => {
     const on = olderInvalidPage("x", { ai: "Fake", place: "Home", owner: "o" });
     for (const mark of [...ASK_ONLY, UNDO_BAR]) expect(on, mark).toContain(mark);
-    expect(olderInvalidPage("x")).not.toContain(UNDO_BAR);
+    // Every menu page has the Undo bar, for the Save dialog's Undo (#329); a page without the menu has none.
+    expect(olderInvalidPage("x")).toContain(UNDO_BAR);
+    expect(loginPage({ next: "/all" })).not.toContain(UNDO_BAR);
   });
 
   for (const [name, render] of Object.entries(pages)) {

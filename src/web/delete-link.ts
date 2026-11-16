@@ -52,7 +52,7 @@ export const deleteLinkScript = (
   };
 };
 const deleteCard = (card) =>
-  whileBusy(card, async (answered) => {
+  whileBusy(card, async (answered, ticket) => {
     const listRoot = document.getElementById(${JSON.stringify(root)});
     const deleteAlert = document.getElementById(${JSON.stringify(error)});
     const id = card.dataset.id;
@@ -64,7 +64,7 @@ const deleteCard = (card) =>
       return;
     }
     const putBack = takeOut(listRoot, card, true);
-    showUndo("Link deleted.", async () => {
+    showUndo(ticket, "Link deleted.", async () => {
       const back = await post("/links/restore", { id });
       if (back && back.status === 204) putBack();
       else deleteAlert.textContent = await failure(back);

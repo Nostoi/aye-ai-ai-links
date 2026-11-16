@@ -675,11 +675,12 @@ const busyLook = (el, button, word) => {
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const ticket = typeof showUndo === "function" ? showUndo.ticket() : null;
   const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run(busy ? busy.answered : () => {});
+    return await run(busy ? busy.answered : () => {}, ticket);
   } finally {
     if (busy) busy.clear();
     cardBusy.delete(card);
@@ -758,7 +759,7 @@ if (copyRoot) {
     const menu = button.closest("details");
     const card = button.closest("[data-id]");
     menu.open = false;
-    await whileBusy(card, async (answered) => {
+    await whileBusy(card, async (answered, ticket) => {
       const id = card.dataset.id;
       const rows = [...card.querySelectorAll("[data-act=read-copy], [data-act=remove-copy]")];
       copyError.textContent = "";
@@ -770,7 +771,7 @@ if (copyRoot) {
       }
       for (const row of rows) row.hidden = true;
       menu.querySelector("summary").focus();
-      showUndo("Saved copy removed.", async () => {
+      showUndo(ticket, "Saved copy removed.", async () => {
         const back = await post("/links/copy/restore", { id });
         if (back && back.status === 204) for (const row of rows) row.hidden = false;
         else copyError.textContent = await failure(back);
@@ -1240,7 +1241,7 @@ form.addEventListener("submit", async (event) => {
   editAlert.textContent = "";
   const target = card;
   const turn = ++saveTurn;
-  const offersAtSave = showUndo.offers();
+  const ticket = showUndo.ticket();
   saving = true;
   syncBusy();
   const res = await fetch("/links/edit", { method: "POST", body, redirect: "manual" }).catch(() => null);
@@ -1260,7 +1261,7 @@ form.addEventListener("submit", async (event) => {
   showCard(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => target.isConnected && showUndo.offers() === offersAtSave && showUndo("Link updated", async () => {
+  const offer = () => target.isConnected && showUndo(ticket, "Link updated", async () => {
     const back = await post("/links/edit/undo", {
       id: target.dataset.id,
       editId: answer.editId,
@@ -1301,7 +1302,7 @@ const takeOut = (listRoot, card, remove) => {
   };
 };
 const deleteCard = (card) =>
-  whileBusy(card, async (answered) => {
+  whileBusy(card, async (answered, ticket) => {
     const listRoot = document.getElementById("space-links");
     const deleteAlert = document.getElementById("space-error");
     const id = card.dataset.id;
@@ -1313,7 +1314,7 @@ const deleteCard = (card) =>
       return;
     }
     const putBack = takeOut(listRoot, card, true);
-    showUndo("Link deleted.", async () => {
+    showUndo(ticket, "Link deleted.", async () => {
       const back = await post("/links/restore", { id });
       if (back && back.status === 204) putBack();
       else deleteAlert.textContent = await failure(back);
@@ -1332,7 +1333,7 @@ if (deleteRoot) {
 }
 const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Marking done…"},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."},"word":"Putting away…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
 const stateCard = (card, act, before, button) =>
-  whileBusy(card, async (answered) => {
+  whileBusy(card, async (answered, ticket) => {
     const listRoot = document.getElementById("space-links");
     const doneAlert = document.getElementById("space-error");
     const id = card.dataset.id;
@@ -1347,7 +1348,7 @@ const stateCard = (card, act, before, button) =>
     }
     if (before) await before();
     const putBack = takeOut(listRoot, card, false, change);
-    showUndo(undo.text, () => whenFree(card, async () => {
+    showUndo(ticket, undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
@@ -1459,9 +1460,12 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  let offers = 0;
-  const show = (message, undo, title) => {
-    offers++;
+  let taken = 0;
+  let newest = 0;
+  const show = (ticket, message, undo, title) => {
+    if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
+    if (ticket < newest) return;
+    newest = ticket;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -1482,7 +1486,7 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
-  show.offers = () => offers;
+  show.ticket = () => ++taken;
   return show;
 })();
 </script>

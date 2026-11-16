@@ -653,11 +653,12 @@ const busyLook = (el, button, word) => {
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const ticket = typeof showUndo === "function" ? showUndo.ticket() : null;
   const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run(busy ? busy.answered : () => {});
+    return await run(busy ? busy.answered : () => {}, ticket);
   } finally {
     if (busy) busy.clear();
     cardBusy.delete(card);

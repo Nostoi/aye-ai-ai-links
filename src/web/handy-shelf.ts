@@ -155,7 +155,9 @@ export const SHELF_STALE = "Your Handy shelf may be out of date. Reload the page
  *   mark only while the newest refresh has not settled (`settledTurn`); the newest releases the kept
  *   tiles when it ends without a swap, and forgets them when it swaps.
  * - `from` (the clicked button's tile, its act and the next tile, read at the click) puts focus back:
- *   on the same button, else the same tile's first control, else the next tile's, else the heading. * - Each button posts its route; a removal offers Undo, which sends back what the action answered.
+ *   on the same button, else the same tile's first control, else the next tile's, else the heading.
+ * - Each button posts its route; a removal offers Undo, which sends back what the action answered,
+ *   with the Undo ticket the action took with the tile's mark (`showUndo.ticket()`).
  *   It still works posts `/links/still-works` and offers Undo with the answer's `check` and `previous`.
  * - A button on the gone band collapses the band once the server agrees (`collapseBand`), inside
  *   the tile's mark, and only then refreshes the shelf, which draws the tile as the server decides.
@@ -217,8 +219,8 @@ const SHELF_ACTS = {
   "suggest-no": (id) => ["/tools/suggestion", { id, keep: false }, "Not kept handy."],
 };
 const working = ${JSON.stringify(WORKING)};
-const offerUndo = (message, route, body, from, title) =>
-  showUndo(message, async () => {
+const offerUndo = (ticket, message, route, body, from, title) =>
+  showUndo(ticket, message, async () => {
     const back = await post(route, body);
     if (back && back.status === 204) await refreshShelf(from);
     else handyError.textContent = await failure(back);
@@ -247,6 +249,7 @@ if (handy) {
     const from = { id, act, next: after && after.dataset.id ? after.dataset.id : null };
     handyError.textContent = "";
     cardBusy.add(tile);
+    const ticket = showUndo.ticket();
     const look = busyLook(tile, button.closest("details") ? null : button, working[act]);
     let dropped = false;
     try {
@@ -260,7 +263,7 @@ if (handy) {
         }
         if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from, tile);
-        offerUndo(${JSON.stringify(DONE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(DONE_UNDO.title)});
+        offerUndo(ticket, ${JSON.stringify(DONE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(DONE_UNDO.title)});
         return;
       }
       if (act === "still-works") {
@@ -273,7 +276,7 @@ if (handy) {
         }
         if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from, tile);
-        offerUndo("Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
+        offerUndo(ticket, "Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
         return;
       }
       const [route, body, undo] = make(id);
@@ -285,7 +288,7 @@ if (handy) {
         return;
       }
       dropped = await refreshShelf(from, tile);
-      if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
+      if (undo) offerUndo(ticket, undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
       look.clear();
       if (!dropped) cardBusy.delete(tile);

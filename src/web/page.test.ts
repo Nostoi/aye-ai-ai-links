@@ -45,19 +45,19 @@ function load() {
   let nextId = 1;
   let now = 0;
   const timers = new Map<number, { fn: () => void; ms: number; due: number }>();
-  const showUndo = new Function(
-    "document",
-    "setTimeout",
-    "clearTimeout",
-    `${code}\nreturn showUndo;`,
-  )(
+  const show = new Function("document", "setTimeout", "clearTimeout", `${code}\nreturn showUndo;`)(
     document,
     (fn: () => void, ms: number) => {
       timers.set(nextId, { fn, ms, due: now + ms });
       return nextId++;
     },
     (id: number) => timers.delete(id),
-  ) as (message: string, undo: () => Promise<void>, title?: string) => void;
+  ) as ((ticket: unknown, message: string, undo: () => Promise<void>, title?: string) => void) & {
+    ticket: () => number;
+  };
+  /** An action that takes its ticket and offers its Undo at once. */
+  const showUndo = (message: string, undo: () => Promise<void>, title?: string) =>
+    show(show.ticket(), message, undo, title);
   const $ = (selector: string) => document.querySelector(selector) as HTMLElement;
   const bar = $("#undo-bar");
   const undoButton = $("#undo-bar button");
@@ -81,6 +81,7 @@ function load() {
     $,
     bar,
     undoButton,
+    show,
     showUndo,
     waits,
     fire,
@@ -219,6 +220,56 @@ describe("the Undo bar", () => {
     p.fire(p.undoButton, "click");
     await p.settle();
     expect(p.focused()).toBe(p.$("#pin2"));
+  });
+
+  it("drops an offer from an action started before the newest one shown, changing nothing (#324)", async () => {
+    const p = load();
+    const undone: string[] = [];
+    const older = p.show.ticket();
+    const newer = p.show.ticket();
+    p.focus(p.$("#pin"));
+    p.show(newer, "Baking unpinned.", async () => void undone.push("baking"));
+    p.focus(p.$("#pin2"));
+    const waits = p.waits();
+    p.show(older, "Kitchen unpinned.", async () => void undone.push("kitchen"));
+    expect(p.$("#undo-bar span").textContent).toBe("Baking unpinned.");
+    expect(p.focused()).toBe(p.$("#pin2"));
+    expect(p.waits()).toEqual(waits);
+    p.focus(p.undoButton);
+    p.fire(p.undoButton, "click");
+    await p.settle();
+    expect(undone).toEqual(["baking"]);
+    expect(p.focused()).toBe(p.$("#pin"));
+  });
+
+  it("keeps dropping the older action's offer once the newer bar has closed", () => {
+    const p = load();
+    const older = p.show.ticket();
+    p.showUndo("Baking unpinned.", async () => {});
+    p.focus(p.$("#pin"));
+    p.advance(UNDO_BAR_MS);
+    expect(p.bar.hidden).toBe(true);
+    p.show(older, "Kitchen unpinned.", async () => {});
+    expect(p.bar.hidden).toBe(true);
+    expect(p.focused()).toBe(p.$("#pin"));
+  });
+
+  it("an action started later replaces the bar of one started earlier", () => {
+    const p = load();
+    const older = p.show.ticket();
+    const newer = p.show.ticket();
+    p.show(older, "Kitchen unpinned.", async () => {});
+    p.show(newer, "Baking unpinned.", async () => {});
+    expect(p.$("#undo-bar span").textContent).toBe("Baking unpinned.");
+  });
+
+  it("refuses an offer without a ticket the bar gave out, showing nothing", () => {
+    const p = load();
+    p.focus(p.$("#pin"));
+    expect(() => p.show(undefined, "Kitchen unpinned.", async () => {})).toThrow(TypeError);
+    expect(() => p.show(1, "Kitchen unpinned.", async () => {})).toThrow(TypeError);
+    expect(p.bar.hidden).toBe(true);
+    expect(p.focused()).toBe(p.$("#pin"));
   });
 });
 

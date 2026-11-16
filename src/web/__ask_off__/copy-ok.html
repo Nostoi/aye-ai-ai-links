@@ -670,11 +670,12 @@ const busyLook = (el, button, word) => {
 const whileBusy = async (card, run, look) => {
   if (cardBusy.has(card)) return;
   cardBusy.add(card);
+  const ticket = typeof showUndo === "function" ? showUndo.ticket() : null;
   const busy = look
     ? busyLook(look.el || (look.button && look.button.closest("[data-busy-scope]")) || card, look.button, look.word)
     : null;
   try {
-    return await run(busy ? busy.answered : () => {});
+    return await run(busy ? busy.answered : () => {}, ticket);
   } finally {
     if (busy) busy.clear();
     cardBusy.delete(card);
@@ -750,7 +751,7 @@ const takeOut = (listRoot, card, remove, change) => {
 };
 const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Marking done…"},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."},"word":"Putting away…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
 const stateCard = (card, act, before, button) =>
-  whileBusy(card, async (answered) => {
+  whileBusy(card, async (answered, ticket) => {
     const listRoot = document.getElementById("copy-frame");
     const doneAlert = document.getElementById("copy-end-error");
     const id = card.dataset.id;
@@ -765,7 +766,7 @@ const stateCard = (card, act, before, button) =>
     }
     if (before) await before();
     const putBack = takeOut(listRoot, card, false, change);
-    showUndo(undo.text, () => whenFree(card, async () => {
+    showUndo(ticket, undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
       if (back && back.status === 204) putBack();
       else doneAlert.textContent = await failure(back);
@@ -804,7 +805,7 @@ if (keepRoot) {
     const card = button.closest("[data-id]");
     const menu = button.closest("details");
     if (menu) menu.open = false;
-    await whileBusy(card, async (answered) => {
+    await whileBusy(card, async (answered, ticket) => {
       const id = card.dataset.id;
       const keep = button.dataset.act === "keep";
       keepError.textContent = "";
@@ -817,7 +818,7 @@ if (keepRoot) {
         return;
       }
       showKept(card, keep, menu);
-      showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
+      showUndo(ticket, keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
         whenFree(card, async () => {
           const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
           if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
@@ -904,9 +905,12 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  let offers = 0;
-  const show = (message, undo, title) => {
-    offers++;
+  let taken = 0;
+  let newest = 0;
+  const show = (ticket, message, undo, title) => {
+    if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
+    if (ticket < newest) return;
+    newest = ticket;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -927,7 +931,7 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
-  show.offers = () => offers;
+  show.ticket = () => ++taken;
   return show;
 })();
 </script>

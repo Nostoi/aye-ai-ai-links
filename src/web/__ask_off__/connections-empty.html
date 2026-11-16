@@ -692,6 +692,7 @@ list.addEventListener("click", async (event) => {
   if (!row || button.disabled) return;
   const id = Number(row.dataset.keyId);
   const name = row.querySelector("strong").textContent;
+  const ticket = showUndo.ticket();
   keysError.textContent = "";
   button.disabled = true;
   const res = await post("/connections/keys/turn-off", { id });
@@ -699,7 +700,7 @@ list.addEventListener("click", async (event) => {
   if (res && res.status === 204) {
     const after = row.nextElementSibling;
     row.remove();
-    showUndo("Key for " + name + " turned off.", async () => {
+    showUndo(ticket, "Key for " + name + " turned off.", async () => {
       const back = await post("/connections/keys/turn-on", { id });
       if (back && back.status === 204) list.insertBefore(row, after && after.parentNode === list ? after : null);
       else keysError.textContent = await failure(back);
@@ -873,9 +874,12 @@ const showUndo = (() => {
       close(action, held);
     }
   });
-  let offers = 0;
-  const show = (message, undo, title) => {
-    offers++;
+  let taken = 0;
+  let newest = 0;
+  const show = (ticket, message, undo, title) => {
+    if (!Number.isInteger(ticket) || ticket < 1 || ticket > taken) throw new TypeError("showUndo needs its action's ticket");
+    if (ticket < newest) return;
+    newest = ticket;
     if (current) {
       clearTimeout(current.timer);
       clearTimeout(current.ceiling);
@@ -896,7 +900,7 @@ const showUndo = (() => {
     arm(action);
     button.focus();
   };
-  show.offers = () => offers;
+  show.ticket = () => ++taken;
   return show;
 })();
 </script>

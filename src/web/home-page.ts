@@ -194,39 +194,39 @@ const showHandy = (card, kept) => {
 // What a button says while its action is slow; a ⋯ menu row has none and only dims the card.
 const homeWords = { snooze: ${JSON.stringify(NOT_NOW_WORKING)} };
 const homeActs = {
-  snooze: async (card, id, answered) => {
+  snooze: async (card, id, answered, ticket) => {
     const res = await post("/home/snooze", { id });
     answered();
     const data = await answerOf(res, "until");
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     const { until, claimedAt, previousSurfacedAt } = data;
-    showUndo(${JSON.stringify(`${NOT_NOW_HINT}.`)}, async () =>
+    showUndo(ticket, ${JSON.stringify(`${NOT_NOW_HINT}.`)}, async () =>
       undoOr(await post("/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }), putBack),
     );
   },
-  keep: async (card, id, answered) => {
+  keep: async (card, id, answered, ticket) => {
     const res = await post("/tools/keep", { id });
     answered();
     const moved = await answerOf(res, "tool");
     if (!moved) return failure(res);
     const putBack = takeOut(worthCards, card, false);
     await refreshShelf();
-    showUndo("Kept on your Handy shelf.", async () =>
+    showUndo(ticket, "Kept on your Handy shelf.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         putBack();
         await refreshShelf();
       }),
     );
   },
-  "not-handy": async (card, id, answered) => {
+  "not-handy": async (card, id, answered, ticket) => {
     const res = await post("/tools/not-handy", { id });
     answered();
     const moved = await answerOf(res, "tool");
     if (!moved) return failure(res);
     showHandy(card, false);
     await refreshShelf();
-    showUndo("Not handy anymore.", async () =>
+    showUndo(ticket, "Not handy anymore.", async () =>
       undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
         showHandy(card, true);
         await refreshShelf();
@@ -244,9 +244,9 @@ if (worthCards) {
     const act = homeActs[button.dataset.act];
     if (!act) return;
     if (menu) menu.open = false;
-    await whileBusy(card, async (answered) => {
+    await whileBusy(card, async (answered, ticket) => {
       homeError.textContent = "";
-      const refused = await act(card, card.dataset.id, answered);
+      const refused = await act(card, card.dataset.id, answered, ticket);
       if (refused) homeError.textContent = refused;
     }, { button: menu ? null : button, word: homeWords[button.dataset.act] });
   });

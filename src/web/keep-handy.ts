@@ -63,7 +63,7 @@ if (keepRoot) {
     const card = button.closest("[data-id]");
     const menu = button.closest("details");
     if (menu) menu.open = false;
-    await whileBusy(card, async (answered) => {
+    await whileBusy(card, async (answered, ticket) => {
       const id = card.dataset.id;
       const keep = button.dataset.act === "keep";
       keepError.textContent = "";
@@ -76,7 +76,7 @@ if (keepRoot) {
         return;
       }
       showKept(card, keep, menu);
-      showUndo(keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
+      showUndo(ticket, keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
         whenFree(card, async () => {
           const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
           if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);

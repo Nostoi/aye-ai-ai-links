@@ -487,10 +487,11 @@ const run = async (button, row, into) => {
   return null;
 };
 
-/** Runs \`fn\` with \`rows\` held and \`button\` disabled; shows the Undo it resolves to, if any. */
+/** Runs \`fn\` with \`rows\` held and \`button\` disabled; shows the Undo it resolves to, if any, with the ticket taken as it starts. */
 const working = async (button, rows, fn) => {
   if (isHeld(rows)) return;
   hold(rows);
+  const ticket = showUndo.ticket();
   // Disabling the focused button drops focus to the page, so it is given back after.
   const hadFocus = document.activeElement === button;
   button.disabled = true;
@@ -502,7 +503,7 @@ const working = async (button, rows, fn) => {
     release(rows);
   }
   if (hadFocus) button.focus();
-  if (undo) showUndo(undo[0], undo[1]);
+  if (undo) showUndo(ticket, undo[0], undo[1]);
 };
 
 /** Not these: posts the pair and takes the suggestion out; its Undo posts it back and puts it where it was. */

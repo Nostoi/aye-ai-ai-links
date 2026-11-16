@@ -806,6 +806,176 @@ describe("the shelf's script", () => {
   });
 });
 
+describe("a tile whose refresh was dropped, when the newer refresh does not swap (#321)", () => {
+  const gate = () => {
+    let open = () => {};
+    const wait = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { wait, open };
+  };
+  /** The page; each home refresh takes the next of `refreshes`, then the page itself. */
+  const refreshing = (html: string, refreshes: Answer[]) => {
+    const queue = [...refreshes];
+    return runPage(html, (s) =>
+      s.body === undefined
+        ? (queue.shift() ?? { status: 200, text: html })
+        : { status: s.url === "/tools/undo" ? 204 : 200, body: MOVED },
+    );
+  };
+  const press = async (p: ReturnType<typeof runPage>, item: ShelfItem) => {
+    p.dispatch(p.$(`[data-id="${item.link.id}"] button[data-act=not-handy]`), "click");
+    await p.settle();
+  };
+  const posts = (p: ReturnType<typeof runPage>, item: ShelfItem) =>
+    p.sent.filter(
+      (s) => s.url === "/tools/not-handy" && (s.body as { id: string }).id === item.link.id,
+    ).length;
+
+  it("lets the first tile act again when the newer refresh fails after the older one answered", async () => {
+    const [a, b] = [kept(), kept()];
+    const [g1, g2] = [gate(), gate()];
+    const html = home([a, b]);
+    const p = refreshing(html, [
+      { status: 200, text: html, wait: g1.wait },
+      { status: 500, wait: g2.wait },
+    ]);
+    await press(p, a);
+    await press(p, b);
+    g1.open();
+    await p.settle();
+    g2.open();
+    await p.settle();
+    expect(p.$("#handy-error").textContent).toBe(SHELF_STALE);
+    await press(p, a);
+    expect(posts(p, a)).toBe(2);
+  });
+
+  it("lets the first tile act again when the newer refresh fails before the older one answers", async () => {
+    const [a, b] = [kept(), kept()];
+    const g1 = gate();
+    const html = home([a, b]);
+    const p = refreshing(html, [
+      { status: 200, text: html, wait: g1.wait },
+      { status: 0, networkFails: true },
+    ]);
+    await press(p, a);
+    await press(p, b);
+    expect(p.$("#handy-error").textContent).toBe(SHELF_STALE);
+    g1.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(2);
+  });
+
+  it("lets two tiles act again when the newest of three refreshes fails first", async () => {
+    const [a, b, c] = [kept(), kept(), kept()];
+    const [g1, g2] = [gate(), gate()];
+    const html = home([a, b, c]);
+    const p = refreshing(html, [
+      { status: 200, text: html, wait: g1.wait },
+      { status: 200, text: html, wait: g2.wait },
+      { status: 500 },
+    ]);
+    await press(p, a);
+    await press(p, b);
+    await press(p, c);
+    g2.open();
+    await p.settle();
+    g1.open();
+    await p.settle();
+    await press(p, a);
+    await press(p, b);
+    expect(posts(p, a)).toBe(2);
+    expect(posts(p, b)).toBe(2);
+  });
+
+  it("lets the tile act again when the newer refresh is an Undo's and fails", async () => {
+    const [a, b] = [kept(), kept()];
+    const g = gate();
+    const html = home([a, b]);
+    const p = refreshing(html, [
+      { status: 200, text: html },
+      { status: 200, text: html, wait: g.wait },
+      { status: 500 },
+    ]);
+    await press(p, b);
+    await press(p, a);
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    g.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(2);
+  });
+
+  it("lets the tile act again when the newer refresh is a Worth card's Keep handy and fails", async () => {
+    const [a, b] = [kept(), kept()];
+    const g = gate();
+    const picked = link();
+    const html = homePage({
+      worth: { ...NO_WORTH, links: [{ link: picked, reasons: [] }] },
+      shelf: render([a, b]),
+      spaces: "",
+    });
+    const p = refreshing(html, [{ status: 200, text: html, wait: g.wait }, { status: 500 }]);
+    await press(p, a);
+    (p.$(`[data-id="${picked.id}"] details.card-menu`) as HTMLDetailsElement).open = true;
+    p.dispatch(p.$(`[data-id="${picked.id}"] .card-menu button[data-act=keep]`), "click");
+    await p.settle();
+    g.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(2);
+  });
+
+  it("keeps the first tile locked when a middle refresh is dropped while the newest still runs", async () => {
+    const [a, b, c] = [kept(), kept(), kept()];
+    const [g1, g2, g3] = [gate(), gate(), gate()];
+    const html = home([a, b, c]);
+    const p = refreshing(html, [
+      { status: 200, text: html, wait: g1.wait },
+      { status: 200, text: html, wait: g2.wait },
+      { status: 500, wait: g3.wait },
+    ]);
+    await press(p, a);
+    await press(p, b);
+    await press(p, c);
+    g1.open();
+    await p.settle();
+    g2.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(1);
+    g3.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(2);
+  });
+
+  it("keeps the tile locked while the newer refresh runs, then lets the new tile act after it swaps", async () => {
+    const [a, b] = [kept(), kept()];
+    const [g1, g2] = [gate(), gate()];
+    const html = home([a, b]);
+    const p = refreshing(html, [
+      { status: 200, text: html, wait: g1.wait },
+      { status: 200, text: html, wait: g2.wait },
+    ]);
+    await press(p, a);
+    await press(p, b);
+    g1.open();
+    await p.settle();
+    await press(p, a);
+    expect(posts(p, a)).toBe(1);
+    g2.open();
+    await p.settle();
+    await press(p, a);
+    await press(p, b);
+    expect(posts(p, a)).toBe(2);
+    expect(posts(p, b)).toBe(2);
+  });
+});
+
 describe("a Handy tile that is slow to answer (#314)", () => {
   const goneItem = (): ShelfItem => ({ ...kept(), gone: true });
   /** Each visible tile button, the tile that holds it and the word it says while its action is out. */

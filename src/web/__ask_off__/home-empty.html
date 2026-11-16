@@ -718,18 +718,28 @@ const focusAfter = (shelf, from) => {
   target.focus();
 };
 let shelfTurn = 0;
-const refreshShelf = async (from) => {
+let settledTurn = 0;
+const keptTiles = new Set();
+const refreshShelf = async (from, tile) => {
   const shelf = document.getElementById("handy-shelf");
   if (!shelf) return;
   const turn = ++shelfTurn;
   const res = await fetch("/", { headers: { accept: "text/html" }, redirect: "manual" }).catch(() => null);
   const text = res && res.ok ? await res.text().catch(() => null) : null;
-  if (turn !== shelfTurn) return true;
+  if (turn !== shelfTurn) {
+    const newerRuns = settledTurn !== shelfTurn;
+    if (newerRuns && tile) keptTiles.add(tile);
+    return newerRuns;
+  }
+  settledTurn = turn;
   const next = text === null ? null : new DOMParser().parseFromString(text, "text/html").getElementById("handy-shelf");
   if (!next) {
     document.getElementById("handy-error").textContent = "Your Handy shelf may be out of date. Reload the page.";
+    for (const kept of keptTiles) cardBusy.delete(kept);
+    keptTiles.clear();
     return;
   }
+  keptTiles.clear();
   const shown = [...shelf.querySelectorAll("[data-more]")].some((tile) => !tile.hidden);
   shelf.innerHTML = next.innerHTML;
   if (shown) showAll(shelf);
@@ -788,7 +798,7 @@ if (handy) {
           return;
         }
         if (gone) await collapseBand(gone);
-        dropped = await refreshShelf(from);
+        dropped = await refreshShelf(from, tile);
         offerUndo("Off Home, All links and your spaces. Still findable in search.", "/home/undo-state", { id, change }, from, "Done with it.");
         return;
       }
@@ -801,7 +811,7 @@ if (handy) {
           return;
         }
         if (gone) await collapseBand(gone);
-        dropped = await refreshShelf(from);
+        dropped = await refreshShelf(from, tile);
         offerUndo("Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
         return;
       }
@@ -813,7 +823,7 @@ if (handy) {
         handyError.textContent = await failure(res);
         return;
       }
-      dropped = await refreshShelf(from);
+      dropped = await refreshShelf(from, tile);
       if (undo) offerUndo(undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
     } finally {
       look.clear();

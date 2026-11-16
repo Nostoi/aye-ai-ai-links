@@ -397,8 +397,8 @@ async function homeAction(
 }
 
 /**
- * The Save dialog's answer: the link as saved, with its date in the page's words, who gave its why
- * (an inferred one shows as a guess) and the initials its square shows.
+ * The Save dialog's answer: the link as saved, with the title and initials its row shows, its date
+ * in the page's words and who gave its why (an inferred one shows as a guess).
  */
 const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
   id: link.id,
@@ -407,7 +407,7 @@ const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
   state: link.state,
   savedAt: link.savedAt.toISOString(),
   savedOn: savedOn(link.savedAt, now),
-  title: link.title,
+  title: displayTitle(link),
   url: link.url,
   why: link.why?.text ?? null,
   whySource: link.why?.source ?? null,

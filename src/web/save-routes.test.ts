@@ -12,6 +12,7 @@ import {
   type World,
 } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
+import { record } from "../core/snapshot-store-contract.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -229,6 +230,25 @@ describe("POST /save", () => {
     expect(linkRow(world, A)).toMatchObject([
       { title: "Saved before", saved_by: "claude", state: "archived" },
     ]);
+  });
+
+  it("a repeat save of a link with no title answers the title its row shows, the page's own", async () => {
+    const { world, browser } = await signedIn();
+    const deps = linkDeps(world);
+    const { link } = await saveLink(deps, A, { url: NEW, savedBy: "claude" });
+    const later = new Date(Date.now() + 60_000);
+    const lease = await deps.store.leaseSnapshot(
+      A,
+      link.id,
+      later,
+      new Date(later.getTime() + 60_000),
+    );
+    if (!lease) throw new Error("expected a lease");
+    expect(
+      await deps.store.recordSnapshot(A, link.id, lease.claim, record({ title: "Example Domain" })),
+    ).toBe(true);
+    const res = await save(browser, { url: NEW, title: null, why: null });
+    expect(res.body).toMatchObject({ created: false, title: "Example Domain" });
   });
 
   it("a repeat save of a put-away link answers its put-away date, as ISO", async () => {

@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { OPEN_PATH } from "../core/open-codes.js";
 
 const MAX_AGENT = 200;
 const MAX_DESCRIPTION = 200;
@@ -18,9 +19,12 @@ declare module "hono" {
 const plainToken = (value: unknown) =>
   typeof value === "string" && /^[\w.-]{1,64}$/.test(value) ? value : undefined;
 
+/** An open link's path (#133) as logged: its code is a credential, so it is never written. */
+const loggedPath = (path: string) => (path.startsWith(OPEN_PATH) ? `${OPEN_PATH}:code` : path);
+
 /**
- * One line per request. The query string, other headers and bodies are never written:
- * they carry codes, tokens, cookies and client assertions.
+ * One line per request. The query string, other headers, bodies and the code in an open link's
+ * path are never written: they carry codes, tokens, cookies and client assertions.
  */
 export function requestLog(log: (line: string) => void): MiddlewareHandler {
   return async (c, next) => {
@@ -31,7 +35,7 @@ export function requestLog(log: (line: string) => void): MiddlewareHandler {
       "[http]",
       new Date(start).toISOString(),
       c.req.method,
-      new URL(c.req.url).pathname,
+      loggedPath(new URL(c.req.url).pathname),
       String(status),
       `${Date.now() - start}ms`,
     ];

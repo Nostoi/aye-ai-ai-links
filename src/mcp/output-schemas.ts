@@ -98,6 +98,12 @@ export const linkOutput = z.strictObject({
   snapshot: snapshotOutput.nullable(),
   handy: handyOutput.nullable(),
   gone: goneOutput.nullable(),
+  openUrl: z
+    .string()
+    .nullable()
+    .describe(
+      "The address to show the owner when they may click the link: it opens the page and records the opening. Fetch url yourself, never this. Null when there is none: show url.",
+    ),
 });
 
 export const tagOutput = z.strictObject({

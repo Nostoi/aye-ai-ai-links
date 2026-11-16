@@ -200,6 +200,41 @@ describe("Keep handy guidance", () => {
   });
 });
 
+describe("open link guidance (#133)", () => {
+  const LINK_TOOLS = {
+    search_links: guidance.SEARCH_LINKS,
+    list_links: guidance.LIST_LINKS,
+    get_link: guidance.GET_LINK,
+    get_digest: GET_DIGEST,
+  };
+
+  it("tells every tool that hands out links to show openUrl, and not to send opened: true for it", () => {
+    for (const [tool, text] of Object.entries(LINK_TOOLS)) {
+      expect(text, tool).toMatch(/link to click, show its openUrl/);
+      expect(text, tool).toMatch(/url if openUrl is null/);
+      expect(text, tool).toMatch(/records the opening, so don't also send opened: true/);
+    }
+    expect(GET_DIGEST).not.toContain("Send opened: true if the owner opens one");
+  });
+
+  it("tells the tools an agent reads pages from to fetch url, never openUrl", () => {
+    for (const text of [guidance.SEARCH_LINKS, guidance.LIST_LINKS, guidance.GET_LINK]) {
+      expect(text).toContain("fetch url, never openUrl");
+    }
+  });
+
+  it("says an openUrl click is a recorded opening wherever the texts say how openings are recorded", () => {
+    expect(UPDATE_LINK).toMatch(
+      /opened: true when the owner opens the link other than through its openUrl/,
+    );
+    expect(guidance.LIST_LINKS).toMatch(/from the web page or an openUrl/);
+    expect(GET_DIGEST).toMatch(/from the web page or an openUrl/);
+    expect(guidance.GET_STATS).toMatch(/on the web page or through an openUrl/);
+    const cameBack = GET_DIGEST.split("\n").find((l) => l.startsWith("- came_back:")) ?? "";
+    expect(cameBack).toContain("an opening also does");
+  });
+});
+
 describe("undo_tag_change guidance", () => {
   it("after a too-late refusal has the agent show the owner what list_tags shows and let them decide, never judging it already undone", () => {
     const text = guidance.UNDO_TAG_CHANGE;

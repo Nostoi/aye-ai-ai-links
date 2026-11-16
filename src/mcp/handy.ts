@@ -1,5 +1,6 @@
 import { CoreError } from "../core/errors.js";
 import type { GoneView } from "../core/link-check.js";
+import { issueOpenCodes, openUrl } from "../core/open-codes.js";
 import {
   type HandyView,
   keepHandy,
@@ -11,16 +12,36 @@ import {
   type ToolsDeps,
 } from "../core/tools.js";
 import type { Link, OwnerId, Source } from "../core/types.js";
+import type { McpDeps } from "./server.js";
 
-/** Keep handy at the MCP door: translates into core/tools.ts calls, and holds no rule. */
+/**
+ * Keep handy, and the other per-link views, at the MCP door: translates into core calls, and
+ * holds no rule.
+ */
 
-/** A link as the door returns it: with its Keep handy view (null for an ordinary link) and its gone view (null unless flagged). */
+/**
+ * A link as the door returns it: with its Keep handy view (null for an ordinary link), its gone
+ * view (null unless flagged) and its open link for the calling agent (#133; null when none).
+ */
 export type HandyLink = Omit<Link, "tidyKeptAt"> & {
   handy: HandyView | null;
   gone: GoneView | null;
+  openUrl: string | null;
 };
 
-type ViewDeps = Pick<ToolsDeps, "tools" | "checks" | "now">;
+type ViewDeps = Pick<ToolsDeps, "tools" | "checks" | "now"> & Pick<McpDeps, "openLinks">;
+
+/** Each web link's open link for `agent`, by link id; none without `openLinks`. */
+async function openUrls(
+  { openLinks, now }: ViewDeps,
+  owner: OwnerId,
+  links: Link[],
+  agent: string,
+): Promise<Map<string, string>> {
+  if (!openLinks) return new Map();
+  const codes = await issueOpenCodes({ openCodes: openLinks.codes, now }, owner, links, agent);
+  return new Map([...codes].map(([id, code]) => [id, openUrl(openLinks.baseUrl, code)]));
+}
 
 /** The link fields `linkOutput` declares, picked by name so an internal field never reaches its strict schema. */
 function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> {
@@ -44,22 +65,37 @@ function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> {
   };
 }
 
+/** `agent` is the calling agent, whose open link the result carries. */
 export async function linkWithHandy(
   deps: ViewDeps,
   owner: OwnerId,
   link: Link,
+  agent: string,
 ): Promise<HandyLink> {
-  return { ...mcpLink(link), ...(await linkView(deps, owner, link)) };
+  const opens = await openUrls(deps, owner, [link], agent);
+  return {
+    ...mcpLink(link),
+    ...(await linkView(deps, owner, link)),
+    openUrl: opens.get(link.id) ?? null,
+  };
 }
 
-/** Each link with its views, from one read of the owner's rows. */
+/** Each link with its views, from one read of the owner's rows, and its open link for `agent`. */
 export async function linksWithHandy(
   deps: ViewDeps,
   owner: OwnerId,
   links: Link[],
+  agent: string,
 ): Promise<HandyLink[]> {
   const views = await linkViews(deps, owner, links);
-  return links.map((l) => ({ ...mcpLink(l), handy: null, gone: null, ...views.get(l.id) }));
+  const opens = await openUrls(deps, owner, links, agent);
+  return links.map((l) => ({
+    ...mcpLink(l),
+    handy: null,
+    gone: null,
+    ...views.get(l.id),
+    openUrl: opens.get(l.id) ?? null,
+  }));
 }
 
 /** The `handy` input's actions. */

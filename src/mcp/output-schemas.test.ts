@@ -704,11 +704,15 @@ type Wire<T> = T extends Date
     : T extends object
       ? { [K in keyof T]: Wire<T[K]> }
       : T;
-/** What the door adds to each link it returns: its Keep handy view and its gone view. */
+/** What the door adds to each link it returns: its Keep handy view, its gone view and its open link. */
 type Handied<T> = T extends Date
   ? T
   : T extends Link
-    ? Omit<T, "tidyKeptAt"> & { handy: HandyView | null; gone: GoneView | null }
+    ? Omit<T, "tidyKeptAt"> & {
+        handy: HandyView | null;
+        gone: GoneView | null;
+        openUrl: string | null;
+      }
     : T extends (infer U)[]
       ? Handied<U>[]
       : T extends object
@@ -854,7 +858,7 @@ describe("the MCP link projection", () => {
     const { deps } = freshApp();
     const { link } = await saveLink(deps, A.owner, { url: "https://example.com/x", savedBy: "t" });
     const extra = { ...link, tidyKeptAt: new Date(), futureField: 1 };
-    const projected = await linkWithHandy(deps, A.owner, extra as Link);
+    const projected = await linkWithHandy(deps, A.owner, extra as Link, "t");
     expect(projected).not.toHaveProperty("tidyKeptAt");
     expect(projected).not.toHaveProperty("futureField");
     expect(linkOutput.safeParse(JSON.parse(JSON.stringify(projected))).success).toBe(true);

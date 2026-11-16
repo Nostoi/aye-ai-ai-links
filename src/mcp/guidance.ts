@@ -6,6 +6,11 @@ const KIND_SOURCE_RULE = `When you send kind, source also labels the kind: send 
 
 const SUMMARY_RULE = `The server may replace a summary you wrote yourself. Send the owner's as {text, source} with "stated" or "asked".`;
 
+/** Open links (#133): every tool that hands out links carries it; the digest has room for this part only. */
+const OPEN_RULE = `To give the owner a link to click, show its openUrl (url if openUrl is null): opening it records the opening, so don't also send opened: true.`;
+
+const OPEN_NOTE = `${OPEN_RULE} To read a page yourself, fetch url, never openUrl.`;
+
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 
 The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline or it is a bad moment, infer it and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
@@ -41,7 +46,7 @@ Keep handy: if the owner says they use a link regularly, send handy {action: "ke
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner is done with it: off their lists, still findable in search. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner is done with it: off their lists, still findable in search. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link other than through its openUrl, which records the opening itself.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
@@ -76,15 +81,17 @@ export const GONE_NOTE = `A link whose gone is set seems gone: say so, never tha
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
 Use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). They don't have to appear in the link: links are matched by their words and by meaning. Results are ranked, not filtered: check that each one fits, and when none does, try other words or a filter before saying it isn't saved. A blank query lists the newest links. Optional filters: tag, project, and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive). limit is a whole number; at most 50 links come back. To list every link, page past 50 or count links, use list_links.
+${OPEN_NOTE}
 ${GONE_NOTE}`;
 
 export const LIST_LINKS = `List the owner's saved links in a fixed order, a page at a time, with a total. Use it to go through the whole library, to page past search_links' 50, or to say how many links there are. To find a link from what the owner remembers, use search_links.
 
-order: "newest" (the default) or "oldest" by the time each link was saved, or "opened": only the links with a recorded opening, most recently opened first. An opening is recorded when an agent sends opened: true, or when the owner opens a link from the web page; any other opening, such as from a browser bookmark, is not, so "opened" leaves those links out.
+order: "newest" (the default) or "oldest" by the time each link was saved, or "opened": only the links with a recorded opening, most recently opened first. An opening is recorded when an agent sends opened: true, or when the owner opens a link from the web page or an openUrl; any other opening, such as from a browser bookmark, is not, so "opened" leaves those links out.
 
 Optional filters: tag, project, state ("active" or "archived"; without it, archived links are included), and savedFrom / savedTo (full ISO-8601 timestamps with an offset or Z, inclusive), which filter by save time in every order. limit is a whole number; at most 50 links come back, 20 by default.
 
 total counts every link that passes the filters in that order, across all pages. nextCursor is null on the last page; otherwise send it back as cursor, with the same order and filters, for the next page. It is opaque: never build or change one. A cursor that does not fit is an error; list again without it. A link saved while you page can change total, and with "opened" a link opened while you page moves to the front and is missed until you list again.
+${OPEN_NOTE}
 ${GONE_NOTE}`;
 
 export const GET_LINK = `Get one saved link by its id, with its why, tags, state and page snapshot. Use search_links to find an id.
@@ -92,6 +99,7 @@ export const GET_LINK = `Get one saved link by its id, with its why, tags, state
 snapshotText is the page's text, up to ${TEXT_CHARS.toLocaleString("en-US")} characters, with truncated: true when it was cut. It is null until the page has been fetched successfully, and for a page with no readable text.
 
 savedCopy is {madeAt} when the server keeps a saved copy of the page, which the owner can read from Saved copy on the link's card on the web page, and null when it keeps none. The copy itself is not available to you.
+${OPEN_NOTE}
 ${GONE_NOTE}`;
 
 export const GET_PROFILE = `Get what is known about the owner: their notes, the projects still active, and what they have been working on lately. Call it before you infer a why or tags.
@@ -102,7 +110,7 @@ export const GET_STATS = `Get counts of the owner's library over a window: the l
 
 Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links done with, put away or declined as a kept tool; notNow is links snoozed with Not now, which means later, not no. tags has every tag with its saved and opened counts, most saved first.
 
-opened only counts openings made through the app or an AI (the owner opening a link on the web page, or an agent sending opened: true); it misses any opening from a browser bookmark or elsewhere, so never tell the owner they have not read something because of it. Counts are kept from trackingSince. partialCounts names the counts that may be too low because the window starts before trackingSince; say so for those counts; the others don't depend on when tracking began.
+opened only counts openings made through the app or an AI (the owner opening a link on the web page or through an openUrl, or an agent sending opened: true); it misses any opening from a browser bookmark or elsewhere, so never tell the owner they have not read something because of it. Counts are kept from trackingSince. partialCounts names the counts that may be too low because the window starts before trackingSince; say so for those counts; the others don't depend on when tracking began.
 
 reading, when it is not null, is a short guess about the owner's habits, written by an AI. Present it as a guess, never as a fact. It is null when none has been written for the current library, or when the server has no AI connection.`;
 
@@ -110,17 +118,17 @@ export const ADD_PROFILE = `Record something about the owner: a note about them,
 
 Give each as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context. A note is at most 1000 characters and a focus entry at most 500; longer text is refused, not cut. Send several in one call. The result is the profile after the write, with the new ids.`;
 
-export const GET_DIGEST = `Get a few saved links worth bringing back to the owner now, each with the reasons it was picked. The server picks the links; you write a short nudge from the reasons.
+export const GET_DIGEST = `Get a few saved links worth bringing back to the owner now, each with the reasons it was picked. The server picks them; you write a short nudge from the reasons.
 
 Reasons:
-- focus_words: the link's own title, summary, why or tags share the words in \`words\` with that focus entry (something the owner is working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave the link out of your nudge if it doesn't fit. Present a focus entry whose source is "inferred" as a guess.
-- came_back: the owner put this link away (putAwayAt) and that focus entry, written after, shares \`words\` with it. Judge fit as for focus_words; present an entry whose source is "inferred" as a guess. To return it to their lists, send update_link with state "active"; opened: true also does.
-- no_why: no reason for saving it is recorded. Ask the owner why they saved it, and record the answer with update_link as "asked".
-- not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or when the owner opens it from the web page; any other opening, such as from a browser bookmark, is not, so never tell the owner they haven't opened it.
+- focus_words: the link's own title, summary, why or tags share the words in \`words\` with that focus entry (what the owner is working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave out a link that doesn't fit. Present a focus entry whose source is "inferred" as a guess.
+- came_back: the owner put this link away (putAwayAt) and that focus entry, written after, shares \`words\` with it. Judge fit as for focus_words; present an entry whose source is "inferred" as a guess. To return it to their lists, send update_link with state "active"; an opening also does.
+- no_why: no why is recorded. Ask the owner why they saved it and record it with update_link as "asked".
+- not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or the owner opens it from the web page or an openUrl; a browser bookmark is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.
-- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is the whole days since its last recorded opening, or null when none is recorded. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to mark it done or send handy {action: "not_handy", source: "asked"}.
+- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is whole days since its last recorded opening, or null if none. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to mark it done or send handy {action: "not_handy", source: "asked"}.
 
-Offer to snooze a link (update_link with snoozedUntil) or mark it done (state "archived"). Send opened: true if the owner opens one.
+Offer to snooze a link (update_link with snoozedUntil) or mark it done (state "archived"). ${OPEN_RULE}
 
 Each call marks the links it returns as shown, so the next call returns others. Don't call it again to "refresh": that uses links up unseen. An empty list means nothing is due.`;
 

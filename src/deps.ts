@@ -9,6 +9,7 @@ import { DIMS, MODEL_KEY } from "./search/model.js";
 import { createNameVectors } from "./search/name-vectors.js";
 import { loadVectorFunctions, VectorSearch } from "./search/vector-search.js";
 import { ExportFolder } from "./store/export-folder.js";
+import { SqliteOpenCodes } from "./store/open-codes.js";
 import { SqliteProfileStore } from "./store/profile-store.js";
 import { SqliteSavedCopyStore } from "./store/saved-copies.js";
 import { SqliteSearchLog } from "./store/search-log.js";
@@ -47,6 +48,8 @@ export function createDeps(
     /** The blank listing, with each link's sort time from the same read, for paging (#215). */
     listing: keywordSearch,
     searchLog: new SqliteSearchLog(db),
+    /** The codes in the links agents hand the owner (#133); only `src/auth/` reads one back. */
+    openCodes: new SqliteOpenCodes(db),
     vectorIndex: new SqliteVectorIndex(db, DIMS),
     /** Preview images: the image pass writes them, the web door reads them. */
     images: new SqliteImageStore(db),

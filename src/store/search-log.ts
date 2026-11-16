@@ -1,5 +1,5 @@
 import type { Database } from "better-sqlite3";
-import type { ReceiptRow, SearchLog, SearchLogEntry } from "../core/search-log.js";
+import type { LoggedRow, ReceiptRow, SearchLog, SearchLogEntry } from "../core/search-log.js";
 import type { OwnerId } from "../core/types.js";
 import { parseId } from "./sql-values.js";
 
@@ -48,20 +48,11 @@ export class SqliteSearchLog implements SearchLog {
 
   async receiptRow(owner: OwnerId, receipt: string): Promise<ReceiptRow | null> {
     const row = this.db
-      .prepare(
-        `SELECT searched_by AS by, created_at AS at, opened_link_id AS opened, results
-         FROM search_log WHERE owner_id = ? AND receipt = ?`,
-      )
-      .get(owner, receipt) as
-      | { by: string; at: number; opened: number | null; results: string }
-      | undefined;
+      .prepare(`SELECT ${ROW_COLUMNS} FROM search_log WHERE owner_id = ? AND receipt = ?`)
+      .get(owner, receipt) as StoredRow | undefined;
     if (!row) return null;
-    return {
-      by: row.by,
-      createdAt: new Date(row.at),
-      openedLinkId: row.opened === null ? null : String(row.opened),
-      resultIds: (JSON.parse(row.results) as { id: string }[]).map((r) => r.id),
-    };
+    const { id: _, ...receiptRow } = loggedRow(row);
+    return receiptRow;
   }
 
   /** The row's own `opened_link_id IS NULL` is the guard, so two opens at once pair one. */
@@ -99,4 +90,43 @@ export class SqliteSearchLog implements SearchLog {
       )
       .run(linkId, link.urlKey, at.getTime(), owner, by, since.getTime());
   }
+
+  async agentRows(owner: OwnerId, by: string, since: Date): Promise<LoggedRow[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT ${ROW_COLUMNS} FROM search_log
+         WHERE owner_id = ? AND searched_by = ? AND created_at >= ? ORDER BY id DESC`,
+      )
+      .all(owner, by, since.getTime()) as StoredRow[];
+    return rows.map(loggedRow);
+  }
+
+  /** The row's own `opened_link_id IS NULL` is the guard, so two opens at once pair one. */
+  async pairRow(
+    owner: OwnerId,
+    id: string,
+    link: { id: string; urlKey: string },
+    at: Date,
+  ): Promise<void> {
+    const rowId = parseId(id);
+    const linkId = parseId(link.id);
+    if (rowId === null || linkId === null) return;
+    this.db
+      .prepare(
+        `UPDATE search_log SET opened_link_id = ?, opened_url_key = ?, opened_at = ?
+         WHERE owner_id = ? AND id = ? AND opened_link_id IS NULL`,
+      )
+      .run(linkId, link.urlKey, at.getTime(), owner, rowId);
+  }
 }
+
+const ROW_COLUMNS = "id, searched_by AS by, created_at AS at, opened_link_id AS opened, results";
+type StoredRow = { id: number; by: string; at: number; opened: number | null; results: string };
+
+const loggedRow = (row: StoredRow): LoggedRow => ({
+  id: String(row.id),
+  by: row.by,
+  createdAt: new Date(row.at),
+  openedLinkId: row.opened === null ? null : String(row.opened),
+  resultIds: (JSON.parse(row.results) as { id: string }[]).map((r) => r.id),
+});

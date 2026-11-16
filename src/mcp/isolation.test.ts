@@ -27,6 +27,7 @@ import {
 } from "../auth/oauth-test-kit.js";
 import { png } from "../core/image-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
+import { issueOpenCodes, newOpenCode } from "../core/open-codes.js";
 import { addProfile } from "../core/profile.js";
 import { copyLimits, imageRef } from "../core/saved-copy.js";
 import { setTagPinned } from "../core/tag-space.js";
@@ -134,6 +135,7 @@ const TOOLS_EXERCISED_ACROSS_TWO_OWNERS = [
 const KNOWN_OWNED_TABLES = [
   "focus_log",
   "link_images",
+  "link_open_codes",
   "link_tags",
   "link_vectors",
   "links",
@@ -629,7 +631,15 @@ describe("owner isolation coverage", () => {
   };
 
   type Marker = string | Buffer | (string | Buffer)[];
-  type ReadEntry = { request: string; marker: (world: World) => Marker } | { noOwnerData: string };
+  /**
+   * `bearer`: a route that takes a code in place of a session, so it shows the code's owner's data
+   * to whoever holds the code, signed in or not. The generic walk below cannot hold it to "B sees
+   * none of A's data"; the bearer-code test does, through the code alone.
+   */
+  type ReadEntry =
+    | { request: string; marker: (world: World) => Marker }
+    | { noOwnerData: string }
+    | { bearer: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
     // A's titled link has no why, so it is one of A's picks on home; A's pinned space and kept tool show too.
     "GET /": {
@@ -684,7 +694,13 @@ describe("owner isolation coverage", () => {
       request: "/links/:id/copy/images/1",
       marker: () => A_COPY_IMAGE,
     },
+    "GET /o/:code": { bearer: "an agent's open link (#133): the code's own link, for anyone" },
   };
+  const bearerPaths = new Set(
+    Object.entries(READ_ROUTES).flatMap(([key, entry]) =>
+      "bearer" in entry ? [key.slice("GET ".length)] : [],
+    ),
+  );
   const readKey = (path: string) => `GET ${path}`;
   const readablePaths = (world: World) => {
     const routes = webRoutes(world);
@@ -831,8 +847,11 @@ describe("owner isolation coverage", () => {
       return sent;
     };
 
+    // A bearer path filled with a link id names no code, so it is a 404 for A too.
     for (const path of paths) {
-      if (readable.has(path)) await asA(fillPath(path, aLinkId), `GET ${path}`);
+      if (readable.has(path) && !bearerPaths.has(path)) {
+        await asA(fillPath(path, aLinkId), `GET ${path}`);
+      }
     }
     const executed = Object.entries(READ_ROUTES).flatMap(([key, entry]) =>
       "request" in entry
@@ -946,6 +965,7 @@ describe("owner isolation coverage", () => {
     "POST /export/prepare":
       "the two-owner test of POST /export/prepare in web/export-zip-routes.test.ts",
     "POST /ai/chat": "the two-owner test of POST /ai/chat in web/ai-routes.test.ts",
+    "POST /o/:code": "the bearer-code test below, and web/open-routes.test.ts",
   };
 
   it("every web route that can write has a named two-owner test", async () => {
@@ -959,6 +979,71 @@ describe("owner isolation coverage", () => {
       }
     }
     expect([...writes].sort()).toEqual(Object.keys(WRITE_ROUTES_TESTED).sort());
+  });
+
+  it("every bearer path is the open link's, and is tested below", async () => {
+    expect([...bearerPaths]).toEqual(["/o/:code"]);
+  });
+
+  it("an open code reaches only its own link, the same whoever is signed in, and nothing else", async () => {
+    const world = await oauthWorld();
+    const deps = createDeps(world.links, new FakeEmbedder(DIMS));
+    const owner = world.agent();
+    await owner.signIn();
+    const browser = await addSecondUser(world);
+    const anyone = world.agent();
+    const { link: aLink } = await saveLink(deps, A, { url: A_URL, savedBy: "seed" });
+    const { link: bLink } = await saveLink(deps, B, { url: B_URL, savedBy: "seed-b" });
+    const aCode = (await issueOpenCodes(deps, A, [aLink], "Claude")).get(aLink.id) as string;
+    const bCode = (await issueOpenCodes(deps, B, [bLink], "Claude")).get(bLink.id) as string;
+    const before = { a: rowsOf(world, A), b: rowsOf(world, B) };
+    const visitors = { anyone, A: owner, B: browser };
+
+    const pagesOf = async (path: string) => {
+      const sent: Sent[] = [];
+      for (const visitor of Object.values(visitors)) sent.push(await visitor.send(path));
+      return sent;
+    };
+    const aPages = await pagesOf(`/o/${aCode}`);
+    const bPages = await pagesOf(`/o/${bCode}`);
+    const nothing = [
+      ...(await pagesOf(`/o/${newOpenCode()}`)),
+      ...(await pagesOf("/o/")),
+      ...(await pagesOf(`/o/${aLink.id}`)),
+    ];
+
+    for (const [i, sent] of aPages.entries()) {
+      expect(sent.status, `A's code for visitor ${i}`).toBe(200);
+      expect(sent.bytes.equals(aPages[0]?.bytes ?? Buffer.alloc(0))).toBe(true);
+      expect(holds(sent, A_URL)).toBe(true);
+      expect(holds(sent, B_URL)).toBe(false);
+      expect(outsideRefs(sent.bytes.toString("utf8"))).toEqual([]);
+    }
+    for (const sent of bPages) {
+      expect(sent.status).toBe(200);
+      expect(sent.bytes.equals(bPages[0]?.bytes ?? Buffer.alloc(0))).toBe(true);
+      expect(holds(sent, B_URL)).toBe(true);
+      expect(holds(sent, A_URL)).toBe(false);
+    }
+    for (const sent of nothing) {
+      expect(sent.status).toBe(404);
+      expect(holds(sent, A_URL) || holds(sent, B_URL)).toBe(false);
+    }
+    expect({ a: rowsOf(world, A), b: rowsOf(world, B) }).toEqual(before);
+
+    // B's session posting A's code records A's opening of A's link; B's rows stay as they were.
+    expect((await browser.send(`/o/${aCode}`, { method: "POST" })).status).toBe(204);
+    expect(rowsOf(world, B)).toEqual(before.b);
+    expect(rowsOf(world, A).link_events).toEqual([
+      expect.objectContaining({ owner_id: A, link_id: Number(aLink.id), kind: "opened" }),
+    ]);
+    // A's session posting B's code records only B's link; A's rows stay as they now are.
+    const afterA = rowsOf(world, A);
+    expect((await owner.send(`/o/${bCode}`, { method: "POST" })).status).toBe(204);
+    expect(rowsOf(world, A)).toEqual(afterA);
+    expect(rowsOf(world, B).link_events).toEqual([
+      expect.objectContaining({ owner_id: B, link_id: Number(bLink.id), kind: "opened" }),
+    ]);
   });
 });
 

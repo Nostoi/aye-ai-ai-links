@@ -25,7 +25,7 @@ async function opening(url = URL_A) {
 const opened = (world: World) =>
   world.links.prepare("SELECT link_id AS link, kind FROM link_events ORDER BY rowid").all();
 
-const post = (code: string, origin: string | false = "https://links.example") => ({
+const post = (origin: string | false = "https://links.example") => ({
   method: "POST",
   ...(origin === false ? { origin: false } : { headers: { origin } }),
 });
@@ -80,7 +80,7 @@ describe("POST /o/:code (#133)", () => {
   it("records one opening of the code's link, with no session", async () => {
     const { world, deps, link, code, visitor } = await opening();
 
-    const sent = await visitor.send(`/o/${code}`, post(code));
+    const sent = await visitor.send(`/o/${code}`, post());
 
     expect(sent.status).toBe(204);
     expect(opened(world)).toEqual([{ link: Number(link.id), kind: "opened" }]);
@@ -91,10 +91,10 @@ describe("POST /o/:code (#133)", () => {
     const { world, code, visitor } = await opening();
     const before = allRows(world);
 
-    const foreign = await visitor.send(`/o/${code}`, post(code, "https://evil.example"));
+    const foreign = await visitor.send(`/o/${code}`, post("https://evil.example"));
     // A sandboxed frame or a data: page sends "null"; the page's own script sends its origin.
-    const opaque = await visitor.send(`/o/${code}`, post(code, "null"));
-    const bare = await visitor.send(`/o/${code}`, post(code, false));
+    const opaque = await visitor.send(`/o/${code}`, post("null"));
+    const bare = await visitor.send(`/o/${code}`, post(false));
 
     expect([foreign.status, opaque.status, bare.status]).toEqual([403, 403, 403]);
     expect(allRows(world)).toEqual(before);
@@ -108,8 +108,8 @@ describe("POST /o/:code (#133)", () => {
 
     const pages = [await visitor.send(`/o/${unknown}`), await visitor.send(`/o/${code}`)];
     const posts = [
-      await visitor.send(`/o/${unknown}`, post(unknown)),
-      await visitor.send(`/o/${code}`, post(code)),
+      await visitor.send(`/o/${unknown}`, post()),
+      await visitor.send(`/o/${code}`, post()),
     ];
 
     expect(pages.map((p) => p.status)).toEqual([404, 404]);
@@ -126,9 +126,9 @@ describe("POST /o/:code (#133)", () => {
 
     const statuses: number[] = [];
     for (let i = 0; i <= OPEN_LIMIT.limit; i++) {
-      statuses.push((await visitor.send(`/o/${code}`, post(code))).status);
+      statuses.push((await visitor.send(`/o/${code}`, post())).status);
     }
-    const free = await visitor.send(`/o/${otherCode}`, post(otherCode));
+    const free = await visitor.send(`/o/${otherCode}`, post());
 
     expect(statuses.slice(0, OPEN_LIMIT.limit).every((s) => s === 204)).toBe(true);
     expect(statuses.at(-1)).toBe(429);
@@ -185,9 +185,9 @@ describe("the request log of /o/:code", () => {
     const unknown = newOpenCode();
 
     await visitor.send(`/o/${code}`);
-    await visitor.send(`/o/${code}`, post(code));
+    await visitor.send(`/o/${code}`, post());
     await visitor.send(`/o/${unknown}`);
-    await visitor.send(`/o/${unknown}`, post(unknown));
+    await visitor.send(`/o/${unknown}`, post());
 
     const logged = lines.filter((l) => l.includes(" /o/"));
     expect(logged).toHaveLength(4);

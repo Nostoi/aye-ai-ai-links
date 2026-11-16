@@ -218,7 +218,12 @@ describe("open link guidance (#133)", () => {
   });
 
   it("tells the tools an agent reads pages from to fetch url, never openUrl", () => {
-    for (const text of [guidance.SEARCH_LINKS, guidance.LIST_LINKS, guidance.GET_LINK]) {
+    for (const text of [
+      guidance.SEARCH_LINKS,
+      guidance.LIST_LINKS,
+      guidance.GET_LINK,
+      GET_DIGEST,
+    ]) {
       expect(text).toContain("fetch url, never openUrl");
     }
   });

@@ -44,7 +44,7 @@ export const MAX_CARDS = 5;
 export const IN_APP_INSTRUCTIONS = `The owner is talking to you inside the app itself. What they write here is in their own words, so record it as "stated", or as "asked" when it answers a question you asked.
 
 <panel>
-Your reply appears in a narrow chat panel beside the owner's links. The panel shows plain text only: it does not render Markdown, so asterisks, dashes and hashes appear exactly as typed. A link is shown as a picture card with its title, so the owner sees the links rather than reads about them.
+Your reply appears in a narrow chat panel beside the owner's links. The panel shows plain text only: it does not render Markdown, so asterisks, dashes and hashes appear exactly as typed. A link is shown as a picture card with its title, so the owner sees the links rather than reads about them. In this panel, link cards ([[link:ID]]) replace openUrl and url, so never write a raw address.
 </panel>
 
 <reply_format>

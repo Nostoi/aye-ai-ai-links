@@ -26,12 +26,12 @@ const FRAME_ID = "copy-frame";
 const OPENED = openedScript(FRAME_ID, "/links/opened", PUT_AWAY_MARKER);
 const END = `<script>${COPY_END_SCRIPT}</script>`;
 
-/** The page's own scripts: its menu, and the Undo bar the end row offers. */
+/** The page's own scripts: its menu with the Save dialog, and the Undo bar the end row offers. */
 const COPY_PAGE_OPTIONS = { menu: true, undo: true };
 
 /**
- * Every script of the copy page: the page's own for its menu and Undo bar, the one recording an
- * opening, and the end row's.
+ * Every script of the copy page: the page's own for its menu, Undo bar and Save dialog, the one
+ * recording an opening, and the end row's.
  * The CSP lists these and no other, hashed from here and never from the page they render into,
  * so a script that reached the page through the article would still be refused.
  */

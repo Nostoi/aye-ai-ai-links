@@ -77,6 +77,22 @@ function start(
   ).HTMLElement.prototype.focus = function (this: Element) {
     focusLog.push(this);
   };
+  // linkedom has no `<dialog>` methods: these stand in for the browser's, so a page script that
+  // opens a dialog while it loads can run. `stubDialog` replaces them on one dialog for a test.
+  const dialogProto = (
+    document.defaultView as unknown as {
+      HTMLElement: { prototype: { showModal: () => void; close: () => void } };
+    }
+  ).HTMLElement.prototype;
+  dialogProto.showModal = function (this: Element & { open?: boolean }) {
+    this.open = true;
+  };
+  dialogProto.close = function (this: Element & { open?: boolean }) {
+    if (!this.open) return;
+    this.open = false;
+    const view = this.ownerDocument.defaultView as unknown as typeof globalThis;
+    this.dispatchEvent(new view.Event("close"));
+  };
   if (ask) {
     Object.defineProperty(document, "activeElement", {
       get: () => {

@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { scriptedModel } from "../ai/model-test-kit.js";
 import { AUTH_BODY_LIMIT } from "../auth/http.js";
 import { TEST_BASE_URL } from "../auth/memory-auth.js";
 import {
@@ -11,6 +12,7 @@ import {
   type World,
 } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
+import { record } from "../core/snapshot-store-contract.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -58,14 +60,31 @@ describe("GET /save", () => {
     expect(allRows(world)).toEqual(before);
   });
 
-  it("?long=1 shows the long-address message and no form", async () => {
+  // Every menu page now carries the Save dialog's form (#329), so "no form" became: the dialog is
+  // not opened at load and nothing is filled.
+  it("?long=1 shows the long-address message, with the dialog closed and empty", async () => {
     const { browser } = await signedIn();
-    const res = await browser.send("/save?long=1");
+    const res = await browser.send(`/save?long=1&url=${encodeURIComponent(NEW)}`);
     expect(res.status).toBe(200);
     expect(shownText(String(res.body))).toContain(
       "This page's address is too long to save from the bookmarklet.",
     );
-    expect(parseHTML(String(res.body)).document.querySelector("form")).toBeNull();
+    const d = parseHTML(String(res.body)).document;
+    expect(d.getElementById("save-dialog")?.hasAttribute("data-page")).toBe(false);
+    expect(field(String(res.body), "save-url")).toBe("");
+  });
+
+  it("with the AI set up, still has no Ask AI panel, owner id or edit dialog", async () => {
+    const world = await oauthWorld({ ai: scriptedModel("Fake", []) });
+    const browser = world.agent();
+    await browser.signIn();
+    const body = String((await browser.send(saveAddress(NEW, "A story"))).body);
+    expect(String((await browser.send("/")).body), "the AI is on").toContain("data-owner");
+    expect(body).not.toContain("data-owner");
+    const d = parseHTML(body).document;
+    expect(d.getElementById("ask-panel")).toBeNull();
+    expect(d.getElementById("edit-link")).toBeNull();
+    expect(d.getElementById("save-dialog")?.hasAttribute("data-page")).toBe(true);
   });
 
   it("leaves other pages without a framing header", async () => {
@@ -177,7 +196,9 @@ describe("POST /save", () => {
       title: "A story",
       url: NEW,
       why: "for the trip",
+      whySource: "asked",
       putAwayAt: null,
+      initials: "AS",
     });
   });
 
@@ -202,11 +223,32 @@ describe("POST /save", () => {
       title: "Saved before",
       url: NEW,
       why: null,
+      whySource: null,
       putAwayAt: null,
+      initials: "SB",
     });
     expect(linkRow(world, A)).toMatchObject([
       { title: "Saved before", saved_by: "claude", state: "archived" },
     ]);
+  });
+
+  it("a repeat save of a link with no title answers the title its row shows, the page's own", async () => {
+    const { world, browser } = await signedIn();
+    const deps = linkDeps(world);
+    const { link } = await saveLink(deps, A, { url: NEW, savedBy: "claude" });
+    const later = new Date(Date.now() + 60_000);
+    const lease = await deps.store.leaseSnapshot(
+      A,
+      link.id,
+      later,
+      new Date(later.getTime() + 60_000),
+    );
+    if (!lease) throw new Error("expected a lease");
+    expect(
+      await deps.store.recordSnapshot(A, link.id, lease.claim, record({ title: "Example Domain" })),
+    ).toBe(true);
+    const res = await save(browser, { url: NEW, title: null, why: null });
+    expect(res.body).toMatchObject({ created: false, title: "Example Domain" });
   });
 
   it("a repeat save of a put-away link answers its put-away date, as ISO", async () => {

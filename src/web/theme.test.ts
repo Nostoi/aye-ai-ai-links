@@ -1515,36 +1515,36 @@ describe("Home's trays, spine and spacing (#306)", () => {
     expect(tokens.light.spine).toBe("hsl(40 25% 88%)");
   });
 
-  it.each(["handy", "worth", "spaces"])("lays the %s section on the --tray colour", (name) => {
-    const section = home(`<section class="${name}"></section>`, "section");
-    for (const w of BOTH) {
-      expect(computed(section, "background", w), w).toBe("var(--tray)");
-      expect(computed(section, "border-radius", w), w).toBe(
-        "calc(var(--radius-card) + var(--tray-pad))",
+  it.each(["handy", "worth", "spaces", "tidy-tray"])(
+    "lays the %s section on the --tray colour",
+    (name) => {
+      const section = home(`<section class="${name}"></section>`, "section");
+      for (const w of BOTH) {
+        expect(computed(section, "background", w), w).toBe("var(--tray)");
+        expect(computed(section, "border-radius", w), w).toBe(
+          "calc(var(--radius-card) + var(--tray-pad))",
+        );
+        expect(computed(section, "margin", w), w).toBe("var(--space-8) 0 0");
+        expect(computed(section, "position", w), w).toBe("relative");
+      }
+      expect(computed(section, "--tray-pad", "desktop")).toBe("16px");
+      expect(computed(section, "--tray-pad", "phone")).toBe("10px");
+      expect(themeCss).not.toContain("var(--tray,");
+    },
+  );
+
+  it.each(["spaces", "tidy-tray"])(
+    "never lets the %s tray be shorter than its absolute spine's content on a wide screen",
+    (name) => {
+      const section = home(`<section class="${name}"></section>`, "section");
+      // Tray padding twice, the 26px icon, the 6px gap and one 13.5px word line (21px).
+      expect(computed(section, "min-height", "desktop")).toBe(
+        "calc(2*var(--tray-pad) + 26px + 6px + 21px)",
       );
-      expect(computed(section, "margin", w), w).toBe("var(--space-8) 0 0");
-      expect(computed(section, "position", w), w).toBe("relative");
-    }
-    expect(computed(section, "--tray-pad", "desktop")).toBe("16px");
-    expect(computed(section, "--tray-pad", "phone")).toBe("10px");
-    expect(themeCss).not.toContain("var(--tray,");
-  });
-
-  it("leaves Tidy up's start line off a tray", () => {
-    const tidy = home('<section class="tidy-start"></section>', "section");
-    expect(computed(tidy, "background", "desktop")).toBeUndefined();
-    expect(computed(tidy, "border-radius", "desktop")).toBeUndefined();
-  });
-
-  it("never lets a tray be shorter than its absolute spine's content on a wide screen", () => {
-    const section = home('<section class="spaces"></section>', "section");
-    // Tray padding twice, the 26px icon, the 6px gap and one 13.5px word line (21px).
-    expect(computed(section, "min-height", "desktop")).toBe(
-      "calc(2*var(--tray-pad) + 26px + 6px + 21px)",
-    );
-    // On a phone the spine is a strip in the flow, so the tray needs no floor.
-    expect(computed(section, "min-height", "phone")).toBe("0");
-  });
+      // On a phone the spine is a strip in the flow, so the tray needs no floor.
+      expect(computed(section, "min-height", "phone")).toBe("0");
+    },
+  );
 
   it("pads the tray past the spine on a wide screen, and evenly on a phone", () => {
     const section = home('<section class="handy"></section>', "section");

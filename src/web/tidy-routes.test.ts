@@ -8,12 +8,16 @@ import {
 } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
 import { addProfile } from "../core/profile.js";
+import { keepHandy } from "../core/tools.js";
+import { WORTH_SIZE } from "../core/worth-a-look.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
 
 const A = "owner";
 const DAY = 86_400_000;
+/** Old links Home offers as Tidy up's session once Worth a look has taken its picks. */
+const SESSION = 5;
 const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS));
 const post = (json: unknown) => ({ method: "POST", json });
 const row = (world: World, id: string) =>
@@ -22,19 +26,26 @@ const row = (world: World, id: string) =>
     unknown
   >;
 
-/** An old link of `owner`: saved 60 days ago and never opened, so Tidy up offers it. */
-async function oldLink(world: World, n: number, owner = A) {
+/** An old link of `owner`: saved 60 days ago (older for a lower `n`) and never opened, so Tidy up offers it. */
+async function oldLink(
+  world: World,
+  n: number,
+  owner = A,
+  tags: { name: string; source: "stated" }[] = [],
+) {
   const { link } = await saveLink(linkDeps(world), owner, {
     url: `https://${owner}.example/old-${n}`,
     savedBy: "seed",
     title: `Old link ${n} of ${owner}`,
+    tags,
   });
   world.links
     .prepare("UPDATE links SET saved_at = ? WHERE id = ?")
-    .run(Date.now() - 60 * DAY, Number(link.id));
+    .run(Date.now() - (60 + 100 - n) * DAY, Number(link.id));
   return link.id;
 }
 
+/** `count` old links of A's and A's signed-in browser. Worth a look takes WORTH_SIZE of them. */
 async function tidy(count = 1) {
   const world = await oauthWorld();
   const ids: string[] = [];
@@ -44,75 +55,119 @@ async function tidy(count = 1) {
   return { world, browser, ids };
 }
 
+const stepIds = (html: string) =>
+  [...html.matchAll(/<div class="tidy-step" data-id="(\d+)"/g)].map((m) => m[1] as string);
+const homeHtml = async (browser: Awaited<ReturnType<typeof tidy>>["browser"]) =>
+  String((await browser.send("/")).body);
+const outsideTidy = (html: string) =>
+  html.replace(/<section class="tidy-tray"[\s\S]*?<\/section>/, "");
+
 describe("GET /tidy", () => {
-  it("shows the owner's old links as a session, the first one visible, uncached", async () => {
-    const { browser, ids } = await tidy(6);
+  it("sends the old page's address to Home, uncached, showing no link", async () => {
+    const { browser } = await tidy(WORTH_SIZE + SESSION);
     const res = await browser.send("/tidy");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    const html = String(res.body);
-    for (const id of ids.slice(0, 5))
-      expect(html).toContain(`<section class="tidy-step" data-id="${id}"`);
-    expect(html).not.toContain(`data-id="${ids[5]}"`);
-    expect(html).toContain("Link 1 of 5");
-    expect(html).toContain("Keep");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/");
+    expect(String(res.body)).not.toContain("Old link");
   });
 
-  it("an owner with nothing old gets the finish screen alone", async () => {
-    const world = await oauthWorld();
-    const browser = world.agent();
-    await browser.signIn();
-    const html = String((await browser.send("/tidy")).body);
-    expect(html).toContain("Done for now.");
-    expect(html).not.toContain("data-id=");
-  });
-
-  it("says a link fits a current focus the keyword search finds", async () => {
-    const world = await oauthWorld();
-    await oldLink(world, 1);
-    await addProfile(linkDeps(world), A, "Claude", {
-      addFocus: [{ text: "old", source: "inferred" }],
-    });
-    const browser = world.agent();
-    await browser.signIn();
-    const html = String((await browser.send("/tidy")).body);
-    expect(html).toMatch(/Might fit <b>old<\/b>, which you may be working on \(a guess\)\./);
-  });
-
-  it("shows no fit line when the owner has no current focus", async () => {
-    const { browser } = await tidy(1);
-    const html = String((await browser.send("/tidy")).body);
-    expect(html).not.toContain("Might fit");
-    expect(html).not.toContain("Doesn't fit anything");
-  });
-
-  it("refuses another site's Origin or Host with 403, showing no link", async () => {
+  it("refuses another site's Origin or Host with 403", async () => {
     const { browser } = await tidy(1);
     const foreign: Record<string, string>[] = [
       { origin: "https://evil.example" },
       { host: "evil.example" },
     ];
     for (const headers of foreign) {
-      const res = await browser.send("/tidy", { headers });
-      expect(res.status).toBe(403);
-      expect(String(res.body)).not.toContain("Old link");
+      expect((await browser.send("/tidy", { headers })).status).toBe(403);
     }
-    expect((await browser.send("/tidy", { origin: false })).status).toBe(200);
+    expect((await browser.send("/tidy", { origin: false })).status).toBe(303);
+  });
+});
+
+describe("GET / Tidy up tray", () => {
+  it("is offered closed at five old links Home shows nowhere else, its steps hidden and no link to /tidy", async () => {
+    const { browser, ids } = await tidy(WORTH_SIZE + SESSION);
+    const res = await browser.send("/");
+    expect(res.status).toBe(200);
+    const html = String(res.body);
+    expect(html).toContain("Clear out a few old links?");
+    expect(html).not.toContain('href="/tidy"');
+    const steps = stepIds(html);
+    expect(steps).toHaveLength(SESSION);
+    expect(steps.every((id) => ids.includes(id))).toBe(true);
+    expect(html.match(/<div class="tidy-step" data-id="\d+" hidden>/g)).toHaveLength(SESSION);
+    // Nothing on Home appears twice: no tray link is a card, row or tile above it.
+    const elsewhere = [...outsideTidy(html).matchAll(/data-id="(\d+)"/g)].map((m) => m[1]);
+    expect(elsewhere.length).toBeGreaterThan(0);
+    for (const id of steps) expect(elsewhere).not.toContain(id);
   });
 
-  it("twice leaves every row byte-identical", async () => {
-    const { world, browser } = await tidy(2);
+  it("is absent when Worth a look takes some of the old links and fewer than five are left", async () => {
+    const { browser } = await tidy(WORTH_SIZE + SESSION - 1);
+    const html = await homeHtml(browser);
+    expect(html).toContain("Worth a look today");
+    expect(html).not.toContain("Clear out a few old links?");
+    expect(html).not.toContain("tidy-step");
+  });
+
+  it("leaves out a link that is a space card's, and is absent when that leaves four", async () => {
+    const world = await oauthWorld();
+    for (let i = 0; i < WORTH_SIZE + SESSION; i++) {
+      await oldLink(world, i, A, [{ name: "Kitchen", source: "stated" }]);
+    }
+    await linkDeps(world).store.pinTag(A, "kitchen", { pinned: true, color: "clay" });
+    const browser = world.agent();
+    await browser.signIn();
+    const html = await homeHtml(browser);
+    expect(html).toContain("home-space-recent");
+    expect(html).not.toContain("tidy-step");
+  });
+
+  it("leaves out a link Home suggests for the Handy shelf", async () => {
+    const world = await oauthWorld();
+    const ids: string[] = [];
+    for (let i = 0; i < WORTH_SIZE + SESSION + 1; i++) ids.push(await oldLink(world, i));
+    const suggested = ids[0] as string;
+    await keepHandy(linkDeps(world), A, suggested, "inferred");
+    const browser = world.agent();
+    await browser.signIn();
+    const html = await homeHtml(browser);
+    const steps = stepIds(html);
+    expect(steps).toHaveLength(SESSION);
+    expect(steps).not.toContain(suggested);
+  });
+
+  it("says a link fits a current focus the keyword search finds", async () => {
+    const { world, browser } = await tidy(WORTH_SIZE + SESSION);
+    await addProfile(linkDeps(world), A, "Claude", {
+      addFocus: [{ text: "old", source: "inferred" }],
+    });
+    const html = await homeHtml(browser);
+    expect(html).toMatch(/Might fit <b>old<\/b>, which you may be working on \(a guess\)\./);
+  });
+
+  it("shows no fit line when the owner has no current focus", async () => {
+    const { browser } = await tidy(WORTH_SIZE + SESSION);
+    const html = await homeHtml(browser);
+    expect(html).toContain("tidy-step");
+    expect(html).not.toContain("Might fit");
+    expect(html).not.toContain("Doesn't fit anything");
+  });
+
+  it("reading Home twice leaves every row byte-identical", async () => {
+    const { world, browser } = await tidy(WORTH_SIZE + SESSION);
+    await homeHtml(browser);
     const before = allRows(world);
-    expect((await browser.send("/tidy")).status).toBe(200);
-    expect((await browser.send("/tidy")).status).toBe(200);
+    expect((await browser.send("/")).status).toBe(200);
     expect(allRows(world)).toEqual(before);
   });
 
-  it("a second owner sees none of the first owner's links", async () => {
-    const { world } = await tidy(2);
+  it("a second owner's Home has their own tray and none of the first owner's links", async () => {
+    const { world } = await tidy(WORTH_SIZE + SESSION);
     const b = await addSecondUser(world);
-    await oldLink(world, 9, SECOND_USER.id);
-    const html = String((await b.send("/tidy")).body);
+    for (let i = 0; i < WORTH_SIZE + SESSION; i++) await oldLink(world, i, SECOND_USER.id);
+    const html = String((await b.send("/")).body);
+    expect(stepIds(html)).toHaveLength(SESSION);
     expect(html).toContain(`of ${SECOND_USER.id}`);
     expect(html).not.toMatch(new RegExp(`of ${A}(?!-)`));
   });
@@ -132,11 +187,13 @@ describe("POST /tidy/keep", () => {
   });
 
   it("a kept link is out of the next session", async () => {
-    const { browser, ids } = await tidy(2);
-    await browser.send("/tidy/keep", post({ id: ids[0] }));
-    const html = String((await browser.send("/tidy")).body);
-    expect(html).not.toContain(`data-id="${ids[0]}"`);
-    expect(html).toContain(`data-id="${ids[1]}"`);
+    const { browser } = await tidy(WORTH_SIZE + SESSION + 1);
+    const [kept, ...left] = stepIds(await homeHtml(browser));
+    expect(left).toHaveLength(SESSION - 1);
+    await browser.send("/tidy/keep", post({ id: kept }));
+    const steps = stepIds(await homeHtml(browser));
+    expect(steps).toHaveLength(SESSION);
+    expect(steps).not.toContain(kept);
   });
 
   it("refuses a link that is no longer active with 409, writing nothing", async () => {

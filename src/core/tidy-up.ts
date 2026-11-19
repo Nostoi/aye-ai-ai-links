@@ -4,10 +4,10 @@ import { recentFocus } from "./profile.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
 import { ALREADY_DONE, changeIf } from "./worth-a-look.js";
 
-/** The Tidy up queue and Keep's wait: the use cases behind the Tidy up pages. */
+/** The Tidy up queue and Keep's wait: the use cases behind Home's Tidy up tray. */
 
 const DAY_MS = 86_400_000;
-/** Links in one Tidy up session; Home offers it once this many qualify. */
+/** Links in one Tidy up session; `tidySession` offers one only when this many are left to show. */
 export const TIDY_SESSION = 5;
 /** After Keep, a link stays out of Tidy up this long. */
 export const TIDY_KEEP_WAIT_MS = 180 * DAY_MS;
@@ -23,9 +23,14 @@ export type TidyLink = { link: Link; fit: FocusEntry | null };
 /**
  * The owner's links that qualify, oldest saved first, then lowest id. A link qualifies when it is
  * active, saved and last opened at least NOT_OPENED_MS ago, not a kept tool, not gone (Home's gone
- * row asks about those), and not kept in Tidy up within TIDY_KEEP_WAIT_MS.
+ * row asks about those), not kept in Tidy up within TIDY_KEEP_WAIT_MS, and not in `skip`.
  */
-async function qualifying(deps: TidyDeps, owner: OwnerId, now: Date): Promise<Link[]> {
+async function qualifying(
+  deps: TidyDeps,
+  owner: OwnerId,
+  now: Date,
+  skip: ReadonlySet<string>,
+): Promise<Link[]> {
   const oldBefore = now.getTime() - NOT_OPENED_MS;
   const keptBefore = now.getTime() - TIDY_KEEP_WAIT_MS;
   const tools = await deps.tools.listTools(owner);
@@ -33,6 +38,7 @@ async function qualifying(deps: TidyDeps, owner: OwnerId, now: Date): Promise<Li
   return (await deps.store.listLinks(owner))
     .filter(
       (l) =>
+        !skip.has(l.id) &&
         l.state === "active" &&
         l.savedAt.getTime() <= oldBefore &&
         (l.lastOpenedAt === null || l.lastOpenedAt.getTime() <= oldBefore) &&
@@ -51,15 +57,17 @@ export async function currentFocus(deps: TidyDeps, owner: OwnerId): Promise<Focu
 
 /**
  * Up to `limit` old links, oldest saved first, then lowest id. Gone links are left out: Home's
- * gone row asks about them. One focus match per current focus entry, newest first.
+ * gone row asks about them. Links in `skip` (what Home already shows) are left out before the
+ * limit applies. One focus match per current focus entry, newest first.
  */
 export async function tidyQueue(
   deps: TidyDeps,
   owner: OwnerId,
   limit: number,
+  skip: ReadonlySet<string> = new Set(),
 ): Promise<TidyLink[]> {
   const now = deps.now();
-  const picked = (await qualifying(deps, owner, now)).slice(0, limit);
+  const picked = (await qualifying(deps, owner, now, skip)).slice(0, limit);
   const entries = await currentFocus(deps, owner);
   const fits = new Map<string, FocusEntry>();
   if (picked.length > 0) {
@@ -72,6 +80,19 @@ export async function tidyQueue(
   return picked.map((link) => ({ link, fit: fits.get(link.id) ?? null }));
 }
 
+/**
+ * One Tidy up session for Home: the queue, with `skip` (what Home shows above it) left out, or
+ * null unless a full TIDY_SESSION of links is left, so Home never offers five and shows fewer.
+ */
+export async function tidySession(
+  deps: TidyDeps,
+  owner: OwnerId,
+  skip: ReadonlySet<string>,
+): Promise<TidyLink[] | null> {
+  const queue = await tidyQueue(deps, owner, TIDY_SESSION, skip);
+  return queue.length < TIDY_SESSION ? null : queue;
+}
+
 /** Keep: sets tidyKeptAt = now while the link is active; a link that changed since is a conflict. */
 export async function keepInTidy(deps: TidyDeps, owner: OwnerId, id: string): Promise<void> {
   await changeIf(
@@ -82,9 +103,4 @@ export async function keepInTidy(deps: TidyDeps, owner: OwnerId, id: string): Pr
     { tidyKeptAt: deps.now() },
     ALREADY_DONE,
   );
-}
-
-/** Whether Home offers Tidy up: at least TIDY_SESSION links qualify. */
-export async function tidyReady(deps: TidyDeps, owner: OwnerId): Promise<boolean> {
-  return (await qualifying(deps, owner, deps.now())).length >= TIDY_SESSION;
 }

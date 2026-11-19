@@ -76,7 +76,7 @@ import {
 } from "../core/tag-suggest.js";
 import type { TagSuggestStore } from "../core/tag-suggest-store.js";
 import { tagKey } from "../core/tags.js";
-import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue, tidyReady } from "../core/tidy-up.js";
+import { currentFocus, keepInTidy, tidySession } from "../core/tidy-up.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
@@ -140,7 +140,6 @@ import { olderInvalidPage } from "./show-older.js";
 import { SPACE_RESTART, spaceHref, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 import { tagsPage } from "./tags-page.js";
-import { tidyPage } from "./tidy-page.js";
 
 /** How many links a space page or All links shows at a time. */
 const LINK_PAGE = 24;
@@ -890,7 +889,23 @@ export function webApp({
       [...items, ...suggestions].map((t) => t.link.id),
     );
     const shelf = handyShelf({ items, suggestions, catalog, images: shelfImages });
-    const tidy = await tidyReady(deps, owner);
+    // Nothing on Home appears twice: Tidy up skips every link shown above it (#332). Only the
+    // route knows what it drew; core decides whether a full session is left.
+    const aboveTidy = new Set([...shown, ...spaces.flatMap((s) => s.recent.map((l) => l.id))]);
+    const queue = await tidySession(deps, owner, aboveTidy);
+    const tidy =
+      queue === null
+        ? undefined
+        : {
+            queue,
+            hasFocus: (await currentFocus(deps, owner)).length > 0,
+            images: await deps.images.imageVersions(
+              owner,
+              queue.map((t) => t.link.id),
+            ),
+            catalog,
+            now: deps.now(),
+          };
     const page = homePage({
       worth,
       shelf,
@@ -901,18 +916,8 @@ export function webApp({
     return c.html(page, 200, NO_STORE);
   });
 
-  // Tidy up (#198): a session of old links. Reading it writes nothing.
-  app.get("/tidy", session, async (c) => {
-    const { owner } = c.get("caller");
-    const queue = await tidyQueue(deps, owner, TIDY_SESSION);
-    const hasFocus = (await currentFocus(deps, owner)).length > 0;
-    const images = await deps.images.imageVersions(
-      owner,
-      queue.map((t) => t.link.id),
-    );
-    const catalog = await deps.store.listTags(owner);
-    return c.html(tidyPage({ queue, hasFocus, images, catalog, now: deps.now() }), 200, NO_STORE);
-  });
+  // Tidy up opens in place on Home (#332); the old page's address lands there.
+  app.get("/tidy", session, (c) => c.redirect("/", 303));
 
   app.get("/search", session, async (c) => {
     const caller = c.get("caller");

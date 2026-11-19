@@ -22,6 +22,8 @@ import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
 import { slideButton } from "./slide-button.js";
 import { SPACES_ID } from "./spaces-section.js";
 import { askWhy, CARD_FETCH, tellWhyScript, WHY_LABEL, whyAnswer } from "./tell-why.js";
+import { TIDY_SCRIPT } from "./tidy-script.js";
+import { type TidyTrayInput, tidyTray } from "./tidy-tray.js";
 import { spine } from "./tray-spine.js";
 
 /**
@@ -256,35 +258,27 @@ addEventListener("pageshow", (event) => {
 });
 }`;
 
-/** Tidy up's quiet start line at the bottom of Home (#198); the route decides when to show it. */
-const TIDY_START = `<section class="tidy-start" aria-label="Tidy up">
-<div>
-<p>Clear out a few old links?</p>
-<p class="small">Five, one at a time. Nothing gets deleted.</p>
-</div>
-<a href="/tidy">Start</a>
-</section>
-`;
-
 /**
  * Home: the big question, the page's one heading, and one search field, then `shelf`, the Handy
  * shelf (#125), then "Worth a look today" when there is anything to show, then `spaces`, the "Your
  * spaces" section (#96). Opening a card's link is recorded with `/home/opened`, which also marks it
  * shown; openings from the shelf are recorded without that. The cards' Delete link, Remove saved
  * copy, Edit, Done with it, gone line and Tell me why are the shared scripts'; the rest is
- * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's.
+ * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's. `tidy`, when the route
+ * offers Tidy up (#198, #332), is the last tray, `tidyTray`, which `TIDY_SCRIPT` works in place;
+ * its opening of a link is recorded like the Handy shelf's.
  */
 export const homePage = ({
   worth,
   shelf,
   spaces,
-  tidy = false,
+  tidy,
   ask,
 }: {
   worth: WorthCards;
   shelf: string;
   spaces: string;
-  tidy?: boolean;
+  tidy?: TidyTrayInput | undefined;
   ask?: Ask | undefined;
 }) => {
   const section = worthSection(worth);
@@ -304,7 +298,7 @@ export const homePage = ({
 ${shelf}
 ${section}
 ${spaces}
-${tidy ? TIDY_START : ""}</main>
+${tidy ? tidyTray(tidy) : ""}</main>
 ${ownEdit ? `${editDialog()}\n` : ""}<script>
 ${CARD_FETCH}
 ${SHELF_SCRIPT}
@@ -314,10 +308,11 @@ ${doneLinkScript("worth-cards", "home-error")}
 ${goneScript("worth-cards", "home-error")}
 ${removeCopyScript("worth-cards", "home-error")}
 ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}
+${tidy ? TIDY_SCRIPT : ""}
 </script>
 ${openedScript("worth-cards", "/home/opened")}
 ${openedScript("handy", "/links/opened")}
-${openedScript(SPACES_ID, "/links/opened")}`,
+${openedScript(SPACES_ID, "/links/opened")}${tidy ? `\n${openedScript("tidy", "/links/opened")}` : ""}`,
     {
       menu: true,
       here: "home",

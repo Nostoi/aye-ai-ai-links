@@ -1388,33 +1388,53 @@ describe("the Worth a look cards' pictures", () => {
   });
 });
 
-describe("Tidy up's start line", () => {
-  const html = (tidy?: boolean) =>
-    homePage({ worth: worth([card([])]), shelf: "", spaces: "", ...(tidy ? { tidy } : {}) });
-  const start = (h: string) => parseHTML(h).document.querySelector('.tidy-start a[href="/tidy"]');
+describe("Tidy up's tray on Home", () => {
+  const input = {
+    queue: [{ link: link({ title: "Old one" }), fit: null }],
+    hasFocus: false,
+    images: new Map(),
+    catalog: [],
+    now: NOW,
+  };
+  const html = (tidy?: typeof input) =>
+    homePage({ worth: worth([card([])]), shelf: "", spaces: "", tidy });
+  const tray = (h: string) => parseHTML(h).document.querySelector("section.tidy-tray");
 
-  it("offers a Start link to /tidy with its two lines when asked", () => {
-    const h = html(true);
-    expect(h).toContain("Clear out a few old links?");
-    expect(h).toContain("Five, one at a time. Nothing gets deleted.");
-    expect(start(h)?.textContent).toBe("Start");
+  it("draws the tray, closed, with a Start button, when asked", () => {
+    const t = tray(html(input)) as Element;
+    expect(t.querySelector(".tidy-closed button")?.textContent).toBe("Start");
+    expect(html(input)).not.toContain('href="/tidy"');
   });
 
-  it("is absent when not asked", () => {
-    expect(html()).not.toContain("Clear out a few old links?");
-    expect(start(html())).toBeNull();
+  it("draws nothing, and runs and records nothing for it, when not asked", () => {
+    const h = html();
+    expect(tray(h)).toBeNull();
+    expect(h).not.toContain("Clear out a few old links?");
+    expect(h).not.toContain('getElementById("tidy")');
   });
 
   it("sits after the spaces, at the bottom of the page", () => {
-    const h = homePage({ worth: worth([]), shelf: "", spaces: "<b>spaces</b>", tidy: true });
-    expect(h.indexOf("<b>spaces</b>")).toBeLessThan(h.indexOf("Clear out"));
+    const h = homePage({ worth: worth([]), shelf: "", spaces: "<b>spaces</b>", tidy: input });
+    expect(h.indexOf("<b>spaces</b>")).toBeLessThan(h.indexOf('class="tidy-tray"'));
   });
 
-  it("is a control at least 44px tall with only theme tokens", () => {
-    const css = themeCss;
-    expect(css).toMatch(/\.tidy-start a[^{]*\{[^}]*min-height:44px/);
-    const rules = css.match(/\.tidy-start[^{]*\{[^}]*\}/g)?.join("") ?? "";
-    expect(rules).not.toMatch(/#[0-9a-f]{3,6}\b|amber/i);
+  it("records the opening of a link in it, like the Handy shelf's", async () => {
+    const p = runPage(html(input));
+    p.dispatch(p.$(".tidy-step a[data-open]"), "click");
+    await p.settle();
+    expect(p.sent).toEqual([
+      {
+        url: "/links/opened",
+        body: { id: p.$(".tidy-step").getAttribute("data-id") },
+        redirect: "manual",
+        keepalive: true,
+      },
+    ]);
+  });
+
+  it("lays the tray on the tray colour like the others", () => {
+    const rule = themeCss.match(/\.handy,\.worth,\.spaces,\.tidy-tray\{[^}]*\}/)?.[0] ?? "";
+    expect(rule).toContain("background:var(--tray)");
   });
 });
 

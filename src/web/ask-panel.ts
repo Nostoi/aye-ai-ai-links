@@ -688,7 +688,12 @@ export const ASK_SCRIPT = `<script>
       for (const s of entry.segments) {
         if (!isObj(s)) continue;
         if (typeof s.text === "string") {
-          reply.appendChild(make("p", opening ? "ask-lead" : "", s.text));
+          const gap = opening ? /\\r?\\n[ \\t]*\\r?\\n/.exec(s.text) : null;
+          if (gap) {
+            reply.appendChild(make("p", "ask-lead", s.text.slice(0, gap.index)));
+            const rest = s.text.slice(gap.index + gap[0].length).replace(/^(?:[ \\t]*\\r?\\n)+/, "");
+            if (rest.trim() !== "") reply.appendChild(make("p", "", rest));
+          } else reply.appendChild(make("p", opening ? "ask-lead" : "", s.text));
         } else if (typeof s.card === "string") {
           slot(reply, s.card, s.note);
         } else continue;

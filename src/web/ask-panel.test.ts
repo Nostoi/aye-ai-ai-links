@@ -1783,6 +1783,20 @@ describe("a reply's notes and label (#334)", () => {
     expect(p.panel().messages.querySelectorAll(".ask-reply > p")).toHaveLength(3);
   });
 
+  it("makes only the opening paragraph of a single multi-paragraph text its lead", () => {
+    const p = load({
+      stored: reply([{ text: "Found it.\n\n\nIt is the 2019 one.\nSaved in May." }]),
+    });
+    const leads = [...p.panel().messages.querySelectorAll("p.ask-lead")];
+    expect(leads.map((n) => n.textContent)).toEqual(["Found it."]);
+    const paras = [...p.panel().messages.querySelectorAll(".ask-reply > p")];
+    expect(paras.map((n) => n.textContent)).toEqual([
+      "Found it.",
+      "It is the 2019 one.\nSaved in May.",
+    ]);
+    expect(paras[1]?.classList.contains("ask-lead")).toBe(false);
+  });
+
   it("gives no lead to text that comes after a card", () => {
     const p = load({ stored: reply([{ card: BODY("7") }, { text: "Want more?" }]) });
     expect(p.panel().messages.querySelector(".ask-lead")).toBeNull();

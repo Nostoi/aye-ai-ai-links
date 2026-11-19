@@ -8,6 +8,7 @@ import {
   TIDY_SESSION,
   type TidyDeps,
   tidyQueue,
+  tidySession,
 } from "./tidy-up.js";
 import { keepHandy } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
@@ -225,6 +226,28 @@ describe("skip", () => {
     await focus("x", ago(DAY), [l.id]);
     expect(await tidyQueue(deps(), A, 5, new Set([l.id]))).toEqual([]);
     expect(searches).toEqual([]);
+  });
+});
+
+describe("tidySession", () => {
+  it("gives the queue when a full session is left after the skip", async () => {
+    const skipped = await link({ savedAt: ago(100 * DAY) });
+    const rest = [];
+    for (let i = 0; i < TIDY_SESSION; i++) rest.push(await link({ savedAt: ago((90 - i) * DAY) }));
+    const got = await tidySession(deps(), A, new Set([skipped.id]));
+    expect(got?.map((t) => t.link.id)).toEqual(rest.map((l) => l.id));
+  });
+
+  it("gives nothing when one fewer than a full session is left", async () => {
+    for (let i = 0; i < TIDY_SESSION - 1; i++) await link({ savedAt: ago((90 - i) * DAY) });
+    expect(await tidySession(deps(), A, new Set())).toBeNull();
+  });
+
+  it("gives nothing when the skip takes a full session down by one", async () => {
+    const [first] = [await link({ savedAt: ago(100 * DAY) })];
+    for (let i = 0; i < TIDY_SESSION - 1; i++) await link({ savedAt: ago((90 - i) * DAY) });
+    expect(await tidySession(deps(), A, new Set())).not.toBeNull();
+    expect(await tidySession(deps(), A, new Set([first.id]))).toBeNull();
   });
 });
 

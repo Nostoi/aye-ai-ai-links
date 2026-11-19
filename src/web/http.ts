@@ -76,7 +76,7 @@ import {
 } from "../core/tag-suggest.js";
 import type { TagSuggestStore } from "../core/tag-suggest-store.js";
 import { tagKey } from "../core/tags.js";
-import { currentFocus, keepInTidy, TIDY_SESSION, tidyQueue } from "../core/tidy-up.js";
+import { currentFocus, keepInTidy, tidySession } from "../core/tidy-up.js";
 import type { ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
@@ -889,12 +889,12 @@ export function webApp({
       [...items, ...suggestions].map((t) => t.link.id),
     );
     const shelf = handyShelf({ items, suggestions, catalog, images: shelfImages });
-    // Nothing on Home appears twice: Tidy up skips every link shown above it, and is offered only
-    // when that leaves a full session (#332).
+    // Nothing on Home appears twice: Tidy up skips every link shown above it (#332). Only the
+    // route knows what it drew; core decides whether a full session is left.
     const aboveTidy = new Set([...shown, ...spaces.flatMap((s) => s.recent.map((l) => l.id))]);
-    const queue = await tidyQueue(deps, owner, TIDY_SESSION, aboveTidy);
+    const queue = await tidySession(deps, owner, aboveTidy);
     const tidy =
-      queue.length < TIDY_SESSION
+      queue === null
         ? undefined
         : {
             queue,

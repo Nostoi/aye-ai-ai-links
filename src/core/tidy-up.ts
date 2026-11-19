@@ -7,7 +7,7 @@ import { ALREADY_DONE, changeIf } from "./worth-a-look.js";
 /** The Tidy up queue and Keep's wait: the use cases behind Home's Tidy up tray. */
 
 const DAY_MS = 86_400_000;
-/** Links in one Tidy up session; Home offers it once this many qualify and Home shows none of them elsewhere. */
+/** Links in one Tidy up session; `tidySession` offers one only when this many are left to show. */
 export const TIDY_SESSION = 5;
 /** After Keep, a link stays out of Tidy up this long. */
 export const TIDY_KEEP_WAIT_MS = 180 * DAY_MS;
@@ -78,6 +78,19 @@ export async function tidyQueue(
     }
   }
   return picked.map((link) => ({ link, fit: fits.get(link.id) ?? null }));
+}
+
+/**
+ * One Tidy up session for Home: the queue, with `skip` (what Home shows above it) left out, or
+ * null unless a full TIDY_SESSION of links is left, so Home never offers five and shows fewer.
+ */
+export async function tidySession(
+  deps: TidyDeps,
+  owner: OwnerId,
+  skip: ReadonlySet<string>,
+): Promise<TidyLink[] | null> {
+  const queue = await tidyQueue(deps, owner, TIDY_SESSION, skip);
+  return queue.length < TIDY_SESSION ? null : queue;
 }
 
 /** Keep: sets tidyKeptAt = now while the link is active; a link that changed since is a conflict. */

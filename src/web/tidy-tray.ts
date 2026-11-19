@@ -24,8 +24,8 @@ function finish(count: number): string {
 
 /**
  * Home's Tidy up tray (#332): a slim tray with the Tidy spine. It is drawn closed, with every step
- * and the finish screen hidden; `TIDY_SCRIPT` opens a session in place. The route offers it only
- * when the queue holds `TIDY_SESSION` links Home shows nowhere else.
+ * and the finish screen hidden; `TIDY_SCRIPT` opens a session in place. Home draws it only when
+ * core's `tidySession` gives a queue.
  */
 export const tidyTray = (
   input: TidyTrayInput,

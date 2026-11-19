@@ -25,6 +25,7 @@ export type ChatAnswer =
 const MARKER = /\[\[link:(\d+)\]\]/g;
 /** The end of a marker's line and the line after it, which is the card's note. */
 const NOTE_LINE = /^[ \t]*\r?\n([^\r\n]*)/;
+const endsLine = (part: string, end: number) => /^\r?\n/.test(part.slice(end));
 const edgeBlanks = (text: string) =>
   text.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
 
@@ -102,8 +103,7 @@ const changeSubject = (change: Change): string => {
 /**
  * The reply split at its `[[link:ID]]` markers. A marker for a link the turn saw and the owner's
  * store returns becomes a card, the first time only, up to `MAX_CARDS`; past that it becomes the
- * link's title. Any other marker is removed. A card whose marker ends its line takes the next line
- * as its `note`, unless that line is blank or another marker comes first. `remember` is the same
+ * link's title. Any other marker is removed. `remember` is the same
  * reply, tidied, for the panel's history.
  */
 async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set<string>) {
@@ -124,10 +124,13 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     .replace(MARKER, (_, id: string) => `${OPEN}${ids.push(id) - 1}${CLOSE}`);
   // The card whose marker came last, until the text right after it has been read.
   let noteFor: { card: string; note?: string } | null = null;
-  for (const [i, part] of tidy(masked).split(HOLDER).entries()) {
+  const parts = tidy(masked).split(HOLDER);
+  for (const [i, part] of parts.entries()) {
     if (i % 2 === 0) {
       remembered += part;
-      const first = noteFor ? NOTE_LINE.exec(part) : null;
+      const found = noteFor ? NOTE_LINE.exec(part) : null;
+      const whole = found && (endsLine(part, found[0].length) || i === parts.length - 1);
+      const first = whole ? found : null;
       if (noteFor && first?.[1]?.trim()) noteFor.note = first[1].trim();
       noteFor = null;
       text += first?.[1]?.trim() ? part.slice(first[0].length) : part;

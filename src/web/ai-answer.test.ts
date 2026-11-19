@@ -110,6 +110,49 @@ describe("a card's note", () => {
     expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined, "Water portal."]);
   });
 
+  it("is not taken from a line with a removed marker inside it", async () => {
+    const { answer } = await replying(1, ([id]) => `[[link:${id}]]\nSee also [[link:999]] above.`);
+    expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined]);
+    expect(answer.segments.at(-1)).toEqual({ text: "See also  above." });
+  });
+
+  it("is not taken from a line with a repeated marker inside it", async () => {
+    const { ids, answer } = await replying(
+      1,
+      ([id]) => `[[link:${id}]]\nSame as [[link:${id}]] earlier.`,
+    );
+    expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined]);
+    expect(answer.segments.at(-1)).toEqual({ text: "Same as  earlier." });
+    expect(answer.remember).toBe(`[[link:${ids[0]}]]\nSame as  earlier.`);
+  });
+
+  it("is not taken from a line with another shown marker inside it", async () => {
+    const { answer } = await replying(
+      2,
+      ([a, b]) => `[[link:${a}]]\nBetter than [[link:${b}]] for bills.`,
+    );
+    expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined, undefined]);
+    expect(answer.segments.at(-1)).toEqual({ text: " for bills." });
+  });
+
+  it("is not taken from a line with a past-cap marker inside it", async () => {
+    const { answer } = await replying(6, (ids) =>
+      [...ids.slice(0, 4).map(pair), `[[link:${ids[4]}]]\nSee [[link:${ids[5]}]] above.`].join(
+        "\n",
+      ),
+    );
+    expect(cardsOf(answer.segments)).toHaveLength(5);
+    expect(cardsOf(answer.segments).map(noteOf).at(-1)).toBeUndefined();
+    expect(answer.segments.at(-1)).toEqual({ text: "See Title 6 above." });
+  });
+
+  it("is a line that ends the reply, with or without a line break after it", async () => {
+    const last = await replying(1, ([id]) => `[[link:${id}]]\nElectric portal.`);
+    expect(cardsOf(last.answer.segments).map(noteOf)).toEqual(["Electric portal."]);
+    const broken = await replying(1, ([id]) => `[[link:${id}]]\nElectric portal.\nMore.`);
+    expect(cardsOf(broken.answer.segments).map(noteOf)).toEqual(["Electric portal."]);
+  });
+
   it("is not made of a blank first line, or of text on the marker's own line", async () => {
     const blank = await replying(1, ([id]) => `[[link:${id}]]\n\nLater.`);
     expect(cardsOf(blank.answer.segments).map(noteOf)).toEqual([undefined]);

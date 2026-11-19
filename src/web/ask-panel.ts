@@ -8,7 +8,8 @@ export type Ask = { ai: string; place: string; owner: string };
 export const ASK_KEY = "aye-ask";
 
 const BUBBLE = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>`;
-const CROSS = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const SPARKLE = `<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>`;
+const CROSS =`<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 
 /** The bar's Ask AI action: a raised pill (`bar-pill`, like Save) after Save and before the account menu. */
 export const ASK_BUTTON = `<button type="button" class="bar-pill" id="ask-open" aria-pressed="false" aria-controls="ask-panel">${BUBBLE}<span class="pill-word">Ask AI</span></button>`;
@@ -22,7 +23,7 @@ export const askPanel = ({
 <div class="ask-head">
 <button type="button" id="ask-back" class="ask-back">‹ ${escapeHtml(place)}</button>
 <div class="ask-title"><h2>Ask AI</h2><p>Using ${escapeHtml(ai)}, on ${escapeHtml(place)}</p></div>
-<div class="ask-tools"><button type="button" id="ask-restart" class="ask-restart">Start over</button><button type="button" id="ask-close" class="ask-close" aria-label="Close">${CROSS}</button></div>
+<div class="ask-tools"><button type="button" id="ask-restart" class="bar-pill ask-restart">Start over</button><button type="button" id="ask-close" class="ask-close" aria-label="Close">${CROSS}</button></div>
 </div>
 <div id="ask-messages" class="ask-messages"></div>
 <form id="ask-form" class="ask-form">
@@ -42,6 +43,7 @@ export const askPanel = ({
 export const ASK_SCRIPT = `<script>
 (() => {
   const KEY = ${JSON.stringify(ASK_KEY)};
+  const SPARKLE = ${JSON.stringify(SPARKLE)};
   const panel = document.getElementById("ask-panel");
   const openButton = document.getElementById("ask-open");
   const messages = document.getElementById("ask-messages");
@@ -369,13 +371,16 @@ export const ASK_SCRIPT = `<script>
   const swapCard = (id, html) => {
     forCards(id, (card) => {
       const fresh = parseCard(html).firstElementChild;
-      if (fresh) card.replaceWith(fresh);
+      if (!fresh) return;
+      const said = card.querySelector(".ask-said");
+      if (said) (fresh.querySelector(".ask-card-body") ?? fresh).appendChild(said);
+      card.replaceWith(fresh);
     });
     for (const entry of state.entries) {
       if (!isObj(entry)) continue;
       if (Array.isArray(entry.segments)) {
         entry.segments = entry.segments.map((s) =>
-          isObj(s) && typeof s.card === "string" && cardIdOf(s.card) === id ? { card: html } : s,
+          isObj(s) && typeof s.card === "string" && cardIdOf(s.card) === id ? { ...s, card: html } : s,
         );
       }
       if (isObj(entry.cards) && typeof entry.cards[id] === "string") entry.cards[id] = html;
@@ -553,8 +558,13 @@ export const ASK_SCRIPT = `<script>
     }
   });
 
-  const slot = (parent, html) => {
+  // A card's own line about its link ends the card's body, so a re-read card can take it again.
+  const slot = (parent, html, note) => {
     const holder = parseCard(html);
+    const card = holder.firstElementChild;
+    if (card && typeof note === "string" && note !== "") {
+      (card.querySelector(".ask-card-body") ?? card).appendChild(make("p", "ask-said", note));
+    }
     while (holder.firstChild) parent.appendChild(holder.firstChild);
   };
   const drawLines = (lines, cards) => {
@@ -668,10 +678,21 @@ export const ASK_SCRIPT = `<script>
     }
     if (entry.kind === "reply" && Array.isArray(entry.segments)) {
       const reply = make("div", "ask-reply");
+      if (typeof entry.ai === "string" && entry.ai !== "") {
+        const who = make("p", "ask-who");
+        who.innerHTML = SPARKLE;
+        who.appendChild(make("span", "", entry.ai));
+        reply.appendChild(who);
+      }
+      let opening = true;
       for (const s of entry.segments) {
         if (!isObj(s)) continue;
-        if (typeof s.text === "string") reply.appendChild(make("p", "", s.text));
-        else if (typeof s.card === "string") slot(reply, s.card);
+        if (typeof s.text === "string") {
+          reply.appendChild(make("p", opening ? "ask-lead" : "", s.text));
+        } else if (typeof s.card === "string") {
+          slot(reply, s.card, s.note);
+        } else continue;
+        opening = false;
       }
       return reply;
     }
@@ -693,45 +714,6 @@ export const ASK_SCRIPT = `<script>
 
   // An entry with no address counts as made on this page.
   const madeHere = (entry) => !isObj(entry) || typeof entry.path !== "string" || entry.path === path;
-  // The cards an exchange shows, as elements: the reply's, and those kept with its changes.
-  const cardsOf = (entries) => {
-    const found = [];
-    for (const e of entries) {
-      const htmls = [];
-      if (Array.isArray(e.segments)) {
-        for (const s of e.segments) if (isObj(s) && typeof s.card === "string") htmls.push(s.card);
-      }
-      if (isObj(e.cards)) {
-        for (const h of Object.values(e.cards)) if (typeof h === "string") htmls.push(h);
-      }
-      for (const h of htmls) found.push(...parseCard(h).querySelectorAll("[data-id]"));
-    }
-    return found;
-  };
-  const clip = (said) => (said.length > 60 ? said.slice(0, 60) + "…" : said);
-  // What the last earlier exchange came to: the links it saved, else what the owner asked.
-  const summarize = (group) => {
-    const exchange = group.slice(Math.max(0, group.findLastIndex((e) => isObj(e) && e.kind === "me")));
-    const entries = exchange.filter(isObj);
-    const cards = cardsOf(entries);
-    const titles = new Map();
-    for (const e of entries) {
-      if (!["changes", "alert"].includes(e.kind) || !Array.isArray(e.lines)) continue;
-      for (const line of e.lines) {
-        if (!isObj(line) || line.text !== "Saved." || typeof line.linkId !== "string") continue;
-        if (isObj(line.undo) && line.undo.done === true) continue;
-        const card = cards.find((c) => c.getAttribute("data-id") === line.linkId);
-        const title = card?.querySelector("h3")?.textContent;
-        if (title) titles.set(line.linkId, title);
-      }
-    }
-    if (titles.size > 0) {
-      const first = titles.values().next().value;
-      return 'saved "' + first + '"' + (titles.size > 1 ? " and " + (titles.size - 1) + " more" : "");
-    }
-    const asked = entries.find((e) => e.kind === "me" && typeof e.text === "string");
-    return asked ? '"' + clip(asked.text) + '"' : "";
-  };
   // Entries made on other pages sit behind one line that shows them or hides them again.
   const drawAll = () => {
     let from = state.entries.length;
@@ -740,8 +722,7 @@ export const ASK_SCRIPT = `<script>
     if (group.length > 0) {
       const last = group[group.length - 1];
       const where = isObj(last) && typeof last.place === "string" ? last.place : "";
-      const said = summarize(group);
-      const toggle = make("button", "ask-earlier", "Earlier, on " + where + (said ? ": " + said : ""));
+      const toggle = make("button", "ask-earlier", "Earlier, on " + where);
       toggle.setAttribute("type", "button");
       toggle.setAttribute("aria-expanded", "false");
       const box = make("div", "ask-earlier-entries");
@@ -803,7 +784,11 @@ export const ASK_SCRIPT = `<script>
     const lines = changeLines(changes);
     const cards = isObj(answer.cards) ? answer.cards : {};
     if (answer.ok) {
-      const node = add({ kind: "reply", segments: Array.isArray(answer.segments) ? answer.segments : [] });
+      const node = add({
+        kind: "reply",
+        ...(typeof answer.ai === "string" ? { ai: answer.ai } : {}),
+        segments: Array.isArray(answer.segments) ? answer.segments : [],
+      });
       const named = new Set([...node.querySelectorAll(".ask-card[data-id]")].map((c) => c.getAttribute("data-id")));
       if (state.open && pageIds().some((id) => named.has(id))) startFade(named);
       if (lines.length > 0) add({ kind: "changes", lines, cards });

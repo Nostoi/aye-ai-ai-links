@@ -1,0 +1,180 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ask AI panel v2 mockup</title><style>
+@font-face{font-family:"Open Runde";font-weight:400;font-display:swap;src:url(../../assets/fonts/open-runde-400.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:500;font-display:swap;src:url(../../assets/fonts/open-runde-500.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:600;font-display:swap;src:url(../../assets/fonts/open-runde-600.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:700;font-display:swap;src:url(../../assets/fonts/open-runde-700.woff2) format("woff2")}
+@font-face{font-family:"Fraunces Question";font-weight:760;font-display:swap;src:url(../../assets/fonts/fraunces-question.woff2) format("woff2")}
+/* Tokens copied from theme.ts (as in tidy-in-place-mockup.html). */
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--about:#57534D;--line:#E7E3DA;--field:#8F8A82;--blue:#3A6FD8;--green:#4C8F4C;--pic:#F2F2F2;--tray:color-mix(in srgb,#8C7350 5%,var(--bg));--spine:hsl(40 25% 88%);--card-ring:0 0 0 1px color-mix(in srgb,var(--ink) 7%,transparent);--text-1:12px;--text-2:13.5px;--text-3:14px;--text-4:15px;--text-5:16px;--text-6:17px;--text-7:18px;--text-8:20px;--text-9:22px;--radius-card:18px;--radius-pill:999px;--shadow-card:0 2px 10px #0000000b;--space:var(--green)}
+@media (prefers-color-scheme: dark){:root:not([data-theme=light]){--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--about:#C9C5BE;--line:#3A3A40;--field:#77736D;--blue:#7099EA;--green:#6DBB6D;--pic:#323236;--tray:color-mix(in srgb,#8C7350 9%,var(--bg));--spine:hsl(40 12% 20%)}}
+:root[data-theme=dark]{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--about:#C9C5BE;--line:#3A3A40;--field:#77736D;--blue:#7099EA;--green:#6DBB6D;--pic:#323236;--tray:color-mix(in srgb,#8C7350 9%,var(--bg));--spine:hsl(40 12% 20%)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde",ui-rounded,system-ui,sans-serif;font-size:var(--text-6);line-height:1.5}
+.intro{max-width:1100px;margin:0 auto;padding:32px 16px 8px}
+.intro h1{margin:0 0 6px;font-family:"Fraunces Question",serif;font-weight:760;font-size:30px}
+.intro p{margin:0 0 6px;color:var(--about);font-size:var(--text-4);max-width:760px}
+.theme{margin-top:8px;display:flex;gap:8px}
+.theme button{min-height:44px;padding:0 16px;border-radius:var(--radius-pill);border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:var(--text-4);font-weight:600;cursor:pointer}
+.grid{display:flex;flex-wrap:wrap;justify-content:center;gap:40px 32px;padding:24px 16px 64px}
+.variant{width:min(400px,100%)}
+.variant h2{margin:0;font-size:var(--text-7)}
+.variant .what{margin:2px 0 12px;font-size:var(--text-3);color:var(--soft);min-height:42px}
+.variant.rec h2::after{content:"Recommended";margin-left:8px;padding:2px 10px;border-radius:var(--radius-pill);font-size:var(--text-1);background:var(--ink);color:var(--surface);vertical-align:3px}
+
+/* ---- The panel as shipped (askCss in theme.ts) ---- */
+.panel{display:flex;flex-direction:column;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;overflow:hidden}
+.ask-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px 6px 22px}
+.ask-title h3{margin:0;font-size:18px}
+.ask-title p{margin:0;font-size:13px;color:var(--soft)}
+.ask-tools{display:flex;align-items:center;gap:2px}
+.ask-restart{min-height:44px;padding:0 10px;font:inherit;font-size:14px;background:none;border:0;color:var(--soft);text-decoration:underline;text-underline-offset:3px}
+.ask-close{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;background:none;border:0;color:var(--ink)}
+.ask-close svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.ask-messages{display:flex;flex-direction:column;gap:14px;padding:18px 18px 8px}
+.ask-earlier{align-self:center;min-height:44px;padding:0 10px;font:inherit;font-size:13px;text-align:center;background:none;border:0;color:var(--soft);text-decoration:underline;text-underline-offset:3px}
+.ask-me{align-self:flex-end;max-width:300px;margin:0;text-align:right;font-size:15px;color:var(--soft)}
+.ask-reply{display:flex;flex-direction:column;gap:8px}
+.ask-reply>p{margin:0;font-size:15.5px}
+.ask-card{display:flex;gap:12px;padding:10px;border-radius:14px;background:var(--bg)}
+.ask-card-body{min-width:0}
+.ask-card h4{margin:0 0 4px;font-size:15.5px;line-height:1.3}
+.ask-card h4 a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.ask-why{margin:0 0 6px;font-size:13px;color:var(--soft)}
+.ask-tile{flex:0 0 84px;width:84px;height:84px;display:grid;place-items:center;border-radius:10px;background:var(--pic);font-weight:700;font-size:28px;color:color-mix(in srgb,var(--field) 55%,var(--ink))}
+.ask-tile.icon{background:#fff}
+.ask-tile svg{width:56px;height:56px}
+.ask-tags{display:flex;flex-wrap:wrap;gap:6px}
+.ask-tag{padding:2px 10px;border-radius:var(--radius-pill);font-size:13px;background:var(--line)}
+.ask-tag.space{background:color-mix(in srgb,var(--space) 18%,var(--surface))}
+.ask-tag.guess{padding:1px 9px;border:1.5px dashed var(--field);background:none;color:var(--soft);font-style:italic}
+.ask-note{margin:0;font-size:15.5px}
+.ask-card .in-note,.ask-card .tagline{display:none}
+.ask-form{display:flex;align-items:flex-end;gap:8px;padding:12px 16px 18px;border-top:1.5px solid var(--line)}
+.ask-form textarea{flex:1;min-width:0;height:72px;margin:0;padding:10px 16px;border:1.5px solid var(--field);border-radius:16px;background:var(--surface);color:var(--ink);font:inherit;font-size:15.5px;resize:none}
+.ask-form button{min-height:48px;padding:0 18px;border:0;border-radius:var(--radius-pill);background:var(--ink);color:var(--surface);font:inherit;font-size:15px;font-weight:600}
+
+/* ---- One change per variant ---- */
+/* A: the AI's per-link line moves inside its card */
+.v-note .ask-reply>.ask-note{display:none}
+.v-note .ask-card .in-note{display:block;margin:6px 0 0;font-size:var(--text-3);color:var(--about)}
+/* B: messages on the tray, cards white with the ring */
+.v-tray .ask-messages{background:var(--tray)}
+.v-tray .ask-card{background:var(--surface);border-radius:var(--radius-card);padding:12px;box-shadow:var(--shadow-card),var(--card-ring)}
+.v-tray .ask-tile{background:var(--pic)}
+/* C: the picture is a small square, like an Also today row */
+.v-tile .ask-tile{flex-basis:48px;width:48px;height:48px;font-size:18px}
+.v-tile .ask-tile svg{width:34px;height:34px}
+/* D: titles not underlined until hovered (as Tidy up) */
+.v-title .ask-card h4 a{text-decoration:none}
+.v-title .ask-card h4 a:hover{text-decoration:underline}
+/* E: tags as one grey line, the guess said once */
+.v-tags .ask-tags{display:none}
+.v-tags .ask-card .tagline{display:block;margin:2px 0 0;font-size:var(--text-2);color:var(--soft)}
+.tagline .dot{display:inline-block;width:8px;height:8px;margin:0 5px 1px 0;border-radius:50%;background:var(--space)}
+/* F: the header sits on the tray band, like the top bar */
+.v-head .ask-head{background:var(--tray);padding-bottom:12px}
+.v-head .ask-messages{padding-top:14px}
+/* G (all): steps from the type scale */
+.v-scale .ask-title h3{font-size:var(--text-8)}
+.v-scale .ask-title p{font-size:var(--text-2)}
+.v-scale .ask-reply>p,.v-scale .ask-note{font-size:var(--text-4)}
+.v-scale .ask-card h4{font-size:var(--text-5)}
+.v-scale .ask-why{font-size:var(--text-3);color:var(--about);margin-bottom:2px}
+.v-scale .ask-me{font-size:var(--text-4)}
+.v-scale .ask-form textarea{font-size:var(--text-4)}
+.ask-who{display:none}
+.intro h2{margin:40px 0 4px;font-size:var(--text-9)}
+/* ---- Top of the panel, each on top of G ---- */
+/* H: your words in a white bubble, full ink */
+.t-bubble .ask-me{max-width:300px;padding:10px 16px;border-radius:18px 18px 6px 18px;background:var(--surface);box-shadow:var(--shadow-card),var(--card-ring);color:var(--ink);text-align:left}
+/* I: your words under a small "You asked" label, full ink */
+.t-asked .ask-me{align-self:stretch;max-width:none;text-align:left;color:var(--ink);font-weight:600}
+.t-asked .ask-me::before{content:"You asked";display:block;font-size:var(--text-2);font-weight:400;color:var(--soft)}
+/* J: the answer's opening sits in its own white card */
+.t-leadcard .ask-lead{padding:12px 14px;border-radius:var(--radius-card);background:var(--surface);box-shadow:var(--shadow-card),var(--card-ring)}
+/* K: the answer's opening is bigger, under a small "Claude" label */
+.t-lead .ask-who{display:flex;align-items:center;gap:6px;margin:0 0 -4px;font-size:var(--text-2);color:var(--soft)}
+.t-lead .ask-who svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.t-lead .ask-lead{font-size:var(--text-6);font-weight:500;line-height:1.45}
+/* L: Earlier becomes a quiet divider; the old question shows when pressed */
+.t-earlier .ask-earlier{display:flex;align-items:center;gap:10px;align-self:stretch;text-decoration:none;font-size:var(--text-2)}
+.t-earlier .ask-earlier::before,.t-earlier .ask-earlier::after{content:"";flex:1;height:1px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.t-earlier .e-q{display:none}
+.t-earlier .ask-earlier.shown{flex-wrap:wrap;justify-content:center}
+.t-earlier .ask-earlier.shown .e-q{display:block;flex-basis:100%;order:3;color:var(--about)}
+/* M: Start over is a pill, like the bar's buttons */
+.t-pill .ask-restart{padding:0 16px;border-radius:var(--radius-pill);background:var(--surface);color:var(--ink);font-weight:600;text-decoration:none;box-shadow:0 1px 3px #0000000f,var(--card-ring)}
+@media (max-width:440px){.variant .what{min-height:0}}
+</style></head><body>
+<div class="intro">
+  <h1>Ask AI panel, next to the new Home</h1>
+  <p>Each card changes one thing from the panel as it ships today, so you can say which ones you want. The last card has them all together. Content is the bills answer from your screenshot.</p>
+  <p>Not decided by this mockup: whether Bills is a space (the green dot is a stand-in colour), and what the panel does on a phone (it stays a full-screen sheet).</p>
+  <div class="theme"><button data-t="light">Light</button><button data-t="dark">Dark</button><button data-t="">Follow system</button></div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="intro"><h2>The top of the panel</h2><p>Each card starts from G and changes one thing about your question, the answer's opening, Earlier, or Start over. The last card has the ones I'd pick together.</p></div>
+<div class="grid" id="grid2"></div>
+<script>
+const VARIANTS = [
+  ["now", "Now", "The panel as it ships today (askCss).", ""],
+  ["a", "A · Note inside its card", "The AI's line about each link moves into that link's card, so nothing sits loose between cards.", "v-note"],
+  ["b", "B · Cards on the tray", "Messages sit on the warm tray; cards are white with the ring, as on Home.", "v-tray"],
+  ["c", "C · Small picture", "The picture is a 48px square, like an Also today row, so the words lead.", "v-tile"],
+  ["d", "D · Quiet titles", "Titles are bold ink, underlined only on hover, as Tidy up decided.", "v-title"],
+  ["e", "E · Tags as one line", "Tags become one grey line, with \"(a guess)\" said once. A space keeps its colour as a dot.", "v-tags"],
+  ["f", "F · Header on the tray band", "The panel's header carries the top bar's band, so the bar doesn't stop at the panel edge.", "v-head"],
+  ["all", "G · All of these", "A–F together, with sizes moved onto the type scale.", "v-note v-tray v-tile v-title v-tags v-head v-scale", true],
+];
+const DROP = '<svg viewBox="0 0 24 24"><path d="M12 2.5C9 7 6 10.4 6 14a6 6 0 0 0 12 0c0-3.6-3-7-6-11.5Z" fill="#2E86DE"/><path d="M9.2 14.5a3 3 0 0 0 2.6 3" stroke="#fff" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".7"/></svg>';
+const LINKS = [
+  {t:"Trash Pickup Bill payment portal", i:"TP", why:"To pay my Trash Pickup Bill.", tags:[["Bills",1,1],["Personal finance",1,0]], note:"Municipal portal for paying your trash pickup bill."},
+  {t:"GVEC - Electric", i:"GE", why:"It's for my electric bill.", tags:[["Bills",0,1],["Personal finance",1,0]], note:"GVEC SmartHub, the account portal for your electric bill."},
+  {t:"Mohela - Mark's Student Loan", i:"MM", why:"It's for my Student Loan bill", tags:[["Bills",1,1],["Personal finance",1,0]], note:"Mohela, for your student loan bill."},
+  {t:"Springhill Water District", icon:DROP, why:"It's for paying my water bill.", tags:[["Bills",1,1],["Personal finance",1,0]], note:"Springs Hill Special Utility District payment portal."},
+];
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function chips(tags){ return tags.map(([n,g,s]) => `<span class="ask-tag${g?" guess":""}${s&&!g?" space":""}">${esc(n)}${g?" (a guess)":""}</span>`).join(""); }
+function tagline(tags){
+  const anyGuess = tags.some(t => t[1]);
+  const parts = tags.map(([n,,s]) => (s?'<span class="dot"></span>':"") + esc(n));
+  return `<p class="tagline">${parts.join(" · ")}${anyGuess ? " (a guess)" : ""}</p>`;
+}
+function card(l){
+  const tile = l.icon ? `<div class="ask-tile icon">${l.icon}</div>` : `<div class="ask-tile">${l.i}</div>`;
+  return `<div class="ask-card">${tile}<div class="ask-card-body"><h4><a href="#">${esc(l.t)}</a></h4><p class="ask-why">${esc(l.why)}</p><div class="ask-tags">${chips(l.tags)}</div>${tagline(l.tags)}<p class="in-note">${esc(l.note)}</p></div></div><p class="ask-note">${esc(l.note)}</p>`;
+}
+function panel(cls){
+  return `<div class="panel ${cls}">
+  <div class="ask-head"><div class="ask-title"><h3>Ask AI</h3><p>Using Claude, on Home</p></div>
+    <div class="ask-tools"><button class="ask-restart">Start over</button><button class="ask-close" aria-label="Close"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 4l10 10M14 4L4 14"/></svg></button></div></div>
+  <div class="ask-messages">
+    <button class="ask-earlier"><span>Earlier, on Search</span><span class="e-q">: "Can you show me what links I have related to bills?"</span></button>
+    <p class="ask-me">Can you show me what links I have related to bills?</p>
+    <div class="ask-reply"><p class="ask-who"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Claude</p><p class="ask-lead">Five of your links are personal bills: trash, electric, student loan, water, and toll tag. Two GitHub billing pages are also tagged Bills.</p>${LINKS.map(card).join("")}</div>
+  </div>
+  <div class="ask-form"><textarea placeholder="Ask, or paste a link to save" aria-label="Ask"></textarea><button>Send</button></div>
+</div>`;
+}
+document.getElementById("grid").innerHTML = VARIANTS.map(([id,name,what,cls,rec]) =>
+  `<section class="variant${rec?" rec":""}" id="${id}"><h2>${name}</h2><p class="what">${what}</p>${panel(cls)}</section>`).join("");
+const G = VARIANTS[VARIANTS.length - 1][3];
+const TOP = [
+  ["g2", "G as it stands", "The combined panel from above, for comparison.", ""],
+  ["h", "H · Your words in a bubble", "Your question sits in a white bubble on the right, in full ink.", "t-bubble"],
+  ["i", "I · \"You asked\"", "Your question is left-aligned and bold under a small \"You asked\" label.", "t-asked"],
+  ["j", "J · Answer in a card", "The answer's opening sits in its own white card, like the link cards below it.", "t-leadcard"],
+  ["k", "K · Bigger answer, labelled", "The answer's opening is a step bigger, under a small \"Claude\" label.", "t-lead"],
+  ["l", "L · Earlier as a divider", "Earlier becomes a quiet line across the panel; the old question shows when you press it.", "t-earlier"],
+  ["m", "M · Start over as a pill", "Start over is a white pill like the top bar's buttons, not underlined text.", "t-pill"],
+  ["n", "N · H + K + L + M", "Bubble, bigger labelled answer, Earlier divider and the Start over pill together.", "t-bubble t-lead t-earlier t-pill", true],
+];
+document.getElementById("grid2").innerHTML = TOP.map(([id,name,what,cls,rec]) =>
+  `<section class="variant${rec?" rec":""}" id="${id}"><h2>${name}</h2><p class="what">${what}</p>${panel(G + " " + cls)}</section>`).join("");
+document.querySelectorAll(".ask-earlier").forEach(b => b.onclick = () => b.classList.toggle("shown"));
+document.querySelectorAll(".theme button").forEach(b => b.onclick = () => {
+  if (b.dataset.t) document.documentElement.dataset.theme = b.dataset.t; else delete document.documentElement.dataset.theme;
+});
+</script>
+</body></html>

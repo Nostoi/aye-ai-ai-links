@@ -559,7 +559,7 @@ describe("an answer", () => {
   it("draws text segments as text, card segments as cards, and keeps the pair with remember", async () => {
     const t = talk(() => reply());
     await t.say("show me");
-    const paragraphs = [...t.messages().querySelectorAll(".ask-reply p")];
+    const paragraphs = [...t.messages().querySelectorAll(".ask-reply p:not(.ask-who)")];
     expect(paragraphs.map((n) => n.textContent)).toEqual(["See <b>this</b>\nand that", "Bye"]);
     expect(t.messages().querySelector(".ask-reply b")).toBeNull();
     expect(t.messages().querySelector(".ask-reply .ask-card[data-id='7']")).not.toBeNull();
@@ -1441,73 +1441,26 @@ describe("the Earlier line", () => {
   const label = (entries: unknown[]) => earlier(load({ stored: saved({ entries }) }))?.textContent;
   const savedLine = (id: string) => ({ text: "Saved.", linkId: id });
 
-  it("names a save that the reply shows as a card", () => {
-    expect(
-      label([
-        old({ kind: "me", text: "save the kettle" }),
-        old({ kind: "reply", segments: [{ text: "Done" }, { card: CARD("5", "Kettle") }] }),
-        old({ kind: "changes", lines: [savedLine("5")], cards: {} }),
-      ]),
-    ).toBe('Earlier, on Kitchen: saved "Kettle"');
+  it("reads just where the earlier entries were made, with no summary of them", () => {
+    const entries = [
+      old({ kind: "me", text: "save the kettle" }),
+      old({ kind: "reply", segments: [{ text: "Done" }, { card: CARD("5", "Kettle") }] }),
+      old({ kind: "changes", lines: [savedLine("5")], cards: {} }),
+    ];
+    expect(label(entries)).toBe("Earlier, on Kitchen");
+    expect(label([old({ kind: "me", text: "what do I have on batteries" })])).toBe(
+      "Earlier, on Kitchen",
+    );
   });
 
-  it("names a save that only the changes show", () => {
-    expect(
-      label([
-        old({ kind: "me", text: "save the mug" }),
-        old({ kind: "reply", segments: [{ text: "Done" }] }),
-        old({ kind: "changes", lines: [savedLine("6")], cards: { "6": CARD("6", "Mug") } }),
-      ]),
-    ).toBe('Earlier, on Kitchen: saved "Mug"');
-  });
-
-  it("names a save that a failed turn made", () => {
-    expect(
-      label([
-        old({ kind: "me", text: "save the mug" }),
-        old({
-          kind: "alert",
-          message: "Broke",
-          text: "save the mug",
-          changed: true,
-          lines: [savedLine("6")],
-          cards: { "6": CARD("6", "Mug") },
-        }),
-      ]),
-    ).toBe('Earlier, on Kitchen: saved "Mug"');
-  });
-
-  it("counts saves by link, so two links with one title are two", () => {
-    expect(
-      label([
-        old({ kind: "me", text: "save both" }),
-        old({
-          kind: "changes",
-          lines: [savedLine("5"), savedLine("6")],
-          cards: { "5": CARD("5", "GitHub"), "6": CARD("6", "GitHub") },
-        }),
-      ]),
-    ).toBe('Earlier, on Kitchen: saved "GitHub" and 1 more');
-  });
-
-  it("leaves out a save that was undone", () => {
-    const undone = (id: string) => ({
-      ...savedLine(id),
-      undo: { kind: "save", url: "/links/delete", body: { id }, done: true },
+  it("still shows the earlier entries themselves, question included, when it is pressed", () => {
+    const p = load({
+      stored: saved({ entries: [old({ kind: "me", text: "save the kettle" })] }),
     });
-    const cards = { "5": CARD("5", "Kettle"), "6": CARD("6", "Mug") };
-    expect(
-      label([
-        old({ kind: "me", text: "save it" }),
-        old({ kind: "changes", lines: [undone("5")], cards }),
-      ]),
-    ).toBe('Earlier, on Kitchen: "save it"');
-    expect(
-      label([
-        old({ kind: "me", text: "save both" }),
-        old({ kind: "changes", lines: [undone("5"), savedLine("6")], cards }),
-      ]),
-    ).toBe('Earlier, on Kitchen: saved "Mug"');
+    const box = p.document.querySelector(".ask-earlier-entries") as HTMLElement;
+    p.document.querySelector<HTMLButtonElement>("button.ask-earlier")?.click();
+    expect(box.hidden).toBe(false);
+    expect(box.textContent).toContain("save the kettle");
   });
 
   it("says where an interrupted turn was sent from, not where it is noticed", () => {
@@ -1519,33 +1472,7 @@ describe("the Earlier line", () => {
       }),
     });
     expect(p.stateNow().entries.at(-1)).toMatchObject({ kind: "notice", ...OLD });
-    expect(earlier(p)?.textContent).toBe('Earlier, on Kitchen: "save the kettle"');
-  });
-
-  it("says how many more were saved", () => {
-    expect(
-      label([
-        old({ kind: "me", text: "save both" }),
-        old({
-          kind: "reply",
-          segments: [{ card: CARD("5", "Kettle") }, { card: CARD("6", "Mug") }],
-        }),
-        old({ kind: "changes", lines: [savedLine("5"), savedLine("6")], cards: {} }),
-      ]),
-    ).toBe('Earlier, on Kitchen: saved "Kettle" and 1 more');
-  });
-
-  it("quotes the question when nothing was saved, cut to 60 characters", () => {
-    expect(
-      label([
-        old({ kind: "me", text: "what do I have on batteries" }),
-        old({ kind: "reply", segments: [{ text: "Two links." }] }),
-      ]),
-    ).toBe('Earlier, on Kitchen: "what do I have on batteries"');
-    const long = "w".repeat(80);
-    expect(label([old({ kind: "me", text: long }), old({ kind: "reply", segments: [] })])).toBe(
-      `Earlier, on Kitchen: "${"w".repeat(60)}…"`,
-    );
+    expect(earlier(p)?.textContent).toBe("Earlier, on Kitchen");
   });
 
   it("offers no Try again for a failure on another page, but keeps its Search link", () => {
@@ -1570,7 +1497,7 @@ describe("the Earlier line", () => {
     ).toEqual(["Try again"]);
   });
 
-  it("goes by the last exchange and the place of the last earlier entry", () => {
+  it("goes by the place of the last earlier entry", () => {
     expect(
       label([
         { path: "/all", place: "All links", kind: "me", text: "save the kettle" },
@@ -1585,7 +1512,7 @@ describe("the Earlier line", () => {
         old({ kind: "reply", segments: [{ text: "No idea." }] }),
         here({ kind: "me", text: "now" }),
       ]),
-    ).toBe('Earlier, on Kitchen: "and the weather?"');
+    ).toBe("Earlier, on Kitchen");
   });
 
   it("hides the earlier entries, shows the ones from this page, and toggles on press", () => {
@@ -1647,7 +1574,7 @@ describe("the Earlier line", () => {
     const box = t.document.querySelector(".ask-earlier + *") as HTMLElement;
     expect(box.hasAttribute("hidden")).toBe(true);
     expect(box.textContent).not.toContain("Fresh");
-    expect(t.messages().lastElementChild?.textContent).toBe("Fresh");
+    expect(t.messages().lastElementChild?.querySelector("p.ask-lead")?.textContent).toBe("Fresh");
   });
 
   it("shows no button for entries without an address, or all from this page", () => {
@@ -1783,5 +1710,85 @@ describe("undoing a tag merge from the panel", () => {
     expect(undos(stored)).toBe(1);
     stored.entries[2].lines[0].undo.body = {};
     expect(undos(stored)).toBe(0);
+  });
+});
+
+describe("a reply's notes and label (#334)", () => {
+  const BODY = (id: string, title = "T") =>
+    `<article class="ask-card" data-id="${id}"><div class="ask-card-body"><h3>${title}</h3></div></article>`;
+  const said = (root: ParentNode) =>
+    [...root.querySelectorAll(".ask-said")].map((n) => n.textContent);
+  const reply = (segments: unknown[], extra: object = {}) =>
+    saved({ entries: [{ kind: "reply", segments, ...extra }] });
+  const first = (p: { panel: () => { messages: Element } }) =>
+    p.panel().messages.querySelector(".ask-reply");
+  const answerWith = (segments: unknown[]) => (call: Call) =>
+    call.url === "/ai/card/7" ? { body: { card: BODY("7", "Fresh") } } : okAnswer({ segments });
+
+  it("draws a card's note as a paragraph at the end of the card's body, and nowhere else", () => {
+    const p = load({ stored: reply([{ card: BODY("7"), note: "Electric portal." }]) });
+    const body = p.panel().messages.querySelector(".ask-card .ask-card-body");
+    expect(body?.lastElementChild?.className).toBe("ask-said");
+    expect(body?.lastElementChild?.tagName).toBe("P");
+    expect(said(p.panel().messages)).toEqual(["Electric portal."]);
+    expect(p.panel().messages.querySelectorAll(".ask-reply > p")).toHaveLength(0);
+  });
+
+  it("draws a card with no note, or a note that isn't text, as it always was", () => {
+    const p = load({ stored: reply([{ card: BODY("7") }, { card: BODY("8"), note: 5 }]) });
+    expect(said(p.panel().messages)).toEqual([]);
+  });
+
+  it("keeps the note in the fresh card, once, and in the stored segment when the card is read again", async () => {
+    const t = talk(answerWith([{ card: BODY("7", "Old"), note: "Electric portal." }]));
+    await t.say("go");
+    t.document.dispatchEvent(new t.window.CustomEvent("aye-edited", { detail: { id: "7" } }));
+    await flush();
+    const card = t.messages().querySelector(".ask-card[data-id='7']");
+    expect(card?.querySelector("h3")?.textContent).toBe("Fresh");
+    expect(said(t.messages())).toEqual(["Electric portal."]);
+    expect(said(card as Element)).toEqual(["Electric portal."]);
+    expect(t.stateNow().entries[1].segments).toEqual([
+      { card: BODY("7", "Fresh"), note: "Electric portal." },
+    ]);
+  });
+
+  it("labels a reply with the AI that answered, as its first child", async () => {
+    const t = talk(() => okAnswer({ ai: "Claude" }));
+    await t.say("go");
+    const who = first(t)?.firstElementChild;
+    expect(who?.className).toBe("ask-who");
+    expect(who?.textContent?.trim()).toBe("Claude");
+    expect(who?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(t.stateNow().entries[1].ai).toBe("Claude");
+    const again = load({ stored: t.stateNow() });
+    expect(first(again)?.firstElementChild?.textContent?.trim()).toBe("Claude");
+  });
+
+  it("shows no label for a reply stored without an AI", () => {
+    const p = load({ stored: reply([{ text: "Hi" }]) });
+    expect(p.panel().messages.querySelector(".ask-who")).toBeNull();
+    const odd = load({ stored: reply([{ text: "Hi" }], { ai: 5 }) });
+    expect(odd.panel().messages.querySelector(".ask-who")).toBeNull();
+  });
+
+  it("makes the opening text of a reply its lead, and no other paragraph", () => {
+    const p = load({
+      stored: reply([{ text: "Found it." }, { card: BODY("7") }, { text: "Want more?" }], {
+        ai: "Claude",
+      }),
+    });
+    const leads = [...p.panel().messages.querySelectorAll("p.ask-lead")];
+    expect(leads.map((n) => n.textContent)).toEqual(["Found it."]);
+    expect(p.panel().messages.querySelectorAll(".ask-reply > p")).toHaveLength(3);
+  });
+
+  it("gives no lead to text that comes after a card", () => {
+    const p = load({ stored: reply([{ card: BODY("7") }, { text: "Want more?" }]) });
+    expect(p.panel().messages.querySelector(".ask-lead")).toBeNull();
+  });
+
+  it("gives Start over the shared pill class and keeps its id", () => {
+    expect(load().el("ask-restart").classList.contains("bar-pill")).toBe(true);
   });
 });

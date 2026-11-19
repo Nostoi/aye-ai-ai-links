@@ -8,9 +8,13 @@ import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
 
+/** The space's colour dot, which only the card's space tag carries. */
+const DOT = `<span class="ask-dot" aria-hidden="true"></span>`;
+
 /**
- * One link as a card in the Ask AI panel: picture, title, why and tags (#159). It carries the
- * edit dialog's data attributes, as a page's cards do.
+ * One link as a card in the Ask AI panel: picture, title, why and one line of tags, stated first,
+ * then the inferred ones with "(a guess)" said once (#159, #334). It carries the edit dialog's
+ * data attributes, as a page's cards do.
  */
 export function renderCard(
   link: Link,
@@ -20,18 +24,20 @@ export function renderCard(
 ): string {
   const why = link.why ? `<p class="ask-why">${whyText(link.why)}</p>\n` : "";
   const space = linkSpace(link, catalog);
-  const tags = link.tags
-    .map((t) =>
-      t.source === "inferred"
-        ? `<span class="ask-tag guess">${escapeHtml(t.name)} (a guess)</span>`
-        : `<span class="ask-tag${t.key === space?.key ? " ask-space" : ""}">${escapeHtml(t.name)}</span>`,
-    )
-    .join("");
+  const name = (t: Link["tags"][number]) =>
+    `${t.key === space?.key ? DOT : ""}${escapeHtml(t.name)}`;
+  const stated = link.tags.filter((t) => t.source !== "inferred").map(name);
+  const guesses = link.tags.filter((t) => t.source === "inferred").map(name);
+  const guessed =
+    guesses.length === 0
+      ? []
+      : [`${guesses.join(" · ")} ${guesses.length === 1 ? "(a guess)" : "(guesses)"}`];
+  const tags = [...stated, ...guessed].join(" · ");
   return `<article class="ask-card${spaceClass(space)}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture, "ask-tile")}
 <div class="ask-card-body">
 <h3>${linkTitle(link)}</h3>
-${why}${tags ? `<div class="ask-tags">${tags}</div>\n` : ""}</div>
+${why}${tags ? `<p class="ask-tagline">${tags}</p>\n` : ""}</div>
 </article>`;
 }
 

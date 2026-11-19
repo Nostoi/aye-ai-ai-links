@@ -3,7 +3,7 @@ import type { OwnerId } from "../core/types.js";
 import type { Change } from "../mcp/changes.js";
 import { type AskCardDeps, loadCard } from "./ai-card.js";
 
-export type Segment = { text: string } | { card: string };
+export type Segment = { text: string } | { card: string; note?: string };
 export type ChatAnswer =
   | {
       ok: true;
@@ -23,6 +23,8 @@ export type ChatAnswer =
     };
 
 const MARKER = /\[\[link:(\d+)\]\]/g;
+/** The end of a marker's line and the line after it, which is the card's note. */
+const NOTE_LINE = /^[ \t]*\r?\n([^\r\n]*)/;
 const edgeBlanks = (text: string) =>
   text.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
 
@@ -100,8 +102,9 @@ const changeSubject = (change: Change): string => {
 /**
  * The reply split at its `[[link:ID]]` markers. A marker for a link the turn saw and the owner's
  * store returns becomes a card, the first time only, up to `MAX_CARDS`; past that it becomes the
- * link's title. Any other marker is removed. `remember` is the same reply, tidied, for the panel's
- * history.
+ * link's title. Any other marker is removed. A card whose marker ends its line takes the next line
+ * as its `note`, unless that line is blank or another marker comes first. `remember` is the same
+ * reply, tidied, for the panel's history.
  */
 async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set<string>) {
   const segments: Segment[] = [];
@@ -119,12 +122,18 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     .replaceAll(OPEN, "")
     .replaceAll(CLOSE, "")
     .replace(MARKER, (_, id: string) => `${OPEN}${ids.push(id) - 1}${CLOSE}`);
+  // The card whose marker came last, until the text right after it has been read.
+  let noteFor: { card: string; note?: string } | null = null;
   for (const [i, part] of tidy(masked).split(HOLDER).entries()) {
     if (i % 2 === 0) {
-      text += part;
       remembered += part;
+      const first = noteFor ? NOTE_LINE.exec(part) : null;
+      if (noteFor && first?.[1]?.trim()) noteFor.note = first[1].trim();
+      noteFor = null;
+      text += first?.[1]?.trim() ? part.slice(first[0].length) : part;
       continue;
     }
+    noteFor = null;
     const id = ids[Number(part)] ?? "";
     if (!seen.has(id) || cited.has(id)) continue;
     const loaded = await readCard(deps, owner, id);
@@ -137,7 +146,8 @@ async function split(deps: AskCardDeps, owner: OwnerId, reply: string, seen: Set
     }
     shown.add(id);
     flush();
-    segments.push({ card: loaded.html });
+    noteFor = { card: loaded.html };
+    segments.push(noteFor);
   }
   flush();
   return { segments, shown, remembered };

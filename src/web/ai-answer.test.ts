@@ -36,8 +36,9 @@ async function replying(
   if (!answer.ok) throw new Error("expected an ok answer");
   return { ids, answer };
 }
-const cardsOf = (segments: ({ text: string } | { card: string })[]) =>
+const cardsOf = (segments: ({ text: string } | { card: string; note?: string })[]) =>
   segments.filter((s) => "card" in s);
+const noteOf = (segment: unknown) => (segment as { note?: string }).note;
 const pair = (id: string) => `[[link:${id}]]\nnote ${id}`;
 
 describe("the card cap", () => {
@@ -47,9 +48,8 @@ describe("the card cap", () => {
     const { ids, answer } = await replying(6, (all) => all.map(pair).join("\n"));
     expect(cardsOf(answer.segments)).toHaveLength(5);
     expect(JSON.stringify(cardsOf(answer.segments))).not.toContain("Title 6");
-    expect(answer.segments.at(-1)).toEqual({
-      text: `note ${ids[4]}\nTitle 6\nnote ${ids[5]}`,
-    });
+    expect(answer.segments.at(-1)).toEqual({ text: `Title 6\nnote ${ids[5]}` });
+    expect(cardsOf(answer.segments).map(noteOf)).toEqual(ids.slice(0, 5).map((id) => `note ${id}`));
     expect(answer.remember).toBe(ids.map(pair).join("\n"));
   });
 
@@ -77,6 +77,49 @@ describe("the card cap", () => {
     );
     expect(cardsOf(answer.segments)).toHaveLength(5);
     expect(Object.keys(answer.cards)).toEqual([ids[5]]);
+  });
+});
+
+describe("a card's note", () => {
+  it("is the first line after its marker, and the rest of the text stays prose", async () => {
+    const { ids, answer } = await replying(
+      1,
+      ([id]) => `Found it.\n[[link:${id}]]\nElectric portal.\n\nWant more?`,
+    );
+    expect(answer.segments.map((s) => ("text" in s ? s.text : noteOf(s)))).toEqual([
+      "Found it.",
+      "Electric portal.",
+      "Want more?",
+    ]);
+    expect(answer.remember).toBe(`Found it.\n[[link:${ids[0]}]]\nElectric portal.\n\nWant more?`);
+  });
+
+  it("is not the next link's title when a sixth marker is past the cap", async () => {
+    const { answer } = await replying(6, (all) => all.map(pair).join("\n"));
+    expect(JSON.stringify(cardsOf(answer.segments).map(noteOf))).not.toContain("Title 6");
+  });
+
+  it("is not taken from after a removed marker: the card gets none and the line stays prose", async () => {
+    const { answer } = await replying(1, ([id]) => `[[link:${id}]]\n[[link:999]]\nWater portal.`);
+    expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined]);
+    expect(answer.segments.at(-1)).toEqual({ text: "Water portal." });
+  });
+
+  it("is not taken from after another shown marker", async () => {
+    const { answer } = await replying(
+      2,
+      ([a, b]) => `[[link:${a}]]\n[[link:${b}]]\nWater portal.`,
+    );
+    expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined, "Water portal."]);
+  });
+
+  it("is not made of a blank first line, or of text on the marker's own line", async () => {
+    const blank = await replying(1, ([id]) => `[[link:${id}]]\n\nLater.`);
+    expect(cardsOf(blank.answer.segments).map(noteOf)).toEqual([undefined]);
+    expect(blank.answer.segments.at(-1)).toEqual({ text: "Later." });
+    const same = await replying(1, ([id]) => `see [[link:${id}]] here`);
+    expect(cardsOf(same.answer.segments).map(noteOf)).toEqual([undefined]);
+    expect(same.answer.segments.at(-1)).toEqual({ text: " here" });
   });
 });
 

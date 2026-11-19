@@ -1891,6 +1891,19 @@ describe("a selected button, held down (#314)", () => {
   });
 });
 
+describe("an Ask AI card's tag line (#336)", () => {
+  const css = `${themeCss}\n${askCss}`;
+  const card =
+    '<article class="ask-card"><div class="ask-card-body"><p class="small ask-tagline">Bills</p></div></article>';
+
+  it("keeps its own margin inside a failed turn's alert", () => {
+    const loose = el(card, ".ask-tagline");
+    const inAlert = el(`<div class="ask-alert">${card}</div>`, ".ask-tagline");
+    expect(computed(loose, "margin", "desktop", css)).toBe("2px 0 0");
+    expect(computed(inAlert, "margin", "desktop", css)).toBe("2px 0 0");
+  });
+});
+
 describe("a busy card and a working button (#314)", () => {
   const css = `${themeCss}\n${askCss}`;
   const CARD = `<article class="worth-card" data-busy><div class="feature-quiet"><button class="slide" data-working><span class="slide-words"><span>Marking done…</span></span></button></div><details class="card-menu"><summary>m</summary><div class="card-menu-list"><button>Row</button></div></details></article>`;

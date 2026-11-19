@@ -688,6 +688,18 @@ describe("the Tidy up session", () => {
       expect(p.sent).toHaveLength(1);
     });
 
+    it.each(["1", "2", "3"])("key %s does nothing while the Ask AI panel is open", async (k) => {
+      const { p, shown, ids, start, key } = load();
+      await start();
+      p.document.body.setAttribute("data-panel", "");
+      await key(k);
+      expect(p.sent).toEqual([]);
+      expect(shown()).toEqual([ids[0]]);
+      p.document.body.removeAttribute("data-panel");
+      await key(k);
+      expect(p.sent).toHaveLength(1);
+    });
+
     it("act on the link currently shown, after an Undo too", async () => {
       const { p, ids, start, choose, undo, key } = load();
       await start();

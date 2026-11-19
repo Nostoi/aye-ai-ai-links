@@ -111,7 +111,7 @@ document.addEventListener("keydown", (event) => {
   const step = shownStep();
   const active = event.target;
   if (!act || !step || event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-  if (document.querySelector("dialog[open]")) return;
+  if (document.querySelector("dialog[open], body[data-panel]")) return;
   if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
   choose(step, act);
 });

@@ -8,7 +8,6 @@ import {
   TIDY_SESSION,
   type TidyDeps,
   tidyQueue,
-  tidyReady,
 } from "./tidy-up.js";
 import { keepHandy } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
@@ -204,19 +203,28 @@ describe("fit", () => {
   });
 });
 
-describe("tidyReady", () => {
-  it("is false at four qualifying links and true at five", async () => {
-    expect(TIDY_SESSION).toBe(5);
-    for (let i = 0; i < 4; i++) await link();
-    await link({ state: "archived" });
-    expect(await tidyReady(deps(), A)).toBe(false);
-    await link();
-    expect(await tidyReady(deps(), A)).toBe(true);
+describe("skip", () => {
+  it("leaves out the skipped links before the limit is applied", async () => {
+    const old = await link({ savedAt: ago(100 * DAY) });
+    const rest = [];
+    for (let i = 0; i < TIDY_SESSION; i++) rest.push(await link({ savedAt: ago((90 - i) * DAY) }));
+    const got = await tidyQueue(deps(), A, TIDY_SESSION, new Set([old.id]));
+    expect(got.map((t) => t.link.id)).toEqual(rest.map((l) => l.id));
   });
 
-  it("counts only the owner's links", async () => {
-    for (let i = 0; i < 5; i++) await link({}, B);
-    expect(await tidyReady(deps(), A)).toBe(false);
+  it("looks up a fit for the links it keeps", async () => {
+    const skipped = await link({ savedAt: ago(100 * DAY) });
+    const kept = await link({ savedAt: ago(90 * DAY) });
+    await focus("both", ago(DAY), [skipped.id, kept.id]);
+    const got = await tidyQueue(deps(), A, 5, new Set([skipped.id]));
+    expect(got.map((t) => [t.link.id, t.fit?.text])).toEqual([[kept.id, "both"]]);
+  });
+
+  it("answers nothing, and searches nothing, when every qualifying link is skipped", async () => {
+    const l = await link();
+    await focus("x", ago(DAY), [l.id]);
+    expect(await tidyQueue(deps(), A, 5, new Set([l.id]))).toEqual([]);
+    expect(searches).toEqual([]);
   });
 });
 

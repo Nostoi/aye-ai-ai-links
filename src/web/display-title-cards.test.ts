@@ -118,6 +118,23 @@ const CASES: Case[] = [
     html: (ls) => homePage({ worth: worth([], ls[0] ?? null), shelf: "", spaces: "" }),
   },
   {
+    name: "Home's Tidy up step",
+    heading: "h3",
+    html: (ls) =>
+      homePage({
+        worth: worth([]),
+        shelf: "",
+        spaces: "",
+        tidy: {
+          queue: ls.map((l) => ({ link: l, fit: null })),
+          hasFocus: false,
+          images: new Map(),
+          catalog: [KITCHEN],
+          now: NOW,
+        },
+      }),
+  },
+  {
     name: "the Handy shelf",
     heading: "h3",
     html: (ls) =>

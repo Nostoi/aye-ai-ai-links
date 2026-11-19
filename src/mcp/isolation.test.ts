@@ -57,6 +57,8 @@ const A_STATS_TAG_NAME = "Quokka stats row";
 const A_READING_TEXT = "Quokka reading: you save far more than you open.";
 const A_TOOL_TITLE = "Quokka keeper login";
 const A_TIDY_TITLE = "Quokka relic for Tidy up";
+/** Only Home's Tidy up tray has this heading, and it is drawn only for an owner with five links to tidy. */
+const TIDY_TRAY = 'id="tidy-title"';
 const A_DONE_URL = "https://a.example/remote-image";
 const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 
@@ -641,13 +643,14 @@ describe("owner isolation coverage", () => {
     | { noOwnerData: string }
     | { bearer: string };
   const READ_ROUTES: Record<string, ReadEntry> = {
-    // A's titled link has no why, so it is one of A's picks on home; A's pinned space and kept tool show too.
+    // A's titled link has no why, so it is one of A's picks on home; A's pinned space and kept tool
+    // show too, and so does A's Tidy up tray, whose own heading id and old links' titles B never gets.
     "GET /": {
       request: "/",
-      marker: () => ["Quokka habitat notes", A_TAG_NAME, A_TOOL_TITLE],
+      marker: () => ["Quokka habitat notes", A_TAG_NAME, A_TOOL_TITLE, TIDY_TRAY, A_TIDY_TITLE],
     },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
-    "GET /tidy": { request: "/tidy", marker: () => A_TIDY_TITLE },
+    "GET /tidy": { noOwnerData: "redirects to Home, whose Tidy up tray the GET / entry covers" },
     "GET /spaces": {
       request: `/spaces?tag=${encodeURIComponent(A_TAG_NAME)}`,
       marker: () => [A_TAG_NAME, A_URL],
@@ -803,15 +806,18 @@ describe("owner isolation coverage", () => {
       title: A_TOOL_TITLE,
     });
     await keepHandy(seedDeps, A, handy.id, "stated");
-    // An old link of A's, never opened: Tidy up offers it.
-    const { link: old } = await saveLink(seedDeps, A, {
-      url: "https://a.example/old-relic",
-      savedBy: "seed",
-      title: A_TIDY_TITLE,
-    });
-    world.links
-      .prepare("UPDATE links SET saved_at = ? WHERE id = ?")
-      .run(Date.now() - 60 * 86_400_000, Number(old.id));
+    // Ten old links of A's, never opened. Home shows some as Worth picks and skips them in Tidy up;
+    // five more are left, so A's Home has its Tidy up tray.
+    for (let i = 0; i < 10; i++) {
+      const { link: old } = await saveLink(seedDeps, A, {
+        url: `https://a.example/old-relic-${i}`,
+        savedBy: "seed",
+        title: `${A_TIDY_TITLE} ${i}`,
+      });
+      world.links
+        .prepare("UPDATE links SET saved_at = ? WHERE id = ?")
+        .run(Date.now() - (60 + i) * 86_400_000, Number(old.id));
+    }
     const browser = await addSecondUser(world);
     await saveLink(createDeps(world.links, new FakeEmbedder(DIMS)), B, {
       url: B_URL,

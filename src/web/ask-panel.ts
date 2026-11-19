@@ -679,7 +679,7 @@ export const ASK_SCRIPT = `<script>
     if (entry.kind === "reply" && Array.isArray(entry.segments)) {
       const reply = make("div", "ask-reply");
       if (typeof entry.ai === "string" && entry.ai !== "") {
-        const who = make("p", "ask-who");
+        const who = make("p", "small ask-who");
         who.innerHTML = SPARKLE;
         who.appendChild(make("span", "", entry.ai));
         reply.appendChild(who);

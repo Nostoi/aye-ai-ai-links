@@ -744,7 +744,7 @@ body.ask-open{margin-right:400px}
 .ask-me{align-self:flex-end;max-width:300px;margin:0;padding:10px 16px;border-radius:18px 18px 6px 18px;background:var(--surface);box-shadow:var(--shadow-card),var(--card-ring);color:var(--ink);text-align:left;font-size:var(--text-4);overflow-wrap:anywhere;white-space:pre-wrap}
 .ask-reply{display:flex;flex-direction:column;gap:8px}
 .ask-reply>p{margin:0;font-size:var(--text-4);white-space:pre-wrap;overflow-wrap:anywhere}
-.ask-reply>.ask-who{display:flex;align-items:center;gap:6px;margin:0 0 -4px;font-size:var(--text-2);color:var(--soft)}
+.ask-reply>.ask-who{display:flex;align-items:center;gap:6px;margin:0 0 -4px;font-size:var(--text-2)}
 .ask-who svg{flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ask-reply>.ask-lead{font-size:var(--text-6);font-weight:500;line-height:1.45}
 .ask-notice{margin:0;font-size:var(--text-3);color:var(--soft)}
@@ -773,7 +773,7 @@ body.ask-open{margin-right:400px}
 .ask-card .ask-why{margin:0 0 2px;font-size:var(--text-3);color:var(--about)}
 .ask-card .ask-said{margin:6px 0 0;font-size:var(--text-3);color:var(--about)}
 .ask-tile{flex:0 0 48px;width:48px;height:48px;--icon:32px;--initials:17px;border-radius:10px;object-fit:cover;background:var(--pic)}
-.ask-tagline{margin:2px 0 0;font-size:var(--text-2);color:var(--soft)}
+.ask-tagline{margin:2px 0 0}
 .ask-dot{display:inline-block;width:8px;height:8px;margin:0 5px 1px 0;border-radius:50%;background:var(--space)}
 .ask-tags{display:flex;flex-wrap:wrap;gap:6px}
 .ask-tag{padding:2px 10px;border-radius:var(--radius-pill);font-size:var(--text-2);background:var(--line)}

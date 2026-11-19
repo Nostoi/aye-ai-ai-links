@@ -1757,7 +1757,7 @@ describe("a reply's notes and label (#334)", () => {
     const t = talk(() => okAnswer({ ai: "Claude" }));
     await t.say("go");
     const who = first(t)?.firstElementChild;
-    expect(who?.className).toBe("ask-who");
+    expect(who?.className).toBe("small ask-who");
     expect(who?.textContent?.trim()).toBe("Claude");
     expect(who?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     expect(t.stateNow().entries[1].ai).toBe("Claude");

@@ -37,7 +37,7 @@ export function renderCard(
 ${tile(link, picture, "ask-tile")}
 <div class="ask-card-body">
 <h3>${linkTitle(link)}</h3>
-${why}${tags ? `<p class="ask-tagline">${tags}</p>\n` : ""}</div>
+${why}${tags ? `<p class="small ask-tagline">${tags}</p>\n` : ""}</div>
 </article>`;
 }
 

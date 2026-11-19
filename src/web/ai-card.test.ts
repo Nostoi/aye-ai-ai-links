@@ -64,7 +64,7 @@ describe("renderCard", () => {
   });
 
   const tagline = (tags: Link["tags"], catalog: Tag[] = []) =>
-    /<p class="ask-tagline">(.*)<\/p>/.exec(
+    /<p class="small ask-tagline">(.*)<\/p>/.exec(
       renderCard(link({ tags }), undefined, undefined, catalog),
     )?.[1] ?? null;
 

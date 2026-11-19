@@ -63,15 +63,42 @@ describe("renderCard", () => {
     ).toContain('<p class="ask-why">Why (a guess): x</p>');
   });
 
-  it("marks an inferred tag as a dashed guess and leaves a stated one plain", () => {
-    const html = renderCard(
-      link({ tags: [tag("shelving", "inferred"), tag("kitchen", "stated")] }),
-      undefined,
-      undefined,
-      [],
+  const tagline = (tags: Link["tags"], catalog: Tag[] = []) =>
+    /<p class="small ask-tagline">(.*)<\/p>/.exec(
+      renderCard(link({ tags }), undefined, undefined, catalog),
+    )?.[1] ?? null;
+
+  it("says a lone inferred tag is a guess, once", () => {
+    expect(tagline([tag("shelving", "inferred")])).toBe("shelving (a guess)");
+  });
+
+  it("says several inferred tags are guesses, once, after the inferred group", () => {
+    expect(tagline([tag("shelving", "inferred"), tag("wood", "inferred")])).toBe(
+      "shelving · wood (guesses)",
     );
-    expect(html).toContain('<span class="ask-tag guess">shelving (a guess)</span>');
-    expect(html).toContain('<span class="ask-tag">kitchen</span>');
+  });
+
+  it("lists stated tags first in their order, then the inferred ones", () => {
+    expect(
+      tagline([
+        tag("shelving", "inferred"),
+        tag("kitchen", "stated"),
+        tag("wood", "inferred"),
+        tag("baking", "stated"),
+      ]),
+    ).toBe("kitchen · baking · shelving · wood (guesses)");
+    expect(tagline([tag("kitchen", "stated"), tag("shelving", "inferred")])).toBe(
+      "kitchen · shelving (a guess)",
+    );
+  });
+
+  it("draws stated tags alone with no guess words, and no line at all without tags", () => {
+    expect(tagline([tag("kitchen", "stated"), tag("baking", "stated")])).toBe("kitchen · baking");
+    expect(renderCard(link(), undefined, undefined, [])).not.toContain("ask-tagline");
+  });
+
+  it("escapes a tag's name", () => {
+    expect(tagline([tag("<b>", "stated")])).toBe("&lt;b&gt;");
   });
 
   it("carries a pinned space's class and the link's id", () => {
@@ -82,15 +109,15 @@ describe("renderCard", () => {
     expect(renderCard(link(), undefined, undefined, [])).toContain('class="ask-card" data-id="7"');
   });
 
-  it("colours only the space's own tag; an unpinned tag shows no colour", () => {
-    const html = renderCard(
-      link({ tags: [tag("kitchen", "stated"), tag("baking", "stated")] }),
-      undefined,
-      undefined,
-      [KITCHEN],
+  it("puts a dot on the space's own tag only, stated or inferred", () => {
+    const DOT = '<span class="ask-dot" aria-hidden="true"></span>';
+    expect(tagline([tag("kitchen", "stated"), tag("baking", "stated")], [KITCHEN])).toBe(
+      `${DOT}kitchen · baking`,
     );
-    expect(html).toContain('<span class="ask-tag ask-space">kitchen</span>');
-    expect(html).toContain('<span class="ask-tag">baking</span>');
+    expect(tagline([tag("baking", "stated"), tag("kitchen", "inferred")], [KITCHEN])).toBe(
+      `baking · ${DOT}kitchen (a guess)`,
+    );
+    expect(tagline([tag("baking", "stated")], [KITCHEN])).not.toContain("ask-dot");
   });
 
   it("escapes the title", () => {

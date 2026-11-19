@@ -1,6 +1,6 @@
 # src/web
 
-Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.html` (option A) and spec §6. The Ask AI panel's reference is `docs/design/ask-ai-panel-mockup.html`, which governs over the text of its design (#159).
+Rules for this folder only. The reference is `docs/design/home-calm-desk-mockup.html` (option A) and spec §6. The Ask AI panel's reference is `docs/design/ask-ai-panel-v2-mockup.html` (options G and N, #334), which governs over the text of its design and over the #159 mockup, `docs/design/ask-ai-panel-mockup.html`.
 
 ## Design rules (spec §6)
 
@@ -94,11 +94,11 @@ The catalogue for a new page. Where a rule already exists above, this names it; 
 - 9: a page's section heading (`h2`), the featured card's title, Tidy up's title and its finish heading.
 - 10: a page title on a phone.
 - 11: a page title (`h1`).
-Typed on purpose, so changing a step can't move them (`design-tokens.test.ts` lists them): Home's question, "Also today" and the card's 13.5px grey detail line (the three rules `.card-line`, `.card-site`, `.also-why`), the saved copy's reading sizes, the initials' figures, and every `.ask-*` rule. Text that sets no size inherits one from its parent, so a new rule that resets `font` to `inherit` follows its container's step.
+Typed on purpose, so changing a step can't move them (`design-tokens.test.ts` lists them): Home's question, "Also today" and the card's 13.5px grey detail line (the three rules `.card-line`, `.card-site`, `.also-why`), the saved copy's reading sizes, and the initials' figures. The `.ask-*` rules are on the steps (#334). Text that sets no size inherits one from its parent, so a new rule that resets `font` to `inherit` follows its container's step.
 
 **Names for new work** (*new*; no existing class is renamed). A picture box is `-pic` (`feature-pic`, `row-pic`). The grey text roles `--about`, `--soft` and `--detail` stay distinct. Grey secondary text takes `.small`, or `.card-line` inside a card, and a new class is named for what the text is (`copy-notice`), never its colour.
 
-**Ask AI** (*new*). Its `.ask-*` families repeat the button, card and label ideas above. When Ask AI is next touched, reuse the shared families instead of writing more `.ask-*` copies.
+**Ask AI** (*new*; restyled in #334). The panel sits on the `--tray` band; your words are a white bubble, a reply opens with a small label of the AI that answered (stored with the reply; none for an older reply) and a lead paragraph, and each link is a white card on the card tokens with a 48px picture. `split` (`ai-answer.ts`) gives a card the first line after its marker as its `note`; the panel draws it inside the card and `swapCard` keeps it. The card's tags are one grey line (`renderCard`): stated tags, then inferred ones with "(a guess)" or "(guesses)" said once, and a dot in its colour on the space's own tag. Earlier is a divider that says only where; Start over is a `bar-pill`. The `.ask-tags` and `.ask-tag` rules stay for cards restored from an older session. The bubble, label and card still have no shared family; reuse the shared ones where one fits.
 
 **A new page, in order** (*new*)
 1. Render through `page()`; colours, type (`--text-N`), `--space-*`, corners, shadows and motion use a token where one fits; anything else is typed to match the nearest existing element of its kind. A `z-index` always takes a `--layer-*` token (Layers, above; `theme.test.ts` fails a number).

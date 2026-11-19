@@ -61,12 +61,12 @@ describe("the chat answer's segments and remember", () => {
   it("turns a marker for a seen, owned link into its card and keeps the text around it", async () => {
     const t = await citing((id) => `Here it is.\n\n[[link:${id}]]\nA note.\n`);
     const body = await asked(t);
-    expect(body.segments).toHaveLength(3);
+    expect(body.segments).toHaveLength(2);
     expect(body.segments?.[0]).toEqual({ text: "Here it is." });
     const card = JSON.stringify(body.segments?.[1]);
     expect(card).toContain(SECRET);
     expect(card).toContain(`data-id=\\"${t.id}\\"`);
-    expect(body.segments?.[2]).toEqual({ text: "A note." });
+    expect(body.segments?.[1]).toMatchObject({ note: "A note." });
   });
 
   it("removes a marker for a link the turn didn't see", async () => {
@@ -80,7 +80,8 @@ describe("the chat answer's segments and remember", () => {
     const t = await citing((id) => `[[link:${id}]]\nagain\n[[link:${id}]]`);
     const body = await asked(t);
     expect(body.segments?.filter((s) => "card" in s)).toHaveLength(1);
-    expect(body.segments?.at(-1)).toEqual({ text: "again" });
+    expect(body.segments).toHaveLength(1);
+    expect(body.segments?.[0]).toMatchObject({ note: "again" });
   });
 
   it("remembers a shown link as the model's own marker, and drops a dropped one", async () => {

@@ -9,7 +9,7 @@ export const ASK_KEY = "aye-ask";
 
 const BUBBLE = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>`;
 const SPARKLE = `<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>`;
-const CROSS =`<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const CROSS = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 
 /** The bar's Ask AI action: a raised pill (`bar-pill`, like Save) after Save and before the account menu. */
 export const ASK_BUTTON = `<button type="button" class="bar-pill" id="ask-open" aria-pressed="false" aria-controls="ask-panel">${BUBBLE}<span class="pill-word">Ask AI</span></button>`;

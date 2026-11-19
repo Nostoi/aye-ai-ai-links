@@ -106,10 +106,7 @@ describe("a card's note", () => {
   });
 
   it("is not taken from after another shown marker", async () => {
-    const { answer } = await replying(
-      2,
-      ([a, b]) => `[[link:${a}]]\n[[link:${b}]]\nWater portal.`,
-    );
+    const { answer } = await replying(2, ([a, b]) => `[[link:${a}]]\n[[link:${b}]]\nWater portal.`);
     expect(cardsOf(answer.segments).map(noteOf)).toEqual([undefined, "Water portal."]);
   });
 

@@ -193,7 +193,8 @@ describe("type scale (#312)", () => {
     for (let n = 1; n <= 11; n++) expect(used, `--text-${n}`).toContain(String(n));
   });
 
-  it("leaves askCss's sizes typed", () => {
-    expect(fontSizes(askCss).filter(({ value }) => step.test(value))).toEqual([]);
+  it("takes every askCss font-size from a --text step (#334)", () => {
+    expect(fontSizes(askCss).filter(({ value }) => !step.test(value))).toEqual([]);
+    expect(fontSizes(askCss).length).toBeGreaterThan(0);
   });
 });

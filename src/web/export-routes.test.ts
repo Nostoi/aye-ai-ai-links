@@ -66,7 +66,8 @@ async function seedOwner(
       lastOpenedAt: at(n + 100),
       lastSurfacedAt: at(n + 200),
       snoozedUntil: null,
-      tidyKeptAt: null,
+      intent: "explore",
+      intentSource: null,
       state: "active",
       ...extra,
     };

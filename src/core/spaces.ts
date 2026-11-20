@@ -57,7 +57,7 @@ function pickRecent(pools: Link[][], shown: ReadonlySet<string>): Link[][] {
 /**
  * The owner's spaces (pinned tags), by key, each with up to three of its active links, newest
  * first, none in `shown` (the ids Home shows above the spaces: every kept Handy item, the
- * suggestions, Worth a look and its gone link) or on an earlier card (`pickRecent`). Chosen by
+ * suggestions and Explore's cards) or on an earlier card (`pickRecent`). Chosen by
  * link identity from its newest `min(3 × spaces + shown.size, 48)`, so a card can have fewer than
  * three links, or none; its count stays every active link. The limit is per page load: after a
  * shelf action on the page, a card may show a link the refreshed shelf now shows, until Home is

@@ -57,8 +57,8 @@ const A_STATS_TAG_NAME = "Quokka stats row";
 const A_READING_TEXT = "Quokka reading: you save far more than you open.";
 const A_TOOL_TITLE = "Quokka keeper login";
 const A_TIDY_TITLE = "Quokka relic for Tidy up";
-/** Only Home's Tidy up tray has this heading, and it is drawn only for an owner with five links to tidy. */
-const TIDY_TRAY = 'id="tidy-title"';
+/** Only Home's Tidy up tray has this button, and it is drawn only for an owner with links to tidy; every owner's Home has the tray. */
+const TIDY_TRAY = 'data-tidy="start"';
 const A_DONE_URL = "https://a.example/remote-image";
 const A_UNTAGGED_DONE_URL = "https://a.example/done-without-a-tag";
 

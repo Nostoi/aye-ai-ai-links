@@ -63,7 +63,43 @@ const doc = (q: TidyLink[], hasFocus = true, copies = new Map<string, CopyInfo>(
 const first = (q: TidyLink[], hasFocus = true, copies = new Map<string, CopyInfo>()) =>
   doc(q, hasFocus, copies).querySelector(".tidy-step") as Element;
 
+const emptyHtml = () => homePage({ worth: NO_WORTH, shelf: "", spaces: spacesSection([]) });
+
+describe("Home's Tidy up tray with nothing to ask", () => {
+  it("is the last tray: the frame, the Tidy spine and the hidden heading, with no Start", () => {
+    const { document: d } = parseHTML(emptyHtml());
+    const tray = d.querySelector("main > section.tidy-tray:last-child") as Element;
+    expect(tray.getAttribute("aria-labelledby")).toBe("tidy-title");
+    expect(tray.querySelector(".spine .spine-word")?.textContent).toBe("Tidy");
+    expect(tray.querySelector("h2#tidy-title")?.className).toBe("visually-hidden");
+    expect(tray.querySelector("button")).toBeNull();
+    expect(tray.querySelector(".tidy-step")).toBeNull();
+  });
+
+  it("says nothing is waiting, then in grey what shows up here", () => {
+    const tray = parseHTML(emptyHtml()).document.querySelector("section.tidy-tray") as Element;
+    expect(tray.querySelector(".tidy-quiet")?.textContent).toBe("Nothing to tidy right now.");
+    const more = tray.querySelector(".tidy-quiet-more") as Element;
+    expect(more.textContent).toBe(
+      "Links you haven’t opened in 30 days, and pages that seem gone, show up here.",
+    );
+    expect(more.className).toContain("small");
+  });
+
+  it("carries no Tidy script, so the page's scripts run without error", () => {
+    expect(emptyHtml()).not.toContain("tidyRoot");
+    expect(() => runPage(emptyHtml())).not.toThrow();
+  });
+});
+
 describe("Home's Tidy up tray", () => {
+  it("says how many links wait before the old line, '1 link' for one", () => {
+    const line = (n: number) => doc(queue(n)).querySelector(".tidy-closed .small")?.textContent;
+    expect(line(1)).toBe("1 link to look at. One at a time. Nothing gets deleted.");
+    expect(line(3)).toBe("3 links to look at. One at a time. Nothing gets deleted.");
+    expect(line(5)).toBe("5 links to look at. One at a time. Nothing gets deleted.");
+  });
+
   it("is a slim tray with the Tidy spine and a hidden heading, closed, with its two lines and a Start button", () => {
     const d = doc(queue(5));
     const tray = d.querySelector("section.tidy-tray") as Element;
@@ -75,7 +111,9 @@ describe("Home's Tidy up tray", () => {
     const closed = tray.querySelector(".tidy-closed") as Element;
     expect(closed.hasAttribute("hidden")).toBe(false);
     expect(closed.textContent).toContain("Clear out a few links?");
-    expect(closed.textContent).toContain("One at a time. Nothing gets deleted.");
+    expect(closed.textContent).toContain(
+      "5 links to look at. One at a time. Nothing gets deleted.",
+    );
     const start = closed.querySelector("button[data-tidy=start]") as Element;
     expect(start.textContent).toBe("Start");
     expect(start.getAttribute("type")).toBe("button");
@@ -449,6 +487,49 @@ describe("the Tidy up session", () => {
       expect(p.focused().at(-1)).toBe(p.$("button[data-tidy=start]"));
       await start();
       expect(shown()).toEqual([ids[1]]);
+    });
+
+    it("the closed line counts what Start will walk through: after Stop here, and after Undo", async () => {
+      const line = (p: ReturnType<typeof runPage>) =>
+        p.$(".tidy-closed .small").textContent?.replace(/\s+/g, " ").trim();
+      const { p, start, stop, choose, undo } = load();
+      expect(line(p)).toBe("5 links to look at. One at a time. Nothing gets deleted.");
+      await start();
+      await choose("keep");
+      await choose("archive");
+      await stop();
+      expect(line(p)).toBe("3 links to look at. One at a time. Nothing gets deleted.");
+      await undo();
+      expect(line(p)).toBe("4 links to look at. One at a time. Nothing gets deleted.");
+      await start();
+      await choose("keep");
+      await choose("keep");
+      await choose("keep");
+      await stop();
+      expect(line(p)).toBe("1 link to look at. One at a time. Nothing gets deleted.");
+    });
+
+    it("the closed line drops the count once every link is decided, and Undo brings it back", async () => {
+      let release: () => void = () => {};
+      const wait = new Promise<void>((r) => {
+        release = r;
+      });
+      const { p, start, stop, choose, undo } = load(
+        (s) => (s.url === "/home/keep" ? { status: 200, body: KEEP_CHANGE, wait } : fine(s)),
+        1,
+      );
+      await start();
+      await choose("keep");
+      await stop();
+      release();
+      await p.settle();
+      expect(p.$(".tidy-closed .small").textContent?.trim()).toBe(
+        "One at a time. Nothing gets deleted.",
+      );
+      await undo();
+      expect(p.$(".tidy-closed .small").textContent?.trim()).toBe(
+        "1 link to look at. One at a time. Nothing gets deleted.",
+      );
     });
 
     it("a choice answered after Stop here is decided but shows nothing, and Start then skips it", async () => {

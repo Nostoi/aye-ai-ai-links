@@ -558,7 +558,7 @@ it("starts Explore with an Explore spine and keeps its heading visually hidden (
   expect([h2?.id, h2?.className, h2?.textContent]).toEqual(["worth", "visually-hidden", "Explore"]);
 });
 
-it("orders home: the search, the Handy shelf, Explore, Your spaces", () => {
+it("orders home: the search, the Handy shelf, Explore, Your spaces, Tidy up", () => {
   const html = homePage({
     worth: worth([card([])]),
     shelf: handyShelf({ items: [], suggestions: [], catalog: [], images: new Map() }),
@@ -570,6 +570,7 @@ it("orders home: the search, the Handy shelf, Explore, Your spaces", () => {
     "handy",
     "worth",
     "spaces",
+    "tidy-tray",
   ]);
 });
 
@@ -1404,9 +1405,9 @@ describe("Tidy up's tray on Home", () => {
     expect(html(input)).not.toContain('href="/tidy"');
   });
 
-  it("draws nothing, and runs and records nothing for it, when not asked", () => {
+  it("draws the empty tray, and runs and records nothing for it, when not asked", () => {
     const h = html();
-    expect(tray(h)).toBeNull();
+    expect(tray(h)?.querySelector(".tidy-quiet")?.textContent).toBe("Nothing to tidy right now.");
     expect(h).not.toContain("Clear out a few links?");
     expect(h).not.toContain('getElementById("tidy")');
   });

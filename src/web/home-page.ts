@@ -261,9 +261,10 @@ addEventListener("pageshow", (event) => {
  * section (#96). Opening a card's link is recorded with `/links/opened`, as every opening is, and
  * shows the card's opened line. The cards' Delete link, Remove saved
  * copy, Edit, Archive, gone line and Tell me why are the shared scripts'; the rest is
- * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's. `tidy`, when the route
- * offers Tidy up (#198, #332), is the last tray, `tidyTray`, which `TIDY_SCRIPT` works in place;
- * its opening of a link is recorded like the Handy shelf's.
+ * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's. The last tray,
+ * `tidyTray`, is always drawn (#347); `tidy`, when the route has links to ask about (#198, #332),
+ * fills it, and `TIDY_SCRIPT` then works it in place; its opening of a link is recorded like the
+ * Handy shelf's.
  */
 export const homePage = ({
   worth,
@@ -280,6 +281,7 @@ export const homePage = ({
 }) => {
   const section = worthSection(worth);
   const ownEdit = section !== "" && ask === undefined;
+  const asking = (tidy?.queue.length ?? 0) > 0;
   return page(
     "Aye-AI-AI Links",
     `<main class="home">
@@ -295,7 +297,7 @@ export const homePage = ({
 ${shelf}
 ${section}
 ${spaces}
-${tidy ? tidyTray(tidy) : ""}</main>
+${tidyTray(tidy)}</main>
 ${ownEdit ? `${editDialog()}\n` : ""}<script>
 ${CARD_FETCH}
 ${SHELF_SCRIPT}
@@ -305,11 +307,11 @@ ${archiveLinkScript("worth-cards", "home-error")}
 ${intentLinkScript("worth-cards", "home-error", true)}
 ${removeCopyScript("worth-cards", "home-error")}
 ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}
-${tidy ? TIDY_SCRIPT : ""}
+${asking ? TIDY_SCRIPT : ""}
 </script>
 ${openedScript("worth-cards", "/links/opened")}
 ${openedScript("handy", "/links/opened")}
-${openedScript(SPACES_ID, "/links/opened")}${tidy ? `\n${openedScript("tidy", "/links/opened")}` : ""}`,
+${openedScript(SPACES_ID, "/links/opened")}${asking ? `\n${openedScript("tidy", "/links/opened")}` : ""}`,
     {
       menu: true,
       here: "home",

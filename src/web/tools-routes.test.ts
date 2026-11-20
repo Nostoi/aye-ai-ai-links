@@ -438,7 +438,12 @@ describe("GET / and the Handy shelf", () => {
     expect(tiles.map((t) => t.hidden)).toEqual([...Array(8).fill(false), true, true, true]);
     expect(tiles[0]?.classList.contains("needs-you")).toBe(true);
     const main = parseHTML(html).document.querySelector("main.home") as HTMLElement;
-    expect([...main.children].map((c) => c.className)).toEqual(["home-search", "handy", "spaces"]);
+    expect([...main.children].map((c) => c.className)).toEqual([
+      "home-search",
+      "handy",
+      "spaces",
+      "tidy-tray",
+    ]);
   });
 
   it("marks a tool kept 31 days ago and never opened as due, and puts a suggestion at the end", async () => {

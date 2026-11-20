@@ -315,6 +315,8 @@ img.handy-image{background:var(--white)}
 .tidy-closed{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--space-2) var(--space-5)}
 .tidy-closed p{margin:0}
 .tidy-closed button{min-height:44px}
+.tidy-quiet{margin:0;max-width:64ch;color:var(--about)}
+.tidy-quiet-more{margin-top:2px;color:var(--soft)}
 #handy-error,#home-error{margin:0 0 var(--space-2)}
 .handy-show-all{display:block;min-height:44px;margin:var(--space-2) 0 0;padding:0 12px;border:0;background:none;color:var(--soft);font-size:var(--text-4);font-weight:600}
 .handy-show-all:hover{color:var(--ink)}
@@ -634,7 +636,7 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <div class="tidy-closed">
 <div>
 <p>Clear out a few links?</p>
-<p class="small">One at a time. Nothing gets deleted.</p>
+<p class="small"><span data-tidy-count>2 links to look at.</span> One at a time. Nothing gets deleted.</p>
 </div>
 <button type="button" data-tidy="start">Start</button>
 </div>
@@ -1239,6 +1241,7 @@ const tidyActs = {"keep":{"route":"/home/keep","answer":"change","undo":{"title"
 const steps = [...tidyRoot.querySelectorAll(".tidy-step")];
 const closed = tidyRoot.querySelector(".tidy-closed");
 const finished = tidyRoot.querySelector(".tidy-done");
+const count = tidyRoot.querySelector("[data-tidy-count]");
 const decided = new Set();
 let state = "closed";
 const undecided = () => steps.find((s) => !decided.has(s)) || null;
@@ -1249,6 +1252,9 @@ const render = () => {
   closed.hidden = state !== "closed";
   for (const s of steps) s.hidden = s !== current;
   finished.hidden = state !== "done";
+  const left = steps.length - decided.size;
+  count.textContent =
+    left === 0 ? "" : left === 1 ? "1 link to look at." : "{n} links to look at.".replace("{n}", left);
 };
 const focusOn = (el) => {
   el.setAttribute("tabindex", "-1");
@@ -1280,6 +1286,7 @@ const choose = (step, act) =>
     }
     decided.add(step);
     if (state === "open") go("open");
+    else render();
     showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";

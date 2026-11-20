@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { Database } from "better-sqlite3";
 import { createChatModel } from "./ai/create-model.js";
+import { createIntentGuesser } from "./ai/intent-guess.js";
 import { createStatsReader } from "./ai/read-stats.js";
 import { createSummarizer } from "./ai/summarize.js";
 import { createApp } from "./app.js";
@@ -19,6 +20,7 @@ import { createFaviconPass, type FaviconPass } from "./core/favicon-pass.js";
 import type { ImageFetcher, LinkChecker, PageFetcher } from "./core/fetch.js";
 import { createIconBackfill, type IconBackfill } from "./core/icon-backfill.js";
 import { createImageIndexer, type ImageIndexer } from "./core/image-indexer.js";
+import { createIntentPass, type IntentPass } from "./core/intent-pass.js";
 import { createCopyKeeper } from "./core/keep-copy.js";
 import { createLinkCheckRunner, type LinkCheckRunner } from "./core/link-check-runner.js";
 import { createLinkPurger } from "./core/link-removal.js";
@@ -91,6 +93,10 @@ export type StartOptions = {
   summaryPollMs?: number;
   /** Time between the summary pass's AI calls; its 5 s default when left out. */
   summaryGapMs?: number;
+  /** Time between intent pass sweeps; its 60 s default when left out. */
+  intentPollMs?: number;
+  /** Time between the intent pass's AI calls; its 5 s default when left out. */
+  intentGapMs?: number;
   /** Time between stats reading sweeps; its 1 h default when left out. */
   readingPollMs?: number;
   wrapAuthMigrations?: (migrate: () => Promise<void>) => Promise<void>;
@@ -110,21 +116,21 @@ export type StartOptions = {
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
- * The snapshot runner, the vector indexer, the image pass, the favicon pass, the copy pass, the icon backfill, the summary pass (only when the AI is set up), the check runner, the link purger and the
+ * The snapshot runner, the vector indexer, the image pass, the favicon pass, the copy pass, the icon backfill, the summary pass and the intent pass (both only when the AI is set up), the check runner, the link purger and the
  * metadata refresher start once the server is listening. Any failure before that closes what was already opened.
  *
  * `stop` shuts down in this order, so no write is cut off and no job's attempt is wasted:
  * 1. In-app AI turns are stopped first: a model call in flight is aborted and the turn answers
  *    that the server is stopping, so its request ends before the drain; a tool call already
  *    running carries on, and step 3 waits for it.
- *    The runner, the indexer, the image pass, the favicon pass, the copy pass, the icon backfill, the summary pass and the check runner take no new work;
+ *    The runner, the indexer, the image pass, the favicon pass, the copy pass, the icon backfill, the summary pass, the intent pass and the check runner take no new work;
  *    running jobs, an embedding, an image or favicon fetch, a copy in the making, a page being read for its icon,
  *    a summary being written and a link check in flight carry on.
  * 2. The HTTP drain: no new connections, and requests in flight get up to the drain limit.
  * 3. The runner aborts its jobs, which give their attempts back, the image pass aborts its fetch,
  *    leaving that image pending, the favicon pass aborts its fetch, leaving that favicon pending, the copy pass aborts its fetch or extraction, leaving the copy for
  *    the next sweep, the icon backfill aborts its fetch or extraction, recording nothing, so the link
- *    stays a candidate, the summary pass aborts its AI call, writing nothing, so the link stays a
+ *    stays a candidate, the summary and intent passes abort their AI call, writing nothing, so the link stays a
  *    candidate, and the check runner aborts its check, recording nothing, so the
  *    link stays due. Stop waits for them, for the indexer's sweep and for any tool call still
  *    running, up to the settle limit.
@@ -162,6 +168,8 @@ export async function startServer(
     iconPollMs,
     summaryPollMs,
     summaryGapMs,
+    intentPollMs,
+    intentGapMs,
     readingPollMs,
     wrapAuthMigrations = (migrate) => migrate(),
     jsonFetcher = createJsonFetcher({ version: config.version }),
@@ -181,6 +189,7 @@ export async function startServer(
   let copyPass: CopyPass | undefined;
   let iconBackfill: IconBackfill | undefined;
   let summaryPass: SummaryPass | undefined;
+  let intentPass: IntentPass | undefined;
   let readingPass: StatsReadingPass | undefined;
   let checks: LinkCheckRunner | undefined;
   let purger: ReturnType<typeof createLinkPurger> | undefined;
@@ -196,6 +205,7 @@ export async function startServer(
     await copyPass?.stop();
     await iconBackfill?.stop();
     await summaryPass?.stop();
+    await intentPass?.stop();
     await readingPass?.stop();
     // The same for the check in flight and its checker.
     await checks?.stop();
@@ -289,7 +299,7 @@ export async function startServer(
       now: deps.now,
       ...(iconPollMs !== undefined && { pollMs: iconPollMs }),
     });
-    // One connection for the web door's chat and the summary pass.
+    // One connection for the web door's chat and the summary, intent and reading passes.
     const chat = config.ai && createChatModel(config.ai);
     if (chat && config.ai) {
       summaryPass = createSummaryPass({
@@ -299,6 +309,13 @@ export async function startServer(
         now: deps.now,
         ...(summaryPollMs !== undefined && { pollMs: summaryPollMs }),
         ...(summaryGapMs !== undefined && { gapMs: summaryGapMs }),
+      });
+      intentPass = createIntentPass({
+        store: deps.store,
+        guesser: createIntentGuesser(chat),
+        now: deps.now,
+        ...(intentPollMs !== undefined && { pollMs: intentPollMs }),
+        ...(intentGapMs !== undefined && { gapMs: intentGapMs }),
       });
       readingPass = createStatsReadingPass({
         readings: deps.statsReadings,
@@ -372,6 +389,7 @@ export async function startServer(
   copyPass?.start();
   iconBackfill?.start();
   summaryPass?.start();
+  intentPass?.start();
   readingPass?.start();
   checks?.start();
   purger?.start();
@@ -423,6 +441,10 @@ export async function startServer(
     const summariesStopped = (summaryPass?.stop() ?? Promise.resolve()).then(() => {
       summariesEnded = true;
     });
+    let guessesEnded = false;
+    const guessesStopped = (intentPass?.stop() ?? Promise.resolve()).then(() => {
+      guessesEnded = true;
+    });
     let readingsEnded = false;
     const readingsStopped = (readingPass?.stop() ?? Promise.resolve()).then(() => {
       readingsEnded = true;
@@ -443,6 +465,7 @@ export async function startServer(
       copiesStopped,
       iconsStopped,
       summariesStopped,
+      guessesStopped,
       readingsStopped,
       checksStopped,
       calls().ended,
@@ -450,7 +473,7 @@ export async function startServer(
     try {
       if (await Promise.race([ended, timedOut])) {
         console.error(
-          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; favicon pass ${faviconsEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; stats reading pass ${readingsEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
+          `[server] closing after ${settleMs} ms with ${calls().running} MCP call(s) running; snapshot jobs ${jobsEnded ? "ended" : "still running"}; vector indexer ${indexEnded ? "ended" : "still running"}; image pass ${imagesEnded ? "ended" : "still running"}; favicon pass ${faviconsEnded ? "ended" : "still running"}; copy pass ${copiesEnded ? "ended" : "still running"}; icon backfill ${iconsEnded ? "ended" : "still running"}; summary pass ${summariesEnded ? "ended" : "still running"}; intent pass ${guessesEnded ? "ended" : "still running"}; stats reading pass ${readingsEnded ? "ended" : "still running"}; link checks ${checksEnded ? "ended" : "still running"}`,
         );
       }
     } finally {
@@ -467,6 +490,7 @@ export async function startServer(
     copyPass?.quiesce();
     iconBackfill?.quiesce();
     summaryPass?.quiesce();
+    intentPass?.quiesce();
     readingPass?.quiesce();
     checks?.quiesce();
     await drain();

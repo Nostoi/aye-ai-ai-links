@@ -452,6 +452,22 @@ export const MIGRATIONS: Migration[] = [
   );
   `,
   addIntent,
+  // The one-off AI pass that guesses To keep (#339): one row per live active link nobody had
+  // spoken for. The pass records its outcome and tries here and never deletes a row, so one
+  // SELECT lists what it wrote. A link saved later is never queued.
+  `
+  CREATE TABLE intent_guesses (
+    owner_id TEXT NOT NULL,
+    link_id INTEGER NOT NULL,
+    outcome TEXT CHECK (outcome IN ('keep', 'not_keep', 'failed')),
+    tries INTEGER NOT NULL DEFAULT 0 CHECK (tries >= 0),
+    PRIMARY KEY (owner_id, link_id),
+    FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE
+  );
+  INSERT INTO intent_guesses (owner_id, link_id)
+    SELECT owner_id, id FROM links
+    WHERE deleted_at IS NULL AND state = 'active' AND intent_source IS NULL;
+  `,
 ];
 
 /**

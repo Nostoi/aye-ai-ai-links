@@ -215,7 +215,8 @@ export interface LinkRemover {
  * summary text while `summarySource` lists the accepted sources of its label, with null for none.
  * `intent` matches the intent and `intentSource` lists the accepted sources of its label, with
  * null for none. `notKeptTool` holds only while the link's Keep handy row is not `kept`, judged
- * in the same write.
+ * in the same write. The store owns that rule: a patch that writes explore is always held to it,
+ * whether or not the caller names it, and answers `applied: false` (`update` answers null).
  */
 export type LinkExpectation = {
   state?: LinkState;
@@ -256,4 +257,34 @@ export interface SummaryCandidates {
     limit: number,
     sources: (SummarySource | null)[],
   ): Promise<SummaryCandidate[]>;
+}
+
+/** A queued link and how many times its batch has failed. */
+export type GuessCandidate = { owner: OwnerId; id: string; tries: number };
+
+/**
+ * The queue of the one-off AI pass that guesses To keep (#339). A row is `undecided` until the pass
+ * records an outcome: `keep` (the pass wrote keep/inferred), `not_keep` (it wrote nothing) or
+ * `failed` (its tries ran out). Rows are never deleted, so the `keep` rows are exactly what the pass
+ * wrote. Every call skips a deleted link, which stays undecided until it is restored.
+ */
+export interface IntentGuesses {
+  /** Undecided rows after `after` (null: from the start), ascending by owner then link id, at most `limit`, across all owners. */
+  guessCandidates(
+    after: { owner: OwnerId; id: string } | null,
+    limit: number,
+  ): Promise<GuessCandidate[]>;
+  /**
+   * In one write, for the owner's undecided rows among `ids`: sets keep/inferred on each link in
+   * `keep` that nobody has spoken for (intent source null), records `keep` for those and
+   * `not_keep` for every other row.
+   */
+  recordGuesses(owner: OwnerId, ids: string[], keep: string[]): Promise<void>;
+  /** Adds a try to each undecided row among `ids`; a row reaching `maxTries` becomes `failed`. */
+  recordGuessFailure(owner: OwnerId, ids: string[], maxTries: number): Promise<void>;
+  /**
+   * Puts the owner's `keep` rows back to To explore, only while the link still holds the pass's
+   * keep/inferred and its Keep handy row is not `kept`. Returns how many links it changed.
+   */
+  revertGuesses(owner: OwnerId): Promise<number>;
 }

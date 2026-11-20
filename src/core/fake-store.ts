@@ -52,6 +52,8 @@ import type { StatsReading, StatsReadingStore } from "./stats-reading-store.js";
 import type { StatsEvent, StatsStore } from "./stats-store.js";
 import type {
   EventWrite,
+  GuessCandidate,
+  IntentGuesses,
   LinkExpectation,
   LinkRemover,
   LinkStore,
@@ -156,6 +158,12 @@ function matchesExpectation(found: Link, expected: LinkExpectation, keptTool: bo
   );
 }
 
+const linkOrder = (id: string) => Number(id.replace(/^link-/, ""));
+
+/** The store, not the caller, refuses an explore under a kept tool (as SQLite's `updateSync`). */
+const withKeptToolRule = (expected: LinkExpectation, patch: LinkPatch): LinkExpectation =>
+  patch.intent === "explore" ? { ...expected, notKeptTool: true } : expected;
+
 /** A tag pair as one string, the keys sorted so either order gives the same one. */
 const pairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
 const pairOf = (p: string): [string, string] => p.split("\0") as [string, string];
@@ -175,6 +183,7 @@ export class FakeStore
     FaviconStore,
     FaviconReader,
     SummaryCandidates,
+    IntentGuesses,
     StatsStore,
     StatsReadingStore,
     TagEditStore,
@@ -619,7 +628,7 @@ export class FakeStore
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    if (!matchesExpectation(found, expected, this.keptTool(owner, id))) {
+    if (!matchesExpectation(found, withKeptToolRule(expected, patch), this.keptTool(owner, id))) {
       return { link: this.view(owner, found), editId: null, applied: false };
     }
     const before = coveredOf(this.view(owner, found));
@@ -705,7 +714,7 @@ export class FakeStore
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    if (!matchesExpectation(found, expected, this.keptTool(owner, id))) {
+    if (!matchesExpectation(found, withKeptToolRule(expected, patch), this.keptTool(owner, id))) {
       return { link: this.view(owner, found), applied: false };
     }
     return { link: (await this.update(owner, id, patch, events)) as Link, applied: true };
@@ -1353,6 +1362,94 @@ export class FakeStore
       }
     }
     return found.sort((a, b) => order(a.id) - order(b.id)).slice(0, limit);
+  }
+
+  /** The intent-guess queue by owner then link id; a test fills it as the migration would. */
+  private guesses = new Map<OwnerId, Map<string, { outcome: string | null; tries: number }>>();
+
+  queueGuess(owner: OwnerId, id: string): void {
+    const mine = this.guesses.get(owner) ?? new Map();
+    mine.set(id, { outcome: null, tries: 0 });
+    this.guesses.set(owner, mine);
+  }
+
+  /** Test inspection: the owner's queue rows, ascending by link. */
+  guessRows(owner: OwnerId): { id: string; outcome: string | null; tries: number }[] {
+    return [...(this.guesses.get(owner) ?? [])]
+      .map(([id, row]) => ({ id, ...row }))
+      .sort((a, b) => linkOrder(a.id) - linkOrder(b.id));
+  }
+
+  /** The owner's undecided row for a live link. */
+  private undecidedGuess(owner: OwnerId, id: string) {
+    const row = this.guesses.get(owner)?.get(id);
+    return row && row.outcome === null && this.owned(owner).has(id) ? row : undefined;
+  }
+
+  async guessCandidates(
+    after: { owner: OwnerId; id: string } | null,
+    limit: number,
+  ): Promise<GuessCandidate[]> {
+    const found: GuessCandidate[] = [];
+    for (const [owner, mine] of this.guesses) {
+      for (const [id, row] of mine) {
+        if (!this.undecidedGuess(owner, id)) continue;
+        if (
+          after &&
+          (owner < after.owner || (owner === after.owner && linkOrder(id) <= linkOrder(after.id)))
+        ) {
+          continue;
+        }
+        found.push({ owner, id, tries: row.tries });
+      }
+    }
+    return found
+      .sort((a, b) =>
+        a.owner === b.owner ? linkOrder(a.id) - linkOrder(b.id) : a.owner < b.owner ? -1 : 1,
+      )
+      .slice(0, limit);
+  }
+
+  async recordGuesses(owner: OwnerId, ids: string[], keep: string[]): Promise<void> {
+    for (const id of ids) {
+      const row = this.undecidedGuess(owner, id);
+      if (!row) continue;
+      const wrote =
+        keep.includes(id) &&
+        (
+          await this.updateIf(
+            owner,
+            id,
+            { intentSource: [null] },
+            { intent: "keep", intentSource: "inferred" },
+          )
+        )?.applied === true;
+      row.outcome = wrote ? "keep" : "not_keep";
+    }
+  }
+
+  async recordGuessFailure(owner: OwnerId, ids: string[], maxTries: number): Promise<void> {
+    for (const id of ids) {
+      const row = this.undecidedGuess(owner, id);
+      if (!row) continue;
+      row.tries += 1;
+      if (row.tries >= maxTries) row.outcome = "failed";
+    }
+  }
+
+  async revertGuesses(owner: OwnerId): Promise<number> {
+    let reverted = 0;
+    for (const [id, row] of this.guesses.get(owner) ?? []) {
+      if (row.outcome !== "keep") continue;
+      const done = await this.updateIf(
+        owner,
+        id,
+        { intent: "keep", intentSource: ["inferred"] },
+        { intent: "explore", intentSource: null },
+      );
+      if (done?.applied) reverted += 1;
+    }
+    return reverted;
   }
 
   async iconCandidates(afterId: string | null, limit: number): Promise<IconCandidate[]> {

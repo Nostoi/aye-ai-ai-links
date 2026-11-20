@@ -9,6 +9,8 @@ import {
 } from "../core/snapshot-store.js";
 import type {
   EventWrite,
+  GuessCandidate,
+  IntentGuesses,
   LinkExpectation,
   LinkRemover,
   LinkStore,
@@ -88,7 +90,7 @@ type SnapshotRow = {
 };
 
 export class SqliteStore
-  implements LinkStore, LinkRemover, SnapshotStore, SummaryCandidates, ToolStore
+  implements LinkStore, LinkRemover, SnapshotStore, SummaryCandidates, IntentGuesses, ToolStore
 {
   constructor(private readonly db: Database) {}
 
@@ -469,6 +471,101 @@ export class SqliteStore
       )
       .all(...guard.values, after, limit) as { owner_id: string; id: number }[];
     return rows.map((r) => ({ owner: r.owner_id, id: String(r.id) }));
+  }
+
+  async guessCandidates(
+    after: { owner: OwnerId; id: string } | null,
+    limit: number,
+  ): Promise<GuessCandidate[]> {
+    const afterId = after === null ? 0 : parseId(after.id);
+    if (afterId === null) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT g.owner_id, g.link_id, g.tries FROM intent_guesses g
+         JOIN links l ON l.owner_id = g.owner_id AND l.id = g.link_id AND l.deleted_at IS NULL
+         WHERE g.outcome IS NULL AND (g.owner_id, g.link_id) > (?, ?)
+         ORDER BY g.owner_id, g.link_id LIMIT ?`,
+      )
+      .all(after?.owner ?? "", afterId, limit) as {
+      owner_id: string;
+      link_id: number;
+      tries: number;
+    }[];
+    return rows.map((r) => ({ owner: r.owner_id, id: String(r.link_id), tries: r.tries }));
+  }
+
+  async recordGuesses(owner: OwnerId, ids: string[], keep: string[]): Promise<void> {
+    const keepIds = new Set(keep);
+    this.db
+      .transaction(() => {
+        for (const id of ids) {
+          const n = parseId(id);
+          if (n === null || !this.undecidedGuess(owner, n)) continue;
+          const wrote =
+            keepIds.has(id) &&
+            this.updateSync(
+              owner,
+              n,
+              { intent: "keep", intentSource: "inferred" },
+              { intentSource: [null] },
+            ) !== null;
+          this.db
+            .prepare("UPDATE intent_guesses SET outcome = ? WHERE owner_id = ? AND link_id = ?")
+            .run(wrote ? "keep" : "not_keep", owner, n);
+        }
+      })
+      .immediate();
+  }
+
+  async recordGuessFailure(owner: OwnerId, ids: string[], maxTries: number): Promise<void> {
+    this.db
+      .transaction(() => {
+        for (const id of ids) {
+          const n = parseId(id);
+          if (n === null || !this.undecidedGuess(owner, n)) continue;
+          this.db
+            .prepare(
+              `UPDATE intent_guesses
+               SET tries = tries + 1, outcome = CASE WHEN tries + 1 >= ? THEN 'failed' END
+               WHERE owner_id = ? AND link_id = ?`,
+            )
+            .run(maxTries, owner, n);
+        }
+      })
+      .immediate();
+  }
+
+  async revertGuesses(owner: OwnerId): Promise<number> {
+    return this.db
+      .transaction(() => {
+        const rows = this.db
+          .prepare("SELECT link_id FROM intent_guesses WHERE owner_id = ? AND outcome = 'keep'")
+          .all(owner) as { link_id: number }[];
+        let reverted = 0;
+        for (const { link_id } of rows) {
+          const done = this.updateSync(
+            owner,
+            link_id,
+            { intent: "explore", intentSource: null },
+            { intent: "keep", intentSource: ["inferred"] },
+          );
+          if (done) reverted += 1;
+        }
+        return reverted;
+      })
+      .immediate();
+  }
+
+  private undecidedGuess(owner: OwnerId, id: number): boolean {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM intent_guesses g
+           JOIN links l ON l.owner_id = g.owner_id AND l.id = g.link_id AND l.deleted_at IS NULL
+           WHERE g.owner_id = ? AND g.link_id = ? AND g.outcome IS NULL`,
+        )
+        .get(owner, id) !== undefined
+    );
   }
 
   async getTool(owner: OwnerId, linkId: string) {

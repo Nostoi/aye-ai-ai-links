@@ -44,6 +44,11 @@ export function describeToolStoreContract(
         })
       ).link.id;
 
+    const state = async (id: string) => {
+      const l = await store.get(A, id);
+      return { tool: await store.getTool(A, id), intent: l?.intent, source: l?.intentSource };
+    };
+
     beforeEach(async () => {
       const h = await makeHarness();
       store = h.store;
@@ -172,11 +177,6 @@ export function describeToolStoreContract(
     describe("a kept tool is always To keep", () => {
       const keep = { intent: "keep", intentSource: "stated" } as const;
       const explore = { intent: "explore", intentSource: "stated" } as const;
-      const state = async (id: string) => {
-        const l = await store.get(A, id);
-        return { tool: await store.getTool(A, id), intent: l?.intent, source: l?.intentSource };
-      };
-
       it("refuses a write of kept over a link that is To explore, changing nothing (Undo of Not handy after Explore it)", async () => {
         const id = await saveExplore(A);
         await store.update(A, id, keep);
@@ -227,6 +227,21 @@ export function describeToolStoreContract(
       expect(await store.get(A, id)).toMatchObject({ intent: "keep", intentSource: "stated" });
       await store.updateToolIf(A, id, kept(), kept({ status: "declined" }));
       expect((await store.updateIf(A, id, { notKeptTool: true }, patch))?.applied).toBe(true);
+    });
+
+    it("an explore patch on a kept tool is refused by updateIf and updateWithReceipt even when the caller omits notKeptTool, writing nothing", async () => {
+      const id = await saveExplore(A);
+      await store.update(A, id, { intent: "keep", intentSource: "stated" });
+      await store.updateToolIf(A, id, null, kept());
+      const before = await state(id);
+      const patch = { intent: "explore", intentSource: "stated" } as const;
+      const viaIf = await store.updateIf(A, id, {}, patch);
+      expect(viaIf?.applied).toBe(false);
+      expect(viaIf?.link).toMatchObject({ intent: "keep", intentSource: "stated" });
+      const viaReceipt = await store.updateWithReceipt(A, id, patch, at(5));
+      expect([viaReceipt?.applied, viaReceipt?.editId]).toEqual([false, null]);
+      expect(viaReceipt?.link).toMatchObject({ intent: "keep", intentSource: "stated" });
+      expect(await state(id)).toEqual(before);
     });
 
     it("lists every row of the owner's, by link id", async () => {

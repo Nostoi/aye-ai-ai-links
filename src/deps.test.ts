@@ -254,7 +254,12 @@ describe("the vector indexer on createDeps' index store", () => {
     });
     await h.sweep();
     expect(h.docs.at(-1)?.[0]).toContain("Car maintenance");
-    await updateLink(h.deps, OWNER, a.id, { title: null, summary: null, why: null, tags: [] });
+    await updateLink(h.deps, OWNER, a.id, {
+      title: null,
+      summary: null,
+      why: { text: "", source: "stated" },
+      tags: [],
+    });
     expect((await h.sweep()).embedded).toEqual([["1"]]);
     const row = h.vector(a.id);
     expect(row?.hash).toBe(documentHash(MODEL_KEY, "https://ex.com/1"));

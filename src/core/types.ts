@@ -99,6 +99,7 @@ export type NewLink = Omit<Link, "id" | "snapshot">;
  * written only while the row's summary source is one of those listed (null for none), decided in
  * the same write; the rest of the patch is written either way. `intent` and `intentSource` are
  * one pair, written together (a missing source is null), and `intentOver` guards it the same way.
+ * `whyOver` guards the why's text and source the same way, against the why's own source.
  */
 export type LinkPatch = Partial<
   Pick<
@@ -114,7 +115,11 @@ export type LinkPatch = Partial<
     | "intent"
     | "intentSource"
   >
-> & { summaryOver?: (SummarySource | null)[]; intentOver?: (Source | null)[] };
+> & {
+  summaryOver?: (SummarySource | null)[];
+  intentOver?: (Source | null)[];
+  whyOver?: (Source | null)[];
+};
 
 /** A note about the owner. `source` says how the writer learned it. */
 export type ProfileNote = {

@@ -64,7 +64,7 @@ type SummaryInput = string | Labelled;
 
 export type UpdateLinkInput = Omit<
   LinkPatch,
-  "tags" | "lastOpenedAt" | "summary" | "summarySource" | "summaryOver" | "intentOver"
+  "tags" | "lastOpenedAt" | "summary" | "summarySource" | "summaryOver" | "intentOver" | "whyOver"
 > & {
   summary?: SummaryInput | null;
   tags?: TagInput;
@@ -296,7 +296,11 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
   if (opened === true) patch.lastOpenedAt = now();
   if (tags !== undefined) patch.tags = normalizeTags(tags);
-  if (why !== undefined) patch.why = cleanWhy(why);
+  if (why !== undefined) {
+    patch.why = cleanWhy(why);
+    // Only the owner's own words (stated or asked) change or clear a why they gave; a guess or a bare null touches only a gap or another guess. The store decides that atomically.
+    if (why === null || why.source === "inferred") patch.whyOver = [null, "inferred"];
+  }
   return patch;
 }
 

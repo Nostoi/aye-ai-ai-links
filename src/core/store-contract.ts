@@ -1645,6 +1645,54 @@ export function describeStoreContract(
         ]);
       });
 
+      it("whyOver writes the why over none or an inferred one, keeps a stated or asked one, and writes the rest either way", async () => {
+        const none = await seed(A, 1);
+        const guess = await seed(A, 2, { why: { text: "g", source: "inferred" } });
+        const said = await seed(A, 3, { why: { text: "s", source: "stated" } });
+        const asked = await seed(A, 4, { why: { text: "a", source: "asked" } });
+        const aiWhy: Labelled = { text: "ai", source: "inferred" };
+        const patch = { title: "T", why: aiWhy, whyOver: [null, "inferred" as const] };
+        for (const link of [none, guess, said, asked]) await h.store.update(A, link.id, patch);
+        const whyOf = async (id: string) => (await h.store.get(A, id))?.why;
+        expect(await whyOf(none.id)).toEqual(aiWhy);
+        expect(await whyOf(guess.id)).toEqual(aiWhy);
+        expect(await whyOf(said.id)).toEqual({ text: "s", source: "stated" });
+        expect(await whyOf(asked.id)).toEqual({ text: "a", source: "asked" });
+        for (const link of [said, asked]) {
+          expect((await h.store.get(A, link.id))?.title, link.id).toBe("T");
+        }
+        await h.store.update(A, said.id, { why: null, whyOver: [null, "inferred"] });
+        expect(await whyOf(said.id)).toEqual({ text: "s", source: "stated" });
+        const viaIf = await h.store.updateIf(A, asked.id, {}, { ...patch, title: "U" });
+        expect([viaIf?.applied, viaIf?.link.title, viaIf?.link.why]).toEqual([
+          true,
+          "U",
+          { text: "a", source: "asked" },
+        ]);
+      });
+
+      it("whyOver through updateWithReceipt keeps the why, records no why change, and a guarded-only patch has no receipt", async () => {
+        const said = await seed(A, 1, { why: { text: "s", source: "stated" } });
+        const guess = await seed(A, 2, { why: { text: "g", source: "inferred" } });
+        const aiWhy: Labelled = { text: "ai", source: "inferred" };
+        const guarded = { why: aiWhy, whyOver: [null, "inferred" as const] };
+        const kept = await h.store.updateWithReceipt(A, said.id, guarded, new Date());
+        expect([kept?.link.why, kept?.editId]).toEqual([{ text: "s", source: "stated" }, null]);
+        const withTitle = await h.store.updateWithReceipt(
+          A,
+          said.id,
+          { ...guarded, title: "T" },
+          new Date(),
+        );
+        expect([withTitle?.link.why, withTitle?.link.title]).toEqual([
+          { text: "s", source: "stated" },
+          "T",
+        ]);
+        expect(withTitle?.editId).not.toBeNull();
+        const written = await h.store.updateWithReceipt(A, guess.id, guarded, new Date());
+        expect([written?.link.why, written?.editId === null]).toEqual([aiWhy, false]);
+      });
+
       it("never matches another owner's link: null, and that link is unchanged", async () => {
         const theirs = await seed(B, 1, { state: "archived" });
         const before = structuredClone(await h.all(B));
@@ -1675,6 +1723,54 @@ export function describeStoreContract(
           },
         ]);
         expect((await h.all(A))[0]?.tags).toEqual(updated.tags);
+      });
+
+      describe("an inferred why", () => {
+        const stated: Labelled = { text: "mine", source: "stated" };
+        const guess: Labelled = { text: "ai", source: "inferred" };
+        let n = 0;
+        const withWhy = async (why: Labelled | null) =>
+          (await saveLink(deps(), A, { url: `https://ex.com/w${++n}`, savedBy: "agent", why })).link
+            .id;
+
+        it("never replaces a stated or asked why, nor clears it with a blank one, and the rest is written", async () => {
+          for (const owned of [stated, { text: "told", source: "asked" } as Labelled]) {
+            const id = await withWhy(owned);
+            const kept = await updateLink(deps(), A, id, { title: "T", why: guess });
+            expect([kept.why, kept.title]).toEqual([owned, "T"]);
+            const blank = await updateLink(deps(), A, id, {
+              why: { text: "  ", source: "inferred" },
+            });
+            expect(blank.why).toEqual(owned);
+            const viaReceipt = await updateLinkWithReceipt(deps(), A, id, { why: guess });
+            expect([viaReceipt.link.why, viaReceipt.editId]).toEqual([owned, null]);
+            expect((await h.store.get(A, id))?.why).toEqual(owned);
+          }
+        });
+
+        it("replaces no why or another guess, and a stated why still replaces anything", async () => {
+          const id = await withWhy(null);
+          expect((await updateLink(deps(), A, id, { why: guess })).why).toEqual(guess);
+          const next: Labelled = { text: "ai2", source: "inferred" };
+          expect((await updateLink(deps(), A, id, { why: next })).why).toEqual(next);
+          expect((await updateLink(deps(), A, id, { why: stated })).why).toEqual(stated);
+          const newer: Labelled = { text: "newer", source: "stated" };
+          expect((await updateLink(deps(), A, id, { why: newer })).why).toEqual(newer);
+        });
+
+        it("a bare null clears only a guess; a blank stated or asked why clears the owner's", async () => {
+          for (const owned of [stated, { text: "told", source: "asked" } as Labelled]) {
+            const id = await withWhy(owned);
+            expect((await updateLink(deps(), A, id, { why: null })).why).toEqual(owned);
+            expect((await h.store.get(A, id))?.why).toEqual(owned);
+            const cleared = await updateLink(deps(), A, id, {
+              why: { text: "", source: "stated" },
+            });
+            expect(cleared.why).toBeNull();
+          }
+          const id = await withWhy(guess);
+          expect((await updateLink(deps(), A, id, { why: null })).why).toBeNull();
+        });
       });
 
       it("leaves why and tags alone when only summary changes", async () => {

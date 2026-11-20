@@ -551,7 +551,8 @@ export class FakeStore
     if (patch.intent === "explore" && this.keptTool(owner, id)) return null;
     const settled = this.settleEvents(owner, found, events);
     this.checkEventKinds(settled);
-    const { summaryOver, intentOver, ...fields } = structuredClone(patch);
+    const { summaryOver, intentOver, whyOver, ...fields } = structuredClone(patch);
+    if (whyOver && !whyOver.includes(found.why?.source ?? null)) delete fields.why;
     if (fields.intent !== undefined || fields.intentSource !== undefined) {
       fields.intentSource ??= null;
       if (intentOver && !intentOver.includes(found.intentSource)) {

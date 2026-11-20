@@ -1,5 +1,6 @@
 import { capCodePoints } from "../core/snapshot-text.js";
 import { SUMMARY_MAX, type Summarizer, SummarizerUnavailable } from "../core/summary-pass.js";
+import { withCallSignal } from "./call-signal.js";
 import { AiUnavailable, type ChatModel } from "./model.js";
 
 /** One summary call's time limit; a local model is slow. */
@@ -62,25 +63,19 @@ function oneLine(reply: { text: string; truncated?: boolean }): string {
 export function createSummarizer(model: ChatModel, timeoutMs = SUMMARY_TIMEOUT_MS): Summarizer {
   return {
     async summarize(page, signal) {
-      const call = new AbortController();
-      const abort = () => call.abort();
-      const timer = setTimeout(abort, timeoutMs);
-      if (signal.aborted) abort();
-      else signal.addEventListener("abort", abort, { once: true });
       try {
-        const reply = await model.reply({
-          system: SYSTEM,
-          messages: [{ role: "user", text: pageMessage(page) }],
-          tools: [],
-          signal: call.signal,
-        });
+        const reply = await withCallSignal(signal, timeoutMs, (call) =>
+          model.reply({
+            system: SYSTEM,
+            messages: [{ role: "user", text: pageMessage(page) }],
+            tools: [],
+            signal: call,
+          }),
+        );
         return oneLine(reply);
       } catch (error) {
         if (error instanceof AiUnavailable) throw new SummarizerUnavailable(error.message);
         throw error;
-      } finally {
-        clearTimeout(timer);
-        signal.removeEventListener("abort", abort);
       }
     },
   };

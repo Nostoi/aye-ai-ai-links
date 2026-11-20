@@ -13,10 +13,13 @@ const STATS_EVENTS = "stats events leave out a hidden link";
 const FAVICONS = "favicon reads and the favicon pass skip a hidden link, and Undo brings it back";
 const OPEN_CODES =
   "open codes resolve to nothing for a hidden link, get none made, and Undo brings them back";
+const INTENT_GUESSES =
+  "intent guess reads and writes skip a hidden link and change nothing, and Undo brings it back";
 
 type Coverage = { test: string | string[] } | { reason: string };
 
 const HIDDEN_LINK_COVERAGE: Record<string, Coverage> = {
+  intent_guesses: { test: INTENT_GUESSES },
   link_checks: { test: RUNNER_AND_BYTE_READS },
   link_edits: { test: HIDDEN_WRITES },
   link_events: { test: [HIDDEN_WRITES, STATS_EVENTS] },

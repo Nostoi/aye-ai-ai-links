@@ -239,6 +239,29 @@ describe("hidden links in the open codes (#133)", () => {
   });
 });
 
+describe("hidden links in the intent guess queue (#339)", () => {
+  it("intent guess reads and writes skip a hidden link and change nothing, and Undo brings it back", async () => {
+    const { db, deps, save, hide } = setup();
+    const id = await save();
+    db.prepare("INSERT INTO intent_guesses (owner_id, link_id) VALUES (?, ?)").run(A, Number(id));
+    const rows = () => db.prepare("SELECT * FROM intent_guesses").all();
+    const before = rows();
+
+    await hide(id);
+
+    expect(await deps.store.guessCandidates(null, 10)).toEqual([]);
+    await deps.store.recordGuesses(A, [id], [id]);
+    await deps.store.recordGuessFailure(A, [id], 1);
+    expect(rows()).toEqual(before);
+    expect(db.prepare("SELECT intent FROM links WHERE id = ?").pluck().get(Number(id))).toBe(
+      "explore",
+    );
+
+    expect(await deps.store.unmarkDeleted(A, id, at(0))).toBe(true);
+    expect(await deps.store.guessCandidates(null, 10)).toEqual([{ owner: A, id, tries: 0 }]);
+  });
+});
+
 describe("hidden links in the digest, Handy and the gone pick", () => {
   it("digest, Handy and the gone pick leave out a hidden link", async () => {
     const { deps, save, hide } = setup();

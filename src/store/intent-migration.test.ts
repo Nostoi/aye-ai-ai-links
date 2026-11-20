@@ -68,8 +68,8 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("intent migration", () => {
-  it("is the last entry", () => {
-    expect(LATEST_VERSION).toBe(INTENT + 1);
+  it("is followed by the intent guesses entry", () => {
+    expect(LATEST_VERSION).toBe(INTENT + 2);
     expect(db.pragma("user_version", { simple: true })).toBe(LATEST_VERSION);
   });
 

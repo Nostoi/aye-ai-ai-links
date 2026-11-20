@@ -18,8 +18,8 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe("stats_readings migration", () => {
-  it("is followed by the tag edits, tag merge dismissals, link favicons, search receipt, open code and intent entries and adds an empty table", () => {
-    expect(MIGRATIONS).toHaveLength(STATS_READINGS + 7);
+  it("is followed by the tag edits, tag merge dismissals, link favicons, search receipt, open code, intent and intent guess entries and adds an empty table", () => {
+    expect(MIGRATIONS).toHaveLength(STATS_READINGS + 8);
     expect(db.prepare("SELECT 1 FROM stats_readings").all()).toEqual([]);
   });
 

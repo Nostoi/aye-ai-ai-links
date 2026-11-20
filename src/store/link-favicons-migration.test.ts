@@ -46,8 +46,8 @@ const put = (r: Row = {}) => {
 };
 
 describe("link_favicons migration", () => {
-  it("is followed by the search receipt, open code and intent entries and adds an empty table keyed by owner and link", () => {
-    expect(MIGRATIONS).toHaveLength(FAVICONS + 4);
+  it("is followed by the search receipt, open code, intent and intent guess entries and adds an empty table keyed by owner and link", () => {
+    expect(MIGRATIONS).toHaveLength(FAVICONS + 5);
     expect(db.pragma("user_version", { simple: true })).toBe(MIGRATIONS.length);
     expect(
       db

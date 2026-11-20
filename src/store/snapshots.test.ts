@@ -183,7 +183,6 @@ describe("search over snapshot text", () => {
       savedAt: at(0),
       savedBy: "t",
       lastOpenedAt: null,
-      putAwayAt: null,
       tidyKeptAt: null,
       lastSurfacedAt: null,
       snoozedUntil: null,

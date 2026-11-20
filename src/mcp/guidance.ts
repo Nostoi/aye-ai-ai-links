@@ -46,7 +46,7 @@ Keep handy: if the owner says they use a link regularly, send handy {action: "ke
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner is done with it: off their lists, still findable in search. Send putAway: true to put an active link away instead: out of the lists, but it can come back when the owner starts something it fits; send it alone or with fields other than state and handy. Send opened: true when the owner opens the link other than through its openUrl, which records the opening itself.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner archived it: out of their lists, still findable in search. Opening a link never changes its state. Send opened: true when the owner opens the link other than through its openUrl, which records the opening itself.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
@@ -76,7 +76,7 @@ export const UNDO_TAG_CHANGE = `Put back what merge_tags or delete_tag changed, 
 
 If the tags changed since, nothing is undone and you are told so. If a later change to the same tags is in the way, nothing is undone either; undoing that one may not be enough, so tell the owner and ask the owner before undoing any other change. The result has the tags that came back, each with its links.`;
 
-export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to mark it done (update_link state "archived") if the owner is done with it.`;
+export const GONE_NOTE = `A link whose gone is set seems gone: say so, never that it is certainly dead, and offer to archive it (update_link state "archived").`;
 
 export const SEARCH_LINKS = `Find the owner's saved links, best match first.
 
@@ -108,7 +108,7 @@ Every note and focus entry has a source: stated (the owner said it), asked (you 
 
 export const GET_STATS = `Get counts of the owner's library over a window: the last 30, 90 or 365 days, or all time (the default). Use it when the owner asks how they are using their links.
 
-Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links done with, put away or declined as a kept tool; notNow is links snoozed with Not now, which means later, not no. tags has every tag with its saved and opened counts, most saved first.
+Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links archived or declined as a kept tool; notNow is links snoozed with Not now, which means later, not no. tags has every tag with its saved and opened counts, most saved first.
 
 opened only counts openings made through the app or an AI (the owner opening a link on the web page or through an openUrl, or an agent sending opened: true); it misses any opening from a browser bookmark or elsewhere, so never tell the owner they have not read something because of it. Counts are kept from trackingSince. partialCounts names the counts that may be too low because the window starts before trackingSince; say so for those counts; the others don't depend on when tracking began.
 
@@ -122,13 +122,12 @@ export const GET_DIGEST = `Get a few saved links worth bringing back now, each w
 
 Reasons:
 - focus_words: the link's own title, summary, why or tags share the words in \`words\` with that focus entry (what they are working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave out a link that doesn't fit. Present an entry whose source is "inferred" as a guess.
-- came_back: the owner put this link away (putAwayAt) and that focus entry, written after, shares \`words\` with it. Judge fit as for focus_words; present an entry whose source is "inferred" as a guess. To return it to their lists, send update_link with state "active"; an opening also does.
 - no_why: no why is recorded. Ask the owner why they saved it; record it with update_link as "asked".
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or the owner opens it from the web page or an openUrl; a browser bookmark is not, so never tell the owner they haven't opened it.
 - never_surfaced: no digest has shown it before.
-- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is whole days since its last recorded opening, or null if none. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to mark it done or send handy {action: "not_handy", source: "asked"}.
+- still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is whole days since its last recorded opening, or null if none. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to archive it or send handy {action: "not_handy", source: "asked"}.
 
-Offer to snooze it (update_link with snoozedUntil) or mark it done (state "archived"). ${OPEN_NOTE}
+Offer to snooze it (update_link with snoozedUntil) or archive it (state "archived"). ${OPEN_NOTE}
 
 Each call marks the links it returns as shown, so the next returns others. Don't call it again to "refresh": that uses links up unseen. An empty list means nothing is due.`;
 

@@ -83,7 +83,10 @@ const linkSchema = z.strictObject({
   lastOpenedAt: date.nullable(),
   lastSurfacedAt: date.nullable(),
   snoozedUntil: date.nullable(),
-  /** Version 2 and later: present there, absent in version 1 (the manifest's check enforces which). */
+  /**
+   * Version 2 and later: present there, absent in version 1 (the manifest's check enforces which).
+   * Always null when written; an old file's date is read and ignored, since its link is archived.
+   */
   putAwayAt: date.nullable().optional(),
   tidyKeptAt: date.nullable().optional(),
   page: z
@@ -255,7 +258,7 @@ function manifestLink(link: Link, r: ManifestReads): ManifestLink {
     lastOpenedAt: isoOrNull(link.lastOpenedAt),
     lastSurfacedAt: isoOrNull(link.lastSurfacedAt),
     snoozedUntil: isoOrNull(link.snoozedUntil),
-    putAwayAt: isoOrNull(link.putAwayAt),
+    putAwayAt: null,
     tidyKeptAt: isoOrNull(link.tidyKeptAt),
     page: snap?.fetchedAt
       ? {
@@ -346,7 +349,6 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
     lastOpenedAt: orNull(entry.lastOpenedAt),
     lastSurfacedAt: orNull(entry.lastSurfacedAt),
     snoozedUntil: orNull(entry.snoozedUntil),
-    putAwayAt: orNull(entry.putAwayAt ?? null),
     tidyKeptAt: orNull(entry.tidyKeptAt ?? null),
     state: entry.state,
   };

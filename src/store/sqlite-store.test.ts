@@ -86,7 +86,6 @@ const baseLink = (): NewLink => ({
   savedAt: NOW,
   savedBy: "x",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -560,5 +559,39 @@ describe("SqliteStore atomicity", () => {
     });
     await expect(p).rejects.toThrow(/boom/);
     expect(await state(s)).toEqual(before);
+  });
+});
+
+describe("a row archived before the put-away date was retired", () => {
+  const PUT_AWAY_AT = Date.UTC(2025, 11, 1);
+  const seeded = async () => {
+    const s = setup();
+    s.h.addOwner("a");
+    const { link } = await saveLink(s.deps, "a", { url: "https://ex.com/old", savedBy: "x" });
+    s.db
+      .prepare("UPDATE links SET state = 'archived', put_away_at = ? WHERE id = ?")
+      .run(PUT_AWAY_AT, Number(link.id));
+    const putAwayAt = () =>
+      (
+        s.db.prepare("SELECT put_away_at AS p FROM links WHERE id = ?").get(Number(link.id)) as {
+          p: number | null;
+        }
+      ).p;
+    return { ...s, id: link.id, putAwayAt };
+  };
+
+  it("reads as archived, and an opening leaves it archived without touching the column", async () => {
+    const { h, deps, id, putAwayAt } = await seeded();
+    expect((await h.store.get("a", id))?.state).toBe("archived");
+    await updateLink(deps, "a", id, { opened: true });
+    expect((await h.store.get("a", id))?.state).toBe("archived");
+    expect(putAwayAt()).toBe(PUT_AWAY_AT);
+  });
+
+  it("is not written to by a state update either", async () => {
+    const { deps, id, putAwayAt } = await seeded();
+    await updateLink(deps, "a", id, { state: "active" });
+    await updateLink(deps, "a", id, { state: "archived" });
+    expect(putAwayAt()).toBe(PUT_AWAY_AT);
   });
 });

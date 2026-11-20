@@ -462,82 +462,31 @@ describe("recordOpening", () => {
     expect(logged).toEqual([]);
   });
 
-  const putAway = async (deps: ReturnType<typeof setup>["deps"], state: "put away" | "stale") => {
+  type OpenDeps = ReturnType<typeof setup>["deps"];
+
+  const archived = async (deps: OpenDeps) => {
     const { link } = await saveLink(deps, "a", URL_A);
-    const stamp = state === "put away" ? new Date("2026-01-01T00:00:00Z") : null;
-    await deps.store.update("a", link.id, { state: "archived", putAwayAt: stamp });
+    await deps.store.update("a", link.id, { state: "archived" });
     return link;
   };
 
-  it("makes a put-away link active with no stamp, in the same write as the opening", async () => {
-    const { store, deps } = setup();
-    const link = await putAway(deps, "put away");
-    await recordOpening(deps, "a", link.id);
-    expect(store.all("a")[0]).toMatchObject({
-      state: "active",
-      putAwayAt: null,
-      lastOpenedAt: T0,
-    });
-  });
-
   it.each([
-    ["updateLink", updateLink],
-    ["updateLinkWithReceipt", updateLinkWithReceipt],
-  ] as const)("%s: a link made stale after the opening read stays stale", async (_name, write) => {
-    const { store, deps } = setup();
-    const link = await putAway(deps, "put away");
-    // Another request marks the link stale right after this one read it as put away.
-    const racing = Object.create(store) as FakeStore;
-    racing.get = async (owner, id) => {
-      const read = await store.get(owner, id);
-      await store.update(owner, id, { state: "archived", putAwayAt: null });
-      return read;
-    };
-    await write({ ...deps, store: racing }, "a", link.id, { opened: true });
-    expect(store.all("a")[0]).toMatchObject({
-      state: "archived",
-      putAwayAt: null,
-      lastOpenedAt: T0,
-    });
-  });
-
-  it("makes a put-away link active when an update sends opened, with or without a receipt", async () => {
-    const { store, deps } = setup();
-    const one = await putAway(deps, "put away");
-    await updateLink(deps, "a", one.id, { opened: true });
-    expect(store.all("a")[0]).toMatchObject({ state: "active", putAwayAt: null });
-    await store.update("a", one.id, { state: "archived", putAwayAt: T0 });
-    await updateLinkWithReceipt(deps, "a", one.id, { opened: true });
-    expect(store.all("a")[0]).toMatchObject({ state: "active", putAwayAt: null });
-  });
-
-  it("leaves a stale link stale, though the opening is recorded", async () => {
-    const { store, deps } = setup();
-    const link = await putAway(deps, "stale");
-    await recordOpening(deps, "a", link.id);
-    expect(store.all("a")[0]).toMatchObject({
-      state: "archived",
-      putAwayAt: null,
-      lastOpenedAt: T0,
-    });
-  });
-
-  it("an update that sets state clears the put-away stamp, with or without a receipt", async () => {
-    const { store, deps } = setup();
-    const link = await putAway(deps, "put away");
-    await updateLink(deps, "a", link.id, { state: "archived" });
-    expect(store.all("a")[0]).toMatchObject({ state: "archived", putAwayAt: null });
-    await store.update("a", link.id, { putAwayAt: T0 });
-    await updateLinkWithReceipt(deps, "a", link.id, { state: "archived" });
-    expect(store.all("a")[0]).toMatchObject({ state: "archived", putAwayAt: null });
-  });
-
-  it("an update that does not set state leaves the stamp", async () => {
-    const { store, deps } = setup();
-    const link = await putAway(deps, "put away");
-    await updateLink(deps, "a", link.id, { summary: "s" });
-    expect(store.all("a")[0]).toMatchObject({ state: "archived", putAwayAt: expect.any(Date) });
-  });
+    ["recordOpening", (deps: OpenDeps, id: string) => recordOpening(deps, "a", id)],
+    ["updateLink", (deps: OpenDeps, id: string) => updateLink(deps, "a", id, { opened: true })],
+    [
+      "updateLinkWithReceipt",
+      (deps: OpenDeps, id: string) => updateLinkWithReceipt(deps, "a", id, { opened: true }),
+    ],
+  ] as const)(
+    "%s leaves an archived link archived, and records the opening once",
+    async (_name, open) => {
+      const { store, deps } = setup();
+      const link = await archived(deps);
+      await open(deps, link.id);
+      expect(store.all("a")[0]).toMatchObject({ state: "archived", lastOpenedAt: T0 });
+      expect(store.eventsOf("a", link.id).map((e) => e.kind)).toEqual(["opened"]);
+    },
+  );
 
   it("refuses another owner's link as not found, changing nothing", async () => {
     const { store, deps } = setup();
@@ -750,21 +699,14 @@ describe("stats events from updateLink and updateLinkWithReceipt (#161)", () => 
 
   it.each(writers)("%s: MCP state archived on a stale link records nothing", async (_n, write) => {
     const { store, deps, id } = await setup();
-    await store.update("a", id, { state: "archived", putAwayAt: null });
+    await store.update("a", id, { state: "archived" });
     await write(deps, "a", id, { state: "archived" });
     expect(log(store, id)).toEqual([]);
   });
 
-  it.each(writers)("%s: MCP state archived on a put-away link records stale", async (_n, write) => {
-    const { store, deps, id } = await setup();
-    await store.update("a", id, { state: "archived", putAwayAt: T0 });
-    await write(deps, "a", id, { state: "archived" });
-    expect(log(store, id)).toEqual([["stale", OPENED.getTime()]]);
-  });
-
   it.each(writers)("%s: MCP state active, and other edits, record nothing", async (_n, write) => {
     const { store, deps, id } = await setup();
-    await store.update("a", id, { state: "archived", putAwayAt: null });
+    await store.update("a", id, { state: "archived" });
     await write(deps, "a", id, { state: "active" });
     await write(deps, "a", id, { title: "New" });
     expect(log(store, id)).toEqual([]);

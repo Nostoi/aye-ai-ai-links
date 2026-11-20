@@ -2,7 +2,7 @@ import { compareIds, type DigestDeps, FOCUS_WINDOW_MS, NOT_OPENED_MS } from "./d
 import { isGone } from "./link-check.js";
 import { recentFocus } from "./profile.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
-import { ALREADY_DONE, changeIf } from "./worth-a-look.js";
+import { ALREADY_ARCHIVED, changeIf } from "./worth-a-look.js";
 
 /** The Tidy up queue and Keep's wait: the use cases behind Home's Tidy up tray. */
 
@@ -99,8 +99,8 @@ export async function keepInTidy(deps: TidyDeps, owner: OwnerId, id: string): Pr
     deps,
     owner,
     id,
-    { state: "active", putAwayAt: null },
+    { state: "active" },
     { tidyKeptAt: deps.now() },
-    ALREADY_DONE,
+    ALREADY_ARCHIVED,
   );
 }

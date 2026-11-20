@@ -704,7 +704,7 @@ type Wire<T> = T extends Date
     : T extends object
       ? { [K in keyof T]: Wire<T[K]> }
       : T;
-/** What the door adds to each link it returns: its Keep handy view, its gone view and its open link. */
+/** What the door adds to each link it returns: its Keep handy view, its gone view, its open link and a putAwayAt that is always null. */
 type Handied<T> = T extends Date
   ? T
   : T extends Link
@@ -712,6 +712,7 @@ type Handied<T> = T extends Date
         handy: HandyView | null;
         gone: GoneView | null;
         openUrl: string | null;
+        putAwayAt: null;
       }
     : T extends (infer U)[]
       ? Handied<U>[]
@@ -771,33 +772,31 @@ describe("output schemas against core's types (checked by tsc)", () => {
   });
 });
 
-describe.each(ERAS)("put-away on the wire, %s era", (era) => {
+describe.each(ERAS)("the retired put-away date on the wire, %s era", (era) => {
   const AWAY = new Date("2026-10-01T08:00:00.123Z");
-
-  it("active, stale and put-away links pass every link tool's schema, carry putAwayAt and never tidyKeptAt", async () => {
-    const { db, app } = freshApp();
+  const callOf = async (app: ReturnType<typeof freshApp>["app"]) => {
     const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
     const validators = new AjvJsonSchemaValidator();
-    const urls = ["active", "stale", "away"].map((n) => `https://example.com/${n}`);
-    for (const url of urls) await callTool(app, era, "save_link", { url });
-    db.prepare("UPDATE links SET state = 'archived' WHERE id IN (2, 3)").run();
-    db.prepare("UPDATE links SET put_away_at = ?, tidy_kept_at = ? WHERE id = 3").run(
-      AWAY.getTime(),
-      AWAY.getTime(),
-    );
-    const expected: Record<string, string | null> = {
-      "1": null,
-      "2": null,
-      "3": AWAY.toISOString(),
-    };
-    const links: Json[] = [];
-    const run = async (tool: string, args: unknown) => {
+    return async (tool: string, args: unknown) => {
       const res = (await callTool(app, era, tool, args)).result;
       expect(res.isError, `${tool}: ${JSON.stringify(res)}`).toBeUndefined();
       const verdict = validators.getValidator(tools[tool].outputSchema)(res.structuredContent);
       expect(verdict.valid, `${tool}: ${JSON.stringify(verdict)}`).toBe(true);
       return res.structuredContent;
     };
+  };
+
+  it("active, archived and formerly put-away links pass every link tool's schema, carry putAwayAt null and never tidyKeptAt", async () => {
+    const { db, app } = freshApp();
+    const run = await callOf(app);
+    const urls = ["active", "archived", "away"].map((n) => `https://example.com/${n}`);
+    for (const url of urls) await run("save_link", { url });
+    db.prepare("UPDATE links SET state = 'archived' WHERE id IN (2, 3)").run();
+    db.prepare("UPDATE links SET put_away_at = ?, tidy_kept_at = ? WHERE id = 3").run(
+      AWAY.getTime(),
+      AWAY.getTime(),
+    );
+    const links: Json[] = [];
     links.push(...(await run("list_links", {})).links);
     for (const [i, url] of urls.entries()) {
       const id = String(i + 1);
@@ -807,41 +806,33 @@ describe.each(ERAS)("put-away on the wire, %s era", (era) => {
     }
     expect(links).toHaveLength(12);
     for (const link of links) {
-      expect(link.putAwayAt, `link ${link.id}`).toBe(expected[link.id]);
+      expect(link.putAwayAt, `link ${link.id}`).toBeNull();
       expect(link).not.toHaveProperty("tidyKeptAt");
     }
   });
 
-  it("get_digest returns a put-away link with a came_back reason that passes the schema", async () => {
+  it("get_digest leaves a formerly put-away link out, and a focus_words reason passes the schema", async () => {
     const { db, app } = freshApp();
-    const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
-    const call = async (tool: string, args: unknown) => {
-      const res = (await callTool(app, era, tool, args)).result;
-      expect(res.isError, `${tool}: ${JSON.stringify(res)}`).toBeUndefined();
-      const verdict = new AjvJsonSchemaValidator().getValidator(tools[tool].outputSchema)(
-        res.structuredContent,
-      );
-      expect(verdict.valid, `${tool}: ${JSON.stringify(verdict)}`).toBe(true);
-      return res.structuredContent;
-    };
-    await call("save_link", {
-      url: "https://example.com/q",
-      title: "Quokka",
-      why: { text: "w", source: "stated" },
-    });
+    const run = await callOf(app);
+    for (const url of ["away", "quokka"]) {
+      await run("save_link", {
+        url: `https://example.com/${url}`,
+        title: "Quokka",
+        why: { text: "w", source: "stated" },
+      });
+    }
     db.prepare("UPDATE links SET state = 'archived', put_away_at = ? WHERE id = 1").run(
       AWAY.getTime(),
     );
-    await call("add_profile", { addFocus: [{ text: "quokka", source: "inferred" }] });
-    const digest = await call("get_digest", {});
-    expect(digest.links.map((d: Json) => d.link.id)).toEqual(["1"]);
+    await run("add_profile", { addFocus: [{ text: "quokka", source: "inferred" }] });
+    const digest = await run("get_digest", {});
+    expect(digest.links.map((d: Json) => d.link.id)).toEqual(["2"]);
     expect(digest.links[0].reasons[0]).toMatchObject({
-      kind: "came_back",
-      putAwayAt: AWAY.toISOString(),
+      kind: "focus_words",
       focus: { text: "quokka", source: "inferred" },
       words: ["quokka"],
     });
-    expect(digest.links[0].link.putAwayAt).toBe(AWAY.toISOString());
+    const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
     const validate = new AjvJsonSchemaValidator().getValidator(tools.get_digest.outputSchema);
     const withWords = (words: unknown) => ({
       links: [{ ...digest.links[0], reasons: [{ ...digest.links[0].reasons[0], words }] }],

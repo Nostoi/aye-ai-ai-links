@@ -65,8 +65,6 @@ export type Link = {
   lastOpenedAt: Date | null;
   lastSurfacedAt: Date | null;
   snoozedUntil: Date | null;
-  /** Set only on an archived link the owner put away; null on a done or active one. */
-  putAwayAt: Date | null;
   /** When Tidy up last kept this link; internal, never sent over MCP. */
   tidyKeptAt: Date | null;
   state: LinkState;
@@ -108,7 +106,6 @@ export type LinkPatch = Partial<
     | "state"
     | "snoozedUntil"
     | "lastOpenedAt"
-    | "putAwayAt"
     | "tidyKeptAt"
   >
 > & { summaryOver?: (SummarySource | null)[] };

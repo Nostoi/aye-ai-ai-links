@@ -229,19 +229,16 @@ describe("the change record", () => {
     expect(s.changes()).toMatchObject([{ kind: "link", tool: "update_link", editId: null }]);
   });
 
-  it("the in-app AI's update puts a link away, and its opening or stale call moves the stamp", async () => {
+  it("the in-app AI's update archives a link, and its opening leaves it archived", async () => {
     const { deps, entry } = setup();
     await saveLink(deps, CALLER.owner, { url: URL, savedBy: "seed" });
     const s = await session(entry, deps);
     const stored = () => deps.store.get(CALLER.owner, "1");
 
-    await s.call("update_link", { id: "1", putAway: true });
-    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: NOW });
-    await s.call("update_link", { id: "1", opened: true });
-    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null });
-    await s.call("update_link", { id: "1", putAway: true });
     await s.call("update_link", { id: "1", state: "archived" });
-    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: null });
+    expect(await stored()).toMatchObject({ state: "archived" });
+    await s.call("update_link", { id: "1", opened: true });
+    expect(await stored()).toMatchObject({ state: "archived" });
   });
 
   it("lists a repeat save that filled the why, and not one that didn't", async () => {

@@ -365,6 +365,7 @@ describe("MCP door over HTTP", () => {
       handy: null,
       gone: null,
       openUrl: null,
+      putAwayAt: null,
     });
     const input = {
       url: "https://example.com/p",

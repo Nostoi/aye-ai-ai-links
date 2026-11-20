@@ -50,9 +50,8 @@ async function gonePick(deps: WorthDeps, owner: OwnerId): Promise<Link | null> {
 /**
  * Worth a look: at most one gone link, and reading picks for the other slots of WORTH_SIZE. The
  * digest never offers a gone link, so the gone pick is not among the reading picks. Leaves out the
- * links in `suggestions`: the caller passes the suggestions it shows on the shelf. A put-away link that
- * came back leads, and at most one does, so every came-back link shown carries its reason; the
- * other came-back links wait for a later build. Else a focus match leads.
+ * links in `suggestions`: the caller passes the suggestions it shows on the shelf. A focus match
+ * leads.
  */
 export async function worthALook(
   deps: WorthDeps,
@@ -63,13 +62,9 @@ export async function worthALook(
   const shown = new Set(suggestions.map((s) => s.link.id));
   if (gone) shown.add(gone.id);
   const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY, shown);
-  const isCameBack = (d: DigestLink) => d.reasons.some((r) => r.kind === "came_back");
-  const lead =
-    links.find(isCameBack) ?? links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
+  const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
   const day = Math.floor(deps.now().getTime() / DAY_MS);
-  const ranked = links
-    .filter((d) => d !== lead && !isCameBack(d))
-    .map((d) => ({ d, rank: dayRank(day, d.link.id) }));
+  const ranked = links.filter((d) => d !== lead).map((d) => ({ d, rank: dayRank(day, d.link.id) }));
   ranked.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
   const shuffled = ranked.map((r) => r.d);
   const reading = (lead ? [lead, ...shuffled] : shuffled).slice(0, WORTH_SIZE - (gone ? 1 : 0));
@@ -94,18 +89,13 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
   const now = deps.now();
   const link = await deps.store.get(owner, id);
   if (!link) throw new CoreError("not_found", "That link is gone. Reload the page.");
-  const putAway = link.state === "archived" && link.putAwayAt !== null;
-  if (link.state !== "active" && !putAway) throw new CoreError("conflict", ALREADY_DONE);
+  if (link.state !== "active") throw new CoreError("conflict", ALREADY_ARCHIVED);
   if (link.snoozedUntil !== null && link.snoozedUntil > now) {
     throw new CoreError("conflict", ALREADY_PUT_OFF);
   }
   const [claim] = await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
   const until = new Date(now.getTime() + SNOOZE_MS);
-  const expected = {
-    state: link.state,
-    putAwayAt: link.putAwayAt,
-    snoozedUntil: link.snoozedUntil,
-  };
+  const expected = { state: link.state, snoozedUntil: link.snoozedUntil };
   try {
     await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF, [
       { record: "not_now", at: now },
@@ -122,7 +112,7 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
-export const ALREADY_DONE = "This link is already done or put away. Reload.";
+export const ALREADY_ARCHIVED = "This link is already archived. Reload.";
 
 export async function unsnoozeLink(
   deps: WorthDeps,
@@ -146,8 +136,8 @@ export async function unsnoozeLink(
 
 /** What a state action replaced and what it left, and when it ran; Undo sends all three back. */
 export type StateChange = {
-  before: { state: LinkState; putAwayAt: Date | null; snoozedUntil: Date | null };
-  after: { state: LinkState; putAwayAt: Date | null };
+  before: { state: LinkState; snoozedUntil: Date | null };
+  after: { state: LinkState };
   at: Date;
 };
 
@@ -155,7 +145,6 @@ type StateDeps = Pick<WorthDeps, "store" | "now">;
 
 const beforeOf = (l: Link): StateChange["before"] => ({
   state: l.state,
-  putAwayAt: l.putAwayAt,
   snoozedUntil: l.snoozedUntil,
 });
 
@@ -165,42 +154,22 @@ async function current(deps: StateDeps, owner: OwnerId, id: string): Promise<Lin
   return link;
 }
 
-/** Put it away: active -> archived with putAwayAt = now; clears the snooze. */
-export async function putAwayLink(
-  deps: StateDeps,
-  owner: OwnerId,
-  id: string,
-): Promise<StateChange> {
-  const link = await current(deps, owner, id);
-  if (link.state !== "active") throw new CoreError("conflict", ALREADY_DONE);
-  const putAwayAt = deps.now();
-  const expected = { state: "active" as const, putAwayAt: null, snoozedUntil: link.snoozedUntil };
-  const patch: LinkPatch = { state: "archived", putAwayAt, snoozedUntil: null };
-  await changeIf(deps, owner, id, expected, patch, ALREADY_DONE, [
-    { record: "put_away", at: putAwayAt },
-  ]);
-  return { before: beforeOf(link), after: { state: "archived", putAwayAt }, at: putAwayAt };
-}
-
-/** Done with it: active or put away -> archived, putAwayAt null. */
+/** Archive: active -> archived. */
 export async function archiveLink(
   deps: StateDeps,
   owner: OwnerId,
   id: string,
 ): Promise<StateChange> {
   const link = await current(deps, owner, id);
-  if (link.state === "archived" && link.putAwayAt === null) {
-    throw new CoreError("conflict", ALREADY_DONE);
-  }
-  const expected = { state: link.state, putAwayAt: link.putAwayAt };
+  if (link.state === "archived") throw new CoreError("conflict", ALREADY_ARCHIVED);
   const at = deps.now();
-  await changeIf(deps, owner, id, expected, { state: "archived", putAwayAt: null }, ALREADY_DONE, [
+  await changeIf(deps, owner, id, { state: "active" }, { state: "archived" }, ALREADY_ARCHIVED, [
     { record: "stale", at },
   ]);
-  return { before: beforeOf(link), after: { state: "archived", putAwayAt: null }, at };
+  return { before: beforeOf(link), after: { state: "archived" }, at };
 }
 
-/** Bring it back: any archived link -> active, putAwayAt null. */
+/** Bring it back: an archived link -> active. A link already active is left as it is. */
 export async function bringBackLink(
   deps: StateDeps,
   owner: OwnerId,
@@ -208,36 +177,21 @@ export async function bringBackLink(
 ): Promise<StateChange> {
   const link = await current(deps, owner, id);
   const at = deps.now();
-  if (link.state === "active" && link.putAwayAt === null) {
-    return { before: beforeOf(link), after: { state: "active", putAwayAt: null }, at };
-  }
-  if (link.state !== "archived") throw new CoreError("conflict", CHANGED_SINCE);
-  const expected = { state: "archived" as const, putAwayAt: link.putAwayAt };
-  await changeIf(deps, owner, id, expected, { state: "active", putAwayAt: null });
-  return { before: beforeOf(link), after: { state: "active", putAwayAt: null }, at };
+  if (link.state === "active") return { before: beforeOf(link), after: { state: "active" }, at };
+  await changeIf(deps, owner, id, { state: "archived" }, { state: "active" });
+  return { before: beforeOf(link), after: { state: "active" }, at };
 }
 
-/** Undo of any of the three: only while the link matches change.after; restores change.before. */
+/** Undo of Archive or Bring it back: only while the link matches change.after; restores change.before. */
 export async function undoStateChange(
   deps: StateDeps,
   owner: OwnerId,
   id: string,
   change: StateChange,
 ): Promise<void> {
-  for (const side of [change.before, change.after]) {
-    if (side.state === "active" && side.putAwayAt !== null) {
-      throw new CoreError("invalid_input", "That can't be undone. Reload the page.");
-    }
-  }
-  // Taking the action back takes back the event it recorded, found by its own time.
+  // Taking Archive back takes back the event it recorded, found by its own time.
   const events: EventWrite[] =
-    change.after.state === "archived"
-      ? [
-          change.after.putAwayAt
-            ? { unrecord: "put_away", at: change.after.putAwayAt }
-            : { unrecord: "stale", at: change.at },
-        ]
-      : [];
+    change.after.state === "archived" ? [{ unrecord: "stale", at: change.at }] : [];
   await changeIf(deps, owner, id, change.after, change.before, undefined, events);
 }
 

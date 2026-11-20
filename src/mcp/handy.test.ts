@@ -433,65 +433,77 @@ describe("save_link's handy", () => {
   });
 });
 
-describe("update_link's putAway", () => {
+describe("update_link's retired putAway", () => {
   const stored = async () => deps.store.get(A.owner, "1");
+  const eventCount = () =>
+    (db.prepare("SELECT COUNT(*) AS n FROM link_events").get() as { n: number }).n;
+  const REFUSAL = 'putAway is no longer supported; send state "archived" to archive a link.';
 
-  it("puts an active link away: archived, stamped now", async () => {
+  it("refuses putAway on an active link with an error naming state archived, writing nothing", async () => {
     await call("save_link", { url: "https://example.com/t" });
+    const before = await stored();
+    const events = eventCount();
     const res = await call("update_link", { id: "1", putAway: true });
-    expect(res.isError).toBe(false);
-    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: NOW });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain(REFUSAL);
+    expect(await stored()).toEqual(before);
+    expect(await stored()).toMatchObject({ state: "active" });
+    expect(eventCount()).toBe(events);
   });
 
-  it("applies the other fields sent with it", async () => {
+  it("refuses putAway sent with other fields or a handy change, writing none of them", async () => {
     await call("save_link", { url: "https://example.com/t" });
-    const res = await call("update_link", { id: "1", putAway: true, summary: "s" });
-    expect(res.data.link.summary).toBe("s");
-    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: NOW });
-  });
-
-  it("refuses putAway with state or handy before anything is written", async () => {
-    await call("save_link", { url: "https://example.com/t" });
-    const withState = await call("update_link", { id: "1", putAway: true, state: "archived" });
-    const withHandy = await call("update_link", {
+    const events = eventCount();
+    const res = await call("update_link", {
       id: "1",
       putAway: true,
       summary: "changed",
       handy: { action: "keep", source: "stated" },
     });
-    expect(withState.isError).toBe(true);
-    expect(withHandy.isError).toBe(true);
-    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null, summary: null });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain(REFUSAL);
+    expect(await stored()).toMatchObject({ state: "active", summary: null });
     expect(row("1")).toBeUndefined();
+    expect(eventCount()).toBe(events);
   });
 
-  it("refuses putAway with opened before anything is written", async () => {
+  it("still ignores an unknown key that is not putAway", async () => {
     await call("save_link", { url: "https://example.com/t" });
-    const res = await call("update_link", { id: "1", putAway: true, opened: true });
-    expect(res.isError).toBe(true);
-    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null, lastOpenedAt: null });
+    const res = await call("update_link", { id: "1", summary: "s", surprise: true });
+    expect(res.isError).toBe(false);
+    expect(res.data.link.summary).toBe("s");
   });
 
-  it("refuses putAway on a link that is not active, changing nothing", async () => {
+  it("state archived archives, and an opening leaves an archived link archived", async () => {
     await call("save_link", { url: "https://example.com/t" });
     await call("update_link", { id: "1", state: "archived" });
-    const res = await call("update_link", { id: "1", putAway: true, summary: "changed" });
-    expect(res.isError).toBe(true);
-    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: null, summary: null });
+    expect(await stored()).toMatchObject({ state: "archived" });
+    const res = await call("update_link", { id: "1", opened: true });
+    expect(res.isError).toBe(false);
+    expect(res.data.link.state).toBe("archived");
+    expect(await stored()).toMatchObject({ state: "archived", lastOpenedAt: NOW });
   });
 
-  it("state archived on a put-away link clears the stamp", async () => {
-    await call("save_link", { url: "https://example.com/t" });
-    await call("update_link", { id: "1", putAway: true });
-    await call("update_link", { id: "1", state: "archived" });
-    expect(await stored()).toMatchObject({ state: "archived", putAwayAt: null });
-  });
-
-  it("an opening makes a put-away link active", async () => {
-    await call("save_link", { url: "https://example.com/t" });
-    await call("update_link", { id: "1", putAway: true });
-    await call("update_link", { id: "1", opened: true });
-    expect(await stored()).toMatchObject({ state: "active", putAwayAt: null });
+  it("advertises no putAway on update_link, no came_back reason, and a null putAwayAt on a link", async () => {
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          host: "localhost",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method: "tools/list" }),
+      }),
+    );
+    const line = (await res.text()).split("\n").find((l) => l.startsWith("data:")) as string;
+    const tools: Json[] = JSON.parse(line.slice(5)).result.tools;
+    const named = (name: string) => tools.find((t) => t.name === name);
+    expect(Object.keys(named("update_link")?.inputSchema.properties)).not.toContain("putAway");
+    expect(JSON.stringify(named("get_digest")?.outputSchema)).not.toContain("came_back");
+    expect(named("get_link")?.outputSchema.properties.link.properties.putAwayAt).toEqual({
+      type: "null",
+    });
   });
 });
 

@@ -31,13 +31,10 @@ export const FOCUS_SLOTS = 3;
  * the entry's words that matched, rarest first and never empty, as they were when the digest or
  * page was built: an edit can make them stale until it is reloaded. `still_using_check`: a kept
  * tool that is due, asked about alone, with whole days since its last recorded opening (null:
- * none recorded). `came_back`: the owner put the link away at `putAwayAt` and that focus entry,
- * written after, matches it the same way (`words` as for `focus_words`); it shows while the
- * entry is in the window.
+ * none recorded).
  */
 export type DigestReason =
   | { kind: "focus_words"; focus: FocusEntry; words: string[] }
-  | { kind: "came_back"; focus: FocusEntry; putAwayAt: Date; words: string[] }
   | { kind: "no_why" }
   | { kind: "not_opened_recently" }
   | { kind: "never_surfaced" }
@@ -73,20 +70,6 @@ function eligible(link: Link, now: Date, notSurfacedAfter: Date): boolean {
     link.state === "active" &&
     (link.snoozedUntil === null || link.snoozedUntil <= now) &&
     (link.lastSurfacedAt === null || link.lastSurfacedAt <= notSurfacedAfter)
-  );
-}
-
-/**
- * A put-away link that may come back: archived with its marker, not snoozed, and not surfaced since
- * the marker within the cooldown (a surfacing before the marker does not count).
- */
-function cameBackEligible(link: Link, now: Date, notSurfacedAfter: Date): boolean {
-  const { putAwayAt, lastSurfacedAt } = link;
-  return (
-    link.state === "archived" &&
-    putAwayAt !== null &&
-    (link.snoozedUntil === null || link.snoozedUntil <= now) &&
-    (lastSurfacedAt === null || lastSurfacedAt < putAwayAt || lastSurfacedAt <= notSurfacedAfter)
   );
 }
 
@@ -140,45 +123,6 @@ async function focusReasons(
   return found;
 }
 
-/**
- * Came-back reasons by link id, in the same order as `focusReasons`. The search asks for put-away
- * links across the whole library; each entry then keeps the candidates that were put away before it
- * was written, in the day's shuffle, and gives its reason to the first FOCUS_MATCHES_PER_ENTRY.
- * Nothing is searched when no link is a candidate.
- */
-async function cameBackReasons(
-  deps: DigestDeps,
-  owner: OwnerId,
-  entries: FocusEntry[],
-  now: Date,
-  candidates: ReadonlyMap<string, Link>,
-): Promise<Map<string, DigestReason[]>> {
-  const found = new Map<string, DigestReason[]>();
-  if (candidates.size === 0) return found;
-  const day = Math.floor(now.getTime() / DAY_MS);
-  for (const focus of entries) {
-    const hits = await deps.focusMatch.match(owner, focus.text, { state: "archived" });
-    const fits = hits
-      .map((h) => ({ l: candidates.get(h.id), words: h.words }))
-      .filter(
-        (f): f is { l: Link; words: string[] } =>
-          f.l !== undefined && focus.createdAt > (f.l.putAwayAt as Date),
-      )
-      .map((f) => ({ ...f, rank: dayRank(day, f.l.id) }))
-      .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
-    for (const { l, words } of fits.slice(0, FOCUS_MATCHES_PER_ENTRY)) {
-      const reason: DigestReason = {
-        kind: "came_back",
-        focus,
-        putAwayAt: l.putAwayAt as Date,
-        words,
-      };
-      found.set(l.id, [...(found.get(l.id) ?? []), reason]);
-    }
-  }
-  return found;
-}
-
 /** The focus entries inside FOCUS_WINDOW_MS, newest first, as `recentFocus` returns them. */
 async function focusEntries(deps: DigestDeps, owner: OwnerId, now: Date): Promise<FocusEntry[]> {
   const since = now.getTime() - FOCUS_WINDOW_MS;
@@ -201,25 +145,21 @@ async function select(
   const all = await deps.store.listLinks(owner);
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
-  const reachable = all.filter((l) => !isGone(checks.get(l.id) ?? null) && !exclude.has(l.id));
   const candidates = new Map(
-    reachable
-      .filter((l) => tools.get(l.id)?.status !== "kept" && eligible(l, now, notSurfacedAfter))
+    all
+      .filter(
+        (l) =>
+          !isGone(checks.get(l.id) ?? null) &&
+          !exclude.has(l.id) &&
+          tools.get(l.id)?.status !== "kept" &&
+          eligible(l, now, notSurfacedAfter),
+      )
       .map((l) => [l.id, l]),
   );
-  // A put-away kept tool can still come back: the kept-tool exclusion is for reading picks.
-  const cameBack = new Map(
-    reachable.filter((l) => cameBackEligible(l, now, notSurfacedAfter)).map((l) => [l.id, l]),
-  );
-  if (candidates.size === 0 && cameBack.size === 0) return { picked: [], focus: new Map() };
+  if (candidates.size === 0) return { picked: [], focus: new Map() };
 
   const entries = await focusEntries(deps, owner, now);
-  const focus = await cameBackReasons(deps, owner, entries, now, cameBack);
-  for (const [id, reasons] of await focusReasons(deps, owner, entries, (id) =>
-    candidates.has(id),
-  )) {
-    focus.set(id, reasons);
-  }
+  const focus = await focusReasons(deps, owner, entries, (id) => candidates.has(id));
   const focusPicked = [...focus.keys()].slice(0, FOCUS_SLOTS);
   const rest = [...candidates.values()]
     .filter(
@@ -228,10 +168,7 @@ async function select(
         (focus.has(l.id) || ownReasons(l, l.lastSurfacedAt, now).length > 0),
     )
     .sort(rotation);
-  const picked = [
-    ...focusPicked.map((id) => (candidates.get(id) ?? cameBack.get(id)) as Link),
-    ...rest,
-  ];
+  const picked = [...focusPicked.map((id) => candidates.get(id) as Link), ...rest];
   return { picked: picked.slice(0, limit), focus };
 }
 
@@ -246,8 +183,7 @@ export async function claimSurfaced(
   {
     exceptKeptTools = false,
     exceptGone = false,
-    putAwayAt,
-  }: { exceptKeptTools?: boolean; exceptGone?: boolean; putAwayAt?: Date } = {},
+  }: { exceptKeptTools?: boolean; exceptGone?: boolean } = {},
 ): Promise<SurfacedClaim[]> {
   const now = deps.now();
   const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
@@ -259,36 +195,7 @@ export async function claimSurfaced(
         now,
         exceptKeptTools,
         exceptGone,
-        ...(putAwayAt === undefined ? {} : { expectedPutAwayAt: putAwayAt }),
       });
-}
-
-/**
- * Claims a digest's picks: reading picks together as always, and each put-away pick (a came-back
- * link) on its own, with the marker it was selected under, so one put away again since is skipped.
- * Claims come back in the picks' order.
- */
-async function claimPicked(
-  deps: Pick<DigestDeps, "store" | "now">,
-  owner: OwnerId,
-  picked: Link[],
-): Promise<SurfacedClaim[]> {
-  const reading = await claimSurfaced(
-    deps,
-    owner,
-    picked.filter((l) => l.putAwayAt === null).map((l) => l.id),
-    { exceptKeptTools: true, exceptGone: true },
-  );
-  const claims = new Map(reading.map((c) => [c.link.id, c]));
-  for (const l of picked) {
-    if (l.putAwayAt === null) continue;
-    const [claim] = await claimSurfaced(deps, owner, [l.id], {
-      exceptGone: true,
-      putAwayAt: l.putAwayAt,
-    });
-    if (claim) claims.set(l.id, claim);
-  }
-  return picked.flatMap((l) => claims.get(l.id) ?? []);
 }
 
 export async function unclaimSurfaced(
@@ -344,7 +251,12 @@ export async function getDigest(
   const now = deps.now();
   const { claimedId, due: check } = await claimDue({ ...deps, now: () => now }, owner);
   const { picked, focus } = await select(deps, owner, now, DIGEST_SIZE - (check ? 1 : 0));
-  const claimed = await claimPicked({ store: deps.store, now: () => now }, owner, picked);
+  const claimed = await claimSurfaced(
+    { store: deps.store, now: () => now },
+    owner,
+    picked.map((l) => l.id),
+    { exceptKeptTools: true, exceptGone: true },
+  );
   const links: DigestLink[] = claimed
     .map(({ link, previousSurfacedAt }) => ({
       link,

@@ -11,6 +11,7 @@ import { deleteLinkScript } from "./delete-link.js";
 import { ARCHIVED, archiveLinkScript } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
+import { intentLinkScript } from "./intent.js";
 import { keepHandyScript } from "./keep-handy.js";
 import { orderNav, orderSelect, orderSelectScript } from "./link-orders.js";
 import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
@@ -128,6 +129,7 @@ ${viewScript}
 ${orderSelectScript}
 ${tellWhyScript("space-links", "space-error")}
 ${keepHandyScript("space-links", "space-error")}
+${intentLinkScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
 ${removeCopyScript("space-links", "space-error")}
 ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}

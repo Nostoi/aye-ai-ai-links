@@ -14,6 +14,7 @@ import { ARCHIVE, ARCHIVE_HINT, ARCHIVE_LABEL, archiveLinkScript } from "./done-
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
+import { intentLinkScript } from "./intent.js";
 import { whyText } from "./link-rows.js";
 import { CLOCK, NOT_NOW_HINT, NOT_NOW_WORKING } from "./not-now.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
@@ -209,7 +210,7 @@ const homeActs = {
     const putBack = takeOut(worthCards, card, false);
     await refreshShelf();
     showUndo(ticket, "Kept on your Handy shelf.", async () =>
-      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
+      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent }), async () => {
         putBack();
         await refreshShelf();
       }),
@@ -223,7 +224,7 @@ const homeActs = {
     showHandy(card, false);
     await refreshShelf();
     showUndo(ticket, "Not handy anymore.", async () =>
-      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
+      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent }), async () => {
         showHandy(card, true);
         await refreshShelf();
       }),
@@ -299,6 +300,7 @@ ${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}
 ${deleteLinkScript("worth-cards", "home-error")}
 ${archiveLinkScript("worth-cards", "home-error")}
+${intentLinkScript("worth-cards", "home-error", true)}
 ${goneScript("worth-cards", "home-error")}
 ${removeCopyScript("worth-cards", "home-error")}
 ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}

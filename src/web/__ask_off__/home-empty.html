@@ -839,7 +839,7 @@ if (handy) {
         }
         if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from, tile);
-        offerUndo(ticket, "Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
+        offerUndo(ticket, "Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous, intent: moved.intent }, from);
         return;
       }
       const [route, body, undo] = make(id);
@@ -851,7 +851,7 @@ if (handy) {
         return;
       }
       dropped = await refreshShelf(from, tile);
-      if (undo) offerUndo(ticket, undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
+      if (undo) offerUndo(ticket, undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent }, from);
     } finally {
       look.clear();
       if (!dropped) cardBusy.delete(tile);
@@ -991,6 +991,57 @@ if (archiveRoot) {
 }
 }
 {
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
+const intentActs = {"intent-keep":{"route":"/home/keep","undo":{"title":"Kept.","text":"Marked To keep. Today and Tidy up won't ask about it."}},"intent-explore":{"route":"/home/explore","undo":{"title":"Back to explore.","text":"Today and Tidy up may ask about it again."}}};
+const intentRoot = document.getElementById("worth-cards");
+const intentError = document.getElementById("home-error");
+if (intentRoot) {
+  intentRoot.addEventListener("click", (event) => {
+    const button = event.target.closest(".card-menu button");
+    if (!button || !(button.dataset.act in intentActs)) return;
+    const menu = button.closest("details");
+    menu.open = false;
+    const card = button.closest("[data-id]");
+    const { route, undo } = intentActs[button.dataset.act];
+    whileBusy(card, async (answered, ticket) => {
+      const id = card.dataset.id;
+      intentError.textContent = "";
+      const res = await post(route, { id });
+      answered();
+      const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (!change || !change.before || !change.after) {
+        menu.querySelector("summary").focus();
+        intentError.textContent = await failure(res);
+        return;
+      }
+      const putBack = takeOut(intentRoot, card, false);
+      if (!putBack) {
+        showIntent(card, change.after.intent, change.after.intentSource, false);
+        menu.querySelector("summary").focus();
+      }
+      showUndo(ticket, undo.text, () => whenFree(card, async () => {
+        const back = await post("/home/undo-intent", { id, change });
+        if (!back || back.status !== 204) {
+          intentError.textContent = await failure(back);
+          return;
+        }
+        if (putBack) putBack();
+        else showIntent(card, change.before.intent, change.before.intentSource, false);
+      }), undo.title);
+    });
+  });
+}
+}
+{
 const goneRoot = document.getElementById("worth-cards");
 const goneError = document.getElementById("home-error");
 if (goneRoot) {
@@ -1100,7 +1151,7 @@ const homeActs = {
     const putBack = takeOut(worthCards, card, false);
     await refreshShelf();
     showUndo(ticket, "Kept on your Handy shelf.", async () =>
-      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
+      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent }), async () => {
         putBack();
         await refreshShelf();
       }),
@@ -1114,7 +1165,7 @@ const homeActs = {
     showHandy(card, false);
     await refreshShelf();
     showUndo(ticket, "Not handy anymore.", async () =>
-      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous }), async () => {
+      undoOr(await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent }), async () => {
         showHandy(card, true);
         await refreshShelf();
       }),

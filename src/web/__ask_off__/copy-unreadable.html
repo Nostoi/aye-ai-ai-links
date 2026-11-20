@@ -804,9 +804,21 @@ if (archiveRoot) {
 }
 }
 {
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
 const keepRoot = document.getElementById("copy-frame");
 const keepError = document.getElementById("copy-end-error");
-const showKept = (card, kept, menu) => {
+const showKept = (card, kept, menu, intent) => {
+  const now = intent || { intent: card.dataset.intent, intentSource: card.dataset.intentSource || null };
+  showIntent(card, now.intent, now.intentSource, kept);
   for (const b of card.querySelectorAll("button[data-act=keep]")) b.hidden = kept;
   for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
   const control = card.querySelector("[data-handy]");
@@ -836,11 +848,11 @@ if (keepRoot) {
         keepError.textContent = await failure(res);
         return;
       }
-      showKept(card, keep, menu);
+      showKept(card, keep, menu, moved.intent && moved.intent.after);
       showUndo(ticket, keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
         whenFree(card, async () => {
-          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
+          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent });
+          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu, moved.intent && moved.intent.before);
           else keepError.textContent = await failure(back);
         }),
       );

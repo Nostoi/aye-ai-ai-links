@@ -76,7 +76,7 @@ export function linkRow(
 ${tile(link, picture, "row-pic")}
 <div class="row-body">
 <h3 data-card-title>${linkTitle(link)}</h3>
-${about}${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from })}</div>
+${about}${why}${cardLine(link, { space: lineSpace, copy, marker: outOfListsMarker(link), from, intent: true })}</div>
 ${editMenu(link, { copy, handy })}${warning ? `\n${warning}` : ""}
 </li>`;
 }

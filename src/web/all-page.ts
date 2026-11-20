@@ -12,6 +12,7 @@ import { deleteLinkScript } from "./delete-link.js";
 import { ARCHIVED, archiveLinkScript } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
+import { intentLinkScript } from "./intent.js";
 import { keepHandyScript } from "./keep-handy.js";
 import { orderNav, orderSelect, orderSelectScript } from "./link-orders.js";
 import { linkRow, monthSections, type View, viewScript, viewSwitch } from "./link-rows.js";
@@ -156,7 +157,7 @@ ${input.ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
 ${viewScript}
 ${orderSelectScript}
-${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
+${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${intentLinkScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
 ${archiveLinkScript("all-links", "all-error")}
 </script>

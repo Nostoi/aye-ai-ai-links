@@ -118,9 +118,13 @@ describe("the card menu and the card data", () => {
   const KEPT = { status: "kept", source: "stated", due: false } as const;
   const ROW_ARCHIVE = "BUTTON archive Archive · Still findable in search";
   const ROW_NOW = "BUTTON snooze Not now · Not suggested for two weeks";
+  const KEEP_IT = "BUTTON intent-keep Keep it · Today and Tidy up won't ask about it";
+  const EXPLORE_IT = "BUTTON intent-explore Explore it · Back in Today and Tidy up";
+  const INTENT_ROWS = [KEEP_IT, `${EXPLORE_IT} (hidden)`];
 
-  it("runs mildest first: Archive, Keep handy, then Edit, Remove saved copy and Delete link (#284)", () => {
+  it("runs mildest first: Keep it, Archive, Keep handy, then Edit, Remove saved copy and Delete link (#284, #339)", () => {
     expect(labels(editMenu(link("7")))).toEqual([
+      ...INTENT_ROWS,
       ROW_ARCHIVE,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -131,6 +135,7 @@ describe("the card menu and the card data", () => {
     ]);
     const withCopy = editMenu(link("7"), { copy: { madeAt: new Date(0) } });
     expect(labels(withCopy)).toEqual([
+      ...INTENT_ROWS,
       ROW_ARCHIVE,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -158,16 +163,33 @@ describe("the card menu and the card data", () => {
   });
 
   it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
-    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 3)).toEqual([
+    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 5)).toEqual([
+      `${KEEP_IT} (hidden)`,
+      `${EXPLORE_IT} (hidden)`,
       ROW_ARCHIVE,
       "BUTTON keep Keep handy (hidden)",
       "BUTTON not-handy Not handy anymore",
     ]);
   });
 
+  it("shows Explore it in Keep it's place once the link is To keep, and neither on a kept tool", () => {
+    const keep = link("7", { intent: "keep", intentSource: "stated" });
+    expect(labels(editMenu(keep)).slice(0, 2)).toEqual([`${KEEP_IT} (hidden)`, EXPLORE_IT]);
+    expect(labels(editMenu(keep, { handy: KEPT })).slice(0, 2)).toEqual([
+      `${KEEP_IT} (hidden)`,
+      `${EXPLORE_IT} (hidden)`,
+    ]);
+  });
+
+  it("gives an archived link's menu no intent row", () => {
+    const html = editMenu(link("7", { state: "archived" }));
+    expect(html).not.toContain("intent-");
+  });
+
   it("puts Not now first on Home's rows, the one menu with Not now (#195, #284)", () => {
     expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
       ROW_NOW,
+      ...INTENT_ROWS,
       ROW_ARCHIVE,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
@@ -185,6 +207,7 @@ describe("the card menu and the card data", () => {
 
   it("leaves out Archive and Not now when the card shows them as buttons (#195)", () => {
     expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
+      ...INTENT_ROWS,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -241,6 +264,8 @@ describe("the card menu and the card data", () => {
         "data-page-fit": "cover",
         "data-initials": "L1",
         "data-tags": KITCHEN_TAGS,
+        "data-intent": "explore",
+        "data-intent-source": "",
       });
       expect(data(second)).toEqual({
         "data-id": "2",
@@ -253,6 +278,8 @@ describe("the card menu and the card data", () => {
         "data-page-fit": "",
         "data-initials": "EC",
         "data-tags": KITCHEN_TAGS,
+        "data-intent": "explore",
+        "data-intent-source": "",
       });
     },
   );

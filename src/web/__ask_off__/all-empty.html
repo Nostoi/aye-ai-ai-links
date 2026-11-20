@@ -797,9 +797,21 @@ if (orderForm) {
 }
 }
 {
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
 const keepRoot = document.getElementById("all-links");
 const keepError = document.getElementById("all-error");
-const showKept = (card, kept, menu) => {
+const showKept = (card, kept, menu, intent) => {
+  const now = intent || { intent: card.dataset.intent, intentSource: card.dataset.intentSource || null };
+  showIntent(card, now.intent, now.intentSource, kept);
   for (const b of card.querySelectorAll("button[data-act=keep]")) b.hidden = kept;
   for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
   const control = card.querySelector("[data-handy]");
@@ -829,15 +841,66 @@ if (keepRoot) {
         keepError.textContent = await failure(res);
         return;
       }
-      showKept(card, keep, menu);
+      showKept(card, keep, menu, moved.intent && moved.intent.after);
       showUndo(ticket, keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
         whenFree(card, async () => {
-          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
+          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent });
+          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu, moved.intent && moved.intent.before);
           else keepError.textContent = await failure(back);
         }),
       );
     }, { button: menu ? null : button, word: button.dataset.act === "keep" ? "Keeping handy…" : "Taking it off…" });
+  });
+}
+}
+{
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
+const intentActs = {"intent-keep":{"route":"/home/keep","undo":{"title":"Kept.","text":"Marked To keep. Today and Tidy up won't ask about it."}},"intent-explore":{"route":"/home/explore","undo":{"title":"Back to explore.","text":"Today and Tidy up may ask about it again."}}};
+const intentRoot = document.getElementById("all-links");
+const intentError = document.getElementById("all-error");
+if (intentRoot) {
+  intentRoot.addEventListener("click", (event) => {
+    const button = event.target.closest(".card-menu button");
+    if (!button || !(button.dataset.act in intentActs)) return;
+    const menu = button.closest("details");
+    menu.open = false;
+    const card = button.closest("[data-id]");
+    const { route, undo } = intentActs[button.dataset.act];
+    whileBusy(card, async (answered, ticket) => {
+      const id = card.dataset.id;
+      intentError.textContent = "";
+      const res = await post(route, { id });
+      answered();
+      const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (!change || !change.before || !change.after) {
+        menu.querySelector("summary").focus();
+        intentError.textContent = await failure(res);
+        return;
+      }
+      const putBack = null;
+      if (!putBack) {
+        showIntent(card, change.after.intent, change.after.intentSource, false);
+        menu.querySelector("summary").focus();
+      }
+      showUndo(ticket, undo.text, () => whenFree(card, async () => {
+        const back = await post("/home/undo-intent", { id, change });
+        if (!back || back.status !== 204) {
+          intentError.textContent = await failure(back);
+          return;
+        }
+        if (putBack) putBack();
+        else showIntent(card, change.before.intent, change.before.intentSource, false);
+      }), undo.title);
+    });
   });
 }
 }

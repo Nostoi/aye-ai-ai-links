@@ -80,7 +80,14 @@ describe("the card menu", () => {
         e.querySelector("small")?.remove();
         return e.textContent;
       }),
-    ).toEqual(["Archive", "Keep handy", "Edit link…", "Remove saved copy", "Delete link"]);
+    ).toEqual([
+      "Keep it",
+      "Archive",
+      "Keep handy",
+      "Edit link…",
+      "Remove saved copy",
+      "Delete link",
+    ]);
   });
 });
 

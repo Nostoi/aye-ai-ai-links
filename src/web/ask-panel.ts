@@ -290,9 +290,9 @@ export const ASK_SCRIPT = `<script>
       return [{ text: "Updated.", linkId: id }];
     }
     if (c.kind === "handy") {
-      const { tool, previous } = c.change;
+      const { tool, previous, intent } = c.change;
       const text = HANDY[tool.status] ?? "Changed its place on your Handy shelf: " + tool.status + ".";
-      const body = { id: c.linkId, tool, previous };
+      const body = { id: c.linkId, tool, previous, intent };
       return [{ text, linkId: c.linkId, undo: { kind: "handy", url: "/tools/undo", body } }];
     }
     if (c.kind === "tag") {

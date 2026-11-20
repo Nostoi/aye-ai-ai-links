@@ -3,11 +3,13 @@ import type { CopyInfo } from "../core/saved-copy.js";
 import type { Link } from "../core/types.js";
 import { copyHref } from "./copy-page.js";
 import { hostOf } from "./host.js";
+import { intentLine } from "./intent.js";
 import { escapeHtml } from "./page.js";
 
 /**
  * A card's grey line: its space (color dot and name), its site, when it was saved (`saved`, a
- * date already in words) or `reason` (which wins, in the same place), Saved copy, a link to its saved copy in the same tab, and `marker`
+ * date already in words) or `reason` (which wins, in the same place), To keep (with `intent`; a
+ * hidden part for explore, so a script can show it), Saved copy, a link to its saved copy in the same tab, and `marker`
  * (Archived, for an archived link), in that order. A missing part drops out, and
  * no part draws no line. The dots between parts are the theme's,
  * drawn only before a part that shows, so Remove saved copy (`removeCopyScript`, which hides
@@ -22,6 +24,7 @@ export function cardLine(
     reason,
     marker,
     from,
+    intent = false,
   }: {
     space?: Space | null;
     copy?: CopyInfo | undefined;
@@ -31,6 +34,8 @@ export function cardLine(
     marker?: string | null | undefined;
     /** The address of the list page this line is on, so the saved copy's Back returns to it. */
     from?: string | undefined;
+    /** Add the link's To keep part (hidden for explore, so a script can show it). */
+    intent?: boolean;
   } = {},
 ): string {
   const host = hostOf(link.url);
@@ -47,10 +52,14 @@ export function cardLine(
   const parts = [
     host ? `<span>${escapeHtml(host)}</span>` : "",
     saved || reason ? `<span>${escapeHtml(sentence(reason ?? `saved ${saved}`))}</span>` : "",
+    intent ? intentLine(link) : "",
     copy
       ? `<a class="saved-copy" href="${escapeHtml(copyHref(link.id, from))}" data-act="read-copy">Saved copy</a>`
       : "",
     marker ? `<span>${escapeHtml(marker)}</span>` : "",
   ].filter(Boolean);
-  return parts.length === 0 && !space ? "" : `<p class="card-line">${slot}${parts.join("")}</p>\n`;
+  const kept = intent && link.intent === "keep";
+  return parts.length === 0 && !space && !kept
+    ? ""
+    : `<p class="card-line">${slot}${parts.join("")}</p>\n`;
 }

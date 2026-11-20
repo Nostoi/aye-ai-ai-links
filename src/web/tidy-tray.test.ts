@@ -338,6 +338,7 @@ describe("the Tidy up tray's styles", () => {
     expect(body(".tidy-choices button")).toMatch(/min-height:\s*(?:[4-9]\d|\d{3})px/);
     expect(body(".leave")).toMatch(/min-height:\s*44px/);
     expect(body(".tidy-closed button")).toMatch(/min-height:\s*44px/);
+    expect(body(".tidy-facts .gone-copy")).toMatch(/min-height:\s*44px/);
   });
 
   it("draws the card on the card tokens", () => {

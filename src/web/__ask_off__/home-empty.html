@@ -315,6 +315,8 @@ img.handy-image{background:var(--white)}
 .tidy-closed{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--space-2) var(--space-5)}
 .tidy-closed p{margin:0}
 .tidy-closed button{min-height:44px}
+.tidy-quiet{margin:0;max-width:64ch;color:var(--about)}
+.tidy-quiet-more{margin-top:2px;color:var(--soft)}
 #handy-error,#home-error{margin:0 0 var(--space-2)}
 .handy-show-all{display:block;min-height:44px;margin:var(--space-2) 0 0;padding:0 12px;border:0;background:none;color:var(--soft);font-size:var(--text-4);font-weight:600}
 .handy-show-all:hover{color:var(--ink)}
@@ -627,6 +629,12 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 
 
 
+<section class="tidy-tray" id="tidy" aria-labelledby="tidy-title">
+<div class="spine"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M19.5 4.5 13 11"/><path d="M11.2 9.8l3 3c.5.5.5 1.2 0 1.7l-.6.6c-1.9 1.9-4.6 2.7-7.2 2.2L4.5 17l-.3-1.9c-.5-2.6.3-5.3 2.2-7.2l.6-.6c.5-.5 1.2-.5 1.7 0z"/><path d="M7.5 17.6l1.6-2.6M10.5 17.2l1.2-2"/></svg><span class="spine-word" aria-hidden="true">Tidy</span></div>
+<h2 id="tidy-title" class="visually-hidden">Tidy up</h2>
+<p class="tidy-quiet">Nothing to tidy right now.</p>
+<p class="small tidy-quiet-more">Links you haven&rsquo;t opened in 30 days, and pages that seem gone, show up here.</p>
+</section>
 </main>
 <script>
 const post = (url, body, extra) =>

@@ -105,10 +105,23 @@ describe("GET / Tidy up tray", () => {
     expect(stepIds(html)).toHaveLength(SESSION - 1);
   });
 
-  it("is absent when Explore takes every old link", async () => {
+  it("says '1 link to look at.' for one (#347)", async () => {
+    const { browser } = await tidy(WORTH_SIZE + 1);
+    expect(await homeHtml(browser)).toContain("1 link to look at. One at a time.");
+  });
+
+  it("counts the session's links, not every link that qualifies (#347)", async () => {
+    const { browser } = await tidy(WORTH_SIZE + SESSION + 3);
+    expect(await homeHtml(browser)).toContain(`${SESSION} links to look at. One at a time.`);
+  });
+
+  it("is still the last tray, with nothing to ask and no Start, when Explore takes every old link (#347)", async () => {
     const { browser } = await tidy(WORTH_SIZE);
     const html = await homeHtml(browser);
+    expect(html).toContain('<section class="tidy-tray"');
+    expect(html).toContain("Nothing to tidy right now.");
     expect(html).not.toContain("Clear out a few links?");
+    expect(html).not.toContain("data-tidy=");
     expect(html).not.toContain("tidy-step");
   });
 

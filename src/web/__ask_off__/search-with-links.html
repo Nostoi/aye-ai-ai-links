@@ -241,7 +241,6 @@ img.handy-image{background:var(--white)}
 .gone-band::after{content:"";position:absolute;top:-11px;left:50%;width:22px;height:11px;transform:translateX(-50%);background:color-mix(in srgb,var(--amber) 35%,var(--surface));clip-path:polygon(50% 0,100% 100%,0 100%)}
 .gone-band::before{content:"";position:absolute;top:-10px;left:50%;width:20px;height:11px;transform:translateX(-50%);background:var(--shade);clip-path:polygon(50% 0,100% 100%,0 100%);z-index:var(--layer-lift)}
 .gone-band>p{flex:1 1 0;min-width:0;max-width:none;margin:0;transition:opacity var(--motion-fade) var(--ease-standard);font-size:var(--text-3);font-weight:600;color:var(--amber-ink)}
-.gone-band .gone-copy{display:inline-flex;align-items:center;min-height:44px;font-size:var(--text-3);color:var(--amber-ink);text-decoration:underline;text-underline-offset:3px}
 .gone-actions{position:relative;flex:none;width:92px;height:44px}
 .gone-band .slide{position:absolute;top:0;right:0;height:44px;min-width:44px;max-width:44px;padding:0 13px;background:none;color:var(--amber-ink)}
 .gone-band .slide:first-child{right:48px}
@@ -569,6 +568,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .tidy-facts li{display:flex;gap:10px;align-items:flex-start}
 .tidy-facts svg{flex:0 0 18px;margin-top:3px;stroke:var(--soft);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .tidy-facts .soft{color:var(--soft)}
+.tidy-facts .gone-copy{margin-left:6px;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 .tidy-facts b{font-weight:650}
 .tidy-open{background:var(--surface);color:var(--ink)}
 .tidy-choices{display:flex;gap:10px;margin-top:14px}
@@ -1309,7 +1309,20 @@ const showCard = (target, answer) => {
   tile.replaceWith(next);
 };
 const giveFocusBack = () => {
-  if (opener && opener.isConnected) opener.focus();
+  if (!opener || !opener.isConnected) return;
+  if (!opener.closest("[hidden]")) opener.focus();
+  else {
+    // The card left its list (an Explore card that is now To keep): focus goes where takeOut sends it.
+    const cards = [...document.querySelectorAll("[data-id]")];
+    const after = cards.slice(cards.indexOf(card) + 1).find((c) => !c.closest("[hidden]"));
+    const menu = after && after.querySelector(".card-menu summary");
+    const heading = document.querySelector("h1");
+    if (menu) menu.focus();
+    else if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus();
+    } else document.body.focus();
+  }
 };
 const finish = () => {
   dropPick();

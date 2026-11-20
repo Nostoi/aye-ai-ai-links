@@ -31,13 +31,18 @@ const link = (over: Partial<Link> = {}): Link => ({
 });
 const KEPT = { status: "kept", source: "stated", due: false } as const;
 
-function cards(l: Link, keptTool: boolean) {
+function cards(l: Link, keptTool: boolean, exploreOnly = false) {
+  const next = link({ id: "2", title: "Link 2" });
   return page(
     "Cards",
-    `<p id="cards-error" role="alert"></p>
-<ul id="cards"><li data-id="1" class="result"${editData(l, undefined, undefined)}>
+    `<h1>Cards</h1>
+<p id="cards-error" role="alert"></p>
+<ul id="cards"><li data-id="1" class="result"${exploreOnly ? " data-explore-only" : ""}${editData(l, undefined, undefined)}>
 <h3 data-card-title>${linkTitle(l)}</h3>
 ${cardLine(l, { space: null, intent: true })}${editMenu(l, keptTool ? { handy: KEPT } : {})}
+</li><li data-id="2" class="result"${editData(next, undefined, undefined)}>
+<h3 data-card-title>${linkTitle(next)}</h3>
+${editMenu(next, {})}
 </li></ul>
 ${editDialog()}
 <script>
@@ -67,10 +72,14 @@ const saved = (intent: string, intentSource: string | null) => ({
 type Page = ReturnType<typeof runPage>;
 async function open(
   l: Link,
-  { keptTool = false, reply }: { keptTool?: boolean; reply?: Answer } = {},
+  {
+    keptTool = false,
+    exploreOnly = false,
+    reply,
+  }: { keptTool?: boolean; exploreOnly?: boolean; reply?: Answer } = {},
 ) {
   const p = runPage(
-    cards(l, keptTool),
+    cards(l, keptTool, exploreOnly),
     () => reply ?? { status: 200, body: saved("keep", "stated") },
   );
   stubDialog(p);
@@ -154,6 +163,40 @@ describe("the edit dialog's intent choice (#339)", () => {
     expect((p.$("[data-id='1'] button[data-act=intent-explore]") as HTMLElement).hidden).toBe(
       false,
     );
+  });
+});
+
+// Where the page script put focus, apart from the Undo bar (its button is focused once the Save is done).
+const landed = (p: Page) =>
+  p
+    .focused()
+    .filter((e) => e.tagName !== "BUTTON")
+    .at(-1);
+
+describe("focus after a save that hides an Explore card (#346)", () => {
+  it("goes to the next shown card's menu, not the hidden card's, with the Ask AI panel off", async () => {
+    const p = await open(link(), { exploreOnly: true });
+    const hiddenMenu = p.$('[data-id="1"] .card-menu summary');
+    choose(p, "keep");
+    await submit(p);
+    expect((p.$('[data-id="1"]') as HTMLElement).hidden).toBe(true);
+    expect(landed(p) === p.$('[data-id="2"] .card-menu summary')).toBe(true);
+    expect(p.focused().includes(hiddenMenu as Element)).toBe(false);
+  });
+
+  it("goes to the heading when no other card is shown", async () => {
+    const p = await open(link(), { exploreOnly: true });
+    (p.$('[data-id="2"]') as HTMLElement).hidden = true;
+    choose(p, "keep");
+    await submit(p);
+    expect(landed(p) === p.$("h1")).toBe(true);
+  });
+
+  it("still returns to the card's own menu when the card stays shown", async () => {
+    const p = await open(link());
+    choose(p, "keep");
+    await submit(p);
+    expect(landed(p) === p.$('[data-id="1"] .card-menu summary')).toBe(true);
   });
 });
 

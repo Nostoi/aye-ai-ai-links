@@ -196,6 +196,7 @@ describe("no promise about Today survives (#340)", () => {
     const tidy = {
       queue: [{ link: link({ id: "8" }), gone: false, fit: null }],
       hasFocus: false,
+      copies: new Map(),
       images: new Map(),
       catalog: [],
       now,

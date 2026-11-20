@@ -200,6 +200,14 @@ describe("the home card actions", () => {
     expect(row(world, id).snoozed_until).toBe(far.getTime());
   });
 
+  it("/home/unsnooze with no previous, as a tab loaded before #340 sends it, restores no snooze", async () => {
+    const { world, browser, id } = await home();
+    const { until } = (await browser.send("/home/snooze", post({ id }))).body as { until: string };
+    expect(row(world, id).snoozed_until).toBe(Date.parse(until));
+    expect((await browser.send("/home/unsnooze", post({ id, until }))).status).toBe(204);
+    expect(row(world, id)).toMatchObject({ snoozed_until: null, last_surfaced_at: null });
+  });
+
   it("/home/unsnooze after an AI changed the snooze is a 409 and leaves the AI's value", async () => {
     const { world, browser, id } = await home();
     const snooze = (await browser.send("/home/snooze", post({ id }))).body as { until: string };
@@ -485,7 +493,7 @@ it("POST /home/unsnooze refuses a time that is missing or not a date, and /home/
     { until: null },
     { until: undefined },
     { previous: "soon" },
-    { previous: undefined },
+    { previous: 7 },
   ]) {
     const res = await browser.send("/home/unsnooze", post({ ...undo, ...bad }));
     expect(res.status, JSON.stringify(bad)).toBe(400);
@@ -538,6 +546,22 @@ describe("GET / with a link that seems gone (#128, #340)", () => {
       ...step.slice(0, step.indexOf("</article>")).matchAll(/data-act="([a-z]+)"/g),
     ].map((m) => m[1]);
     expect(acts).toEqual(["works", "archive"]);
+  });
+
+  it("gives Tidy's gone step Read the saved copy only when the link has one", async () => {
+    const { world, browser, gone } = await withGone();
+    const stepOf = async () => {
+      const html = String((await browser.send("/")).body);
+      const tidy = html.slice(html.indexOf('<section class="tidy-tray"'));
+      const step = tidy.slice(tidy.indexOf(`data-id="${gone.id}"`));
+      return step.slice(0, step.indexOf("</article>"));
+    };
+    expect(await stepOf()).not.toContain("read-copy");
+    vi.spyOn(world.savedCopies, "copyInfo").mockImplementation(
+      async (_owner, ids) =>
+        new Map(ids.filter((id) => id === gone.id).map((id) => [id, { madeAt: new Date() }])),
+    );
+    expect(await stepOf()).toContain(`href="/links/${gone.id}/copy?from=%2F"`);
   });
 
   it("reads the pictures and saved copies of every Explore card", async () => {

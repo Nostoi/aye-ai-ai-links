@@ -126,6 +126,12 @@ describe("get_digest guidance", () => {
     expect(GET_DIGEST).not.toMatch(/marks the links it returns/);
   });
 
+  it("says how long a snooze holds the link back from Tidy up and from Explore", () => {
+    expect(GET_DIGEST).toContain(
+      "A snooze of up to two weeks also holds the link back from Tidy up; a longer one hides it from Explore only.",
+    );
+  });
+
   it("says the web page records openings too, and does not claim agents are the only source", () => {
     expect(GET_DIGEST).not.toContain("recorded only when an agent sends opened: true");
     // #124: openings are recorded from every web page, not only home's cards.

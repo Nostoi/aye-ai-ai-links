@@ -131,6 +131,7 @@ const pages: Record<string, () => string> = {
           },
         ],
         hasFocus: true,
+        copies: new Map(),
         images: new Map(),
         catalog: [KITCHEN],
         now: NOW,

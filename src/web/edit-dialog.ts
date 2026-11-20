@@ -398,7 +398,24 @@ const showCard = (target, answer) => {
   tile.replaceWith(next);
 };
 const giveFocusBack = () => {
-  ${panel ? 'const askText = document.getElementById("ask-text");\n  if (opener && opener.isConnected && !opener.closest("[hidden]")) opener.focus();\n  else if (askText && !askText.closest("[hidden]")) askText.focus();\n  else document.body.focus();' : "if (opener && opener.isConnected) opener.focus();"}
+  ${
+    panel
+      ? 'const askText = document.getElementById("ask-text");\n  if (opener && opener.isConnected && !opener.closest("[hidden]")) opener.focus();\n  else if (askText && !askText.closest("[hidden]")) askText.focus();\n  else document.body.focus();'
+      : `if (!opener || !opener.isConnected) return;
+  if (!opener.closest("[hidden]")) opener.focus();
+  else {
+    // The card left its list (an Explore card that is now To keep): focus goes where takeOut sends it.
+    const cards = [...document.querySelectorAll("[data-id]")];
+    const after = cards.slice(cards.indexOf(card) + 1).find((c) => !c.closest("[hidden]"));
+    const menu = after && after.querySelector(".card-menu summary");
+    const heading = document.querySelector("h1");
+    if (menu) menu.focus();
+    else if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus();
+    } else document.body.focus();
+  }`
+  }
 };
 const finish = () => {
   dropPick();

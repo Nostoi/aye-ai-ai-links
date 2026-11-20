@@ -122,6 +122,7 @@ const CASES: Case[] = [
         tidy: {
           queue: ls.map((l) => ({ link: l, gone: false, fit: null })),
           hasFocus: false,
+          copies: new Map(),
           images: new Map(),
           catalog: [KITCHEN],
           now: NOW,

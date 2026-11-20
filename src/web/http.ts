@@ -957,6 +957,10 @@ export function webApp({
               owner,
               queue.map((t) => t.link.id),
             ),
+            copies: await deps.savedCopies.copyInfo(
+              owner,
+              queue.map((t) => t.link.id),
+            ),
             catalog,
             now: deps.now(),
           };
@@ -1407,14 +1411,19 @@ export function webApp({
 
   app.post(
     "/home/unsnooze",
-    jsonBody({ ...linkId, until: isDate, previous: isDateOrNull }),
+    // A tab loaded before `previous` was sent has none: Undo then restores no snooze.
+    jsonBody({
+      ...linkId,
+      until: isDate,
+      previous: (v): v is string | null | undefined => v === undefined || isDateOrNull(v),
+    }),
     session,
     (c) =>
       homeAction(c, async () => {
         const { id, until, previous } = c.get("body");
         await unsnoozeLink(deps, c.get("caller").owner, id, {
           until: new Date(until),
-          previous: previous === null ? null : new Date(previous),
+          previous: previous == null ? null : new Date(previous),
         });
         return done(c);
       }),

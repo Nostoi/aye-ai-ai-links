@@ -133,7 +133,7 @@ Reasons may be empty: a link with a why that was saved recently is picked for be
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or the owner opens it from the web page or an openUrl; a browser bookmark is not, so never tell the owner they haven't opened it.
 - still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is whole days since its last recorded opening, or null if none. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to archive it or send handy {action: "not_handy", source: "asked"}.
 
-Offer to snooze it (update_link with snoozedUntil) or archive it (state "archived"). ${OPEN_NOTE}
+Offer to snooze it (update_link with snoozedUntil) or archive it (state "archived"). A snooze of up to two weeks also holds the link back from Tidy up; a longer one hides it from Explore only. ${OPEN_NOTE}
 
 Calling it changes nothing, so a repeat call returns the same links until the owner decides them: Keep, Skip or Archive on the web page, or update_link. Don't call it again to "refresh". An empty list means nothing is due.`;
 

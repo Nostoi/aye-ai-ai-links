@@ -1,11 +1,13 @@
 import type { ShownPicture } from "../core/image-store.js";
 import { linkSpace } from "../core/link-space.js";
+import type { CopyInfo } from "../core/saved-copy.js";
 import type { TidyLink } from "../core/tidy-up.js";
 import type { FocusEntry, Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 import { cardLine } from "./card-line.js";
+import { copyHref } from "./copy-page.js";
 import { ARCHIVE_TIDY_LINE } from "./done-link.js";
-import { GONE_TEXT, STILL_WORKS_TIDY_LINE } from "./gone-line.js";
+import { GONE_TEXT, readCopyLink, STILL_WORKS_TIDY_LINE } from "./gone-line.js";
 import { KEEP_TIDY_LINE } from "./intent.js";
 import { monthName } from "./link-rows.js";
 import { linkTitle, openLink } from "./open-link.js";
@@ -19,6 +21,8 @@ export type TidyTrayInput = {
   /** Whether the owner has any current focus entry; without one the fit line is left out. */
   hasFocus: boolean;
   images: Map<string, ShownPicture>;
+  /** The links that have a saved copy; a gone step links to it. */
+  copies: Map<string, CopyInfo>;
   catalog: Tag[];
   now: Date;
 };
@@ -81,7 +85,7 @@ const choices = (list: Choice[]) =>
  * which the tray's `openedScript` and the choices read.
  */
 export function tidyStep({ link, fit, gone }: TidyLink, at: number, input: TidyTrayInput): string {
-  const { queue, hasFocus, images, catalog, now } = input;
+  const { queue, hasFocus, images, copies, catalog, now } = input;
   const dots = queue
     .map((_, i) => `<b${i < at ? ' class="done"' : i === at ? ' class="now"' : ""}></b>`)
     .join("");
@@ -90,6 +94,7 @@ export function tidyStep({ link, fit, gone }: TidyLink, at: number, input: TidyT
     ? `<p>${openLink(link, "Open it to check", "button tidy-open")}</p>\n`
     : "";
   const space = linkSpace(link, catalog);
+  const read = copies.has(link.id) ? ` ${readCopyLink(copyHref(link.id, "/"))}` : "";
   return `<div class="tidy-step" data-id="${escapeHtml(link.id)}" hidden>
 <div class="tidy-bar"><span class="count">${at + 1} of ${queue.length}</span><span class="steps" aria-hidden="true">${dots}</span><button type="button" class="leave" data-tidy="stop">Stop here</button></div>
 <article class="tidy${spaceClass(space)}">
@@ -102,7 +107,7 @@ ${cardLine(link, { space })}</div>
 ${whySection(link.why)}
 <ul class="tidy-facts">
 <li>${CLOCK}<span class="soft">${savedFact(link, now)}</span></li>
-${gone ? `<li>${WARNING}<span class="soft">${GONE_TEXT}.</span></li>\n` : ""}${fitLine ? `<li>${TARGET}<span class="fit">${fitLine}</span></li>\n` : ""}</ul>
+${gone ? `<li>${WARNING}<span class="soft">${GONE_TEXT}.${read}</span></li>\n` : ""}${fitLine ? `<li>${TARGET}<span class="fit">${fitLine}</span></li>\n` : ""}</ul>
 ${open}${choices(gone ? GONE_CHOICES : EXPLORE_CHOICES)}
 </article>
 </div>`;

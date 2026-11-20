@@ -50,7 +50,7 @@ const tile = (id: string): ShelfItem => ({
   due: false,
   gone: false,
 });
-const NO_WORTH: WorthCards = { links: [], images: new Map(), now: NOW, catalog: [], gone: null };
+const NO_WORTH: WorthCards = { links: [], images: new Map(), now: NOW, catalog: [] };
 
 /** Home with these Handy tiles and, when given, `featured` as Worth a look's featured card. */
 const home = (tiles: string[], featured?: string) =>

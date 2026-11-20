@@ -4,10 +4,14 @@ import type { TidyLink } from "../core/tidy-up.js";
 import type { FocusEntry, Link, Tag } from "../core/types.js";
 import { isWebUrl } from "../core/url-key.js";
 import { cardLine } from "./card-line.js";
+import { ARCHIVE_TIDY_LINE } from "./done-link.js";
+import { GONE_TEXT, STILL_WORKS_TIDY_LINE } from "./gone-line.js";
+import { KEEP_TIDY_LINE } from "./intent.js";
 import { monthName } from "./link-rows.js";
 import { linkTitle, openLink } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
+import { SKIP_TIDY_LINE } from "./skip.js";
 
 /** What Home's Tidy up tray shows: the queue, and what each step's card reads about it. */
 export type TidyTrayInput = {
@@ -23,6 +27,7 @@ const ICON = (inner: string) =>
   `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
 const CLOCK = ICON(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`);
 const TARGET = ICON(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>`);
+const WARNING = ICON(`<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16v.5"/>`);
 
 /** "Saved in March. You haven't opened it from here." Only the latest opening is stored. */
 function savedFact(link: Link, now: Date): string {
@@ -49,22 +54,38 @@ function whySection(why: Link["why"]): string {
   return `<p class="tidy-why"><small>${label}</small>${why ? escapeHtml(why.text) : "No why yet"}</p>`;
 }
 
-const CHOICES = `<div class="tidy-choices">
-<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>To keep. Tidy won't ask again.</span><kbd class="key" aria-hidden="true">1</kbd></button>
-<button type="button" data-act="archive" aria-keyshortcuts="2"><b>Archive</b><span>Still findable in search.</span><kbd class="key" aria-hidden="true">2</kbd></button>
-</div>`;
+type Choice = { act: string; title: string; line: string };
+
+/** An explore step's choices, then a gone step's; a choice's key is its place in the list. */
+const EXPLORE_CHOICES: Choice[] = [
+  { act: "keep", title: "Keep", line: KEEP_TIDY_LINE },
+  { act: "skip", title: "Skip", line: SKIP_TIDY_LINE },
+  { act: "archive", title: "Archive", line: ARCHIVE_TIDY_LINE },
+];
+const GONE_CHOICES: Choice[] = [
+  { act: "works", title: "It still works", line: STILL_WORKS_TIDY_LINE },
+  { act: "archive", title: "Archive", line: ARCHIVE_TIDY_LINE },
+];
+
+const choices = (list: Choice[]) =>
+  `<div class="tidy-choices">\n${list
+    .map(
+      (c, i) =>
+        `<button type="button" data-act="${c.act}" aria-keyshortcuts="${i + 1}"><b>${c.title}</b><span>${c.line}</span><kbd class="key" aria-hidden="true">${i + 1}</kbd></button>`,
+    )
+    .join("\n")}\n</div>`;
 
 /**
  * One step of the session: its bar ("N of M", one dot per link, Stop here) and the link's card.
  * Rendered hidden; the tray's script shows the current one. The step carries the link's `data-id`,
  * which the tray's `openedScript` and the choices read.
  */
-export function tidyStep({ link, fit }: TidyLink, at: number, input: TidyTrayInput): string {
+export function tidyStep({ link, fit, gone }: TidyLink, at: number, input: TidyTrayInput): string {
   const { queue, hasFocus, images, catalog, now } = input;
   const dots = queue
     .map((_, i) => `<b${i < at ? ' class="done"' : i === at ? ' class="now"' : ""}></b>`)
     .join("");
-  const fitLine = fitFact(fit, hasFocus);
+  const fitLine = gone ? "" : fitFact(fit, hasFocus);
   const open = isWebUrl(link.url)
     ? `<p>${openLink(link, "Open it to check", "button tidy-open")}</p>\n`
     : "";
@@ -81,8 +102,8 @@ ${cardLine(link, { space })}</div>
 ${whySection(link.why)}
 <ul class="tidy-facts">
 <li>${CLOCK}<span class="soft">${savedFact(link, now)}</span></li>
-${fitLine ? `<li>${TARGET}<span class="fit">${fitLine}</span></li>\n` : ""}</ul>
-${open}${CHOICES}
+${gone ? `<li>${WARNING}<span class="soft">${GONE_TEXT}.</span></li>\n` : ""}${fitLine ? `<li>${TARGET}<span class="fit">${fitLine}</span></li>\n` : ""}</ul>
+${open}${choices(gone ? GONE_CHOICES : EXPLORE_CHOICES)}
 </article>
 </div>`;
 }

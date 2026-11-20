@@ -194,23 +194,5 @@ export function describeLinkCheckStoreContract(
         ]);
       });
     });
-
-    it("claimSurfaced with exceptGone skips a flagged link, writing nothing, and claims the rest", async () => {
-      const flagged = await save(A);
-      const dead = await save(A);
-      const plain = await save(A);
-      await h.checks.updateCheckIf(A, flagged, null, row({ flaggedAt: at(900) }));
-      await h.checks.updateCheckIf(A, dead, null, row());
-      const when = { at: at(1000), notSurfacedAfter: at(1000), now: at(1000) };
-      const claimed = await h.links.claimSurfaced(A, [flagged, dead, plain], {
-        ...when,
-        exceptGone: true,
-      });
-      expect(claimed.map((c) => c.link.id)).toEqual([dead, plain]);
-      expect((await h.links.get(A, flagged))?.lastSurfacedAt).toBeNull();
-      expect((await h.links.claimSurfaced(A, [flagged], when)).map((c) => c.link.id)).toEqual([
-        flagged,
-      ]);
-    });
   });
 }

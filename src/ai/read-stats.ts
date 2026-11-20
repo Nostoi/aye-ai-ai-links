@@ -32,7 +32,7 @@ function oneLine(text: string, max: number): string {
 function windowBlock(label: string, stats: Stats): string {
   const lines = [
     `${label}:`,
-    `Saved ${stats.saved}, opened ${stats.opened}, not opened yet ${stats.notOpenedYet}, set aside ${stats.setAside}, not now ${stats.notNow}.`,
+    `Saved ${stats.saved}, opened ${stats.opened}, not opened yet ${stats.notOpenedYet}, set aside ${stats.setAside}, skipped ${stats.notNow}.`,
     `Tracking since ${stats.trackingSince.toISOString().slice(0, 10)}.`,
     `Counts that may be too low: ${stats.partialCounts.join(", ") || "none"}.`,
     "Tags (links saved in this window):",

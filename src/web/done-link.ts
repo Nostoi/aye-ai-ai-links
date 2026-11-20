@@ -9,7 +9,10 @@ export const ARCHIVE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hid
 export const ARCHIVE_LABEL = "Archive";
 
 /** The small line under Archive, saying what happens. */
-export const ARCHIVE_HINT = "Still findable in search";
+export const ARCHIVE_HINT = "Out of lists, still in search";
+
+/** Archive's line in a Tidy up step. */
+export const ARCHIVE_TIDY_LINE = "Out of your lists. Still found by search.";
 
 /** What each state action's button says while it waits for the answer (#314). */
 export const ARCHIVE_WORKING = "Archiving…";

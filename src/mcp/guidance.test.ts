@@ -108,16 +108,12 @@ describe("summary guidance", () => {
 
 describe("get_digest guidance", () => {
   it("names every reason, and the cautions that go with focus words and openings", () => {
-    for (const kind of [
-      "focus_words",
-      "no_why",
-      "not_opened_recently",
-      "never_surfaced",
-      "still_using_check",
-    ]) {
+    for (const kind of ["focus_words", "no_why", "not_opened_recently", "still_using_check"]) {
       expect(GET_DIGEST).toContain(`- ${kind}:`);
     }
     expect(GET_DIGEST).not.toContain("came_back");
+    expect(GET_DIGEST).not.toContain("never_surfaced");
+    expect(GET_DIGEST).toContain("Reasons may be empty");
     const focusLine = GET_DIGEST.split("\n").find((l) => l.startsWith("- focus_words:")) ?? "";
     expect(focusLine).toContain("`words`");
     expect(focusLine).toContain("own title, summary, why or tags");
@@ -126,7 +122,8 @@ describe("get_digest guidance", () => {
     expect(GET_DIGEST).toContain('update_link as "asked"');
     expect(GET_DIGEST).toContain("never tell the owner they haven't opened it");
     expect(GET_DIGEST).toContain("snoozedUntil");
-    expect(GET_DIGEST).toMatch(/marks the links it returns as shown.*Don't call it again/s);
+    expect(GET_DIGEST).toContain("a repeat call returns the same links");
+    expect(GET_DIGEST).not.toMatch(/marks the links it returns/);
   });
 
   it("says the web page records openings too, and does not claim agents are the only source", () => {

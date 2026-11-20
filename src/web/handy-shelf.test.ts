@@ -254,7 +254,7 @@ describe("the Handy shelf", () => {
           `${b.getAttribute("data-act")} ${b.textContent} ${b.querySelector("small")?.textContent ?? "-"}`,
       ),
     ).toEqual([
-      "archive ArchiveStill findable in search Still findable in search",
+      "archive ArchiveOut of lists, still in search Out of lists, still in search",
       "not-handy Not handy anymore -",
     ]);
     expect(guess?.querySelector("details")).toBeNull();
@@ -351,7 +351,6 @@ const NO_WORTH: WorthCards = {
   images: new Map(),
   now: new Date("2026-10-16T00:00:00Z"),
   catalog: [],
-  gone: null,
 };
 const home = (items: ShelfItem[], suggestions: ToolItem[] = []) =>
   homePage({ worth: NO_WORTH, shelf: render(items, suggestions), spaces: "" });

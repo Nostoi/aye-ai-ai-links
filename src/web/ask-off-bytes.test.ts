@@ -117,9 +117,10 @@ const pages: Record<string, () => string> = {
       spaces: "",
       tidy: {
         queue: [
-          { link: link("1"), fit: null },
+          { link: link("1"), gone: false, fit: null },
           {
             link: link("2", { lastOpenedAt: new Date("2026-05-02T10:00:00Z") }),
+            gone: false,
             fit: {
               id: "f1",
               text: "the garden plan",

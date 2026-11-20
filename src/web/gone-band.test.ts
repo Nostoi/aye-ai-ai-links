@@ -8,7 +8,7 @@ import { BAND_COLLAPSE } from "./band-collapse.js";
 import { ARCHIVE_HINT } from "./done-link.js";
 import { goneLine } from "./gone-line.js";
 import { handyShelf } from "./handy-shelf.js";
-import { homePage, type WorthCards } from "./home-page.js";
+import { homePage } from "./home-page.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
 import { searchPage } from "./pages.js";
 import { themeCss } from "./theme.js";
@@ -101,24 +101,6 @@ describe("where the band sits", () => {
     const li = dom(all([link("1")])).querySelector("li.link-row");
     expect(li?.lastElementChild?.classList.contains("gone-band")).toBe(true);
     expect(li?.querySelector(".row-body [data-gone]")).toBeNull();
-  });
-
-  it("is the last child of an Also today row, with the saved-copy link beside the warning", () => {
-    const g = link("1");
-    const worth: WorthCards = {
-      links: [],
-      images: new Map(),
-      now: NOW,
-      catalog: [],
-      gone: g,
-      copies: new Map([[g.id, { madeAt: NOW }]]),
-      views: new Map([[g.id, { handy: null, gone: GONE }]]),
-    };
-    const row = dom(homePage({ worth, shelf: "", spaces: "" })).querySelector(".worth-gone");
-    const band = row?.lastElementChild;
-    expect(band?.classList.contains("gone-band")).toBe(true);
-    expect(band?.querySelector("p + a.gone-copy")?.textContent).toBe("Read the saved copy");
-    expect(row?.querySelector(".also-body [data-gone], .also-body .gone-copy")).toBeNull();
   });
 
   it("stays inside a search result's body, last", () => {
@@ -371,7 +353,7 @@ describe("the band's slide-away", () => {
 describe("the Handy tile's slide-away", () => {
   const tileHome = (items: ShelfItem[]) =>
     homePage({
-      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null },
+      worth: { links: [], images: new Map(), now: NOW, catalog: [] },
       shelf: handyShelf({ items, suggestions: [], catalog: [], images: new Map() }),
       spaces: "",
     });
@@ -522,7 +504,7 @@ describe("the busy look and the slide-away (motion on)", () => {
   };
   const tileHome = (gone: boolean) =>
     homePage({
-      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null },
+      worth: { links: [], images: new Map(), now: NOW, catalog: [] },
       shelf: handyShelf({
         items: [
           {

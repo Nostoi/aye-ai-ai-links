@@ -16,7 +16,6 @@ import type {
   LinkStore,
   SummaryCandidate,
   SummaryCandidates,
-  SurfacedClaim,
 } from "../core/store.js";
 import {
   type IntentWith,
@@ -317,33 +316,6 @@ export class SqliteStore
       links: this.readAll(owner),
       tags: this.readTags(owner),
     }))();
-  }
-
-  async claimSurfaced(
-    owner: OwnerId,
-    ids: string[],
-    when: {
-      at: Date;
-      notSurfacedAfter: Date;
-      now: Date;
-      exceptKeptTools?: boolean;
-      exceptGone?: boolean;
-    },
-  ): Promise<SurfacedClaim[]> {
-    const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
-    return this.db.transaction(() => this.claimSync(owner, [...parsed], when)).immediate();
-  }
-
-  async unclaimSurfaced(owner: OwnerId, id: string, claim: { at: Date; previous: Date | null }) {
-    const n = parseId(id);
-    if (n === null) return false;
-    const { changes } = this.db
-      .prepare(
-        `UPDATE links SET last_surfaced_at = ?
-         WHERE id = ? AND owner_id = ? AND deleted_at IS NULL AND last_surfaced_at = ?`,
-      )
-      .run(toMs(claim.previous), n, owner, toMs(claim.at));
-    return changes === 1;
   }
 
   async dueSnapshots(now: Date, limit: number) {
@@ -839,57 +811,6 @@ export class SqliteStore
       )
       .run(why.text, why.source, id, owner);
     return changes === 1;
-  }
-
-  private claimSync(
-    owner: OwnerId,
-    ids: number[],
-    {
-      at,
-      notSurfacedAfter,
-      now,
-      exceptKeptTools,
-      exceptGone,
-    }: {
-      at: Date;
-      notSurfacedAfter: Date;
-      now: Date;
-      exceptKeptTools?: boolean;
-      exceptGone?: boolean;
-    },
-  ): SurfacedClaim[] {
-    const previous = this.db.prepare(
-      `SELECT last_surfaced_at FROM links
-       WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
-         AND state = 'active'
-         AND (snoozed_until IS NULL OR snoozed_until <= ?)
-         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
-         AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
-           WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))
-         AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_checks c
-           WHERE c.owner_id = links.owner_id AND c.link_id = links.id AND c.flagged_at IS NOT NULL))`,
-    );
-    const mark = this.db.prepare(
-      "UPDATE links SET last_surfaced_at = ? WHERE id = ? AND owner_id = ? AND deleted_at IS NULL",
-    );
-    const claimed: SurfacedClaim[] = [];
-    for (const id of ids) {
-      const row = previous.get(
-        id,
-        owner,
-        toMs(now),
-        toMs(notSurfacedAfter),
-        exceptKeptTools ? 1 : 0,
-        exceptGone ? 1 : 0,
-      ) as { last_surfaced_at: number | null } | undefined;
-      if (!row) continue;
-      mark.run(toMs(at), id, owner);
-      claimed.push({
-        link: this.mustRead(owner, id),
-        previousSurfacedAt: fromMs(row.last_surfaced_at),
-      });
-    }
-    return claimed;
   }
 
   private attachTags(owner: OwnerId, linkId: number, tags: LinkTag[]): void {

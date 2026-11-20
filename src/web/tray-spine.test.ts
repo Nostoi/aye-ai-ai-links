@@ -7,7 +7,7 @@ const dom = (html: string) => parseHTML(`<html><body>${html}</body></html>`).doc
 describe("a tray's spine", () => {
   it.each([
     ["handy", "Handy"],
-    ["today", "Today"],
+    ["explore", "Explore"],
     ["spaces", "Spaces"],
   ] as const)(
     "holds the %s icon and the word %s, both hidden from screen readers",
@@ -25,7 +25,7 @@ describe("a tray's spine", () => {
   );
 
   it("draws a different icon for each section", () => {
-    const icons = (["handy", "today", "spaces"] as const).map(
+    const icons = (["handy", "explore", "spaces"] as const).map(
       (k) => dom(spine(k)).querySelector("svg")?.innerHTML,
     );
     expect(new Set(icons).size).toBe(3);

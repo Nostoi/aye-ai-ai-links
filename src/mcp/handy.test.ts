@@ -127,7 +127,7 @@ describe("the handy view on link results", () => {
     expect(byId(digest.map((d: Json) => d.link))).toEqual({ 2: null });
   });
 
-  it("get_digest returns a due tool as a still_using_check item with its handy view, and marks it shown", async () => {
+  it("get_digest returns a due tool as a still_using_check item with its handy view, and writes nothing", async () => {
     await call("save_link", { url: "https://example.com/tool" });
     await keptDaysAgo("1", 40);
 
@@ -142,7 +142,7 @@ describe("the handy view on link results", () => {
       ],
     ]);
     expect(db.prepare("SELECT last_surfaced_at AS at FROM links WHERE id = 1").get()).toEqual({
-      at: NOW.getTime(),
+      at: null,
     });
   });
 });

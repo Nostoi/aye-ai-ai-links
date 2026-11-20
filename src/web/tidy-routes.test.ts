@@ -85,7 +85,7 @@ describe("GET / Tidy up tray", () => {
     const res = await browser.send("/");
     expect(res.status).toBe(200);
     const html = String(res.body);
-    expect(html).toContain("Clear out a few old links?");
+    expect(html).toContain("Clear out a few links?");
     expect(html).not.toContain('href="/tidy"');
     const steps = stepIds(html);
     expect(steps).toHaveLength(SESSION);
@@ -97,15 +97,22 @@ describe("GET / Tidy up tray", () => {
     for (const id of steps) expect(elsewhere).not.toContain(id);
   });
 
-  it("is absent when Worth a look takes some of the old links and fewer than five are left", async () => {
+  it("offers what is left when fewer than five are, with no minimum (#340)", async () => {
     const { browser } = await tidy(WORTH_SIZE + SESSION - 1);
     const html = await homeHtml(browser);
-    expect(html).toContain("Worth a look today");
-    expect(html).not.toContain("Clear out a few old links?");
+    expect(html).toContain(">Explore</h2>");
+    expect(html).toContain("Clear out a few links?");
+    expect(stepIds(html)).toHaveLength(SESSION - 1);
+  });
+
+  it("is absent when Explore takes every old link", async () => {
+    const { browser } = await tidy(WORTH_SIZE);
+    const html = await homeHtml(browser);
+    expect(html).not.toContain("Clear out a few links?");
     expect(html).not.toContain("tidy-step");
   });
 
-  it("leaves out a link that is a space card's, and is absent when that leaves four", async () => {
+  it("still offers a link that is a space card's recent link: only Explore's cards and Handy are skipped (#340)", async () => {
     const world = await oauthWorld();
     for (let i = 0; i < WORTH_SIZE + SESSION; i++) {
       await oldLink(world, i, A, [{ name: "Kitchen", source: "stated" }]);
@@ -114,8 +121,14 @@ describe("GET / Tidy up tray", () => {
     const browser = world.agent();
     await browser.signIn();
     const html = await homeHtml(browser);
+    const steps = stepIds(html);
     expect(html).toContain("home-space-recent");
-    expect(html).not.toContain("tidy-step");
+    expect(steps).toHaveLength(SESSION);
+    const spaces = html.slice(html.indexOf('<section class="spaces"'));
+    const recent = spaces.slice(0, spaces.indexOf("</section>"));
+    expect(
+      steps.some((id) => recent.includes(`/links/${id}`) || recent.includes(`data-id="${id}"`)),
+    ).toBe(true);
   });
 
   it("leaves out a link Home suggests for the Handy shelf", async () => {

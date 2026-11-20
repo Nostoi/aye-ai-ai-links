@@ -1,92 +1,38 @@
-import {
-  claimSurfaced,
-  compareIds,
-  type DigestDeps,
-  type DigestLink,
-  dayRank,
-  previewDigest,
-  unclaimSurfaced,
-} from "./digest.js";
+import { type DigestDeps, type DigestLink, previewDigest } from "./digest.js";
 import { CoreError } from "./errors.js";
 import { checkPair, intentExpectation, KEPT_TOOL_STAYS } from "./intent.js";
-import { recordOpening } from "./links.js";
 import type { EventWrite, LinkExpectation } from "./store.js";
 import type { IntentPair } from "./tool-store.js";
 import type { ToolItem } from "./tools.js";
 import type { Intent, Link, LinkPatch, LinkState, OwnerId } from "./types.js";
 
-/** The home page's "Worth a look today": the use cases behind its cards and buttons. */
+/** Home's Explore tray: the use cases behind its cards and buttons. */
 
 const DAY_MS = 86_400_000;
 /** Cards on the home page, at most. */
 export const WORTH_SIZE = 3;
-/** How long Not now hides a link (owner ruling on #95). */
+/** How long Skip hides a link (owner ruling on #95). */
 export const SNOOZE_MS = 14 * DAY_MS;
 
 export type WorthDeps = DigestDeps;
 
 /**
- * The earliest-flagged gone link the owner could act on: active, not snoozed at `now`, not a kept
- * tool (the shelf asks about those). Ties go to the lowest id. Reads only.
- */
-async function gonePick(deps: WorthDeps, owner: OwnerId): Promise<Link | null> {
-  const now = deps.now();
-  const links = await deps.store.listLinks(owner);
-  const checks = await deps.checks.listChecks(owner);
-  const tools = await deps.tools.listTools(owner);
-  const flaggedAt = (l: Link) => checks.get(l.id)?.flaggedAt ?? null;
-  const gone = links.filter(
-    (l) =>
-      l.state === "active" &&
-      (l.snoozedUntil === null || l.snoozedUntil <= now) &&
-      tools.get(l.id)?.status !== "kept" &&
-      flaggedAt(l) !== null,
-  );
-  gone.sort(
-    (a, b) =>
-      (flaggedAt(a) as Date).getTime() - (flaggedAt(b) as Date).getTime() || compareIds(a.id, b.id),
-  );
-  return gone[0] ?? null;
-}
-
-/**
- * Worth a look: at most one gone link, and reading picks for the other slots of WORTH_SIZE. The
- * digest never offers a gone link, so the gone pick is not among the reading picks. Leaves out the
- * links in `suggestions`: the caller passes the suggestions it shows on the shelf. A focus match
- * leads.
+ * Explore's cards: up to WORTH_SIZE To explore links, the oldest saved first, with at most one
+ * focus match leading. Leaves out the links in `suggestions`: the caller passes the suggestions it
+ * shows on the shelf. Reads only, so the same cards show until one is decided.
  */
 export async function worthALook(
   deps: WorthDeps,
   owner: OwnerId,
   suggestions: readonly ToolItem[],
-): Promise<{ links: DigestLink[]; gone: Link | null }> {
-  const gone = await gonePick(deps, owner);
+): Promise<{ links: DigestLink[] }> {
   const shown = new Set(suggestions.map((s) => s.link.id));
-  if (gone) shown.add(gone.id);
-  const { links } = await previewDigest(deps, owner, Number.POSITIVE_INFINITY, shown);
-  const lead = links.find((d) => d.reasons.some((r) => r.kind === "focus_words"));
-  const day = Math.floor(deps.now().getTime() / DAY_MS);
-  const ranked = links.filter((d) => d !== lead).map((d) => ({ d, rank: dayRank(day, d.link.id) }));
-  ranked.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
-  const shuffled = ranked.map((r) => r.d);
-  const reading = (lead ? [lead, ...shuffled] : shuffled).slice(0, WORTH_SIZE - (gone ? 1 : 0));
-  return { links: reading, gone };
+  return previewDigest(deps, owner, WORTH_SIZE, shown, 1);
 }
 
-/**
- * The owner opened the link from home: records the opening and marks it surfaced, so home leaves
- * it out for the digest's cooldown. Never logged as a search result's open.
- */
-export async function markOpened(deps: WorthDeps, owner: OwnerId, id: string): Promise<void> {
-  const now = deps.now();
-  const at = { store: deps.store, now: () => now };
-  await recordOpening(at, owner, id);
-  await claimSurfaced(at, owner, [id]);
-}
+export type Snooze = { until: Date };
 
-export type Snooze = { until: Date; claimedAt: Date | null; previousSurfacedAt: Date | null };
-
-/** Not now: marks the link surfaced, then snoozes it for SNOOZE_MS. */
+/** Skip: snoozes the link for SNOOZE_MS and records `not_now`. */
 export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<Snooze> {
   const now = deps.now();
   const link = await deps.store.get(owner, id);
@@ -95,22 +41,12 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
   if (link.snoozedUntil !== null && link.snoozedUntil > now) {
     throw new CoreError("conflict", ALREADY_PUT_OFF);
   }
-  const [claim] = await claimSurfaced({ store: deps.store, now: () => now }, owner, [id]);
   const until = new Date(now.getTime() + SNOOZE_MS);
   const expected = { state: link.state, snoozedUntil: link.snoozedUntil };
-  try {
-    await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF, [
-      { record: "not_now", at: now },
-    ]);
-  } catch (error) {
-    if (claim) await unclaimSurfaced(deps, owner, id, now, claim.previousSurfacedAt);
-    throw error;
-  }
-  return {
-    until,
-    claimedAt: claim ? now : null,
-    previousSurfacedAt: claim?.previousSurfacedAt ?? null,
-  };
+  await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF, [
+    { record: "not_now", at: now },
+  ]);
+  return { until };
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
@@ -122,9 +58,6 @@ export async function unsnoozeLink(
   id: string,
   snooze: Snooze,
 ): Promise<void> {
-  if (snooze.claimedAt) {
-    await unclaimSurfaced(deps, owner, id, snooze.claimedAt, snooze.previousSurfacedAt);
-  }
   await changeIf(
     deps,
     owner,

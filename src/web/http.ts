@@ -107,7 +107,6 @@ import {
   exploreLink,
   type IntentChange,
   keepLink,
-  markOpened,
   type StateChange,
   snoozeLink,
   tellWhy,
@@ -918,12 +917,12 @@ export function webApp({
     c.html(oauthErrorPage(oauthErrorMessage(c.req.query("error"))), 200, NO_STORE),
   );
 
-  // Reads only: a cross-site GET carries the Lax session cookie, so it must not use links up.
+  // Reads only: a cross-site GET carries the Lax session cookie, so it must not write.
   app.get("/", session, async (c) => {
     const { owner } = c.get("caller");
     const suggestions = await listSuggestions(deps, owner);
-    const { links, gone } = await worthALook(deps, owner, suggestions);
-    const cards = [...links.map((d) => d.link), ...(gone ? [gone] : [])];
+    const { links } = await worthALook(deps, owner, suggestions);
+    const cards = links.map((d) => d.link);
     const ids = cards.map((l) => l.id);
     const images = await deps.images.imageVersions(owner, ids);
     const pictures = await deps.images.pictureInfo(owner, ids);
@@ -937,17 +936,17 @@ export function webApp({
       owner,
       spaces.flatMap((s) => s.recent.map((l) => l.id)),
     );
-    const worth = { links, images, now: deps.now(), catalog, gone, pictures, copies, views };
+    const worth = { links, images, now: deps.now(), catalog, pictures, copies, views };
     // Every tile, including those hidden until Show all: the shelf script's fresh copy comes from here.
     const shelfImages = await deps.images.imageVersions(
       owner,
       [...items, ...suggestions].map((t) => t.link.id),
     );
     const shelf = handyShelf({ items, suggestions, catalog, images: shelfImages });
-    // Nothing on Home appears twice: Tidy up skips every link shown above it (#332). Only the
-    // route knows what it drew; core decides whether a full session is left.
-    const aboveTidy = new Set([...shown, ...spaces.flatMap((s) => s.recent.map((l) => l.id))]);
-    const queue = await tidySession(deps, owner, aboveTidy);
+    // Tidy up skips Explore's cards and Handy, which is everything `shown` holds (#332): the space
+    // cards' recent titles carry no question, so they are not skipped. Core decides whether any
+    // link is left to ask about.
+    const queue = await tidySession(deps, owner, shown);
     const tidy =
       queue === null
         ? undefined
@@ -1324,14 +1323,7 @@ export function webApp({
     removalAction(c, () => restoreLink(deps, c.get("caller").owner, c.get("body").id)),
   );
 
-  app.post("/home/opened", jsonBody(linkId), session, (c) =>
-    homeAction(c, async () => {
-      await markOpened(deps, c.get("caller").owner, c.get("body").id);
-      return done(c);
-    }),
-  );
-
-  // An opening from any other page (search, All links, a space): recorded, but not a nudge. The
+  // An opening from any page, Home's Explore cards included: recorded and nothing else. The
   // search results page also sends its receipt, which pairs the opening with that search (#134);
   // a failure there never changes the opening.
   app.post("/links/opened", jsonBody({ ...linkId, receipt: isOptionalReceipt }), session, (c) =>
@@ -1405,27 +1397,14 @@ export function webApp({
   app.post("/home/snooze", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
       const snooze = await snoozeLink(deps, c.get("caller").owner, c.get("body").id);
-      return c.json(
-        {
-          until: snooze.until.toISOString(),
-          claimedAt: snooze.claimedAt?.toISOString() ?? null,
-          previousSurfacedAt: snooze.previousSurfacedAt?.toISOString() ?? null,
-        },
-        200,
-        NO_STORE,
-      );
+      return c.json({ until: snooze.until.toISOString() }, 200, NO_STORE);
     }),
   );
 
-  const undoSnooze = { until: isDate, claimedAt: isDateOrNull, previousSurfacedAt: isDateOrNull };
-  app.post("/home/unsnooze", jsonBody({ ...linkId, ...undoSnooze }), session, (c) =>
+  app.post("/home/unsnooze", jsonBody({ ...linkId, until: isDate }), session, (c) =>
     homeAction(c, async () => {
-      const { id, until, claimedAt, previousSurfacedAt } = c.get("body");
-      await unsnoozeLink(deps, c.get("caller").owner, id, {
-        until: new Date(until),
-        claimedAt: claimedAt === null ? null : new Date(claimedAt),
-        previousSurfacedAt: previousSurfacedAt === null ? null : new Date(previousSurfacedAt),
-      });
+      const { id, until } = c.get("body");
+      await unsnoozeLink(deps, c.get("caller").owner, id, { until: new Date(until) });
       return done(c);
     }),
   );

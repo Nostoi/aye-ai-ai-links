@@ -56,9 +56,9 @@ describe("the profile stats section", () => {
     expect(html).toContain("Openings from bookmarks or outside the app aren't counted.");
   });
 
-  it("shows Put off with Not now only when something was", () => {
-    expect(profileStats(stats({ notNow: 0 }), NOW)).not.toContain("Put off with Not now");
-    expect(profileStats(stats({ notNow: 2 }), NOW)).toContain("Put off with Not now: 2");
+  it("shows Skipped only when something was", () => {
+    expect(profileStats(stats({ notNow: 0 }), NOW)).not.toContain("Skipped");
+    expect(profileStats(stats({ notNow: 2 }), NOW)).toContain("Skipped: 2");
   });
 
   it("the current window is marked", () => {
@@ -128,14 +128,14 @@ describe("the profile stats section", () => {
       NOW,
     );
     expect(html).toContain(
-      "Counting began on October 22, so openings, set-asides and Not now before then are only partly counted.",
+      "Counting began on October 22, so openings, set-asides and skipping before then are only partly counted.",
     );
     expect(profileStats(stats({ partialCounts: [] }), NOW)).not.toContain("partly");
   });
 
-  it("the all-time note names only Not now", () => {
+  it("the all-time note names only skipping", () => {
     const html = profileStats(stats({ window: "all", partialCounts: ["notNow"] }), NOW);
-    expect(html).toContain("so Not now before then is only partly counted.");
+    expect(html).toContain("so skipping before then is only partly counted.");
     expect(html).not.toContain("openings");
   });
 

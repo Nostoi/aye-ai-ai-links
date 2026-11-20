@@ -1,26 +1,38 @@
 import { ARCHIVE_UNDO, ARCHIVE_WORKING } from "./done-link.js";
+import { STILL_WORKS_WORKING } from "./gone-line.js";
+import { KEEP_IT_UNDO, KEEP_WORKING } from "./intent.js";
+import { SKIP_UNDO, SKIP_WORKING } from "./skip.js";
 
-/** What Keep says while it waits for the answer (#314). */
-const KEEP_WORKING = "Keeping…";
-
-/** What each choice posts, the bar and route of its Undo, and its working word. Keep is Keep it (#339). */
+/**
+ * What each choice posts, what its answer holds (`answer`: a state or intent `change`, a snooze's
+ * `until`, or a link check's `check`), the bar and route of its Undo, and its working word.
+ */
 const ACTS = {
   keep: {
     route: "/home/keep",
-    undo: {
-      title: "Kept.",
-      text: "Marked To keep. Tidy up won't ask about it again.",
-      route: "/home/undo-intent",
-    },
+    answer: "change",
+    undo: { ...KEEP_IT_UNDO, route: "/home/undo-intent" },
     word: KEEP_WORKING,
+  },
+  skip: {
+    route: "/home/snooze",
+    answer: "until",
+    undo: { ...SKIP_UNDO, route: "/home/unsnooze" },
+    word: SKIP_WORKING,
   },
   archive: {
     route: "/home/archive",
+    answer: "change",
     undo: { ...ARCHIVE_UNDO, route: "/home/undo-state" },
     word: ARCHIVE_WORKING,
   },
+  works: {
+    route: "/links/still-works",
+    answer: "check",
+    undo: { text: "Marked as working.", route: "/links/still-works/undo" },
+    word: STILL_WORKS_WORKING,
+  },
 };
-const KEYS = { 1: "keep", 2: "archive" };
 
 /**
  * The tray's script, a block inside Home's script after `CARD_FETCH` and the Undo bar's
@@ -35,12 +47,14 @@ const KEYS = { 1: "keep", 2: "archive" };
  * marks the link decided, and, while open, shows the next undecided link or the finish screen and
  * moves focus to its heading. An answer that comes after Stop here or Close still counts, and shows
  * nothing. Archive answers the `StateChange` that its Undo posts back to
- * `/home/undo-state` exactly as received, and Keep the intent change its Undo posts to
- * `/home/undo-intent`; then the link is undecided again: an open tray shows it
+ * `/home/undo-state` exactly as received, Keep the intent change its Undo posts to
+ * `/home/undo-intent`, Skip its `until` to `/home/unsnooze`, and It still works its `check` and
+ * `previous` to `/links/still-works/undo`; then the link is undecided again: an open tray shows it
  * (the finish screen too), a closed or ended one only returns to `closed`, never open. A refusal is
  * shown in `#tidy-error`.
  *
- * Keys 1 and 2 press the shown link's choices only while open, and not in a field, with a
+ * A key presses the shown step's button whose `aria-keyshortcuts` it is (1 to 3 on an explore step,
+ * 1 and 2 on a gone one) only while open, and not in a field, with a
  * modifier, while a dialog is open, or when auto-repeating. A choice that is slow to answer dims
  * its link's step, not the whole tray, and its title says its working word (`busyLook`); a key finds
  * the choice's button from the step and the action.
@@ -49,7 +63,6 @@ export const TIDY_SCRIPT = `{
 const tidyRoot = document.getElementById("tidy");
 const tidyAlert = document.getElementById("tidy-error");
 const tidyActs = ${JSON.stringify(ACTS)};
-const tidyKeys = ${JSON.stringify(KEYS)};
 const steps = [...tidyRoot.querySelectorAll(".tidy-step")];
 const closed = tidyRoot.querySelector(".tidy-closed");
 const finished = tidyRoot.querySelector(".tidy-done");
@@ -74,15 +87,21 @@ const go = (next) => {
   if (state === "open") focusOn(undecided().querySelector(".tidy-title"));
   if (state === "done") focusOn(finished.querySelector("h3"));
 };
+const undoBodies = {
+  change: (id, data) => (data.before && data.after ? { id, change: data } : null),
+  until: (id, data) => (data.until ? { id, until: data.until } : null),
+  check: (id, data) => (data.check ? { id, check: data.check, previous: data.previous } : null),
+};
 const choose = (step, act) =>
   whileBusy(tidyRoot, async (answered, ticket) => {
     const id = step.dataset.id;
-    const { route, undo } = tidyActs[act];
+    const { route, undo, answer } = tidyActs[act];
     tidyAlert.textContent = "";
     const res = await post(route, { id });
     answered();
-    const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (!change || !change.before || !change.after) {
+    const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    const body = data && undoBodies[answer](id, data);
+    if (!body) {
       tidyAlert.textContent = await failure(res);
       return;
     }
@@ -91,7 +110,7 @@ const choose = (step, act) =>
     showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";
-        const back = await post(undo.route, { id, change });
+        const back = await post(undo.route, body);
         if (!back || back.status !== 204) {
           tidyAlert.textContent = await failure(back);
           return;
@@ -118,12 +137,12 @@ tidyRoot.addEventListener("click", (event) => {
   } else if (button.dataset.tidy === "close") close();
 });
 document.addEventListener("keydown", (event) => {
-  const act = tidyKeys[event.key];
   const step = shownStep();
   const active = event.target;
-  if (!act || !step || event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+  if (!step || event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
   if (document.querySelector("dialog[open], body[data-panel]")) return;
   if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return;
-  choose(step, act);
+  const button = [...step.querySelectorAll("button[data-act]")].find((b) => b.getAttribute("aria-keyshortcuts") === event.key);
+  if (button) choose(step, button.dataset.act);
 });
 }`;

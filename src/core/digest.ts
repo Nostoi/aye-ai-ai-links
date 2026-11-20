@@ -1,11 +1,9 @@
-import { createHash } from "node:crypto";
-import { CoreError } from "./errors.js";
 import { isGone } from "./link-check.js";
 import type { LinkCheckStore } from "./link-check-store.js";
 import { recentFocus } from "./profile.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { FocusMatch } from "./search.js";
-import type { LinkStore, SurfacedClaim } from "./store.js";
+import type { LinkStore } from "./store.js";
 import type { ToolStore } from "./tool-store.js";
 import { isDue } from "./tools.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
@@ -14,15 +12,11 @@ import type { FocusEntry, Link, OwnerId } from "./types.js";
 const DAY_MS = 86_400_000;
 /** Links in one digest, at most. */
 export const DIGEST_SIZE = 5;
-/** A link surfaced within this long before now is left out; one surfaced exactly this long ago is not. */
-export const SURFACE_COOLDOWN_MS = 14 * DAY_MS;
 /** Of the recent focus entries, only those created within this long count. */
 export const FOCUS_WINDOW_MS = 30 * DAY_MS;
 /** not_opened_recently: saved at least this long ago, and no opening recorded within it. */
 export const NOT_OPENED_MS = 30 * DAY_MS;
-/** Each focus entry gives its reason to at most this many links, its best-ranked eligible ones. */
-export const FOCUS_MATCHES_PER_ENTRY = 3;
-/** At most this many of a digest's links are picked for a focus match; the rest rotate. */
+/** At most this many of a digest's links are picked for a focus match; the rest follow by age. */
 export const FOCUS_SLOTS = 3;
 
 /**
@@ -37,7 +31,6 @@ export type DigestReason =
   | { kind: "focus_words"; focus: FocusEntry; words: string[] }
   | { kind: "no_why" }
   | { kind: "not_opened_recently" }
-  | { kind: "never_surfaced" }
   | { kind: "still_using_check"; daysSinceOpened: number | null };
 
 export type DigestLink = { link: Link; reasons: DigestReason[] };
@@ -65,20 +58,15 @@ export function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function eligible(link: Link, now: Date, notSurfacedAfter: Date): boolean {
-  return (
-    link.state === "active" &&
-    (link.snoozedUntil === null || link.snoozedUntil <= now) &&
-    (link.lastSurfacedAt === null || link.lastSurfacedAt <= notSurfacedAfter)
-  );
-}
+const isActive = (link: Link, now: Date) =>
+  link.state === "active" && (link.snoozedUntil === null || link.snoozedUntil <= now);
 
-/** A link's place in one day's shuffle: the same all that day (UTC), different the next. */
-export const dayRank = (day: number, id: string) =>
-  createHash("sha256").update(`${day}:${id}`).digest("hex");
+/** Oldest saved first, then lowest id: the one order Explore and the digest share. */
+const oldestFirst = (a: Link, b: Link) =>
+  a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id);
 
-/** Every reason but focus. `surfacedBefore` is lastSurfacedAt as it was before this digest. */
-function ownReasons(link: Link, surfacedBefore: Date | null, now: Date): DigestReason[] {
+/** Every reason but focus. */
+function ownReasons(link: Link, now: Date): DigestReason[] {
   const reasons: DigestReason[] = [];
   if (link.why === null) reasons.push({ kind: "no_why" });
   const longAgo = now.getTime() - NOT_OPENED_MS;
@@ -88,35 +76,24 @@ function ownReasons(link: Link, surfacedBefore: Date | null, now: Date): DigestR
   ) {
     reasons.push({ kind: "not_opened_recently" });
   }
-  if (surfacedBefore === null) reasons.push({ kind: "never_surfaced" });
   return reasons;
 }
 
-/** A fair queue: least recently touched first (last surfaced, or saved if never), then oldest saved. */
-function rotation(a: Link, b: Link): number {
-  const touched = (l: Link) => (l.lastSurfacedAt ?? l.savedAt).getTime();
-  return (
-    touched(a) - touched(b) || a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id)
-  );
-}
-
 /**
- * Focus reasons by link id. Entries are taken newest first and hits in rank order, so the map's
- * order is the focus links' digest order: by their newest matching entry, then rank in it.
- * Each match is the keyword engine's whole answer, untraced, so not logged.
+ * Focus reasons by link id, one per current entry whose words match the link. Membership only: the
+ * keyword engine's rank never decides a card. Each match is the engine's whole answer, untraced, so
+ * not logged.
  */
 async function focusReasons(
   deps: DigestDeps,
   owner: OwnerId,
   entries: FocusEntry[],
-  isEligible: (id: string) => boolean,
+  isCandidate: (id: string) => boolean,
 ): Promise<Map<string, DigestReason[]>> {
   const found = new Map<string, DigestReason[]>();
   for (const focus of entries) {
     const hits = await deps.focusMatch.match(owner, focus.text, {});
-    for (const { id, words } of hits
-      .filter((h) => isEligible(h.id))
-      .slice(0, FOCUS_MATCHES_PER_ENTRY)) {
+    for (const { id, words } of hits.filter((h) => isCandidate(h.id))) {
       found.set(id, [...(found.get(id) ?? []), { kind: "focus_words", focus, words }]);
     }
   }
@@ -130,212 +107,112 @@ async function focusEntries(deps: DigestDeps, owner: OwnerId, now: Date): Promis
 }
 
 /**
- * Up to `limit` eligible links that have a reason, in digest order, with each one's focus reasons.
- * Reads only. Eligible: active, To explore (a To keep link is never picked, #339), not a kept tool,
- * not gone (#128), not snoozed at now, and surfaced at or before now - SURFACE_COOLDOWN_MS.
+ * Up to `limit` links in the one order Explore and the digest share, with each one's focus reasons.
+ * Reads only, and keeps no state: the same links come back until the owner decides one. A candidate
+ * is active, To explore (a To keep link is never picked, #339), not a kept tool, not gone (#128),
+ * not snoozed at now and not in `exclude`. Up to `focusSlots` focus matches come first, oldest
+ * saved first; the rest follow in that order too.
  */
 async function select(
   deps: DigestDeps,
   owner: OwnerId,
   now: Date,
   limit: number,
-  exclude: ReadonlySet<string> = new Set(),
+  exclude: ReadonlySet<string>,
+  focusSlots: number,
 ): Promise<{ picked: Link[]; focus: Map<string, DigestReason[]> }> {
-  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
-  const all = await deps.store.listLinks(owner);
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
   const candidates = new Map(
-    all
+    (await deps.store.listLinks(owner))
       .filter(
         (l) =>
           !isGone(checks.get(l.id) ?? null) &&
           !exclude.has(l.id) &&
           l.intent === "explore" &&
           tools.get(l.id)?.status !== "kept" &&
-          eligible(l, now, notSurfacedAfter),
+          isActive(l, now),
       )
       .map((l) => [l.id, l]),
   );
   if (candidates.size === 0) return { picked: [], focus: new Map() };
 
-  const entries = await focusEntries(deps, owner, now);
-  const focus = await focusReasons(deps, owner, entries, (id) => candidates.has(id));
-  const focusPicked = [...focus.keys()].slice(0, FOCUS_SLOTS);
-  const rest = [...candidates.values()]
-    .filter(
-      (l) =>
-        !focusPicked.includes(l.id) &&
-        (focus.has(l.id) || ownReasons(l, l.lastSurfacedAt, now).length > 0),
-    )
-    .sort(rotation);
-  const picked = [...focusPicked.map((id) => candidates.get(id) as Link), ...rest];
-  return { picked: picked.slice(0, limit), focus };
+  const focus = await focusReasons(deps, owner, await focusEntries(deps, owner, now), (id) =>
+    candidates.has(id),
+  );
+  const ordered = [...candidates.values()].sort(oldestFirst);
+  const lead = ordered.filter((l) => focus.has(l.id)).slice(0, focusSlots);
+  const rest = ordered.filter((l) => !lead.includes(l));
+  return { picked: [...lead, ...rest].slice(0, limit), focus };
 }
 
 /**
- * Marks the owner's links `ids` surfaced at now, the one write behind the digest's cooldown. The
- * store re-checks eligibility; a link no longer eligible is skipped and left as it is.
- */
-export async function claimSurfaced(
-  deps: Pick<DigestDeps, "store" | "now">,
-  owner: OwnerId,
-  ids: string[],
-  {
-    exceptKeptTools = false,
-    exceptGone = false,
-  }: { exceptKeptTools?: boolean; exceptGone?: boolean } = {},
-): Promise<SurfacedClaim[]> {
-  const now = deps.now();
-  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
-  return ids.length === 0
-    ? []
-    : deps.store.claimSurfaced(owner, ids, {
-        at: now,
-        notSurfacedAfter,
-        now,
-        exceptKeptTools,
-        exceptGone,
-      });
-}
-
-export async function unclaimSurfaced(
-  deps: Pick<DigestDeps, "store">,
-  owner: OwnerId,
-  id: string,
-  claimedAt: Date,
-  previous: Date | null,
-): Promise<boolean> {
-  if (previous !== null && previous >= claimedAt) {
-    throw new CoreError("invalid_input", "The surfacing to put back must be before the claim.");
-  }
-  return deps.store.unclaimSurfaced(owner, id, { at: claimedAt, previous });
-}
-
-/**
- * Reading picks, without marking anything: up to `limit` eligible links that have a reason
- * (DIGEST_SIZE by default), in the order `getDigest` uses, with every reason that applies. It never
- * holds the still-using check: `getDigest` claims that first and, when it has one, gives it one of
- * its slots.
+ * Reading picks, writing nothing: up to `limit` links (DIGEST_SIZE by default), in the order Explore
+ * uses, with every reason that applies. A link can have none: a new To explore link that has a why.
+ * Up to `focusSlots` of them lead for a focus match (FOCUS_SLOTS by default). It never holds the
+ * still-using check, which `getDigest` adds.
  */
 export async function previewDigest(
   deps: DigestDeps,
   owner: OwnerId,
   limit = DIGEST_SIZE,
   exclude: ReadonlySet<string> = new Set(),
+  focusSlots = FOCUS_SLOTS,
 ): Promise<{ links: DigestLink[] }> {
   const now = deps.now();
-  const { picked, focus } = await select(deps, owner, now, limit, exclude);
+  const { picked, focus } = await select(deps, owner, now, limit, exclude, focusSlots);
   const links = picked.map((link) => ({
     link,
-    reasons: [...(focus.get(link.id) ?? []), ...ownReasons(link, link.lastSurfacedAt, now)],
+    reasons: [...(focus.get(link.id) ?? []), ...ownReasons(link, now)],
   }));
   return { links };
 }
 
 /**
- * Picks up to DIGEST_SIZE eligible links that have a reason, marks them surfaced, and returns them
- * with every reason that applies. A due kept tool, claimed first through `claimDueTool`, takes one
- * of the slots and comes last as a `still_using_check`; at most one per digest. A check dropped at
- * its claim frees its slot.
- *
- * The claim re-checks eligibility in the store; a link it skips is left out, and the other reasons
- * are judged again from the link as claimed. The claim also skips a link kept handy, or flagged as gone, since
- * selection. A claimed link left with no reason is left out but
- * stays marked. A response lost after the claim still uses up its links. `claimed` is the id of
- * every link this call marked, left out or not.
+ * The digest: up to DIGEST_SIZE links as `previewDigest` picks them, with a due kept tool taking one
+ * of the slots and coming last as a `still_using_check`; at most one per digest. It writes nothing,
+ * so a repeat call returns the same links until the owner decides them.
  */
 export async function getDigest(
   deps: DigestDeps,
   owner: OwnerId,
-): Promise<{ links: DigestLink[]; claimed: string[] }> {
+): Promise<{ links: DigestLink[] }> {
   const now = deps.now();
-  const { claimedId, due: check } = await claimDue({ ...deps, now: () => now }, owner);
-  const { picked, focus } = await select(deps, owner, now, DIGEST_SIZE - (check ? 1 : 0));
-  const claimed = await claimSurfaced(
-    { store: deps.store, now: () => now },
+  const check = await dueTool({ ...deps, now: () => now }, owner);
+  const { links } = await previewDigest(
+    { ...deps, now: () => now },
     owner,
-    picked.map((l) => l.id),
-    { exceptKeptTools: true, exceptGone: true },
+    DIGEST_SIZE - (check ? 1 : 0),
   );
-  const links: DigestLink[] = claimed
-    .map(({ link, previousSurfacedAt }) => ({
-      link,
-      reasons: [...(focus.get(link.id) ?? []), ...ownReasons(link, previousSurfacedAt, now)],
-    }))
-    .filter((d) => d.reasons.length > 0);
   if (check) {
     links.push({
       link: check.link,
       reasons: [{ kind: "still_using_check", daysSinceOpened: check.daysSinceOpened }],
     });
   }
-  return {
-    links,
-    claimed: [...(claimedId === null ? [] : [claimedId]), ...claimed.map((c) => c.link.id)],
-  };
+  return { links };
 }
 
 /** A due kept tool for the digest's still-using check, with whole days since its last recorded opening (null: never opened). */
 export type DueTool = { link: Link; daysSinceOpened: number | null };
 
 /**
- * At most one kept tool that is due and eligible as digest links are (active, not snoozed at now,
- * surfaced at or before now - SURFACE_COOLDOWN_MS), the first in the digest's rotation. A gone
- * tool is never due (#128). Reads only; the caller claims it as it claims other picks.
+ * At most one kept tool that is due, active and not snoozed at now, the oldest saved first. A gone
+ * tool is never due (#128). Reads only.
  */
 export async function dueTool(
   deps: Pick<DigestDeps, "store" | "tools" | "checks" | "now">,
   owner: OwnerId,
 ): Promise<DueTool | null> {
   const now = deps.now();
-  const notSurfacedAfter = new Date(now.getTime() - SURFACE_COOLDOWN_MS);
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
   const [link] = (await deps.store.listLinks(owner))
     .filter(
-      (l) =>
-        eligible(l, now, notSurfacedAfter) &&
-        isDue(l, tools.get(l.id) ?? null, checks.get(l.id) ?? null, now),
+      (l) => isActive(l, now) && isDue(l, tools.get(l.id) ?? null, checks.get(l.id) ?? null, now),
     )
-    .sort(rotation);
+    .sort(oldestFirst);
   return link ? dueToolOf(link, now) : null;
-}
-
-/**
- * Claims `dueTool`'s pick as the digest claims its other picks, skipping it if it was flagged as
- * gone since, then judges it again from the link as claimed and its Keep handy and check rows read
- * after the claim. One no longer due is left out but stays marked, as a digest pick left with no
- * reason is.
- */
-export async function claimDueTool(
-  deps: Pick<DigestDeps, "store" | "tools" | "checks" | "now">,
-  owner: OwnerId,
-): Promise<DueTool | null> {
-  return (await claimDue(deps, owner)).due;
-}
-
-/** `claimDueTool`, with the id it marked (null: none), whether or not the tool stayed due. */
-async function claimDue(
-  deps: Pick<DigestDeps, "store" | "tools" | "checks" | "now">,
-  owner: OwnerId,
-): Promise<{ claimedId: string | null; due: DueTool | null }> {
-  const now = deps.now();
-  const picked = await dueTool({ ...deps, now: () => now }, owner);
-  if (!picked) return { claimedId: null, due: null };
-  const [claim] = await claimSurfaced(
-    { store: deps.store, now: () => now },
-    owner,
-    [picked.link.id],
-    { exceptGone: true },
-  );
-  if (!claim) return { claimedId: null, due: null };
-  const tool = await deps.tools.getTool(owner, claim.link.id);
-  const check = await deps.checks.getCheck(owner, claim.link.id);
-  return {
-    claimedId: claim.link.id,
-    due: isDue(claim.link, tool, check, now) ? dueToolOf(claim.link, now) : null,
-  };
 }
 
 function dueToolOf(link: Link, now: Date): DueTool {

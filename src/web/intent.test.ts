@@ -3,6 +3,7 @@ import type { Link } from "../core/types.js";
 import { cardLine } from "./card-line.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { editMenu } from "./edit-link.js";
+import { homePage } from "./home-page.js";
 import { intentLinkScript } from "./intent.js";
 import { keepHandyScript } from "./keep-handy.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
@@ -118,7 +119,7 @@ describe("Keep it and Explore it on a card (#339)", () => {
     expect((p.$("#undo-bar") as HTMLElement).hidden).toBe(true);
   });
 
-  it("on Home's Today cards (leaves) Keep it takes the card out, and Undo puts it back", async () => {
+  it("on Home's Explore cards (leaves) Keep it takes the card out, and Undo puts it back", async () => {
     const p = load(
       (s) => (s.url === "/home/keep" ? { status: 200, body: KEEP_CHANGE } : { status: 204 }),
       {
@@ -179,5 +180,35 @@ describe("Keep handy on a card with the intent rows (#339)", () => {
     await press(p, "keep");
     await press(p, "not-handy");
     expect([rows(p), lineText(p)]).toEqual([[true, false], "To keep"]);
+  });
+});
+
+describe("no promise about Today survives (#340)", () => {
+  it("says neither 'Today and Tidy up' nor 'won't ask about it' in any page or script", () => {
+    const now = new Date("2026-11-20T00:00:00Z");
+    const worth = {
+      links: [{ link: link(), reasons: [] }],
+      images: new Map(),
+      now,
+      catalog: [],
+      views: new Map(),
+    };
+    const tidy = {
+      queue: [{ link: link({ id: "8" }), gone: false, fit: null }],
+      hasFocus: false,
+      images: new Map(),
+      catalog: [],
+      now,
+    };
+    const home = homePage({ worth, shelf: "", spaces: "", tidy });
+    for (const text of [
+      home,
+      editMenu(link(), {}),
+      intentLinkScript("worth-cards", "home-error"),
+    ]) {
+      expect(text).not.toContain("Today and Tidy up");
+      expect(text).not.toContain("won't ask about it");
+    }
+    expect(home).toContain("Explore won't show it.");
   });
 });

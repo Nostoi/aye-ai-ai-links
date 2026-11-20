@@ -265,7 +265,7 @@ describe("the vector indexer on createDeps' index store", () => {
 });
 
 describe("the digest on createDeps", () => {
-  it("skips a link the check store flagged, because the store's claim reads the same database", async () => {
+  it("skips a link the check store flagged", async () => {
     const db = openDatabase(":memory:");
     const now = new Date("2026-06-01T00:00:00Z");
     const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => now };
@@ -279,13 +279,11 @@ describe("the digest on createDeps", () => {
       flaggedAt: now,
       stillWorksAt: null,
     });
-    const when = { at: now, notSurfacedAfter: now, now, exceptGone: true };
-    expect(await deps.store.claimSurfaced(OWNER, [link.id], when)).toEqual([]);
-    expect(await getDigest(deps, OWNER)).toEqual({ links: [], claimed: [] });
+    expect(await getDigest(deps, OWNER)).toEqual({ links: [] });
     db.close();
   });
 
-  it("matches focus words in a link's own fields but not its page text, logs nothing, and claims in SQLite", async () => {
+  it("matches focus words in a link's own fields but not its page text, logs nothing, and writes nothing in SQLite", async () => {
     const db = openDatabase(":memory:");
     const now = new Date("2026-06-01T00:00:00Z");
     const deps = { ...createDeps(db, new FakeEmbedder(DIMS)), now: () => now };
@@ -339,15 +337,16 @@ describe("the digest on createDeps", () => {
     ]);
     expect(first.links[0]?.reasons).toEqual([
       { kind: "focus_words", focus: recentFocus[0], words: ["quokka"] },
-      { kind: "never_surfaced" },
     ]);
     const pageOnlyReasons = first.links.find((l) => l.link.id === pageOnly.id)?.reasons ?? [];
     expect(pageOnlyReasons.map((r) => r.kind)).not.toContain("focus_words");
-    expect(first.links[0]?.link.lastSurfacedAt).toEqual(now);
     expect(db.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
     expect((await getDigest(deps, OWNER)).links.map((l) => l.link.id)).toEqual(
-      links.slice(4, 6).map((l) => l.id),
+      first.links.map((l) => l.link.id),
     );
+    expect(
+      db.prepare("SELECT count(*) AS n FROM links WHERE last_surfaced_at IS NOT NULL").get(),
+    ).toEqual({ n: 0 });
     db.close();
   });
 });

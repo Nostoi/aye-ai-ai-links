@@ -5,7 +5,7 @@ import type { FocusMatch } from "./search.js";
 import { TIDY_SESSION, type TidyDeps, tidyQueue, tidySession } from "./tidy-up.js";
 import { keepHandy } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
-import { exploreLink, keepLink } from "./worth-a-look.js";
+import { exploreLink, keepLink, SNOOZE_MS } from "./worth-a-look.js";
 
 const A = "a";
 const B = "b";
@@ -75,6 +75,16 @@ async function focus(text: string, created: Date, found: string[]): Promise<void
   hits.set(text, found);
 }
 
+const flag = (id: string, flaggedAt: Date) =>
+  store.updateCheckIf(A, id, null, {
+    checkedAt: flaggedAt,
+    result: "dead",
+    detail: "http:404",
+    firstDeadAt: new Date(flaggedAt.getTime() - 7 * DAY),
+    flaggedAt,
+    stillWorksAt: null,
+  });
+
 const queueIds = async (limit = 100) => (await tidyQueue(deps(), A, limit)).map((t) => t.link.id);
 
 describe("which links qualify", () => {
@@ -109,17 +119,29 @@ describe("which links qualify", () => {
     expect(await queueIds()).toEqual([]);
   });
 
-  it("leaves out a gone link", async () => {
-    const gone = await link();
-    await store.updateCheckIf(A, gone.id, null, {
-      checkedAt: ago(DAY),
-      result: "dead",
-      detail: "http:404",
-      firstDeadAt: ago(8 * DAY),
-      flaggedAt: ago(DAY),
-      stillWorksAt: null,
-    });
-    expect(await queueIds()).toEqual([]);
+  it("asks about a gone page whatever its intent and age, before the old links, by when it was flagged", async () => {
+    const old = await link({ savedAt: ago(200 * DAY) });
+    const goneKeep = await link({ intent: "keep", intentSource: "stated", savedAt: ago(5 * DAY) });
+    const goneNew = await link({ savedAt: ago(DAY) });
+    await flag(goneNew.id, ago(3 * DAY));
+    await flag(goneKeep.id, ago(2 * DAY));
+    const got = await tidyQueue(deps(), A, 5);
+    expect(got.map((t) => [t.link.id, t.gone])).toEqual([
+      [goneNew.id, true],
+      [goneKeep.id, true],
+      [old.id, false],
+    ]);
+  });
+
+  it("leaves out a gone kept tool, an archived gone link and a gone link in skip", async () => {
+    const tool = await link();
+    await keepHandy(deps(), A, tool.id, "stated");
+    const archived = await link({ state: "archived" });
+    const skipped = await link();
+    for (const l of [tool, archived, skipped]) await flag(l.id, ago(DAY));
+    expect((await tidyQueue(deps(), A, 5, new Set([skipped.id]))).map((t) => t.link.id)).toEqual(
+      [],
+    );
   });
 
   it("never asks about a To keep link, stated, asked or guessed", async () => {
@@ -233,16 +255,41 @@ describe("tidySession", () => {
     expect(got?.map((t) => t.link.id)).toEqual(rest.map((l) => l.id));
   });
 
-  it("gives nothing when one fewer than a full session is left", async () => {
-    for (let i = 0; i < TIDY_SESSION - 1; i++) await link({ savedAt: ago((90 - i) * DAY) });
+  it("gives a session of one when one link qualifies, and nothing when none does", async () => {
     expect(await tidySession(deps(), A, new Set())).toBeNull();
+    const only = await link();
+    expect((await tidySession(deps(), A, new Set()))?.map((t) => t.link.id)).toEqual([only.id]);
+    expect(await tidySession(deps(), A, new Set([only.id]))).toBeNull();
   });
 
-  it("gives nothing when the skip takes a full session down by one", async () => {
-    const [first] = [await link({ savedAt: ago(100 * DAY) })];
-    for (let i = 0; i < TIDY_SESSION - 1; i++) await link({ savedAt: ago((90 - i) * DAY) });
-    expect(await tidySession(deps(), A, new Set())).not.toBeNull();
-    expect(await tidySession(deps(), A, new Set([first.id]))).toBeNull();
+  it("holds at most five", async () => {
+    for (let i = 0; i < TIDY_SESSION + 2; i++) await link({ savedAt: ago((90 - i) * DAY) });
+    expect(await tidySession(deps(), A, new Set())).toHaveLength(TIDY_SESSION);
+  });
+});
+
+describe("Skip in Tidy up (#340)", () => {
+  const snooze = (id: string, until: Date) => store.update(A, id, { snoozedUntil: until });
+
+  it("leaves out an old link and a gone one that are snoozed until tomorrow, and asks again once it ends", async () => {
+    const old = await link({ savedAt: ago(100 * DAY) });
+    const gone = await link();
+    await flag(gone.id, ago(DAY));
+    const tomorrow = new Date(NOW.getTime() + DAY);
+    await snooze(old.id, tomorrow);
+    await snooze(gone.id, tomorrow);
+    expect(await queueIds()).toEqual([]);
+    await store.update(A, old.id, { snoozedUntil: ago(1) });
+    await store.update(A, gone.id, { snoozedUntil: ago(1) });
+    expect(await queueIds()).toEqual([gone.id, old.id]);
+  });
+
+  it("honours a snooze of exactly SNOOZE_MS, but still asks about one set far longer", async () => {
+    const exact = await link({ savedAt: ago(100 * DAY) });
+    const long = await link({ savedAt: ago(90 * DAY) });
+    await snooze(exact.id, new Date(NOW.getTime() + SNOOZE_MS));
+    await snooze(long.id, new Date("2036-10-21T09:00:00Z"));
+    expect(await queueIds()).toEqual([long.id]);
   });
 });
 

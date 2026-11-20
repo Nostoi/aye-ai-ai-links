@@ -326,10 +326,6 @@ export const ASK_SCRIPT = `<script>
       }
       return lines;
     }
-    if (c.kind === "surfaced") {
-      const n = c.linkIds.length;
-      return [{ text: "Marked " + n + (n === 1 ? " link" : " links") + " as shown in today's picks." }];
-    }
     return [];
   };
   // One line per link: its save's if it was saved, else the edit that has an Undo, else the first.

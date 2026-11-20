@@ -1,12 +1,5 @@
-import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  compareIds,
-  DIGEST_SIZE,
-  getDigest,
-  previewDigest,
-  SURFACE_COOLDOWN_MS,
-} from "./digest.js";
+import { DIGEST_SIZE, getDigest, previewDigest } from "./digest.js";
 import type { CoreError } from "./errors.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
@@ -17,7 +10,6 @@ import type { Link, NewLink } from "./types.js";
 import {
   archiveLink,
   bringBackLink,
-  markOpened,
   SNOOZE_MS,
   snoozeLink,
   tellWhy,
@@ -127,7 +119,7 @@ const picked = async () => worthALook(deps(), A, await listSuggestions(deps(), A
 const ids = async () => (await picked()).links.map((d) => d.link.id);
 
 /** Flags the link as gone, first flagged at `flaggedAt`. */
-const flagGone = (id: string, flaggedAt: Date) =>
+const _flagGone = (id: string, flaggedAt: Date) =>
   store.updateCheckIf(A, id, null, {
     checkedAt: flaggedAt,
     result: "dead",
@@ -146,90 +138,6 @@ async function code(p: Promise<unknown>): Promise<string> {
   return "no error";
 }
 
-describe("worthALook's gone pick (#128)", () => {
-  it("is the earliest flagged link, and the lowest id on a tie", async () => {
-    const late = await link();
-    const early = await link();
-    await flagGone(late.id, at(-2 * DAY));
-    await flagGone(early.id, at(-9 * DAY));
-    expect((await picked()).gone?.id).toBe(early.id);
-    const tied = [await link(), await link()];
-    for (const l of tied) await flagGone(l.id, at(-20 * DAY));
-    expect((await picked()).gone?.id).toBe(tied.map((l) => l.id).sort(compareIds)[0]);
-  });
-
-  it("takes a slot: three reading candidates and a gone link give two reading links and the gone one", async () => {
-    await link();
-    await link();
-    await link();
-    const gone = await link();
-    await flagGone(gone.id, at(-DAY));
-    const { links, gone: pick } = await picked();
-    expect(links).toHaveLength(WORTH_SIZE - 1);
-    expect(pick?.id).toBe(gone.id);
-    expect(links.map((d) => d.link.id)).not.toContain(gone.id);
-  });
-
-  it("is never an archived, snoozed or kept-tool link", async () => {
-    const archived = await link(A, { state: "archived" });
-    const snoozed = await link(A, { snoozedUntil: at(DAY) });
-    const kept = await link();
-    await keepHandy(deps(), A, kept.id, "stated");
-    for (const l of [archived, snoozed, kept]) await flagGone(l.id, at(-9 * DAY));
-    expect((await picked()).gone).toBeNull();
-    const ok = await link();
-    await flagGone(ok.id, at(-DAY));
-    expect((await picked()).gone?.id).toBe(ok.id);
-  });
-
-  it("picks a link whose snooze has ended, including one ending exactly now", async () => {
-    const over = await link(A, { snoozedUntil: at(-DAY) });
-    const now = await link(A, { snoozedUntil: NOW });
-    await flagGone(over.id, at(-2 * DAY));
-    await flagGone(now.id, at(-DAY));
-    expect((await picked()).gone?.id).toBe(over.id);
-    await store.update(A, over.id, { snoozedUntil: at(DAY) });
-    expect((await picked()).gone?.id).toBe(now.id);
-  });
-
-  it("is excluded from the reading picks even if the digest would offer it", async () => {
-    const gone = await link();
-    await link();
-    await flagGone(gone.id, at(-DAY));
-    // The digest's own gone filter sees no checks; only the gone pick's read does.
-    let reads = 0;
-    const checks = Object.assign(Object.create(store) as FakeStore, {
-      listChecks: async (...a: Parameters<FakeStore["listChecks"]>) =>
-        reads++ === 0 ? store.listChecks(...a) : new Map(),
-    });
-    const { links, gone: pick } = await worthALook({ ...deps(), checks }, A, []);
-    expect(pick?.id).toBe(gone.id);
-    expect(links.map((d) => d.link.id)).not.toContain(gone.id);
-  });
-
-  it("writes nothing", async () => {
-    const gone = await link();
-    await link();
-    await flagGone(gone.id, at(-DAY));
-    const rows = async () =>
-      structuredClone([
-        await store.listLinks(A),
-        [...(await store.listChecks(A))],
-        [...(await store.listTools(A))],
-      ]);
-    const before = await rows();
-    await picked();
-    expect(await rows()).toEqual(before);
-  });
-
-  it("is null, and the reading picks fill all slots, with no gone link", async () => {
-    for (let i = 0; i < 4; i++) await link();
-    const { links, gone } = await picked();
-    expect(gone).toBeNull();
-    expect(links).toHaveLength(WORTH_SIZE);
-  });
-});
-
 describe("worthALook", () => {
   it("leaves a gone link out of its reading picks (#128)", async () => {
     const gone = await link();
@@ -243,7 +151,6 @@ describe("worthALook", () => {
       stillWorksAt: null,
     });
     expect(await ids()).toEqual([other.id]);
-    expect((await picked()).gone?.id).toBe(gone.id);
   });
 
   it("leaves out a kept tool, even one that matches the focus", async () => {
@@ -359,7 +266,6 @@ describe("worthALook", () => {
     for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
     for (const act of [
       (id: string) => snoozeLink(deps(), A, id),
-      (id: string) => markOpened(deps(), A, id),
       (id: string) => archiveLink(deps(), A, id),
     ]) {
       const [first, ...rest] = await ids();
@@ -371,60 +277,17 @@ describe("worthALook", () => {
     expect((await ids()).filter((id) => before.includes(id)).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("shows other picks on another day, from the whole queue, not only one digest's worth", async () => {
-    for (let i = 0; i < DIGEST_SIZE + 3; i++) await link();
-    const seen = new Set<string>();
-    const days: string[][] = [];
-    // A daily shuffle: over 60 days every link of eight comes up (a miss is about 1 in 10^12).
-    for (let d = 0; d < 60; d++) {
-      clock = at(d * DAY);
-      days.push(await ids());
-      for (const id of days.at(-1) ?? []) seen.add(id);
-    }
-    expect(days.slice(1, 8).some((day) => day.join() !== days[0]?.join())).toBe(true);
-    expect(seen.size).toBe(DIGEST_SIZE + 3);
-  });
-
-  it("leads with the queue's first focus match every day, the other two from the day's shuffle", async () => {
+  it("when the lead goes, the next focus match leads and the other picks stay", async () => {
     const all: Link[] = [];
     for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
-    const [older, newer, also] = all.slice(-3) as [Link, Link, Link];
-    await focus("older", at(-2 * DAY), [older.id]);
-    await focus("newer", at(-DAY), [newer.id, also.id]);
-    for (let d = 0; d < 10; d++) {
-      clock = at(d * DAY);
-      const picks = await ids();
-      expect(picks[0]).toBe(newer.id);
-      expect(new Set(picks).size).toBe(WORTH_SIZE);
-    }
-  });
-
-  it("with no focus match, leads with the day's shuffle first, not the queue's first", async () => {
-    const all: Link[] = [];
-    for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
-    const rank = (day: number, id: string) =>
-      createHash("sha256").update(`${day}:${id}`).digest("hex");
-    for (let d = 0; d < 10; d++) {
-      clock = at(d * DAY);
-      const day = Math.floor(clock.getTime() / DAY);
-      const shuffled = all.map((l) => l.id).sort((x, y) => (rank(day, x) < rank(day, y) ? -1 : 1));
-      expect((await ids())[0]).toBe(shuffled[0]);
-    }
-  });
-
-  it("when the lead goes, the next focus match leads, else the shuffle's first, and the other picks stay", async () => {
-    const all: Link[] = [];
-    for (let i = 0; i < DIGEST_SIZE + 3; i++) all.push(await link());
-    const [first, second] = all.slice(-2) as [Link, Link];
-    await focus("topic", at(-DAY), [first.id, second.id]);
-    const [lead, ...rest] = await ids();
-    expect(lead).toBe(first.id);
-    await snoozeLink(deps(), A, first.id);
-    const [nextLead, ...nextRest] = await ids();
-    expect(nextLead).toBe(second.id);
-    expect(nextRest).toEqual(expect.arrayContaining(rest.filter((id) => id !== second.id)));
-    await archiveLink(deps(), A, second.id);
-    expect(await ids()).toEqual(expect.arrayContaining(nextRest));
+    const [newer, older] = all.slice(-2) as [Link, Link];
+    await focus("topic", at(-DAY), [older.id, newer.id]);
+    expect((await ids())[0]).toBe(older.id);
+    await snoozeLink(deps(), A, older.id);
+    expect((await ids())[0]).toBe(newer.id);
+    await archiveLink(deps(), A, newer.id);
+    expect(await ids()).not.toContain(newer.id);
+    expect(await ids()).toHaveLength(WORTH_SIZE);
   });
 
   it("shows every eligible link when there are fewer than three, and none when nothing is due", async () => {
@@ -435,61 +298,13 @@ describe("worthALook", () => {
   });
 });
 
-describe("markOpened", () => {
-  it("records the opening and marks it surfaced, so home leaves it out for two weeks", async () => {
-    const l = await link();
-    await markOpened(deps(), A, l.id);
-    expect(await get(l.id)).toMatchObject({ lastOpenedAt: NOW, lastSurfacedAt: NOW });
-    clock = at(SURFACE_COOLDOWN_MS - 1);
-    expect(await ids()).not.toContain(l.id);
-    clock = at(SURFACE_COOLDOWN_MS);
-    expect(await ids()).toContain(l.id);
-  });
-
-  it("records the opening and the surfacing at one instant, though the clock moves", async () => {
-    const l = await link();
-    let tick = 0;
-    await markOpened({ ...deps(), now: () => at(tick++) }, A, l.id);
-    const after = await get(l.id);
-    expect(after.lastSurfacedAt).toEqual(after.lastOpenedAt);
-  });
-
-  it("writes no search log row", async () => {
-    const l = await link();
-    await markOpened(deps(), A, l.id);
-    expect(searchLog.calls).toEqual([]);
-  });
-
-  it("records the opening of a link an agent's digest already marked, leaving that mark", async () => {
-    const l = await link(A, { lastSurfacedAt: at(-DAY) });
-    await markOpened(deps(), A, l.id);
-    expect(await get(l.id)).toMatchObject({ lastOpenedAt: NOW, lastSurfacedAt: at(-DAY) });
-  });
-
-  it("refuses another owner's link as not found, changing nothing", async () => {
-    const theirs = await link(B);
-    const before = structuredClone(store.all(B));
-    expect(await code(markOpened(deps(), A, theirs.id))).toBe("not_found");
-    expect(store.all(B)).toEqual(before);
-  });
-});
-
-describe("Not now", () => {
-  it("marks the link surfaced and snoozes it for two weeks, returning when the snooze ends", async () => {
+describe("Skip", () => {
+  it("snoozes the link for two weeks without marking it surfaced", async () => {
     const l = await link();
     const { until } = await snoozeLink(deps(), A, l.id);
     expect(until).toEqual(at(SNOOZE_MS));
     expect(SNOOZE_MS).toBe(14 * DAY);
-    expect(await get(l.id)).toMatchObject({ lastSurfacedAt: NOW, snoozedUntil: at(SNOOZE_MS) });
-  });
-
-  it("marks and snoozes from one instant, though the clock moves while it runs", async () => {
-    const l = await link();
-    let tick = 0;
-    const { until } = await snoozeLink({ ...deps(), now: () => at(tick++) }, A, l.id);
-    const after = await get(l.id);
-    expect(after.snoozedUntil).toEqual(until);
-    expect(until.getTime() - (after.lastSurfacedAt as Date).getTime()).toBe(SNOOZE_MS);
+    expect(await get(l.id)).toMatchObject({ lastSurfacedAt: null, snoozedUntil: at(SNOOZE_MS) });
   });
 
   it("will not override a snooze an AI set after the page was shown: a conflict, nothing written", async () => {
@@ -532,37 +347,18 @@ describe("Not now", () => {
     expect(await get(l.id)).toMatchObject({ snoozedUntil: null, lastSurfacedAt: null });
   });
 
-  it("will not put off a link an AI archived after its claim: a conflict, the claim taken back", async () => {
-    const l = await link(A, { lastSurfacedAt: at(-SURFACE_COOLDOWN_MS) });
-    const racing = Object.create(store) as FakeStore;
-    racing.claimSurfaced = async (owner, ids, when) => {
-      const claimed = await store.claimSurfaced(owner, ids, when);
-      await store.update(A, l.id, { state: "archived" });
-      return claimed;
-    };
-    expect(await code(snoozeLink({ ...deps(), store: racing }, A, l.id))).toBe("conflict");
-    expect(await get(l.id)).toMatchObject({
-      snoozedUntil: null,
-      lastSurfacedAt: at(-SURFACE_COOLDOWN_MS),
-    });
-  });
-
   it("puts off a link whose earlier snooze has ended", async () => {
     const l = await link(A, { snoozedUntil: NOW });
     await snoozeLink(deps(), A, l.id);
     expect((await get(l.id)).snoozedUntil).toEqual(at(SNOOZE_MS));
   });
 
-  it("answers the claim it made and the value it replaced, which undo sends back", async () => {
-    const l = await link(A, { lastSurfacedAt: at(-SURFACE_COOLDOWN_MS) });
-    expect(await snoozeLink(deps(), A, l.id)).toEqual({
-      until: at(SNOOZE_MS),
-      claimedAt: NOW,
-      previousSurfacedAt: at(-SURFACE_COOLDOWN_MS),
-    });
+  it("answers the snooze it set, which undo sends back", async () => {
+    const l = await link();
+    expect(await snoozeLink(deps(), A, l.id)).toEqual({ until: at(SNOOZE_MS) });
   });
 
-  it("undo clears the snooze and the claim it set: the link is back on home and in a digest at once", async () => {
+  it("undo clears the snooze: the link is back on home and in a digest at once", async () => {
     const l = await link();
     const snooze = await snoozeLink(deps(), A, l.id);
     await unsnoozeLink(deps(), A, l.id, structuredClone(snooze));
@@ -571,13 +367,7 @@ describe("Not now", () => {
     expect((await getDigest(deps(), A)).links.map((d) => d.link.id)).toContain(l.id);
   });
 
-  it("undo puts back the surfacing the claim replaced", async () => {
-    const l = await link(A, { lastSurfacedAt: at(-SURFACE_COOLDOWN_MS) });
-    await unsnoozeLink(deps(), A, l.id, await snoozeLink(deps(), A, l.id));
-    expect((await get(l.id)).lastSurfacedAt).toEqual(at(-SURFACE_COOLDOWN_MS));
-  });
-
-  it("undo after an AI changed the snooze is a conflict, leaves the AI's value, and still takes back its claim", async () => {
+  it("undo after an AI changed the snooze is a conflict and leaves the AI's value", async () => {
     const l = await link();
     const snooze = await snoozeLink(deps(), A, l.id);
     await store.update(A, l.id, { snoozedUntil: at(3 * DAY) });
@@ -585,33 +375,12 @@ describe("Not now", () => {
     expect(await get(l.id)).toMatchObject({ snoozedUntil: at(3 * DAY), lastSurfacedAt: null });
   });
 
-  it("undo after an agent's digest claimed the link clears the snooze and leaves the agent's claim", async () => {
-    const l = await link();
-    const snooze = await snoozeLink(deps(), A, l.id);
-    clock = snooze.until;
-    expect((await getDigest(deps(), A)).links.map((d) => d.link.id)).toEqual([l.id]);
-    await unsnoozeLink(deps(), A, l.id, snooze);
-    expect(await get(l.id)).toMatchObject({ snoozedUntil: null, lastSurfacedAt: snooze.until });
-  });
-
-  it("undo refuses a replaced value that is not before the claim, writing nothing", async () => {
-    const l = await link();
-    const snooze = await snoozeLink(deps(), A, l.id);
-    const before = await get(l.id);
-    for (const previousSurfacedAt of [snooze.claimedAt, at(DAY)]) {
-      const bad = { ...snooze, previousSurfacedAt };
-      expect(await code(unsnoozeLink(deps(), A, l.id, bad))).toBe("invalid_input");
-    }
-    expect(await get(l.id)).toEqual(before);
-  });
-
   it("refuses another owner's link as not found, never as a conflict, changing nothing", async () => {
     const theirs = await link(B, { snoozedUntil: at(DAY), lastSurfacedAt: NOW });
     const before = structuredClone(store.all(B));
     expect(await code(snoozeLink(deps(), A, theirs.id))).toBe("not_found");
     for (const until of [at(DAY), at(2 * DAY)]) {
-      const snooze = { until, claimedAt: NOW, previousSurfacedAt: null };
-      expect(await code(unsnoozeLink(deps(), A, theirs.id, snooze))).toBe("not_found");
+      expect(await code(unsnoozeLink(deps(), A, theirs.id, { until }))).toBe("not_found");
     }
     expect(store.all(B)).toEqual(before);
   });
@@ -833,5 +602,76 @@ describe("an archived link and a focus entry written after it", () => {
 
     expect(await ids()).not.toContain(archived.id);
     expect((await get(archived.id)).lastSurfacedAt).toBeNull();
+  });
+});
+
+describe("Explore: the cards stay until decided (#340)", () => {
+  /** Six To explore links saved 6..1 days ago, never surfaced, in that order (oldest first). */
+  async function six(): Promise<string[]> {
+    const made: string[] = [];
+    for (let day = 6; day >= 1; day--) made.push((await link(A, { savedAt: at(-day * DAY) })).id);
+    return made;
+  }
+
+  it("shows the same three on every day with no action", async () => {
+    await six();
+    const first = await ids();
+    for (const day of [1, 2, 3, 9]) {
+      clock = at(day * DAY);
+      expect(await ids()).toEqual(first);
+    }
+  });
+
+  it("shows the oldest saved first; deciding one brings the next up", async () => {
+    const all = await six();
+    const first = await ids();
+    expect(first).toEqual(all.slice(0, 3));
+    await archiveLink(deps(), A, all[0] as string);
+    expect(await ids()).toEqual(all.slice(1, 4));
+  });
+
+  it("picks a link with a why saved yesterday that was never surfaced or opened, with no reason", async () => {
+    const l = await link(A, { why: { text: "w", source: "stated" }, savedAt: at(-DAY) });
+    expect(await ids()).toEqual([l.id]);
+    expect((await picked()).links[0]?.reasons).toEqual([]);
+  });
+
+  it("gives its one focus slot to the oldest focus match, then the rest oldest first", async () => {
+    const all = await six();
+    await focus("rust", at(-DAY), [all[5] as string, all[3] as string]);
+    expect(await ids()).toEqual([all[3], all[0], all[1]]);
+  });
+
+  it("brings a skipped link back to its old place when its two weeks run out", async () => {
+    const all = await six();
+    await snoozeLink(deps(), A, all[0] as string);
+    expect(await ids()).toEqual(all.slice(1, 4));
+    clock = at(SNOOZE_MS);
+    expect(await ids()).toEqual(all.slice(0, 3));
+  });
+
+  it("leaves out a kept tool even if its link reads as explore (the store refuses to write that pair)", async () => {
+    const tool = await link(A, { savedAt: at(-30 * DAY) });
+    const plain = await link(A, { savedAt: at(-DAY) });
+    const kept = { status: "kept", source: "stated", since: NOW, answeredAt: null } as never;
+    const tools = Object.assign(Object.create(store), {
+      listTools: async () => new Map([[tool.id, kept]]),
+    });
+    const got = await worthALook({ ...deps(), tools }, A, []);
+    expect(got.links.map((d) => d.link.id)).toEqual([plain.id]);
+  });
+
+  it("Skip writes no surfacing and records not_now; Undo clears the snooze and the event", async () => {
+    const l = await link(A, { lastSurfacedAt: at(-3 * DAY) });
+    const snooze = await snoozeLink(deps(), A, l.id);
+    expect(Object.keys(snooze)).toEqual(["until"]);
+    expect(await get(l.id)).toMatchObject({
+      lastSurfacedAt: at(-3 * DAY),
+      snoozedUntil: snooze.until,
+    });
+    expect(store.eventsOf(A, l.id).map((e) => e.kind)).toEqual(["not_now"]);
+    await unsnoozeLink(deps(), A, l.id, snooze);
+    expect(await get(l.id)).toMatchObject({ lastSurfacedAt: at(-3 * DAY), snoozedUntil: null });
+    expect(store.eventsOf(A, l.id)).toEqual([]);
   });
 });

@@ -115,7 +115,7 @@ Every note and focus entry has a source: stated (the owner said it), asked (you 
 
 export const GET_STATS = `Get counts of the owner's library over a window: the last 30, 90 or 365 days, or all time (the default). Use it when the owner asks how they are using their links.
 
-Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links archived or declined as a kept tool; notNow is links snoozed with Not now, which means later, not no. tags has every tag with its saved and opened counts, most saved first.
+Every count is distinct links, not events, and leaves out deleted links. saved is links saved in the window; opened is links opened; notOpenedYet is links saved in the window that are still active, not declined as a kept tool, and never opened; setAside is links archived or declined as a kept tool; notNow is links skipped (snoozed), which means later, not no. tags has every tag with its saved and opened counts, most saved first.
 
 opened only counts openings made through the app or an AI (the owner opening a link on the web page or through an openUrl, or an agent sending opened: true); it misses any opening from a browser bookmark or elsewhere, so never tell the owner they have not read something because of it. Counts are kept from trackingSince. partialCounts names the counts that may be too low because the window starts before trackingSince; say so for those counts; the others don't depend on when tracking began.
 
@@ -125,18 +125,17 @@ export const ADD_PROFILE = `Record something about the owner: a note about them,
 
 Give each as {text, source}: "stated" if the owner said it, "asked" if you asked and they answered, "inferred" if you worked it out from context. A note is at most 1000 characters and a focus entry at most 500; longer text is refused, not cut. Send several in one call. The result is the profile after the write, with the new ids.`;
 
-export const GET_DIGEST = `Get a few saved links worth bringing back now, each with the reasons it was picked. You write a short nudge from the reasons.
+export const GET_DIGEST = `Get a few saved links worth bringing back now, oldest saved first, each with the reasons it was picked. You write a short nudge from the reasons.
 
-Reasons:
+Reasons may be empty: a link with a why that was saved recently is picked for being undecided. The reasons are:
 - focus_words: the link's own title, summary, why or tags share the words in \`words\` with that focus entry (what they are working on). Shared words are not proof it is relevant: judge from the link and the entry, and leave out a link that doesn't fit. Present an entry whose source is "inferred" as a guess.
 - no_why: no why is recorded. Ask the owner why they saved it; record it with update_link as "asked".
 - not_opened_recently: no opening has been recorded in the last 30 days. An opening is recorded when an agent sends opened: true, or the owner opens it from the web page or an openUrl; a browser bookmark is not, so never tell the owner they haven't opened it.
-- never_surfaced: no digest has shown it before.
 - still_using_check: a link the owner keeps handy as a tool is due for "Still using it?". daysSinceOpened is whole days since its last recorded opening, or null if none. Bookmark clicks are not seen, so report those days and never say the owner hasn't used it. If they still use it, send update_link with handy {action: "still_using", source: "asked"}; if not, offer to archive it or send handy {action: "not_handy", source: "asked"}.
 
 Offer to snooze it (update_link with snoozedUntil) or archive it (state "archived"). ${OPEN_NOTE}
 
-Each call marks the links it returns as shown, so the next returns others. Don't call it again to "refresh": that uses links up unseen. An empty list means nothing is due.`;
+Calling it changes nothing, so a repeat call returns the same links until the owner decides them: Keep, Skip or Archive on the web page, or update_link. Don't call it again to "refresh". An empty list means nothing is due.`;
 
 export const EDIT_PROFILE = `Change or remove existing profile notes. Use it only when the owner asks for the change or confirms it. To record something new, use add_profile.
 

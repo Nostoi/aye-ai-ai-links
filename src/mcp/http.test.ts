@@ -272,7 +272,7 @@ describe("MCP door over HTTP", () => {
     expect(tools.add_profile.annotations).toEqual(hints(false, false, false));
     expect(tools.edit_profile.annotations).toEqual(hints(false, true, false));
     // Each call marks the links it returns as surfaced, so a repeat returns others.
-    expect(tools.get_digest.annotations).toEqual(hints(false, false, false));
+    expect(tools.get_digest.annotations).toEqual(hints(true, false, true));
     expect(tools.get_profile.inputSchema.additionalProperties).toBe(false);
     expect(tools.get_digest.inputSchema.additionalProperties).toBe(false);
     expect(tools.search_links.inputSchema.properties.savedFrom.type).toBe("string");
@@ -431,14 +431,16 @@ describe("MCP door over HTTP", () => {
     );
   });
 
-  it("get_digest neither returns nor marks another owner's links", async () => {
+  it("get_digest leaves out another owner's links, and a repeat call returns the same", async () => {
     await call(app, "key-b", "save_link", { url: "https://example.com/b-only" });
     const a = await call(app, "key-a", "get_digest", {});
     expect(a.body.result.structuredContent).toEqual({ links: [] });
     const b = await call(app, "key-b", "get_digest", {});
     expect(b.body.result.structuredContent.links.map((l: Json) => l.reasons)).toEqual([
-      [{ kind: "no_why" }, { kind: "never_surfaced" }],
+      [{ kind: "no_why" }],
     ]);
+    const again = await call(app, "key-b", "get_digest", {});
+    expect(again.body.result.structuredContent).toEqual(b.body.result.structuredContent);
   });
 
   it("keeps the facts core returns for the in-app change record out of tool results", async () => {
@@ -454,7 +456,6 @@ describe("MCP door over HTTP", () => {
     });
     expect(keys(filled)).toEqual(["created", "filingContext", "link", "profile", "snapshotText"]);
 
-    // It claims the link, never surfaced before, so core reports it in claimed.
     const digest = await call(app, "key-a", "get_digest", {});
     expect(keys(digest)).toEqual(["links"]);
     expect(digest.body.result.structuredContent.links).toHaveLength(1);

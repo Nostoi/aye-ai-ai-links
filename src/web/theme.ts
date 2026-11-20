@@ -681,7 +681,7 @@ ${spaceClasses}
 .tidy-facts li{display:flex;gap:10px;align-items:flex-start}
 .tidy-facts svg{flex:0 0 18px;margin-top:3px;stroke:var(--soft);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .tidy-facts .soft{color:var(--soft)}
-.tidy-facts .gone-copy{display:inline-flex;align-items:center;min-height:44px;margin:-12px 0 -12px 6px;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.tidy-facts .gone-copy{display:inline-flex;align-items:center;min-height:44px;margin:-12px 0 0 6px;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 .tidy-facts b{font-weight:650}
 .tidy-open{background:var(--surface);color:var(--ink)}
 .tidy-choices{display:flex;gap:10px;margin-top:14px}

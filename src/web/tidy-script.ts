@@ -2,6 +2,7 @@ import { ARCHIVE_UNDO, ARCHIVE_WORKING } from "./done-link.js";
 import { STILL_WORKS_WORKING } from "./gone-line.js";
 import { KEEP_IT_UNDO, KEEP_WORKING } from "./intent.js";
 import { SKIP_UNDO, SKIP_WORKING } from "./skip.js";
+import { COUNT_MANY, COUNT_ONE } from "./tidy-tray.js";
 
 /**
  * What each choice posts, what its answer holds (`answer`: a state or intent `change`, a snooze's
@@ -66,6 +67,7 @@ const tidyActs = ${JSON.stringify(ACTS)};
 const steps = [...tidyRoot.querySelectorAll(".tidy-step")];
 const closed = tidyRoot.querySelector(".tidy-closed");
 const finished = tidyRoot.querySelector(".tidy-done");
+const count = tidyRoot.querySelector("[data-tidy-count]");
 const decided = new Set();
 let state = "closed";
 const undecided = () => steps.find((s) => !decided.has(s)) || null;
@@ -76,6 +78,9 @@ const render = () => {
   closed.hidden = state !== "closed";
   for (const s of steps) s.hidden = s !== current;
   finished.hidden = state !== "done";
+  const left = steps.length - decided.size;
+  count.textContent =
+    left === 0 ? "" : left === 1 ? ${JSON.stringify(COUNT_ONE)} : ${JSON.stringify(COUNT_MANY)}.replace("{n}", left);
 };
 const focusOn = (el) => {
   el.setAttribute("tabindex", "-1");
@@ -107,6 +112,7 @@ const choose = (step, act) =>
     }
     decided.add(step);
     if (state === "open") go("open");
+    else render();
     showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";

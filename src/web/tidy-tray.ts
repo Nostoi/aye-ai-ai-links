@@ -18,10 +18,14 @@ const FINISH = `<div class="tidy-done" hidden>
 <p><button type="button" data-tidy="close">Close</button></p>
 </div>`;
 
+/** The count's words, "{n}" standing for the number; the tray and `TIDY_SCRIPT` both read them. */
+export const COUNT_ONE = "1 link to look at.";
+export const COUNT_MANY = "{n} links to look at.";
+
 const closed = (count: number) =>
   CLOSED.replace(
     "One at a time.",
-    `${count} ${count === 1 ? "link" : "links"} to look at. One at a time.`,
+    `<span data-tidy-count>${count === 1 ? COUNT_ONE : COUNT_MANY.replace("{n}", String(count))}</span> One at a time.`,
   );
 
 const frame = (body: string) => `<section class="tidy-tray" id="tidy" aria-labelledby="tidy-title">

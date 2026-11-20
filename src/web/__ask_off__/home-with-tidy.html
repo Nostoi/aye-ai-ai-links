@@ -636,7 +636,7 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <div class="tidy-closed">
 <div>
 <p>Clear out a few links?</p>
-<p class="small">2 links to look at. One at a time. Nothing gets deleted.</p>
+<p class="small"><span data-tidy-count>2 links to look at.</span> One at a time. Nothing gets deleted.</p>
 </div>
 <button type="button" data-tidy="start">Start</button>
 </div>
@@ -1241,6 +1241,7 @@ const tidyActs = {"keep":{"route":"/home/keep","answer":"change","undo":{"title"
 const steps = [...tidyRoot.querySelectorAll(".tidy-step")];
 const closed = tidyRoot.querySelector(".tidy-closed");
 const finished = tidyRoot.querySelector(".tidy-done");
+const count = tidyRoot.querySelector("[data-tidy-count]");
 const decided = new Set();
 let state = "closed";
 const undecided = () => steps.find((s) => !decided.has(s)) || null;
@@ -1251,6 +1252,9 @@ const render = () => {
   closed.hidden = state !== "closed";
   for (const s of steps) s.hidden = s !== current;
   finished.hidden = state !== "done";
+  const left = steps.length - decided.size;
+  count.textContent =
+    left === 0 ? "" : left === 1 ? "1 link to look at." : "{n} links to look at.".replace("{n}", left);
 };
 const focusOn = (el) => {
   el.setAttribute("tabindex", "-1");
@@ -1282,6 +1286,7 @@ const choose = (step, act) =>
     }
     decided.add(step);
     if (state === "open") go("open");
+    else render();
     showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";

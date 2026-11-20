@@ -489,6 +489,49 @@ describe("the Tidy up session", () => {
       expect(shown()).toEqual([ids[1]]);
     });
 
+    it("the closed line counts what Start will walk through: after Stop here, and after Undo", async () => {
+      const line = (p: ReturnType<typeof runPage>) =>
+        p.$(".tidy-closed .small").textContent?.replace(/\s+/g, " ").trim();
+      const { p, start, stop, choose, undo } = load();
+      expect(line(p)).toBe("5 links to look at. One at a time. Nothing gets deleted.");
+      await start();
+      await choose("keep");
+      await choose("archive");
+      await stop();
+      expect(line(p)).toBe("3 links to look at. One at a time. Nothing gets deleted.");
+      await undo();
+      expect(line(p)).toBe("4 links to look at. One at a time. Nothing gets deleted.");
+      await start();
+      await choose("keep");
+      await choose("keep");
+      await choose("keep");
+      await stop();
+      expect(line(p)).toBe("1 link to look at. One at a time. Nothing gets deleted.");
+    });
+
+    it("the closed line drops the count once every link is decided, and Undo brings it back", async () => {
+      let release: () => void = () => {};
+      const wait = new Promise<void>((r) => {
+        release = r;
+      });
+      const { p, start, stop, choose, undo } = load(
+        (s) => (s.url === "/home/keep" ? { status: 200, body: KEEP_CHANGE, wait } : fine(s)),
+        1,
+      );
+      await start();
+      await choose("keep");
+      await stop();
+      release();
+      await p.settle();
+      expect(p.$(".tidy-closed .small").textContent?.trim()).toBe(
+        "One at a time. Nothing gets deleted.",
+      );
+      await undo();
+      expect(p.$(".tidy-closed .small").textContent?.trim()).toBe(
+        "1 link to look at. One at a time. Nothing gets deleted.",
+      );
+    });
+
     it("a choice answered after Stop here is decided but shows nothing, and Start then skips it", async () => {
       let release: () => void = () => {};
       const wait = new Promise<void>((r) => {

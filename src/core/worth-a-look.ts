@@ -30,7 +30,7 @@ export async function worthALook(
   return previewDigest(deps, owner, WORTH_SIZE, shown, 1);
 }
 
-export type Snooze = { until: Date };
+export type Snooze = { until: Date; previous: Date | null };
 
 /** Skip: snoozes the link for SNOOZE_MS and records `not_now`. */
 export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): Promise<Snooze> {
@@ -38,15 +38,15 @@ export async function snoozeLink(deps: WorthDeps, owner: OwnerId, id: string): P
   const link = await deps.store.get(owner, id);
   if (!link) throw new CoreError("not_found", "That link is gone. Reload the page.");
   if (link.state !== "active") throw new CoreError("conflict", ALREADY_ARCHIVED);
-  if (link.snoozedUntil !== null && link.snoozedUntil > now) {
+  const until = new Date(now.getTime() + SNOOZE_MS);
+  if (link.snoozedUntil !== null && link.snoozedUntil > now && link.snoozedUntil <= until) {
     throw new CoreError("conflict", ALREADY_PUT_OFF);
   }
-  const until = new Date(now.getTime() + SNOOZE_MS);
   const expected = { state: link.state, snoozedUntil: link.snoozedUntil };
   await changeIf(deps, owner, id, expected, { snoozedUntil: until }, ALREADY_PUT_OFF, [
     { record: "not_now", at: now },
   ]);
-  return { until };
+  return { until, previous: link.snoozedUntil };
 }
 
 const ALREADY_PUT_OFF = "This link is already put off. Reload.";
@@ -63,7 +63,7 @@ export async function unsnoozeLink(
     owner,
     id,
     { snoozedUntil: snooze.until },
-    { snoozedUntil: null },
+    { snoozedUntil: snooze.previous },
     undefined,
     [{ unrecord: "not_now", at: new Date(snooze.until.getTime() - SNOOZE_MS) }],
   );

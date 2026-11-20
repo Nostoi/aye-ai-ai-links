@@ -35,6 +35,8 @@ function world() {
 describe("Explore's featured card on real keyword search (#340)", () => {
   const seed = async () => {
     const w = world();
+    const oldest = await w.save("Old chess notes");
+    w.advance(1);
     const matching = [];
     for (const title of [
       "Solar roof guide",
@@ -51,7 +53,7 @@ describe("Explore's featured card on real keyword search (#340)", () => {
       w.advance(1);
     }
     await addProfile(w.deps, OWNER, "t", { addFocus: [{ text: "solar", source: "stated" }] });
-    return { ...w, matching };
+    return { ...w, matching, oldest };
   };
 
   it("keeps the same featured card after Tell me why, whose words sit outside the focus text", async () => {
@@ -74,13 +76,9 @@ describe("Explore's featured card on real keyword search (#340)", () => {
     w.db.close();
   });
 
-  it("puts one focus match first and the rest oldest first, whatever the keyword ranking", async () => {
+  it("puts one focus match first, though an older link exists, and the rest oldest first", async () => {
     const w = await seed();
-    const ids = await w.explore();
-    const all = (await w.deps.store.listLinks(OWNER)).sort(
-      (a, b) => a.savedAt.getTime() - b.savedAt.getTime(),
-    );
-    expect(ids).toEqual(all.slice(0, 3).map((l) => l.id));
+    expect(await w.explore()).toEqual([w.matching[0]?.id, w.oldest.id, w.matching[1]?.id]);
     w.db.close();
   });
 });

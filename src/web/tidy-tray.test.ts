@@ -344,7 +344,7 @@ const KEEP_CHANGE = {
   before: { intent: "explore", intentSource: null },
   after: { intent: "keep", intentSource: "stated" },
 };
-const SNOOZE = { until: "2026-11-04T10:00:00.000Z" };
+const SNOOZE = { until: "2026-11-04T10:00:00.000Z", previous: "2099-01-01T00:00:00.000Z" };
 const STILL_WORKS = { check: { result: "ok" }, previous: { result: "dead" } };
 /** The answers when nothing is wrong: each choice its answer, Undo 204. */
 const fine = (s: Post): Answer =>
@@ -537,7 +537,7 @@ describe("the Tidy up session", () => {
     expect(p.$("#undo-bar span").textContent).toBe("Skipped. Back in two weeks.");
     expect(shown()).toEqual([ids[1]]);
     await undo();
-    expect(p.sent[1]).toEqual(post("/home/unsnooze", { id: ids[0], until: SNOOZE.until }));
+    expect(p.sent[1]).toEqual(post("/home/unsnooze", { id: ids[0], ...SNOOZE }));
     expect(shown()).toEqual([ids[0]]);
   });
 

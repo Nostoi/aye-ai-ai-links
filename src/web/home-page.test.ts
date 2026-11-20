@@ -573,7 +573,7 @@ it("orders home: the search, the Handy shelf, Explore, Your spaces", () => {
   ]);
 });
 
-const SNOOZE = { until: "2026-10-28T10:00:00.000Z" };
+const SNOOZE = { until: "2026-10-28T10:00:00.000Z", previous: "2099-01-01T00:00:00.000Z" };
 const CHANGE = {
   before: { state: "active", snoozedUntil: null },
   after: { state: "archived" },
@@ -676,7 +676,7 @@ describe("the home page's script", () => {
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
     expect(p.sent[1]).toMatchObject({ url: "/home/unsnooze" });
-    expect(p.sent[1]?.body).toEqual({ id, until: SNOOZE.until });
+    expect(p.sent[1]?.body).toEqual({ id, ...SNOOZE });
     expect(hidden(p, id)).toBe(false);
   });
 

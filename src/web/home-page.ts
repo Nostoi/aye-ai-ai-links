@@ -192,9 +192,9 @@ const homeActs = {
     const data = await answerOf(res, "until");
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
-    const { until } = data;
+    const { until, previous } = data;
     showUndo(ticket, ${JSON.stringify(SKIP_UNDO.text)}, async () =>
-      undoOr(await post("/home/unsnooze", { id, until }), putBack),
+      undoOr(await post("/home/unsnooze", { id, until, previous }), putBack),
     ${JSON.stringify(SKIP_UNDO.title)});
   },
   keep: async (card, id, answered, ticket) => {

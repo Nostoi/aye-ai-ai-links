@@ -268,3 +268,12 @@ describe("undo_tag_change guidance", () => {
     expect(text).not.toMatch(/rename/i);
   });
 });
+
+describe("the intent rule is true of Explore and Tidy up (#340)", () => {
+  it("does not promise that Tidy up never asks about a To keep link, and says what Tidy still asks", () => {
+    expect(guidance.INTENT_RULE).not.toContain("Today");
+    expect(guidance.INTENT_RULE).not.toMatch(/Tidy up never ask/);
+    expect(guidance.INTENT_RULE).toContain("Explore never shows it");
+    expect(guidance.INTENT_RULE).toContain("whether a gone page still works");
+  });
+});

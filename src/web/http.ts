@@ -1397,16 +1397,27 @@ export function webApp({
   app.post("/home/snooze", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
       const snooze = await snoozeLink(deps, c.get("caller").owner, c.get("body").id);
-      return c.json({ until: snooze.until.toISOString() }, 200, NO_STORE);
+      return c.json(
+        { until: snooze.until.toISOString(), previous: snooze.previous?.toISOString() ?? null },
+        200,
+        NO_STORE,
+      );
     }),
   );
 
-  app.post("/home/unsnooze", jsonBody({ ...linkId, until: isDate }), session, (c) =>
-    homeAction(c, async () => {
-      const { id, until } = c.get("body");
-      await unsnoozeLink(deps, c.get("caller").owner, id, { until: new Date(until) });
-      return done(c);
-    }),
+  app.post(
+    "/home/unsnooze",
+    jsonBody({ ...linkId, until: isDate, previous: isDateOrNull }),
+    session,
+    (c) =>
+      homeAction(c, async () => {
+        const { id, until, previous } = c.get("body");
+        await unsnoozeLink(deps, c.get("caller").owner, id, {
+          until: new Date(until),
+          previous: previous === null ? null : new Date(previous),
+        });
+        return done(c);
+      }),
   );
 
   // Archive and Bring it back answer the change they made; the page sends it

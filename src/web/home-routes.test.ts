@@ -174,7 +174,10 @@ describe("the home card actions", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const snooze = res.body as Record<string, string | null>;
     const r = row(world, id);
-    expect(snooze).toEqual({ until: new Date(r.snoozed_until as number).toISOString() });
+    expect(snooze).toEqual({
+      until: new Date(r.snoozed_until as number).toISOString(),
+      previous: null,
+    });
     expect(r.snoozed_until as number).toBeGreaterThan(Date.now() + SNOOZE_MS - 60_000);
     expect(r.last_surfaced_at).toBeNull();
     expect(String((await browser.send("/")).body)).not.toContain(`data-id="${id}"`);
@@ -182,6 +185,19 @@ describe("the home card actions", () => {
     expect(back.status).toBe(204);
     expect(row(world, id)).toMatchObject({ snoozed_until: null, last_surfaced_at: null });
     expect(String((await browser.send("/")).body)).toContain(`data-id="${id}"`);
+  });
+
+  it("/home/snooze on a link an agent snoozed far ahead answers the old date, and /home/unsnooze with it puts that date back exactly (#340)", async () => {
+    const { world, browser, id } = await home();
+    const far = new Date("2099-01-01T00:00:00.000Z");
+    await updateLink(linkDeps(world), A, id, { snoozedUntil: far });
+    const res = await browser.send("/home/snooze", post({ id }));
+    expect(res.status).toBe(200);
+    const snooze = res.body as { until: string; previous: string | null };
+    expect(snooze.previous).toBe(far.toISOString());
+    expect(row(world, id).snoozed_until).toBe(Date.parse(snooze.until));
+    expect((await browser.send("/home/unsnooze", post({ id, ...snooze }))).status).toBe(204);
+    expect(row(world, id).snoozed_until).toBe(far.getTime());
   });
 
   it("/home/unsnooze after an AI changed the snooze is a 409 and leaves the AI's value", async () => {
@@ -400,7 +416,7 @@ const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
   ["/home/snooze", (id) => ({ id }), {}],
   [
     "/home/unsnooze",
-    (id) => ({ id, until: SEED_UNTIL.toISOString() }),
+    (id) => ({ id, until: SEED_UNTIL.toISOString(), previous: null }),
     { snoozedUntil: SEED_UNTIL },
   ],
   ["/home/archive", (id) => ({ id }), {}],
@@ -463,8 +479,14 @@ describe.each(ROUTES)("POST %s", (path, body, seed) => {
 it("POST /home/unsnooze refuses a time that is missing or not a date, and /home/why a text that is not a string", async () => {
   const { world, browser, id } = await home();
   const before = allRows(world);
-  const undo = { id, until: SEED_UNTIL.toISOString() };
-  for (const bad of [{ until: "soon" }, { until: null }, { until: undefined }]) {
+  const undo = { id, until: SEED_UNTIL.toISOString(), previous: null };
+  for (const bad of [
+    { until: "soon" },
+    { until: null },
+    { until: undefined },
+    { previous: "soon" },
+    { previous: undefined },
+  ]) {
     const res = await browser.send("/home/unsnooze", post({ ...undo, ...bad }));
     expect(res.status, JSON.stringify(bad)).toBe(400);
   }

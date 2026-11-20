@@ -262,6 +262,20 @@ describe("getDigest order", () => {
     expect(compareIds("link-9", "link-10")).toBeGreaterThan(0);
   });
 
+  it("orders links saved at the same instant by id, whatever order the store lists them in", async () => {
+    const same = at(-3 * DAY);
+    const made = [
+      await link({ savedAt: same }),
+      await link({ savedAt: same }),
+      await link({ savedAt: same }),
+    ];
+    const reversed = Object.assign(Object.create(store), {
+      listLinks: async (owner: string) => (await store.listLinks(owner)).reverse(),
+    });
+    const got = await previewDigest({ ...deps(), store: reversed }, OWNER);
+    expect(got.links.map((d) => d.link.id)).toEqual(made.map((l) => l.id));
+  });
+
   it("holds FOCUS_SLOTS focus picks; further focus matches follow in age order with the rest", async () => {
     const hits = [];
     for (let d = 20; d > 20 - (FOCUS_SLOTS + 1); d--)

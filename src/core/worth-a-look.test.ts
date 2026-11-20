@@ -355,7 +355,7 @@ describe("Skip", () => {
 
   it("answers the snooze it set, which undo sends back", async () => {
     const l = await link();
-    expect(await snoozeLink(deps(), A, l.id)).toEqual({ until: at(SNOOZE_MS) });
+    expect(await snoozeLink(deps(), A, l.id)).toEqual({ until: at(SNOOZE_MS), previous: null });
   });
 
   it("undo clears the snooze: the link is back on home and in a digest at once", async () => {
@@ -380,7 +380,9 @@ describe("Skip", () => {
     const before = structuredClone(store.all(B));
     expect(await code(snoozeLink(deps(), A, theirs.id))).toBe("not_found");
     for (const until of [at(DAY), at(2 * DAY)]) {
-      expect(await code(unsnoozeLink(deps(), A, theirs.id, { until }))).toBe("not_found");
+      expect(await code(unsnoozeLink(deps(), A, theirs.id, { until, previous: null }))).toBe(
+        "not_found",
+      );
     }
     expect(store.all(B)).toEqual(before);
   });
@@ -664,7 +666,8 @@ describe("Explore: the cards stay until decided (#340)", () => {
   it("Skip writes no surfacing and records not_now; Undo clears the snooze and the event", async () => {
     const l = await link(A, { lastSurfacedAt: at(-3 * DAY) });
     const snooze = await snoozeLink(deps(), A, l.id);
-    expect(Object.keys(snooze)).toEqual(["until"]);
+    expect(Object.keys(snooze)).toEqual(["until", "previous"]);
+    expect(snooze.previous).toBeNull();
     expect(await get(l.id)).toMatchObject({
       lastSurfacedAt: at(-3 * DAY),
       snoozedUntil: snooze.until,
@@ -672,6 +675,26 @@ describe("Explore: the cards stay until decided (#340)", () => {
     expect(store.eventsOf(A, l.id).map((e) => e.kind)).toEqual(["not_now"]);
     await unsnoozeLink(deps(), A, l.id, snooze);
     expect(await get(l.id)).toMatchObject({ lastSurfacedAt: at(-3 * DAY), snoozedUntil: null });
+    expect(store.eventsOf(A, l.id)).toEqual([]);
+  });
+
+  it("Skip on a link an agent snoozed far ahead sets now + SNOOZE_MS, and Undo restores the agent's date exactly", async () => {
+    const far = new Date("2099-01-01T00:00:00Z");
+    const l = await link(A, { snoozedUntil: far });
+    const snooze = await snoozeLink(deps(), A, l.id);
+    expect(snooze).toEqual({ until: new Date(NOW.getTime() + SNOOZE_MS), previous: far });
+    expect((await get(l.id))?.snoozedUntil).toEqual(snooze.until);
+    expect(store.eventsOf(A, l.id).map((e) => e.kind)).toEqual(["not_now"]);
+    await unsnoozeLink(deps(), A, l.id, snooze);
+    expect((await get(l.id))?.snoozedUntil).toEqual(far);
+    expect(store.eventsOf(A, l.id)).toEqual([]);
+  });
+
+  it("Skip on a link already skipped within SNOOZE_MS is still refused, changing nothing", async () => {
+    const soon = at(SNOOZE_MS - DAY);
+    const l = await link(A, { snoozedUntil: soon });
+    await expect(snoozeLink(deps(), A, l.id)).rejects.toMatchObject({ code: "conflict" });
+    expect((await get(l.id))?.snoozedUntil).toEqual(soon);
     expect(store.eventsOf(A, l.id)).toEqual([]);
   });
 });

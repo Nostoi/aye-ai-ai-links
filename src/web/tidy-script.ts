@@ -89,7 +89,7 @@ const go = (next) => {
 };
 const undoBodies = {
   change: (id, data) => (data.before && data.after ? { id, change: data } : null),
-  until: (id, data) => (data.until ? { id, until: data.until } : null),
+  until: (id, data) => (data.until ? { id, until: data.until, previous: data.previous ?? null } : null),
   check: (id, data) => (data.check ? { id, check: data.check, previous: data.previous } : null),
 };
 const choose = (step, act) =>

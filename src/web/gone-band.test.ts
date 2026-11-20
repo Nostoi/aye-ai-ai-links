@@ -74,12 +74,11 @@ describe("the band's markup", () => {
     expect(band?.querySelector("button")).toBeNull();
   });
 
-  it("can name the act Archive carries, and carry a link beside the warning", () => {
-    const band = dom(
-      goneLine(link("1"), GONE, { archive: "archive", read: "/copy/1" }),
-    ).querySelector("[data-gone]");
+  it("can name the act Archive carries", () => {
+    const band = dom(goneLine(link("1"), GONE, { archive: "archive" })).querySelector(
+      "[data-gone]",
+    );
     expect(words(band).map((w) => w[0])).toEqual(["still-works", "archive"]);
-    expect(band?.querySelector("p + a[data-act=read-copy]")?.getAttribute("href")).toBe("/copy/1");
   });
 });
 

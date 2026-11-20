@@ -1389,6 +1389,7 @@ describe("Tidy up's tray on Home", () => {
   const input = {
     queue: [{ link: link({ title: "Old one" }), gone: false, fit: null }],
     hasFocus: false,
+    copies: new Map(),
     images: new Map(),
     catalog: [],
     now: NOW,

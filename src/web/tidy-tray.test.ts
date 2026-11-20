@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import type { CopyInfo } from "../core/saved-copy.js";
 import type { TidyLink } from "../core/tidy-up.js";
 import type { FocusEntry, Link, Source } from "../core/types.js";
 import { homePage } from "./home-page.js";
@@ -45,16 +46,22 @@ const queue = (count: number): TidyLink[] =>
   Array.from({ length: count }, () => ({ link: link(), gone: false, fit: null }));
 
 const NO_WORTH = { links: [], images: new Map(), now: NOW, catalog: [] };
-const render = (q: TidyLink[], hasFocus = true, spaces = spacesSection([])) =>
+const render = (
+  q: TidyLink[],
+  hasFocus = true,
+  spaces = spacesSection([]),
+  copies = new Map<string, CopyInfo>(),
+) =>
   homePage({
     worth: NO_WORTH,
     shelf: "",
     spaces,
-    tidy: { queue: q, hasFocus, images: new Map(), catalog: [], now: NOW },
+    tidy: { queue: q, hasFocus, images: new Map(), catalog: [], now: NOW, copies },
   });
-const doc = (q: TidyLink[], hasFocus = true) => parseHTML(render(q, hasFocus)).document;
-const first = (q: TidyLink[], hasFocus = true) =>
-  doc(q, hasFocus).querySelector(".tidy-step") as Element;
+const doc = (q: TidyLink[], hasFocus = true, copies = new Map<string, CopyInfo>()) =>
+  parseHTML(render(q, hasFocus, spacesSection([]), copies)).document;
+const first = (q: TidyLink[], hasFocus = true, copies = new Map<string, CopyInfo>()) =>
+  doc(q, hasFocus, copies).querySelector(".tidy-step") as Element;
 
 describe("Home's Tidy up tray", () => {
   it("is a slim tray with the Tidy spine and a hidden heading, closed, with its two lines and a Start button", () => {
@@ -208,6 +215,30 @@ describe("Home's Tidy up tray", () => {
       expect(buttons.map((b) => b.getAttribute("aria-keyshortcuts"))).toEqual(["1", "2"]);
     });
 
+    it("links Read the saved copy to the copy page, before the choices, when the link has a copy", () => {
+      const l = link();
+      const step = first(
+        [{ link: l, gone: true, fit: null }],
+        true,
+        new Map([[l.id, { madeAt: NOW }]]),
+      );
+      const a = step.querySelector("a[data-act=read-copy]");
+      expect(a?.textContent).toBe("Read the saved copy");
+      expect(a?.getAttribute("href")).toBe(`/links/${l.id}/copy?from=%2F`);
+      const order = [...step.querySelectorAll("a, button")];
+      const works = step.querySelector("button[data-act=works]");
+      expect(a && order.includes(a)).toBe(true);
+      expect(order.indexOf(a as Element)).toBeLessThan(order.indexOf(works as Element));
+    });
+
+    it("shows no such link on a gone step without a copy, nor on an explore step with one", () => {
+      expect(goneStep().querySelector("a[data-act=read-copy]")).toBeNull();
+      const l = link();
+      const copies = new Map([[l.id, { madeAt: NOW }]]);
+      const explore = first([{ link: l, gone: false, fit: null }], true, copies);
+      expect(explore.querySelector("a[data-act=read-copy]")).toBeNull();
+    });
+
     it("offers no Keep, and an explore step says nothing about a gone page", () => {
       expect(goneStep().querySelector("button[data-act=keep], button[data-act=skip]")).toBeNull();
       expect(first(queue(1)).textContent).not.toContain("seems gone");
@@ -307,6 +338,8 @@ describe("the Tidy up tray's styles", () => {
     expect(body(".tidy-choices button")).toMatch(/min-height:\s*(?:[4-9]\d|\d{3})px/);
     expect(body(".leave")).toMatch(/min-height:\s*44px/);
     expect(body(".tidy-closed button")).toMatch(/min-height:\s*44px/);
+    expect(body(".tidy-facts .gone-copy")).toMatch(/min-height:\s*44px/);
+    expect(body(".tidy-facts .gone-copy")).toMatch(/margin:-12px 0 0 6px/);
   });
 
   it("draws the card on the card tokens", () => {

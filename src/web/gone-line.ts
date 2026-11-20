@@ -16,6 +16,10 @@ export const STILL_WORKS_TIDY_LINE = "Clears the warning.";
 /** What It still works says while it waits for the answer (#314). */
 export const STILL_WORKS_WORKING = "Checking…";
 
+/** The link to a gone page's saved copy; `href` is the copy page's address. */
+export const readCopyLink = (href: string) =>
+  `<a class="gone-copy" href="${escapeHtml(href)}" data-act="read-copy">Read the saved copy</a>`;
+
 /** A chain link, for It still works. */
 const LINK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>`;
 
@@ -23,23 +27,19 @@ const LINK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="
  * The amber band a card carries once its link seems gone (#128, #298): the warning, then, on an
  * active link, It still works and Archive as sliding icon buttons, Archive last. An archived link
  * gets the warning only. `archive` is the `data-act` of Archive, which
- * the page's script knows (`gone-archive`, or `archive` on a Handy tile); `read` is the address of a
- * saved copy, linked beside the warning where a page wants it (Home's gone row; every other page's
- * grey line has it). The band carries no date. The theme draws it along its card's bottom edge.
+ * the page's script knows (`gone-archive`, or `archive` on a Handy tile). The band carries no
+ * date. The theme draws it along its card's bottom edge.
  */
 export function goneBand(
   link: Link,
-  { archive = "gone-archive", read }: { archive?: string; read?: string | undefined } = {},
+  { archive = "gone-archive" }: { archive?: string } = {},
 ): string {
-  const copy = read
-    ? `\n<a class="gone-copy" href="${escapeHtml(read)}" data-act="read-copy">Read the saved copy</a>`
-    : "";
   const buttons =
     link.state === "active"
       ? `\n<div class="gone-actions">${slideButton("still-works", LINK_ICON, "It still works", STILL_WORKS_HINT)}${slideButton(archive, ARCHIVE, ARCHIVE_LABEL, ARCHIVE_HINT)}</div>`
       : "";
   return `<div class="gone-band" data-gone>
-<p>${GONE_TEXT}</p>${copy}${buttons}
+<p>${GONE_TEXT}</p>${buttons}
 </div>`;
 }
 

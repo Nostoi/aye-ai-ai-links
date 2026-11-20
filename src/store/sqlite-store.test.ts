@@ -588,9 +588,16 @@ describe("a row archived before the put-away date was retired", () => {
     expect(putAwayAt()).toBe(PUT_AWAY_AT);
   });
 
-  it("is not written to by a state update either", async () => {
+  it("is cleared when a state update changes the state, so main's 'active means no date' holds", async () => {
     const { deps, id, putAwayAt } = await seeded();
     await updateLink(deps, "a", id, { state: "active" });
+    expect(putAwayAt()).toBeNull();
+    await updateLink(deps, "a", id, { state: "archived" });
+    expect(putAwayAt()).toBeNull();
+  });
+
+  it("is kept by a state update that leaves the state as it was", async () => {
+    const { deps, id, putAwayAt } = await seeded();
     await updateLink(deps, "a", id, { state: "archived" });
     expect(putAwayAt()).toBe(PUT_AWAY_AT);
   });

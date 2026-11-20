@@ -637,7 +637,12 @@ export class SqliteStore
         }
       }
     }
-    if (patch.state !== undefined) set("state", patch.state);
+    if (patch.state !== undefined) {
+      // Until #339 drops put_away_at, a changed state clears it, so a revert finds no stale date.
+      sets.push("put_away_at = CASE WHEN state = ? THEN put_away_at END");
+      values.push(patch.state);
+      set("state", patch.state);
+    }
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));
     if (patch.lastOpenedAt === null) set("last_opened_at", null);
     else if (patch.lastOpenedAt !== undefined) {

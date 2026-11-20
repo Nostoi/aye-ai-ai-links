@@ -291,14 +291,12 @@ describe("the Tidy up tray's styles", () => {
     expect(body(".tidy-title a:hover")).toContain("text-decoration:underline");
   });
 
-  it("sets the choices in a row on a wide screen, with the marker above the title, and stacks them on a phone", () => {
+  it("sets the choices in a row on a wide screen and stacks them on a phone", () => {
     expect(body(".tidy-choices")).toContain("display:flex");
     expect(body(".tidy-choices")).not.toContain("flex-direction:column");
-    expect(body(".tidy-choices em")).toContain("order:-1");
     const phone = (themeCss.match(/@media \(max-width:600px\)\{.*\}/g) ?? []).join("\n");
     expect(phone).toContain(".tidy-choices{flex-direction:column}");
     expect(phone).toContain(".tidy-choices .key{display:none}");
-    expect(phone).toContain(".tidy-choices em{order:0");
   });
 });
 

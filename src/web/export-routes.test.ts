@@ -66,7 +66,6 @@ async function seedOwner(
       lastOpenedAt: at(n + 100),
       lastSurfacedAt: at(n + 200),
       snoozedUntil: null,
-      putAwayAt: null,
       tidyKeptAt: null,
       state: "active",
       ...extra,

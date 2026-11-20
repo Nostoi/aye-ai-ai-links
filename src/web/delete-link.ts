@@ -12,8 +12,8 @@ export const deleteLinkItem: MenuItem = { act: "delete-link", icon: TRASH, text:
  * - `takeOut(listRoot, card, remove)` takes a card out of its list: it puts focus on the ⋯ of the
  *   next shown card in the list, across months, or else on the page's heading, then removes the
  *   card (`remove`) or hides it, and hides its month when no shown card is left in it. It returns
- *   the function that puts the card back where it was and shows its month. Done with it
- *   (`doneLinkScript`) uses it too, and passes a fourth argument, the change the route answered,
+ *   the function that puts the card back where it was and shows its month. Archive
+ *   (`archiveLinkScript`) uses it too, and passes a fourth argument, the change the route answered,
  *   which this `takeOut` ignores.
  * - `deleteCard(card)`, which the edit dialog's Delete also calls: it posts `/links/delete`, takes
  *   the card out and offers Undo, which posts `/links/restore` and puts the same card back. It
@@ -28,7 +28,7 @@ export const deleteLinkScript = (
   root: string,
   error: string,
 ) => `const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("Done with it") stays in the page, hidden.
+  // A card moved out of the list ("Archive") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;

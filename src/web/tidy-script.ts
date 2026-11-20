@@ -1,4 +1,4 @@
-import { DONE_UNDO, DONE_WORKING, PUT_AWAY_UNDO, PUT_AWAY_WORKING } from "./done-link.js";
+import { ARCHIVE_UNDO, ARCHIVE_WORKING } from "./done-link.js";
 
 /** What Keep says while it waits for the answer (#314). */
 const KEEP_WORKING = "Keeping…";
@@ -6,10 +6,9 @@ const KEEP_WORKING = "Keeping…";
 /** What each choice posts, the bar its Undo is offered on (Keep has none), and its working word. */
 const ACTS = {
   keep: { route: "/tidy/keep", undo: null, word: KEEP_WORKING },
-  "put-away": { route: "/home/put-away", undo: PUT_AWAY_UNDO, word: PUT_AWAY_WORKING },
-  stale: { route: "/home/archive", undo: DONE_UNDO, word: DONE_WORKING },
+  archive: { route: "/home/archive", undo: ARCHIVE_UNDO, word: ARCHIVE_WORKING },
 };
-const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
+const KEYS = { 1: "keep", 2: "archive" };
 
 /**
  * The tray's script, a block inside Home's script after `CARD_FETCH` and the Undo bar's
@@ -23,12 +22,12 @@ const KEYS = { 1: "keep", 2: "put-away", 3: "stale" };
  * Undo waits for it (`whenFree`), then runs. A choice posts its route; only an answer that is OK
  * marks the link decided, and, while open, shows the next undecided link or the finish screen and
  * moves focus to its heading. An answer that comes after Stop here or Close still counts, and shows
- * nothing. Put it away and Done with it answer the `StateChange` that their Undo posts back to
+ * nothing. Archive answers the `StateChange` that its Undo posts back to
  * `/home/undo-state` exactly as received, then the link is undecided again: an open tray shows it
  * (the finish screen too), a closed or ended one only returns to `closed`, never open. A refusal is
  * shown in `#tidy-error`.
  *
- * Keys 1, 2 and 3 press the shown link's choices only while open, and not in a field, with a
+ * Keys 1 and 2 press the shown link's choices only while open, and not in a field, with a
  * modifier, while a dialog is open, or when auto-repeating. A choice that is slow to answer dims
  * its link's step, not the whole tray, and its title says its working word (`busyLook`); a key finds
  * the choice's button from the step and the action.

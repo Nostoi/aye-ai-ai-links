@@ -36,7 +36,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -101,7 +100,7 @@ describe("goneLine", () => {
     const part = dom(goneLine(link("1"), GONE));
     expect(part.querySelector("[data-gone] p")?.textContent).toBe("This page seems gone");
     expect(part.querySelector("[data-gone]")?.textContent).not.toMatch(/\d/);
-    expect(buttons(goneLine(link("1"), GONE))).toEqual(["It still works", "Done with it"]);
+    expect(buttons(goneLine(link("1"), GONE))).toEqual(["It still works", "Archive"]);
   });
 
   it("gives an archived link the line alone, and never the needs-you amber", () => {
@@ -239,28 +238,28 @@ describe("the gone line's buttons", () => {
     expect((p.$("button[data-act=still-works]") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("Done with it posts /home/archive, hides the card, and its Undo restores it", async () => {
+  it("Archive posts /home/archive, hides the card, and its Undo restores it", async () => {
     const change = {
-      before: { state: "active", putAwayAt: null, snoozedUntil: null },
-      after: { state: "archived", putAwayAt: null },
+      before: { state: "active", snoozedUntil: null },
+      after: { state: "archived" },
     };
     const p = load((s) =>
       s.url === "/home/archive" ? { status: 200, body: change } : { status: 204 },
     );
-    await click(p, "button[data-act=gone-done]");
+    await click(p, "button[data-act=gone-archive]");
     expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
     expect(p.$("li[data-id]").hidden).toBe(true);
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
     await click(p, "#undo-bar button");
     expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change }));
     expect(p.$("li[data-id]").hidden).toBe(false);
   });
 
-  it("a refused Done with it shows the message and leaves the card", async () => {
+  it("a refused Archive shows the message and leaves the card", async () => {
     const p = load(() => ({ status: 404, body: { code: "not_found", message: "Gone." } }));
-    await click(p, "button[data-act=gone-done]");
+    await click(p, "button[data-act=gone-archive]");
     expect(p.$("li[data-id]").hidden).toBe(false);
     expect(p.$("#results-error").textContent).toBe("Gone.");
   });
@@ -272,7 +271,7 @@ describe("the gone line's buttons", () => {
     });
     const p = load(() => ({ ...WORKS, wait }));
     p.dispatch(p.$("button[data-act=still-works]"), "click");
-    p.dispatch(p.$("button[data-act=gone-done]"), "click");
+    p.dispatch(p.$("button[data-act=gone-archive]"), "click");
     release();
     await p.settle();
     expect(p.sent).toHaveLength(1);

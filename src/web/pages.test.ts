@@ -369,7 +369,6 @@ const link = (over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-03-12T10:00:00Z"),
   savedBy: "claude",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -586,25 +585,19 @@ describe("the search card's tile", () => {
   });
 });
 
-describe("search results fade only stale links", () => {
-  it("gives a stale result the faded class, and a put-away or active one not", () => {
+describe("search results fade archived links", () => {
+  it("gives an archived result the faded class, and an active one not", () => {
     const html = searchPage({
       query: "x",
       now: NOW,
       links: [
         link({ id: "1", url: "https://example.com/1" }),
         link({ id: "2", url: "https://example.com/2", state: "archived" }),
-        link({
-          id: "3",
-          url: "https://example.com/3",
-          state: "archived",
-          putAwayAt: new Date("2026-10-01T00:00:00Z"),
-        }),
       ],
     });
     const faded = (id: string) =>
       parseHTML(html).document.querySelector(`[data-id="${id}"]`)?.classList.contains("faded");
-    expect([faded("1"), faded("2"), faded("3")]).toEqual([false, true, false]);
+    expect([faded("1"), faded("2")]).toEqual([false, true]);
   });
 });
 

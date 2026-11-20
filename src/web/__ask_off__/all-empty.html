@@ -348,20 +348,20 @@ img.home-fav{background:var(--plate)}
 .page-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .order-select{display:none}
 .order-select select{min-height:44px;padding:0 8px 0 0;border:0;background:none;color:var(--soft);font:inherit;font-size:var(--text-4)}
-.done-link,.back-link{display:inline-flex;align-items:center;min-height:44px;font-size:var(--text-4)}
+.archived-link,.back-link{display:inline-flex;align-items:center;min-height:44px;font-size:var(--text-4)}
 .in-space{white-space:nowrap}
 .in-space .dot{width:12px;height:12px;margin:0 8px 0 2px;background:var(--space,var(--field))}
 .space .back-link{gap:8px;font-size:var(--text-4);color:var(--soft)}
 .space .back-link .dot{flex:none;width:8px;height:8px;margin:0;background:var(--space,var(--field))}
 .chevron{flex:none;fill:none;stroke:var(--soft);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.done-head{margin:4px 0 16px}
-.done-head h1{margin:0}
-.done-empty{display:none;padding:24px 20px;background:var(--surface);border-radius:var(--radius-card)}
-.done-empty p{margin:0}
-.done-empty p:first-child{margin-bottom:6px;font-weight:700}
-.done-empty .small{font-size:var(--text-4)}
-main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .done-empty{display:block}
-main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .done-head .view-switch{display:none}
+.archived-head{margin:4px 0 16px}
+.archived-head h1{margin:0}
+.archived-empty{display:none;padding:24px 20px;background:var(--surface);border-radius:var(--radius-card)}
+.archived-empty p{margin:0}
+.archived-empty p:first-child{margin-bottom:6px;font-weight:700}
+.archived-empty .small{font-size:var(--text-4)}
+main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .archived-empty{display:block}
+main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .archived-head .view-switch{display:none}
 .space h2{margin-bottom:16px}
 .link-rows{list-style:none;padding:0;margin:0;background:var(--surface);border-radius:var(--radius-card-large);box-shadow:0 1px 2px #0000000f,var(--card-ring)}
 .link-row{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:14px 16px;min-width:0;max-width:none;margin:0;padding:14px 60px 14px 16px}
@@ -566,7 +566,6 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .tidy-choices button{position:relative;display:flex;flex:1 1 0;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:2px;min-width:0;min-height:112px;padding:14px 56px 14px 20px;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .tidy-choices b{font-size:var(--text-6)}
 .tidy-choices span{font-size:var(--text-3);color:var(--soft)}
-.tidy-choices button.safe{border-color:transparent;background:color-mix(in srgb,var(--ink) 6%,var(--surface))}
 .tidy-choices em{order:-1;margin-bottom:4px;font-size:var(--text-2);font-style:normal;color:var(--soft)}
 .tidy-choices .key{position:absolute;bottom:12px;right:18px;min-width:22px;padding:0 6px;border:1.5px solid var(--line);border-radius:6px;background:none;font-size:var(--text-1);line-height:19px;text-align:center}
 #tidy-error{margin:0 0 var(--space-2)}
@@ -590,7 +589,6 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 .small-actions button:active:not(:disabled),.small-actions a:active{background:color-mix(in srgb,var(--ink) 9%,transparent);transition:none}
 .card-menu-list button:active:not(:disabled),.account-list a:active,.account-list button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 13%,transparent);transition:none}
 .tidy-choices button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
-.tidy-choices button.safe:active:not(:disabled){background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
 .tag .pill[aria-pressed=true]:active:not(:disabled),.tag .pick[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--ink) 80%,var(--surface));border-color:color-mix(in srgb,var(--ink) 80%,var(--surface));transition:none}
 .view-switch button[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
 [data-busy]{opacity:.6}
@@ -624,7 +622,7 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <nav class="orders" aria-label="Order"><a href="/all" aria-current="true">Newest first</a><span aria-hidden="true">·</span><a href="/all?order=oldest">Oldest first</a><span aria-hidden="true">·</span><a href="/all?order=opened">Recently opened</a></nav>
 <p id="all-error" role="alert"></p>
 <p>No links yet.</p>
-<div class="all-foot"><a class="done-link" href="/all/done">Done and put away</a></div>
+<div class="all-foot"><a class="archived-link" href="/all/done">Archived</a></div>
 </main>
 <dialog class="edit-link" id="edit-link" aria-labelledby="edit-link-title">
 <form class="edit-form" novalidate>
@@ -858,7 +856,7 @@ if (goneRoot) {
     buttons.forEach((b) => (b.disabled = true));
     try {
       if (button.dataset.act !== "still-works") {
-        await doneCard(card, () => collapseBand(line), button);
+        await archiveCard(card, () => collapseBand(line), button);
         return resetBand(line);
       }
       const id = card.dataset.id;
@@ -1415,7 +1413,7 @@ if (copyRoot) {
 }
 }
 const takeOut = (listRoot, card, remove) => {
-  // A card moved out of the list ("Done with it") stays in the page, hidden.
+  // A card moved out of the list ("Archive") stays in the page, hidden.
   const shown = (el) => !el.closest("[hidden]");
   const parent = card.parentNode;
   const next = card.nextElementSibling;
@@ -1468,19 +1466,19 @@ if (deleteRoot) {
   });
 }
 }
-const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Done with it.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Marking done…"},"put-away":{"route":"/home/put-away","undo":{"title":"Put away.","text":"Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back."},"word":"Putting away…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
+const STATE_ACTS = {"archive":{"route":"/home/archive","undo":{"title":"Archived.","text":"Off Home, All links and your spaces. Still findable in search."},"word":"Archiving…"},"bring-back":{"route":"/home/bring-back","undo":{"title":"Brought back.","text":""},"word":"Bringing back…"}};
 const stateCard = (card, act, before, button) =>
   whileBusy(card, async (answered, ticket) => {
     const listRoot = document.getElementById("all-links");
-    const doneAlert = document.getElementById("all-error");
+    const archiveAlert = document.getElementById("all-error");
     const id = card.dataset.id;
     const { route, undo } = STATE_ACTS[act];
-    doneAlert.textContent = "";
+    archiveAlert.textContent = "";
     const res = await post(route, { id });
     answered();
     const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
     if (!change || !change.before || !change.after) {
-      doneAlert.textContent = await failure(res);
+      archiveAlert.textContent = await failure(res);
       return;
     }
     if (before) await before();
@@ -1488,14 +1486,14 @@ const stateCard = (card, act, before, button) =>
     showUndo(ticket, undo.text, () => whenFree(card, async () => {
       const back = await post("/home/undo-state", { id, change });
       if (back && back.status === 204) putBack();
-      else doneAlert.textContent = await failure(back);
+      else archiveAlert.textContent = await failure(back);
     }), undo.title);
   }, { button, word: STATE_ACTS[act].word });
-const doneCard = (card, before, button) => stateCard(card, "archive", before, button);
+const archiveCard = (card, before, button) => stateCard(card, "archive", before, button);
 {
-const doneRoot = document.getElementById("all-links");
-if (doneRoot) {
-  doneRoot.addEventListener("click", (event) => {
+const archiveRoot = document.getElementById("all-links");
+if (archiveRoot) {
+  archiveRoot.addEventListener("click", (event) => {
     const button = event.target.closest(".card-menu button");
     if (!button || !(button.dataset.act in STATE_ACTS)) return;
     button.closest("details").open = false;
@@ -1950,7 +1948,7 @@ const showFound = (data, typedWhy) => {
   found.setAttribute("data-id", data.id);
   foundPic.textContent = data.initials || "";
   foundTitle.textContent = data.title || data.url;
-  const marker = data.state === "archived" ? (data.putAwayAt ? "Put away" : "Done") : "";
+  const marker = data.state === "archived" ? "Archived" : "";
   drawLine(data, marker);
   foundWhy.replaceChildren();
   if (data.why && data.whySource === "inferred") foundWhy.append("Why (a guess): " + data.why);

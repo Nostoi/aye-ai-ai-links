@@ -197,7 +197,6 @@ describe("POST /save", () => {
       url: NEW,
       why: "for the trip",
       whySource: "asked",
-      putAwayAt: null,
       initials: "AS",
     });
   });
@@ -224,7 +223,6 @@ describe("POST /save", () => {
       url: NEW,
       why: null,
       whySource: null,
-      putAwayAt: null,
       initials: "SB",
     });
     expect(linkRow(world, A)).toMatchObject([
@@ -251,13 +249,13 @@ describe("POST /save", () => {
     expect(res.body).toMatchObject({ created: false, title: "Example Domain" });
   });
 
-  it("a repeat save of a put-away link answers its put-away date, as ISO", async () => {
+  it("a repeat save of an archived link answers it archived, with no put-away date", async () => {
     const { world, browser } = await signedIn();
     const { link } = await saveLink(linkDeps(world), A, { url: NEW, savedBy: "claude" });
-    const at = new Date("2026-10-01T08:00:00.123Z");
-    await linkDeps(world).store.update(A, link.id, { state: "archived", putAwayAt: at });
+    await linkDeps(world).store.update(A, link.id, { state: "archived" });
     const res = await save(browser, { url: NEW, title: null, why: null });
-    expect(res.body).toMatchObject({ state: "archived", putAwayAt: at.toISOString() });
+    expect(res.body).toMatchObject({ state: "archived" });
+    expect(res.body).not.toHaveProperty("putAwayAt");
   });
 
   it("over a stated why, keeps it and answers whyKept false with the stored why", async () => {

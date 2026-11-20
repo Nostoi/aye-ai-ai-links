@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GoneView } from "../core/link-check.js";
 import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
-import { doneLinkScript } from "./done-link.js";
+import { archiveLinkScript } from "./done-link.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
 import { page } from "./page.js";
 import { searchPage } from "./pages.js";
@@ -39,7 +39,6 @@ const link = (id: string, savedAt = NOW): Link => ({
   savedAt,
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -73,30 +72,22 @@ const allLinks = (
     later,
   });
 const CHANGE = {
-  before: { state: "active", putAwayAt: null, snoozedUntil: "2026-11-01T00:00:00.000Z" },
-  after: { state: "archived", putAwayAt: null },
-};
-const PUT_CHANGE = {
-  before: { state: "active", putAwayAt: null, snoozedUntil: null },
-  after: { state: "archived", putAwayAt: "2026-10-17T12:00:00.000Z" },
+  before: { state: "active", snoozedUntil: "2026-11-01T00:00:00.000Z" },
+  after: { state: "archived" },
 };
 /** The answer a state action gets when nothing is wrong: the change as JSON; an Undo gets 204. */
 const fine = (s: Post): Answer =>
-  s.url === "/home/archive"
-    ? { status: 200, body: CHANGE }
-    : s.url === "/home/put-away"
-      ? { status: 200, body: PUT_CHANGE }
-      : { status: 204 };
+  s.url === "/home/archive" ? { status: 200, body: CHANGE } : { status: 204 };
 const click = async (p: ReturnType<typeof runPage>, selector: string) => {
   p.dispatch(p.$(selector), "click");
   await p.settle();
 };
-const MENU_DONE = (id: string) => `[data-id='${id}'] .card-menu button[data-act=archive]`;
-const GONE_DONE = (id: string) => `[data-id='${id}'] [data-gone] button[data-act=gone-done]`;
+const MENU_ARCHIVE = (id: string) => `[data-id='${id}'] .card-menu button[data-act=archive]`;
+const GONE_ARCHIVE = (id: string) => `[data-id='${id}'] [data-gone] button[data-act=gone-archive]`;
 
 describe.each([
-  ["the ⋯ menu's Done with it", MENU_DONE],
-  ["the gone line's Done with it", GONE_DONE],
+  ["the ⋯ menu's Archive", MENU_ARCHIVE],
+  ["the gone line's Archive", GONE_ARCHIVE],
 ])("%s on All links", (_, button) => {
   const load = (answer: (s: Post) => Answer = fine) =>
     runPage(allLinks([link("7"), link("8"), link("9", SEPTEMBER)], { gone: ["7"] }), answer);
@@ -104,14 +95,14 @@ describe.each([
   it("posts /home/archive, hides the card, focuses the next card's ⋯ and offers Undo", async () => {
     const p = load();
     const menu = p.$("[data-id='7'] details.card-menu") as HTMLDetailsElement;
-    if (button === MENU_DONE) menu.open = true;
+    if (button === MENU_ARCHIVE) menu.open = true;
     await click(p, button("7"));
     expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
     expect(p.$("[data-id='7']").hidden).toBe(true);
-    if (button === MENU_DONE) expect(menu.open).toBe(false);
+    if (button === MENU_ARCHIVE) expect(menu.open).toBe(false);
     expect(p.focused().at(-2)).toBe(p.$("[data-id='8'] .card-menu summary"));
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
   });
 
@@ -137,10 +128,13 @@ describe.each([
   });
 
   it("a refusal says why, leaves the card shown and offers no Undo", async () => {
-    const p = load(() => ({ status: 409, body: { code: "conflict", message: "Already done." } }));
+    const p = load(() => ({
+      status: 409,
+      body: { code: "conflict", message: "Already archived." },
+    }));
     await click(p, button("7"));
     expect(p.$("[data-id='7']").hidden).toBe(false);
-    expect(p.$("#all-error").textContent).toBe("Already done.");
+    expect(p.$("#all-error").textContent).toBe("Already archived.");
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
@@ -159,9 +153,9 @@ describe.each([
 });
 
 describe.each([
-  ["the ⋯ menu", MENU_DONE],
-  ["the gone line", GONE_DONE],
-])("Done with it from %s on a month's only card", (_, button) => {
+  ["the ⋯ menu", MENU_ARCHIVE],
+  ["the gone line", GONE_ARCHIVE],
+])("Archive from %s on a month's only card", (_, button) => {
   it("hides the month, focuses the next month's card, and Undo shows both again", async () => {
     const p = runPage(allLinks([link("7"), link("9", SEPTEMBER)], { gone: ["7"] }), fine);
     const month = p.$("[data-id='7']").closest("section.month") as HTMLElement;
@@ -187,7 +181,7 @@ describe.each([
   });
 });
 
-describe("Done with it from the ⋯ menu on space pages and search", () => {
+describe("Archive from the ⋯ menu on space pages and search", () => {
   it.each([
     [
       "a space page",
@@ -211,53 +205,13 @@ describe("Done with it from the ⋯ menu on space pages and search", () => {
     ],
   ])("on %s hides the card and Undo shows it again", async (_, html, error) => {
     const p = runPage(html(), fine);
-    await click(p, MENU_DONE("7"));
+    await click(p, MENU_ARCHIVE("7"));
     expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
     expect(p.$("[data-id='7']").hidden).toBe(true);
     expect(p.focused().at(-2)).toBe(p.$("[data-id='8'] .card-menu summary"));
     await click(p, "#undo-bar button");
     expect(p.$("[data-id='7']").hidden).toBe(false);
     expect(p.$(error).textContent).toBe("");
-  });
-});
-
-describe("Put it away from the ⋯ menu", () => {
-  const PUT = (id: string) => `[data-id='${id}'] .card-menu button[data-act=put-away]`;
-  const load = (answer: (s: Post) => Answer = fine) =>
-    runPage(allLinks([link("7"), link("8")]), answer);
-
-  it("posts /home/put-away, hides the card and offers the Put away bar", async () => {
-    const p = load();
-    await click(p, PUT("7"));
-    expect(p.sent).toEqual([post("/home/put-away", { id: "7" })]);
-    expect(p.$("[data-id='7']").hidden).toBe(true);
-    expect(p.$("#undo-bar span").textContent).toBe(
-      "Put away. Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
-    );
-  });
-
-  it("Undo posts /home/undo-state with the change it received and shows the card again", async () => {
-    const p = load();
-    await click(p, PUT("7"));
-    await click(p, "#undo-bar button");
-    expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change: PUT_CHANGE }));
-    expect(p.$("[data-id='7']").hidden).toBe(false);
-  });
-
-  it("a refusal says why and leaves the card shown, with no Undo", async () => {
-    const p = load(() => ({ status: 409, body: { code: "conflict", message: "Already done." } }));
-    await click(p, PUT("7"));
-    expect(p.$("[data-id='7']").hidden).toBe(false);
-    expect(p.$("#all-error").textContent).toBe("Already done.");
-    expect(p.$("#undo-bar").hidden).toBe(true);
-  });
-
-  it("an answer that is not a change is a failure, not a take-out", async () => {
-    const p = load(() => ({ status: 200 }));
-    await click(p, PUT("7"));
-    expect(p.$("[data-id='7']").hidden).toBe(false);
-    expect(p.$("#undo-bar").hidden).toBe(true);
-    expect(p.$("#all-error").textContent).not.toBe("");
   });
 });
 
@@ -268,7 +222,7 @@ describe("the state script on a page whose card stays visible", () => {
       page(
         "Test",
         `<p id="err" role="alert"></p>
-<ul id="list"><li data-id="7"><details class="card-menu"><summary>More</summary><button data-act="archive">Done with it</button></details></li></ul>
+<ul id="list"><li data-id="7"><details class="card-menu"><summary>More</summary><button data-act="archive">Archive</button></details></li></ul>
 <p id="seen"></p>
 <script>
 ${CARD_FETCH}
@@ -276,7 +230,7 @@ const takeOut = (root, card, remove, change) => {
   document.getElementById("seen").textContent = JSON.stringify(change);
   return () => { document.getElementById("seen").textContent = "put back"; };
 };
-${doneLinkScript("list", "err")}
+${archiveLinkScript("list", "err")}
 </script>`,
         { undo: true },
       ),

@@ -1103,7 +1103,6 @@ describe("Home's Worth a look cards (#195)", () => {
         savedAt: new Date(0),
         savedBy: "t",
         lastOpenedAt: null,
-        putAwayAt: null,
         tidyKeptAt: null,
         lastSurfacedAt: null,
         snoozedUntil: null,
@@ -1756,12 +1755,6 @@ describe("a held-down control (#314)", () => {
       '<div class="tidy-choices"><button>Keep</button></div>',
       "button",
       mix(8, "var(--surface)"),
-    ],
-    [
-      "Tidy up's safe choice",
-      '<div class="tidy-choices"><button class="safe">Put it away</button></div>',
-      "button",
-      mix(12, "var(--surface)"),
     ],
     [
       "a button on the saved copy's end row",

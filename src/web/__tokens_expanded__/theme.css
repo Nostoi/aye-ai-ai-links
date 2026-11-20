@@ -340,20 +340,20 @@ img.home-fav{background:var(--plate)}
 .page-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .order-select{display:none}
 .order-select select{min-height:44px;padding:0 8px 0 0;border:0;background:none;color:var(--soft);font:inherit;font-size:15px}
-.done-link,.back-link{display:inline-flex;align-items:center;min-height:44px;font-size:15px}
+.archived-link,.back-link{display:inline-flex;align-items:center;min-height:44px;font-size:15px}
 .in-space{white-space:nowrap}
 .in-space .dot{width:12px;height:12px;margin:0 8px 0 2px;background:var(--space,var(--field))}
 .space .back-link{gap:8px;font-size:15px;color:var(--soft)}
 .space .back-link .dot{flex:none;width:8px;height:8px;margin:0;background:var(--space,var(--field))}
 .chevron{flex:none;fill:none;stroke:var(--soft);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.done-head{margin:4px 0 16px}
-.done-head h1{margin:0}
-.done-empty{display:none;padding:24px 20px;background:var(--surface);border-radius:18px}
-.done-empty p{margin:0}
-.done-empty p:first-child{margin-bottom:6px;font-weight:700}
-.done-empty .small{font-size:15px}
-main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .done-empty{display:block}
-main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .done-head .view-switch{display:none}
+.archived-head{margin:4px 0 16px}
+.archived-head h1{margin:0}
+.archived-empty{display:none;padding:24px 20px;background:var(--surface);border-radius:18px}
+.archived-empty p{margin:0}
+.archived-empty p:first-child{margin-bottom:6px;font-weight:700}
+.archived-empty .small{font-size:15px}
+main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .archived-empty{display:block}
+main:not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older)) .archived-head .view-switch{display:none}
 .space h2{margin-bottom:16px}
 .link-rows{list-style:none;padding:0;margin:0;background:var(--surface);border-radius:20px;box-shadow:0 1px 2px #0000000f,var(--card-ring)}
 .link-row{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:14px 16px;min-width:0;max-width:none;margin:0;padding:14px 60px 14px 16px}
@@ -558,7 +558,6 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .tidy-choices button{position:relative;display:flex;flex:1 1 0;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:2px;min-width:0;min-height:112px;padding:14px 56px 14px 20px;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .tidy-choices b{font-size:17px}
 .tidy-choices span{font-size:14px;color:var(--soft)}
-.tidy-choices button.safe{border-color:transparent;background:color-mix(in srgb,var(--ink) 6%,var(--surface))}
 .tidy-choices em{order:-1;margin-bottom:4px;font-size:13.5px;font-style:normal;color:var(--soft)}
 .tidy-choices .key{position:absolute;bottom:12px;right:18px;min-width:22px;padding:0 6px;border:1.5px solid var(--line);border-radius:6px;background:none;font-size:12px;line-height:19px;text-align:center}
 #tidy-error{margin:0 0 var(--space-2)}
@@ -582,7 +581,6 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 .small-actions button:active:not(:disabled),.small-actions a:active{background:color-mix(in srgb,var(--ink) 9%,transparent);transition:none}
 .card-menu-list button:active:not(:disabled),.account-list a:active,.account-list button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 13%,transparent);transition:none}
 .tidy-choices button:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
-.tidy-choices button.safe:active:not(:disabled){background:color-mix(in srgb,var(--ink) 12%,var(--surface))}
 .tag .pill[aria-pressed=true]:active:not(:disabled),.tag .pick[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--ink) 80%,var(--surface));border-color:color-mix(in srgb,var(--ink) 80%,var(--surface));transition:none}
 .view-switch button[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--surface));transition:none}
 [data-busy]{opacity:.6}

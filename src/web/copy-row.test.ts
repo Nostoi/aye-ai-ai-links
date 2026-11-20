@@ -45,7 +45,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -80,14 +79,7 @@ describe("the card menu", () => {
         e.querySelector("small")?.remove();
         return e.textContent;
       }),
-    ).toEqual([
-      "Put it away",
-      "Done with it",
-      "Keep handy",
-      "Edit link…",
-      "Remove saved copy",
-      "Delete link",
-    ]);
+    ).toEqual(["Archive", "Keep handy", "Edit link…", "Remove saved copy", "Delete link"]);
   });
 });
 

@@ -34,7 +34,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -71,7 +70,7 @@ const dom = (html: string) => parseHTML(html).document;
 const texts = (html: string, selector: string) =>
   [...dom(html).querySelectorAll(selector)].map((e) => e.textContent?.trim());
 
-describe("the section All links and Done and put away mark as current", () => {
+describe("the section All links and Archived mark as current", () => {
   it.each([false, true])("marks /all in the bar and the phone menu (done: %s)", (done) => {
     const marked = [...dom(all({ done })).querySelectorAll('nav.menu [aria-current="page"]')];
     expect(marked.map((a) => [a.className, a.getAttribute("href")])).toEqual([
@@ -169,12 +168,12 @@ describe("the All links page", () => {
   it("fades the cards on the done page, which links back in the same order", () => {
     const html = all({ done: true, order: "oldest", links: [link("1", { state: "archived" })] });
     expect(dom(html).querySelector(".link-row")?.className).toContain("faded");
-    expect(texts(html, "h1")).toEqual(["Done and put away"]);
+    expect(texts(html, "h1")).toEqual(["Archived"]);
     expect(dom(html).querySelector("title")?.textContent).toBe(
-      "Done and put away · All links · Aye-AI-AI Links",
+      "Archived · All links · Aye-AI-AI Links",
     );
     expect(dom(html).querySelector("a.back-link")?.getAttribute("href")).toBe("/all?order=oldest");
-    expect(dom(html).querySelector("a.done-link")).toBeNull();
+    expect(dom(html).querySelector("a.archived-link")).toBeNull();
   });
 
   it.each<[LinkOrder, string]>([
@@ -200,7 +199,7 @@ describe("the All links page", () => {
     const older = dom(html).getElementById("older");
     expect(older?.textContent).toBe(label);
     expect(older?.getAttribute("href")).toBe(allHref(order, { before: "c1" }));
-    expect(dom(html).querySelector("a.done-link")?.getAttribute("href")).toBe(
+    expect(dom(html).querySelector("a.archived-link")?.getAttribute("href")).toBe(
       allHref(order, { done: true }),
     );
   });
@@ -257,10 +256,10 @@ describe("the All links page", () => {
   it.each([
     [{}, "No links yet."],
     [{ order: "opened" as const }, "Nothing opened yet. Links you open from this site show here."],
-    [{ done: true }, "Nothing here is done or put away yet."],
+    [{ done: true }, "Nothing here is archived yet."],
     [
       { done: true, order: "opened" as const },
-      "You haven't opened any of the links you're done with or put away.",
+      "You haven't opened any of the links you've archived.",
     ],
     [{ later: true }, "No older links."],
     [{ later: true, order: "oldest" as const }, "No more links."],
@@ -331,21 +330,21 @@ describe("openings on All links (#124)", () => {
   describe("its active links", () => {
     itRecordsOpenings(() => all({ links: shown }), web, "/links/opened");
   });
-  describe("its links done and put away", () => {
+  describe("its archived links", () => {
     itRecordsOpenings(() => all({ links: shown, done: true }), web, "/links/opened");
   });
-  describe("a put-away link opened on Done and put away", () => {
-    const put = link("1", { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
-    const stale = link("2", { state: "archived" });
-    const html = () => all({ links: [put, stale], done: true });
-    it("leaves the page once the opening is recorded; a stale row stays", async () => {
+  describe("an archived link opened on Archived", () => {
+    const archived = link("1", { state: "archived" });
+    const html = () => all({ links: [archived], done: true });
+    const marker = (page: ReturnType<typeof runPage>) =>
+      page.$("[data-id='1'] .card-line").lastElementChild?.textContent;
+    it("keeps the card and its Archived marker once the opening is recorded", async () => {
       const page = runPage(html());
-      page.dispatch(page.$("[data-id='2'] a[data-open]"), "click");
       page.dispatch(page.$("[data-id='1'] a[data-open]"), "click");
       await page.settle();
-      expect(page.sent.map((s) => s.body)).toEqual([{ id: "2" }, { id: "1" }]);
-      expect(page.$("[data-id='1']").hidden).toBe(true);
-      expect(page.$("[data-id='2']").hidden).toBeFalsy();
+      expect(page.sent.map((s) => s.body)).toEqual([{ id: "1" }]);
+      expect(page.$("[data-id='1']").hidden).toBeFalsy();
+      expect(marker(page)).toBe("Archived");
     });
     it("stays when the opening is refused", async () => {
       const page = runPage(html(), () => ({ status: 500 }));
@@ -519,14 +518,12 @@ describe("the List / Pictures switch on All links", () => {
   });
 });
 
-describe("Bring it back and the markers on Done and put away", () => {
+describe("Bring it back and the markers on Archived", () => {
   const CHANGE = {
-    before: { state: "archived", putAwayAt: "2026-10-01T00:00:00.000Z", snoozedUntil: null },
-    after: { state: "active", putAwayAt: null },
+    before: { state: "archived", snoozedUntil: null },
+    after: { state: "active" },
   };
-  const stale = (id: string) => link(id, { state: "archived" });
-  const put = (id: string) =>
-    link(id, { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
+  const archived = (id: string) => link(id, { state: "archived" });
   const back = (id: string) => `[data-id='${id}'] .card-menu button[data-act=bring-back]`;
   const sentPosts = (p: ReturnType<typeof runPage>) => p.sent.filter((s) => s.body !== undefined);
   const answer = (next: string) => (s: { url: string; body: unknown }) =>
@@ -536,19 +533,17 @@ describe("Bring it back and the markers on Done and put away", () => {
         ? { status: 200, body: CHANGE }
         : { status: 204 };
 
-  it("ends each grey line with Put away or Stale", () => {
-    const html = all({ done: true, links: [put("1"), stale("2")] });
+  it("ends each grey line with Archived", () => {
+    const html = all({ done: true, links: [archived("1"), archived("2")] });
     const lines = [...dom(html).querySelectorAll(".link-row .card-line")].map(
       (l) => l.lastElementChild?.textContent,
     );
-    expect(lines).toEqual(["Put away", "Done"]);
+    expect(lines).toEqual(["Archived", "Archived"]);
   });
 
   it("puts no marker on an active row", () => {
     const html = all({ links: [link("1")] });
-    expect(dom(html).querySelector(".link-row .card-line")?.textContent).not.toMatch(
-      /Put away|Stale/,
-    );
+    expect(dom(html).querySelector(".link-row .card-line")?.textContent).not.toContain("Archived");
   });
 
   it.each([
@@ -557,8 +552,8 @@ describe("Bring it back and the markers on Done and put away", () => {
   ])(
     "posts /home/bring-back for %s, takes the row out and Undo sends the change back",
     async (_, appended) => {
-      const first = all({ done: true, links: [put("1")], older: appended ? "c1" : null });
-      const next = all({ done: true, links: [put("9")], later: true });
+      const first = all({ done: true, links: [archived("1")], older: appended ? "c1" : null });
+      const next = all({ done: true, links: [archived("9")], later: true });
       const p = runPage(first, answer(next));
       if (appended) {
         p.dispatch(p.$("#older"), "click");

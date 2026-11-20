@@ -36,7 +36,6 @@ const link = (id: string, savedAt = NOW): Link => ({
   savedAt,
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -72,24 +71,17 @@ const PAGES: [string, string, (links: Link[], over?: { older?: string | null }) 
 
 type Action = { name: string; select: string; url: string; undo: string; json?: unknown };
 const card = (id: string) => `[data-id='${id}']`;
-type Key = "done" | "put" | "bring" | "delete" | "keep" | "copy" | "still";
+type Key = "archive" | "bring" | "delete" | "keep" | "copy" | "still";
 const CHANGE = {
-  before: { state: "active", putAwayAt: null, snoozedUntil: null },
-  after: { state: "archived", putAwayAt: null },
+  before: { state: "active", snoozedUntil: null },
+  after: { state: "archived" },
 };
 const ACTIONS: Record<Key, Action> = {
-  done: {
-    name: "Done with it",
+  archive: {
+    name: "Archive",
     select: ".card-menu button[data-act=archive]",
     url: "/home/archive",
-    undo: "Done with it. Off Home, All links and your spaces. Still findable in search.",
-    json: CHANGE,
-  },
-  put: {
-    name: "Put it away",
-    select: ".card-menu button[data-act=put-away]",
-    url: "/home/put-away",
-    undo: "Put away. Off Home, All links and your spaces, still saved. If you start something it fits, it'll come back.",
+    undo: "Archived. Off Home, All links and your spaces. Still findable in search.",
     json: CHANGE,
   },
   bring: {
@@ -146,17 +138,15 @@ const press = async (p: ReturnType<typeof runPage>, id: string, a: Action) => {
   await p.settle();
 };
 
-/** Put it away is held against every other action on an active card, in both orders. */
-const PUT_PAIRS: [Key, Key][] = (["done", "delete", "keep", "copy", "still"] as const).flatMap(
+/** Archive is held against every other action on an active card, in both orders. */
+const ARCHIVE_PAIRS: [Key, Key][] = (["delete", "keep", "copy", "still"] as const).flatMap(
   (other) => [
-    ["put", other],
-    [other, "put"],
+    ["archive", other],
+    [other, "archive"],
   ],
 );
 const PAIRS: [Key, Key][] = [
-  ...PUT_PAIRS,
-  ["done", "delete"],
-  ["delete", "done"],
+  ...ARCHIVE_PAIRS,
   ["keep", "delete"],
   ["delete", "keep"],
   ["copy", "delete"],
@@ -196,7 +186,7 @@ describe.each(PAGES)("%s: a card takes one action at a time", (_, errorId, html)
     },
   );
 
-  it.each(["done", "put", "keep", "copy", "still"] as const)(
+  it.each(["archive", "keep", "copy", "still"] as const)(
     "Delete link posts once %s has finished, and its Undo is the one offered",
     async (firstKey) => {
       const first = ACTIONS[firstKey];
@@ -243,13 +233,13 @@ describe("All links, on a card Show older appended", () => {
     );
     p.dispatch(p.$("#older"), "click");
     await p.settle();
-    await press(p, "9", ACTIONS.done);
+    await press(p, "9", ACTIONS.archive);
     await press(p, "9", ACTIONS.delete);
     expect(sentUrls(p)).toEqual(["/home/archive"]);
     release();
     await p.settle();
     expect(undoText(p)).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
   });
 
@@ -274,7 +264,7 @@ describe("the edit dialog's Delete link", () => {
         s.url === "/home/archive" ? { status: 200, body: CHANGE, wait: gate } : { status: 204 },
     );
     const dialog = stubDialog(p);
-    await press(p, "7", ACTIONS.done);
+    await press(p, "7", ACTIONS.archive);
     p.dispatch(p.$(`${card("7")} button[data-act=edit]`), "click");
     await p.settle();
     expect(dialog.open).toBe(true);
@@ -284,21 +274,21 @@ describe("the edit dialog's Delete link", () => {
     release();
     await p.settle();
     expect(undoText(p)).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
   });
 });
 
 /** Bring it back lives on archived rows: search lists every state, the done pages only archived ones. */
 const archived = (id: string): Link => ({ ...link(id), state: "archived" });
-const DONE_PAGES: [string, string, (links: Link[]) => string][] = [
+const ARCHIVED_PAGES: [string, string, (links: Link[]) => string][] = [
   [
-    "Done and put away on All links",
+    "Archived on All links",
     "all-error",
     (links) => allPage({ ...common, links, older: null, gone, order: "newest", done: true }),
   ],
   [
-    "a space's Done and put away",
+    "a space's Archived",
     "space-error",
     (links) => spacePage({ ...common, links, older: null, gone, tag: KITCHEN, done: true }),
   ],
@@ -309,55 +299,57 @@ const BRING_PAIRS: [Key, Key][] = (["delete", "copy"] as const).flatMap((other) 
   [other, "bring"],
 ]);
 
-describe.each(DONE_PAGES)("%s: Bring it back takes one action at a time", (_, errorId, html) => {
-  const links = [archived("7"), archived("8")];
+describe.each(ARCHIVED_PAGES)(
+  "%s: Bring it back takes one action at a time",
+  (_, errorId, html) => {
+    const links = [archived("7"), archived("8")];
 
-  it.each(BRING_PAIRS)("%s then %s sends nothing while the first is out", async (a, b) => {
-    const first = ACTIONS[a];
-    const { gate, release } = held();
-    const p = runPage(html(links), (s) =>
-      s.url === first.url ? { ...fine(s), wait: gate } : fine(s),
+    it.each(BRING_PAIRS)("%s then %s sends nothing while the first is out", async (a, b) => {
+      const first = ACTIONS[a];
+      const { gate, release } = held();
+      const p = runPage(html(links), (s) =>
+        s.url === first.url ? { ...fine(s), wait: gate } : fine(s),
+      );
+      await press(p, "7", first);
+      await press(p, "7", ACTIONS[b]);
+      expect(sentUrls(p)).toEqual([first.url]);
+      release();
+      await p.settle();
+      expect(sentUrls(p)).toEqual([first.url]);
+      expect(undoText(p)).toBe(first.undo);
+      expect(p.$(`#${errorId}`).textContent).toBe("");
+    });
+
+    it.each(["Delete link", "Remove saved copy"])(
+      "%s posts once Bring it back has finished, and its Undo is the one offered",
+      async (name) => {
+        const next = name === "Delete link" ? ACTIONS.delete : ACTIONS.copy;
+        const p = runPage(html(links), fine);
+        await press(p, "7", ACTIONS.bring);
+        expect(undoText(p)).toBe("Brought back.");
+        await press(p, "7", next);
+        expect(sentUrls(p)).toEqual(["/home/bring-back", next.url]);
+        expect(undoText(p)).toBe(next.undo);
+      },
     );
-    await press(p, "7", first);
-    await press(p, "7", ACTIONS[b]);
-    expect(sentUrls(p)).toEqual([first.url]);
-    release();
-    await p.settle();
-    expect(sentUrls(p)).toEqual([first.url]);
-    expect(undoText(p)).toBe(first.undo);
-    expect(p.$(`#${errorId}`).textContent).toBe("");
-  });
-
-  it.each(["Delete link", "Remove saved copy"])(
-    "%s posts once Bring it back has finished, and its Undo is the one offered",
-    async (name) => {
-      const next = name === "Delete link" ? ACTIONS.delete : ACTIONS.copy;
-      const p = runPage(html(links), fine);
-      await press(p, "7", ACTIONS.bring);
-      expect(undoText(p)).toBe("Brought back.");
-      await press(p, "7", next);
-      expect(sentUrls(p)).toEqual(["/home/bring-back", next.url]);
-      expect(undoText(p)).toBe(next.undo);
-    },
-  );
-});
+  },
+);
 
 /** The words a card's visible button shows while its action is out; a ⋯ menu row closes and only dims. */
-const GONE_DONE = {
-  name: "Done with it (gone band)",
-  select: "[data-gone] button[data-act=gone-done]",
+const GONE_ARCHIVE = {
+  name: "Archive (gone band)",
+  select: "[data-gone] button[data-act=gone-archive]",
   url: "/home/archive",
   undo: "",
   json: CHANGE,
 };
 const LOOKS: [string, Action, string | null][] = [
-  ["Done with it", ACTIONS.done, null],
-  ["Put it away", ACTIONS.put, null],
+  ["Archive", ACTIONS.archive, null],
   ["Delete link", ACTIONS.delete, null],
   ["Keep handy", ACTIONS.keep, null],
   ["Remove saved copy", ACTIONS.copy, null],
   ["It still works", ACTIONS.still, "Checking…"],
-  ["the gone band's Done with it", GONE_DONE, "Marking done…"],
+  ["the gone band's Archive", GONE_ARCHIVE, "Archiving…"],
 ];
 
 describe.each(PAGES)(
@@ -403,10 +395,10 @@ describe.each(PAGES)(
       );
       p.dispatch(p.$(`${card("7")} ${ACTIONS.still.select}`), "click");
       await p.settle();
-      p.dispatch(p.$(`${card("7")} ${GONE_DONE.select}`), "click");
+      p.dispatch(p.$(`${card("7")} ${GONE_ARCHIVE.select}`), "click");
       await p.settle();
       p.timers.fire();
-      expect(labelOf(p, GONE_DONE)).toBe("Done with it");
+      expect(labelOf(p, GONE_ARCHIVE)).toBe("Archive");
       expect(sentUrls(p)).toEqual([ACTIONS.still.url]);
       release();
       await p.settle();

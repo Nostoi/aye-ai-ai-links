@@ -33,7 +33,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: NOW,
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -64,7 +63,6 @@ const SAVED = {
   title: "A story",
   url: NEWS,
   why: "for the trip",
-  putAwayAt: null,
   initials: "AS",
 };
 
@@ -406,13 +404,12 @@ describe("an address already saved", () => {
     ...SAVED,
     created: false,
     state: "archived",
-    putAwayAt: "2026-10-01T00:00:00.000Z",
   };
 
   it("shows the link, its why and Bring it back, and Bring it back works in place", async () => {
     const change = {
-      before: { state: "archived", putAwayAt: ALREADY.putAwayAt, snoozedUntil: null },
-      after: { state: "active", putAwayAt: null },
+      before: { state: "archived", snoozedUntil: null },
+      after: { state: "active" },
     };
     const p = start(
       answering(
@@ -431,7 +428,7 @@ describe("an address already saved", () => {
     expect(p.$("#save-dialog [data-save-part=fields]").hidden).toBe(true);
     expect(found.textContent).toContain("A story");
     expect(found.textContent).toContain("Already saved on March 3");
-    expect(found.textContent).toContain("Put away");
+    expect(found.textContent).toContain("Archived");
     expect(found.textContent).toContain("for the trip");
     const open = p.$("#save-dialog [data-save=open]");
     expect(open.getAttribute("href")).toBe(NEWS);
@@ -447,7 +444,7 @@ describe("an address already saved", () => {
     ]);
     expect(p.dialog?.open).toBe(true);
     expect(back.hidden).toBe(true);
-    expect(found.textContent).not.toContain("Put away");
+    expect(found.textContent).not.toContain("Archived");
     expect(p.$("#save-dialog-title").textContent).toBe("Brought back");
   });
 
@@ -498,14 +495,14 @@ describe("an address already saved", () => {
     expect(p.$("#save-dialog [data-save-part=fields]").hidden).toBe(false);
   });
 
-  it("a link done, not put away, says Done", async () => {
-    const p = start(answering({ status: 200, body: { ...ALREADY, putAwayAt: null } }));
+  it("an archived link says Archived", async () => {
+    const p = start(answering({ status: 200, body: { ...ALREADY } }));
     p.openIt();
     p.fill();
     p.save();
     await p.settle();
     expect(p.$("#save-dialog .save-found-line").textContent).toBe(
-      "Already saved on March 3 · news.example · Done",
+      "Already saved on March 3 · news.example · Archived",
     );
   });
 

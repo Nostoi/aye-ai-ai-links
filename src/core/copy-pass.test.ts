@@ -384,6 +384,7 @@ describe("copy pass backfill", () => {
     it("records none for a kept tool without fetching it", async () => {
       const t = setup();
       const id = await t.link(1);
+      await t.store.update(OWNER, id, { intent: "keep", intentSource: "stated" });
       await t.store.updateToolIf(OWNER, id, null, kept);
       await t.pass.sweep();
       expect(t.status(id)).toBe("none");
@@ -394,6 +395,7 @@ describe("copy pass backfill", () => {
       const t = setup();
       const a = await t.link(1);
       const b = await t.link(2);
+      await t.store.update(OWNER, a, { intent: "keep", intentSource: "stated" });
       await t.store.updateToolIf(OWNER, a, null, kept);
       await t.pass.sweep();
       expect([t.status(a), t.status(b)]).toEqual(["none", "ok"]);

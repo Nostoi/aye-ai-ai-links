@@ -1,5 +1,14 @@
 import type { EventWrite } from "./store.js";
-import type { OwnerId, Source, ToolStatus } from "./types.js";
+import type { Intent, OwnerId, Source, ToolStatus } from "./types.js";
+
+/** A link's intent and who said so. */
+export type IntentPair = { intent: Intent; intentSource: Source | null };
+
+/**
+ * An intent write that goes with a tool write: `set` is written, in the same step, only while the
+ * link's intent is still `onlyIf`. The tool write is applied either way.
+ */
+export type IntentWith = { set: IntentPair; onlyIf: IntentPair };
 
 /** How long a kept tool waits before "Still using it?", in days. */
 export type WaitDays = 30 | 60 | 120;
@@ -39,7 +48,10 @@ export interface ToolStore {
    * `sameTool` compares them. Returns the row as it is afterwards with `applied`, or null when
    * the link is absent, foreign or never issued; then nothing is written. Core supplies both
    * rows; the store holds no rule. `events` are applied in the same step, only when it is
-   * applied; an `unlessBefore` is judged against the link as it is before the write.
+   * applied; an `unlessBefore` is judged against the link as it is before the write. `intent`
+   * is written in the same step once the tool write is applied, and only while the link's intent
+   * is still `intent.onlyIf` (see `IntentWith`); the tool row is judged after it, so a guarded
+   * explore on the link sees the row this write left.
    */
   updateToolIf(
     owner: OwnerId,
@@ -47,6 +59,7 @@ export interface ToolStore {
     expected: ToolRecord | null,
     next: ToolRecord | null,
     events?: EventWrite[],
+    intent?: IntentWith,
   ): Promise<ToolWrite | null>;
 }
 

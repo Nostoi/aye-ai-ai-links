@@ -9,6 +9,7 @@ import { deleteLinkItem } from "./delete-link.js";
 import { displayTitle } from "./display-title.js";
 import { ARCHIVE_ITEM, BRING_BACK_ITEM } from "./done-link.js";
 import { initialsText } from "./initials.js";
+import { EXPLORE_IT_ITEM, KEEP_IT_ITEM } from "./intent.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
 import { NOT_NOW_ITEM } from "./not-now.js";
 import { escapeHtml } from "./page.js";
@@ -20,8 +21,9 @@ export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit link
 
 /**
  * A card's ⋯ menu on the pages with the edit dialog, mildest first (#284). An active link's menu
- * opens with Archive and Keep handy, which reads Not handy anymore once `handy`
- * is kept; both Keep rows are rendered and the script swaps them. An archived link starts
+ * opens with Keep it (Explore it once the link is To keep), then Archive and Keep handy, which
+ * reads Not handy anymore once `handy` is kept; both rows of each pair are rendered and the
+ * scripts swap them. A link kept handy is To keep for good, so it shows neither intent row. An archived link starts
  * at Edit and offers Bring it back after it. Then Remove saved copy when `copy` is there, and
  * Delete link last. The copy itself opens from the card's grey line (`cardLine`). Home's rows put
  * Not now first (`notNow`); Home's featured card shows Archive and Not now as buttons, so
@@ -46,6 +48,8 @@ export const editMenu = (
   const first = active
     ? [
         ...(notNow && !onCard ? [NOT_NOW_ITEM] : []),
+        { ...KEEP_IT_ITEM, hidden: kept || link.intent === "keep" },
+        { ...EXPLORE_IT_ITEM, hidden: kept || link.intent === "explore" },
         ...(onCard ? [] : [ARCHIVE_ITEM]),
         { ...KEEP_ITEM, hidden: kept },
         { ...NOT_HANDY, hidden: !kept },
@@ -70,7 +74,8 @@ export const shownTags = (tags: LinkTag[]) =>
  * What the edit dialog reads from a card, as data attributes: the title ("" for none), the page's
  * own title, the version of the picture that shows, whether it is the owner's, the fetched
  * picture's version, the initials a picture-less preview shows, and the tags as JSON
- * (`shownTags`). The one helper for every card builder.
+ * (`shownTags`), and the link's intent and who said so ("" for nobody). The one helper for
+ * every card builder.
  */
 export function editData(
   link: Link,
@@ -88,6 +93,8 @@ export function editData(
     ["page-fit", info?.pageFit ?? ""],
     ["initials", initialsText(link)],
     ["tags", JSON.stringify(shownTags(link.tags))],
+    ["intent", link.intent],
+    ["intent-source", link.intentSource ?? ""],
   ];
   return data.map(([name, value]) => ` data-${name}="${escapeHtml(value)}"`).join("");
 }

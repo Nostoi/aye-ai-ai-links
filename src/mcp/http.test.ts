@@ -333,9 +333,10 @@ describe("MCP door over HTTP", () => {
         savedAt: "2026-10-11T12:00:00.000Z",
         savedBy: "claude-code",
         lastOpenedAt: null,
-        putAwayAt: null,
         lastSurfacedAt: null,
         snoozedUntil: null,
+        intent: "explore",
+        intentSource: null,
         state: "active",
         snapshot: {
           status: "pending",
@@ -360,12 +361,11 @@ describe("MCP door over HTTP", () => {
   });
 
   it("every tool equals the direct core call with the same clock", async () => {
-    const plain = ({ tidyKeptAt: _, ...link }: Link) => ({
+    const plain = (link: Link) => ({
       ...link,
       handy: null,
       gone: null,
       openUrl: null,
-      putAwayAt: null,
     });
     const input = {
       url: "https://example.com/p",

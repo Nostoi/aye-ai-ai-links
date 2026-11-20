@@ -2,6 +2,7 @@ import type { StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { STATS_WINDOWS } from "../core/stats.js";
 import {
+  INTENTS,
   SNAPSHOT_STATUSES,
   SOURCES,
   STATES,
@@ -93,8 +94,16 @@ export const linkOutput = z.strictObject({
   lastOpenedAt: timestamp.nullable(),
   lastSurfacedAt: timestamp.nullable(),
   snoozedUntil: timestamp.nullable(),
-  /** Always null: the owner's put-away date is retired. Kept so a client holding an earlier tool list still accepts the result (ROADMAP #39). */
-  putAwayAt: z.null(),
+  intent: z
+    .enum(INTENTS)
+    .describe(
+      '"explore" (To explore): saved, maybe to read, try or watch; every new link starts here. "keep" (To keep): something to hold on to and return to, such as bills, accounts, docs or a tool.',
+    ),
+  intentSource: source
+    .nullable()
+    .describe(
+      "Who said so: stated or asked by the owner, or inferred by an agent (a guess). Null means nobody did, the default To explore.",
+    ),
   state: z.enum(STATES),
   snapshot: snapshotOutput.nullable(),
   handy: handyOutput.nullable(),

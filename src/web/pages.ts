@@ -13,6 +13,7 @@ import { archiveLinkScript, outOfListsMarker } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { initialsText } from "./initials.js";
+import { intentLinkScript } from "./intent.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript, searchReportScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -175,7 +176,7 @@ ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}
 <h2 data-card-title>${linkTitle(link)}</h2>
-${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from })}${link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
+${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from, intent: true })}${link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
 ${keep ? handyControl(link, view) : ""}${goneLine(link, gone)}</div>
 </li>`;
 }
@@ -272,6 +273,7 @@ ${ask && query.trim() !== "" && query.length <= MAX_TEXT_CHARS ? `<p><button typ
 ${ask ? "" : `${editDialog()}\n`}<script>
 ${CARD_FETCH}
 ${keepHandyScript("results", "results-error")}
+${intentLinkScript("results", "results-error")}
 ${goneScript("results", "results-error")}
 ${removeCopyScript("results", "results-error")}
 ${ask ? "" : `${editLinkScript("results", "results-error")}\n`}${deleteLinkScript("results", "results-error")}

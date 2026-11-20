@@ -25,7 +25,8 @@ const link = (over: Partial<Link> = {}): Link => {
     savedAt: new Date("2026-03-12T10:00:00Z"),
     savedBy: "claude",
     lastOpenedAt: null,
-    tidyKeptAt: null,
+    intent: "explore",
+    intentSource: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
     state: "active",
@@ -179,7 +180,7 @@ describe("Home's Tidy up tray", () => {
     expect(buttons.every((b) => b.getAttribute("type") === "button")).toBe(true);
     const [keep, archive] = buttons;
     expect(keep?.textContent).toContain("Keep");
-    expect(keep?.textContent).toContain("Stays where it is.");
+    expect(keep?.textContent).toContain("To keep. Tidy won't ask again.");
     expect(archive?.textContent).toContain("Archive");
     expect(archive?.textContent).toContain("Still findable in search.");
     expect(buttons.map((b) => b.getAttribute("aria-keyshortcuts"))).toEqual(["1", "2"]);
@@ -310,9 +311,17 @@ const ARCHIVE_CHANGE = {
   before: { state: "active", snoozedUntil: null },
   after: { state: "archived" },
 };
-/** The answers when nothing is wrong: Keep and Undo 204, Archive its change. */
+const KEEP_CHANGE = {
+  before: { intent: "explore", intentSource: null },
+  after: { intent: "keep", intentSource: "stated" },
+};
+/** The answers when nothing is wrong: Archive and Keep their changes, Undo 204. */
 const fine = (s: Post): Answer =>
-  s.url === "/home/archive" ? { status: 200, body: ARCHIVE_CHANGE } : { status: 204 };
+  s.url === "/home/archive"
+    ? { status: 200, body: ARCHIVE_CHANGE }
+    : s.url === "/home/keep"
+      ? { status: 200, body: KEEP_CHANGE }
+      : { status: 204 };
 
 describe("the Tidy up session", () => {
   const load = (answer: (s: Post) => Answer = fine, count = 5, spaces = spacesSection([])) => {
@@ -376,7 +385,7 @@ describe("the Tidy up session", () => {
         release = r;
       });
       const { p, ids, shown, closed, start, stop, choose } = load((s) =>
-        s.url === "/tidy/keep" ? { status: 204, wait } : fine(s),
+        s.url === "/home/keep" ? { status: 200, body: KEEP_CHANGE, wait } : fine(s),
       );
       await start();
       await choose("keep");
@@ -445,7 +454,7 @@ describe("the Tidy up session", () => {
         release = r;
       });
       const { p, finished, start, stop, choose } = load(
-        (s) => (s.url === "/tidy/keep" ? { status: 204, wait } : fine(s)),
+        (s) => (s.url === "/home/keep" ? { status: 200, body: KEEP_CHANGE, wait } : fine(s)),
         1,
       );
       await start();
@@ -459,7 +468,7 @@ describe("the Tidy up session", () => {
   });
 
   it.each([
-    ["keep", "/tidy/keep"],
+    ["keep", "/home/keep"],
     ["archive", "/home/archive"],
   ])("%s posts once to %s with the link's id and shows the next link", async (act, url) => {
     const { p, ids, shown, start, choose } = load();
@@ -469,11 +478,17 @@ describe("the Tidy up session", () => {
     expect(shown()).toEqual([ids[1]]);
   });
 
-  it("Keep offers no Undo bar", async () => {
-    const { p, start, choose } = load();
+  it("Keep offers its bar, and its Undo posts the change to /home/undo-intent", async () => {
+    const { p, ids, shown, start, choose, undo } = load();
     await start();
     await choose("keep");
-    expect(p.$("#undo-bar").hidden).toBe(true);
+    expect(p.$("#undo-bar").hidden).toBe(false);
+    expect(p.$("#undo-bar span").textContent).toBe(
+      "Kept. Marked To keep. Tidy up won't ask about it again.",
+    );
+    await undo();
+    expect(p.sent[1]).toEqual(post("/home/undo-intent", { id: ids[0], change: KEEP_CHANGE }));
+    expect(shown()).toEqual([ids[0]]);
   });
 
   it("Archive offers its bar, title first", async () => {
@@ -501,8 +516,8 @@ describe("the Tidy up session", () => {
     await choose("archive");
     await undo();
     await choose("keep");
-    expect(urls(p)).toEqual(["/home/archive", "/home/undo-state", "/tidy/keep"]);
-    expect(p.sent[2]).toEqual(post("/tidy/keep", { id: ids[0] }));
+    expect(urls(p)).toEqual(["/home/archive", "/home/undo-state", "/home/keep"]);
+    expect(p.sent[2]).toEqual(post("/home/keep", { id: ids[0] }));
     expect(shown()).toEqual([ids[1]]);
   });
 
@@ -512,11 +527,11 @@ describe("the Tidy up session", () => {
     await choose("archive");
     await choose("keep");
     await undo();
-    expect(shown()).toEqual([ids[0]]);
+    expect(shown()).toEqual([ids[1]]);
     await choose("keep");
     expect(shown()).toEqual([ids[2]]);
-    const kept = p.sent.filter((s) => s.url === "/tidy/keep").map((s) => s.body);
-    expect(kept).toEqual([{ id: ids[1] }, { id: ids[0] }]);
+    const kept = p.sent.filter((s) => s.url === "/home/keep").map((s) => s.body);
+    expect(kept).toEqual([{ id: ids[1] }, { id: ids[1] }]);
   });
 
   it("shows the finish screen after the fifth, and an Undo there brings the link back to a step", async () => {
@@ -567,7 +582,7 @@ describe("the Tidy up session", () => {
     p.dispatch(button, "click");
     release();
     await p.settle();
-    expect(p.sent).toEqual([post("/tidy/keep", { id: ids[0] })]);
+    expect(p.sent).toEqual([post("/home/keep", { id: ids[0] })]);
     expect(shown()).toEqual([ids[1]]);
   });
 
@@ -623,7 +638,7 @@ describe("the Tidy up session", () => {
 
   describe("the keys", () => {
     it.each([
-      ["1", "/tidy/keep"],
+      ["1", "/home/keep"],
       ["2", "/home/archive"],
     ])("key %s posts %s for the shown link", async (k, url) => {
       const { p, ids, start, key } = load();
@@ -684,7 +699,7 @@ describe("the Tidy up session", () => {
       await choose("archive");
       await undo();
       await key("1");
-      expect(p.sent.at(-1)).toEqual(post("/tidy/keep", { id: ids[0] }));
+      expect(p.sent.at(-1)).toEqual(post("/home/keep", { id: ids[0] }));
     });
 
     it.each(["1", "2"])("an auto-repeated key %s picks nothing", async (k) => {
@@ -725,10 +740,12 @@ describe("the Tidy up session", () => {
     await start();
     await choose("keep");
     const title = p.$(`.tidy-step[data-id='${ids[1]}'] .tidy-title`);
-    expect(p.focused().at(-1)).toBe(title);
+    // The Undo bar then takes focus, as it does after Archive.
+    expect(p.focused().includes(title)).toBe(true);
+    expect(p.focused().at(-1)).toBe(p.$("#undo-bar button"));
     expect(title.getAttribute("tabindex")).toBe("-1");
     await choose("keep");
-    expect(p.focused().at(-1)).toBe(p.$(".tidy-done h3"));
+    expect(p.focused().includes(p.$(".tidy-done h3"))).toBe(true);
   });
 
   it("hints each choice's key, off the screen reader's path", () => {
@@ -750,7 +767,7 @@ describe("a Tidy up choice that is slow to answer (#314)", () => {
       release = resolve;
     });
     const p = runPage(render(queue(3)), (s) =>
-      s.url === "/tidy/keep" ? { status: 204, wait: gate } : { ...fine(s), wait: gate },
+      s.url === "/home/keep" ? { status: 204, wait: gate } : { ...fine(s), wait: gate },
     );
     p.dispatch(p.$("button[data-tidy=start]"), "click");
     await p.settle();
@@ -814,7 +831,7 @@ describe("a Tidy up choice that is slow to answer (#314)", () => {
     await p.settle();
     p.timers.fire();
     expect(choice(step, "archive").querySelector("b")?.textContent).toBe("Archive");
-    expect(p.sent.map((s) => s.url)).toEqual(["/tidy/keep"]);
+    expect(p.sent.map((s) => s.url)).toEqual(["/home/keep"]);
     release();
     await p.settle();
   });

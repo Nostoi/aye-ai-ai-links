@@ -45,7 +45,8 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  tidyKeptAt: null,
+  intent: "explore",
+  intentSource: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -79,7 +80,14 @@ describe("the card menu", () => {
         e.querySelector("small")?.remove();
         return e.textContent;
       }),
-    ).toEqual(["Archive", "Keep handy", "Edit link…", "Remove saved copy", "Delete link"]);
+    ).toEqual([
+      "Keep it",
+      "Archive",
+      "Keep handy",
+      "Edit link…",
+      "Remove saved copy",
+      "Delete link",
+    ]);
   });
 });
 

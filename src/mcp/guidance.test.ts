@@ -9,6 +9,19 @@ import {
   UPDATE_TAG,
 } from "./guidance.js";
 
+describe("intent guidance", () => {
+  it("tells agents in the instructions to label intent like the why, save_link how to send it, and update_link what each means", () => {
+    expect(INSTRUCTIONS).toContain("Intent (explore or keep) is labelled like the why.");
+    expect(SAVE_LINK).toContain("with intentSource. A repeat save ignores it too.");
+    for (const text of ["To explore", "To keep", '"inferred" if you worked it out']) {
+      expect(UPDATE_LINK).toContain(text);
+    }
+    expect(UPDATE_LINK).toContain("An inferred intent never replaces one the owner gave");
+    expect(UPDATE_LINK).toContain("A link kept handy stays To keep");
+    expect(UPDATE_LINK).toContain("Send both intent and intentSource, or neither");
+  });
+});
+
 describe("list_links guidance", () => {
   const LIST_LINKS = (guidance as Record<string, string>).LIST_LINKS ?? "";
 
@@ -195,8 +208,11 @@ describe("Keep handy guidance", () => {
     expect(GET_DIGEST).toContain('handy {action: "not_handy", source: "asked"}');
   });
 
-  it("leaves the server instructions as they were, already at the 2048-character limit", () => {
+  it("leaves Keep handy out of the server instructions, which sit at the 2048-character limit", () => {
     expect(INSTRUCTIONS).not.toContain("handy");
+    expect(INSTRUCTIONS.length).toBeLessThanOrEqual(2048);
+    expect(SAVE_LINK.length).toBeLessThanOrEqual(2048);
+    expect(UPDATE_LINK.length).toBeLessThanOrEqual(2048);
   });
 });
 

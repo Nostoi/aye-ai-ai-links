@@ -1,4 +1,5 @@
 import type { ImageBytes } from "./image-store.js";
+import type { IntentPair } from "./tool-store.js";
 import type { LinkTag, OwnerId, Source } from "./types.js";
 
 /** A picture edit: set the owner's picture, or "page" to remove it so the fetched one shows. */
@@ -7,13 +8,19 @@ export type PictureEdit = { set: ImageBytes } | "page";
 /**
  * What one edit asks for. An absent field is left as it is; a null title removes the title.
  * `tags` replaces the link's whole ordered tag set with `set`, but only while the link still
- * holds `expected`: the ordered keys and sources the owner saw.
+ * holds `expected`: the ordered keys and sources the owner saw. `intent` sets the link's intent
+ * and source, but only while the link still holds `expected`, the pair the owner saw; an
+ * `explore` is also refused while the link's Keep handy row is `kept`.
  */
 export type LinkEdit = {
   title?: string | null;
   picture?: PictureEdit;
   tags?: { expected: { key: string; source: Source }[]; set: LinkTag[] };
+  intent?: { expected: IntentPair; set: IntentPair };
 };
+
+/** What `applyEdit` answers when it wrote nothing: tags or intent moved on, or a kept tool refuses an explore. */
+export type EditRefusal = "conflict" | "intent_conflict" | "kept_tool";
 
 export type UndoOutcome = "undone" | "conflict";
 
@@ -31,7 +38,10 @@ export interface LinkEditStore {
   /**
    * In one transaction: reads the link's title, owner picture and ordered tags. When the edit
    * has tags and the link's tags (keys and sources, in order) differ from `tags.expected`, it
-   * writes nothing, title and picture included, and answers "conflict". When nothing would
+   * writes nothing, title and picture included, and answers "conflict". The same for an
+   * `intent` whose `expected` pair differs from the link's ("intent_conflict"), and for one
+   * that would change the link to `explore` while its Keep handy row is `kept` ("kept_tool").
+   * When nothing would
    * change (tags compared by key, source and order), it writes nothing and returns
    * `{ editId: null }`. Otherwise it replaces the link's edit record with what this edit
    * replaced and wrote, under a new random edit id, applies the edit and returns that id. Tags
@@ -43,7 +53,7 @@ export interface LinkEditStore {
     linkId: string,
     edit: LinkEdit,
     at: Date,
-  ): Promise<{ editId: string | null } | "conflict" | null>;
+  ): Promise<{ editId: string | null } | EditRefusal | null>;
 
   /**
    * In one transaction: puts back what the edit replaced, and removes its record. It does this

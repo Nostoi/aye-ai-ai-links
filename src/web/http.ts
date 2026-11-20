@@ -76,8 +76,8 @@ import {
 } from "../core/tag-suggest.js";
 import type { TagSuggestStore } from "../core/tag-suggest-store.js";
 import { tagKey } from "../core/tags.js";
-import { currentFocus, keepInTidy, tidySession } from "../core/tidy-up.js";
-import type { ToolRecord, WaitDays } from "../core/tool-store.js";
+import { currentFocus, tidySession } from "../core/tidy-up.js";
+import type { IntentPair, ToolRecord, WaitDays } from "../core/tool-store.js";
 import {
   answerSuggestion,
   handyOf,
@@ -104,10 +104,14 @@ import {
 import {
   archiveLink,
   bringBackLink,
+  exploreLink,
+  type IntentChange,
+  keepLink,
   markOpened,
   type StateChange,
   snoozeLink,
   tellWhy,
+  undoIntentChange,
   undoStateChange,
   unsnoozeLink,
   type WorthDeps,
@@ -283,6 +287,7 @@ type EditForm = View & {
   title?: string;
   picture?: Uint8Array | "page";
   tags?: { names: string[]; seen: { key: string; source: string }[] };
+  intent?: { value: string; seen: { intent: string; source: string | null } };
 };
 
 const isText = (value: unknown): value is string => typeof value === "string";
@@ -311,6 +316,27 @@ function takeTags(tags: unknown, seen: unknown): EditForm["tags"] | null | undef
     isText((m as { source?: unknown }).source);
   if (!Array.isArray(marks) || !marks.every(fits)) return null;
   return { names, seen: marks.map(({ key, source }) => ({ key, source })) };
+}
+
+/**
+ * The `intent` and `intentSeen` form fields, sent together or not at all: `undefined` when neither
+ * was sent, `null` when `intentSeen` is not JSON of `{ intent, source }` (a text and a text or
+ * null). Whether they are an intent and a source is core's to say.
+ */
+function takeIntent(intent: unknown, seen: unknown): EditForm["intent"] | null | undefined {
+  if (intent === null && seen === null) return undefined;
+  if (typeof intent !== "string" || typeof seen !== "string") return null;
+  let mark: unknown;
+  try {
+    mark = JSON.parse(seen);
+  } catch {
+    return null;
+  }
+  const { intent: was, source } = (mark ?? {}) as { intent?: unknown; source?: unknown };
+  if (typeof mark !== "object" || !isText(was) || !(source === null || isText(source))) {
+    return null;
+  }
+  return { value: intent, seen: { intent: was, source } };
 }
 
 /** An optional JSON member: absent, or passing `check`. */
@@ -359,9 +385,12 @@ const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, n
   }
   const tags = takeTags(form.get("tags"), form.get("seen"));
   if (tags === null) return bad();
+  const intent = takeIntent(form.get("intent"), form.get("intentSeen"));
+  if (intent === null) return bad();
   const edit: EditForm = { id };
   if (title !== null) edit.title = title;
   if (tags) edit.tags = tags;
+  if (intent) edit.intent = intent;
   if (within !== null) edit.within = within;
   if (own !== null) edit.own = true;
   if (picture instanceof Blob) edit.picture = new Uint8Array(await picture.arrayBuffer());
@@ -483,6 +512,34 @@ const stateChange = ({ before, after, at }: StateChangeJson): StateChange => ({
   at: new Date(at),
 });
 
+/** An intent action's `IntentChange` as the page holds it between the action and its Undo. */
+type IntentChangeJson = {
+  before: { intent: string; intentSource: string | null };
+  after: { intent: string; intentSource: string | null };
+  at: string;
+};
+
+const intentChangeJson = ({ before, after, at }: IntentChange): IntentChangeJson => ({
+  before,
+  after,
+  at: at.toISOString(),
+});
+
+const isPairJson = (value: unknown): value is { intent: string; intentSource: string | null } =>
+  isRecord(value) &&
+  typeof value.intent === "string" &&
+  (value.intentSource === null || typeof value.intentSource === "string");
+
+/** A change the page sends back: both pairs have their members and the time parses. Whether a pair is one the store can hold is core's to say. */
+export const isIntentChangeJson = (value: unknown): value is IntentChangeJson =>
+  isRecord(value) && isPairJson(value.before) && isPairJson(value.after) && isDate(value.at);
+
+const intentChange = ({ before, after, at }: IntentChangeJson): IntentChange => ({
+  before: before as IntentPair,
+  after: after as IntentPair,
+  at: new Date(at),
+});
+
 /** An absent row is null; a missing member is refused, never read as null. */
 export const isToolJsonOrNull = (value: unknown): value is ToolJson | null =>
   value === null || isToolJson(value);
@@ -495,10 +552,18 @@ const toolRecord = (t: ToolJson): ToolRecord => ({
   waitDays: t.waitDays,
 });
 
-/** A tool action's answer: the row it wrote and the row it replaced, which its Undo sends back. */
+/** The intent a tool action moved, as its Undo sends it back; null when it moved none. */
+const isIntentMoveOrNull = (value: unknown): value is ToolChange["intent"] =>
+  value === null || (isRecord(value) && isPairJson(value.before) && isPairJson(value.after));
+
+/** A tool action's answer: the row it wrote, the row it replaced and the intent it moved, which its Undo sends back. */
 const toolMoved = (c: Context, change: ToolChange) =>
   c.json(
-    { tool: toolJson(change.tool), previous: change.previous && toolJson(change.previous) },
+    {
+      tool: toolJson(change.tool),
+      previous: change.previous && toolJson(change.previous),
+      intent: change.intent,
+    },
     200,
     NO_STORE,
   );
@@ -827,6 +892,8 @@ export function webApp({
         pageFit: info?.pageFit ?? null,
       },
       tags: shownTags(link.tags),
+      intent: link.intent,
+      intentSource: link.intentSource,
       space: space && { color: space.color },
       lineSpace: line && { name: line.name },
     };
@@ -1302,11 +1369,12 @@ export function webApp({
   app.post("/links/edit", session, editForm, (c) =>
     homeAction(c, async () => {
       const { owner } = c.get("caller");
-      const { id, title, picture, tags, within, own } = c.get("edit");
+      const { id, title, picture, tags, intent, within, own } = c.get("edit");
       const editId = await editLink(deps, owner, id, {
         ...(title !== undefined && { title }),
         ...(picture !== undefined && { picture }),
         ...(tags !== undefined && { tags }),
+        ...(intent !== undefined && { intent }),
       });
       const view: View = { ...(within !== undefined && { within }), ...(own && { own }) };
       return c.json({ ...(await cardState(owner, id, view)), editId }, 200, NO_STORE);
@@ -1333,14 +1401,6 @@ export function webApp({
     const tags = await deps.store.listTags(c.get("caller").owner);
     return c.json({ names: tags.map((t) => t.name) }, 200, NO_STORE);
   });
-
-  // Keep in Tidy up: the link stays in the lists and out of the next sessions for a while.
-  app.post("/tidy/keep", jsonBody(linkId), session, (c) =>
-    homeAction(c, async () => {
-      await keepInTidy(deps, c.get("caller").owner, c.get("body").id);
-      return done(c);
-    }),
-  );
 
   app.post("/home/snooze", jsonBody(linkId), session, (c) =>
     homeAction(c, async () => {
@@ -1396,6 +1456,31 @@ export function webApp({
     }),
   );
 
+  // Keep it and Explore it (#339) answer the change they made; the page sends it back, as it got
+  // it, to `/home/undo-intent`. Home, the lists, search and Tidy up all use them.
+  for (const [path, act] of [
+    ["/home/keep", keepLink],
+    ["/home/explore", exploreLink],
+  ] as const) {
+    app.post(path, jsonBody(linkId), session, (c) =>
+      homeAction(c, async () =>
+        c.json(
+          intentChangeJson(await act(deps, c.get("caller").owner, c.get("body").id)),
+          200,
+          NO_STORE,
+        ),
+      ),
+    );
+  }
+
+  app.post("/home/undo-intent", jsonBody({ ...linkId, change: isIntentChangeJson }), session, (c) =>
+    homeAction(c, async () => {
+      const { id, change } = c.get("body");
+      await undoIntentChange(deps, c.get("caller").owner, id, intentChange(change));
+      return done(c);
+    }),
+  );
+
   app.post("/home/why", jsonBody({ ...linkId, text: isString }), session, (c) =>
     homeAction(c, async () => {
       const { id, text } = c.get("body");
@@ -1434,12 +1519,25 @@ export function webApp({
 
   // The Undo of a tool action: puts `previous` back (null: no row) while the row still holds
   // `tool`, the row the action answered. Core refuses a row no action could write.
-  const undoTool = { tool: isToolJson, previous: isToolJsonOrNull };
+  // `intent` is the intent the action moved with it, if any: core puts it back only while the link
+  // still holds what the action wrote, and refuses a pair the store could not hold.
+  const undoTool = {
+    tool: isToolJson,
+    previous: isToolJsonOrNull,
+    intent: optional(isIntentMoveOrNull),
+  };
   app.post("/tools/undo", jsonBody({ ...linkId, ...undoTool }), session, (c) =>
     toolAction(c, async () => {
-      const { id, tool, previous } = c.get("body");
+      const { id, tool, previous, intent } = c.get("body");
       const restored = previous && toolRecord(previous);
-      await restoreTool(deps, c.get("caller").owner, id, restored, toolRecord(tool));
+      await restoreTool(
+        deps,
+        c.get("caller").owner,
+        id,
+        restored,
+        toolRecord(tool),
+        intent ?? null,
+      );
       return done(c);
     }),
   );

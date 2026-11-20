@@ -20,11 +20,6 @@ const DAY = 86_400_000;
 const SESSION = 5;
 const linkDeps = (world: World) => createDeps(world.links, new FakeEmbedder(DIMS));
 const post = (json: unknown) => ({ method: "POST", json });
-const row = (world: World, id: string) =>
-  world.links.prepare("SELECT * FROM links WHERE id = ?").get(Number(id)) as Record<
-    string,
-    unknown
-  >;
 
 /** An old link of `owner`: saved 60 days ago (older for a lower `n`) and never opened, so Tidy up offers it. */
 async function oldLink(
@@ -173,64 +168,32 @@ describe("GET / Tidy up tray", () => {
   });
 });
 
-describe("POST /tidy/keep", () => {
-  it("sets the keep date and answers 204, uncached, changing nothing else", async () => {
+describe("Keep in Tidy up is Keep it (#339)", () => {
+  it("POST /tidy/keep is gone: a 404, changing nothing", async () => {
     const { world, browser, ids } = await tidy(1);
-    const id = ids[0] as string;
-    const before = row(world, id);
-    const res = await browser.send("/tidy/keep", post({ id }));
-    expect(res.status).toBe(204);
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    const after = row(world, id);
-    expect(after.tidy_kept_at).toEqual(expect.any(Number));
-    expect({ ...after, tidy_kept_at: null }).toEqual({ ...before, tidy_kept_at: null });
+    const before = allRows(world);
+    expect((await browser.send("/tidy/keep", post({ id: ids[0] }))).status).toBe(404);
+    expect(allRows(world)).toEqual(before);
   });
 
-  it("a kept link is out of the next session", async () => {
+  it("a link kept with /home/keep is out of the next session, and its Undo brings it back", async () => {
     const { browser } = await tidy(WORTH_SIZE + SESSION + 1);
     const [kept, ...left] = stepIds(await homeHtml(browser));
     expect(left).toHaveLength(SESSION - 1);
-    await browser.send("/tidy/keep", post({ id: kept }));
+    const res = await browser.send("/home/keep", post({ id: kept }));
+    expect(res.status).toBe(200);
     const steps = stepIds(await homeHtml(browser));
     expect(steps).toHaveLength(SESSION);
     expect(steps).not.toContain(kept);
-  });
-
-  it("refuses a link that is no longer active with 409, writing nothing", async () => {
-    const { world, browser, ids } = await tidy(1);
-    const id = ids[0] as string;
-    world.links.prepare("UPDATE links SET state = 'archived' WHERE id = ?").run(Number(id));
-    const before = allRows(world);
-    const res = await browser.send("/tidy/keep", post({ id }));
-    expect(res.status).toBe(409);
-    expect(allRows(world)).toEqual(before);
-    expect(row(world, id).tidy_kept_at).toBeNull();
+    await browser.send("/home/undo-intent", post({ id: kept, change: res.body }));
+    expect(stepIds(await homeHtml(browser))).toContain(kept);
   });
 
   it("answers 404 for a link that does not exist, and 400 for a body without an id", async () => {
-    const { browser } = await tidy(1);
-    expect((await browser.send("/tidy/keep", post({ id: "999999" }))).status).toBe(404);
-    expect((await browser.send("/tidy/keep", post({}))).status).toBe(400);
-  });
-
-  it("refuses another site's Origin with 403, writing nothing", async () => {
-    const { world, browser, ids } = await tidy(1);
-    const res = await browser.send("/tidy/keep", {
-      ...post({ id: ids[0] }),
-      headers: { origin: "https://evil.example" },
-    });
-    expect(res.status).toBe(403);
-    expect(row(world, ids[0] as string).tidy_kept_at).toBeNull();
-  });
-
-  it("the two-owner test of POST /tidy/keep: B cannot keep A's link, and A's tidyKeptAt stays null", async () => {
-    const { world, ids } = await tidy(1);
-    const id = ids[0] as string;
-    const b = await addSecondUser(world);
+    const { world, browser } = await tidy(1);
     const before = allRows(world);
-    const res = await b.send("/tidy/keep", post({ id }));
-    expect(res.status).toBe(404);
-    expect(row(world, id).tidy_kept_at).toBeNull();
+    expect((await browser.send("/home/keep", post({ id: "999999" }))).status).toBe(404);
+    expect((await browser.send("/home/keep", post({}))).status).toBe(400);
     expect(allRows(world)).toEqual(before);
   });
 });

@@ -573,6 +573,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .edit-foot button{min-height:44px}
 .edit-tags{min-width:0;margin:16px 0 0;padding:0;border:0}
 .edit-tags legend{padding:0;margin:0 0 8px;font-size:var(--text-3);font-weight:600}
+.edit-intent{min-width:0;margin:16px 0 0;padding:0;border:0}
+.edit-intent legend{padding:0;margin:0 0 8px;font-size:var(--text-3);font-weight:600}
+.edit-intent-choice{display:flex;align-items:center;gap:10px;min-height:44px}
+.edit-intent-choice input{flex:none;display:inline-block;width:auto;margin:0;padding:0;border:0}
 .edit-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px;padding:0;list-style:none}
 .edit-chips:empty{display:none}
 .edit-tag{display:inline-flex;align-items:center;min-height:44px;padding:0 0 0 14px;border:1.5px solid var(--line);border-radius:var(--radius-pill);background:var(--surface);overflow-wrap:anywhere}

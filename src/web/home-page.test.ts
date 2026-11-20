@@ -33,7 +33,8 @@ const link = (over: Partial<Link> = {}): Link => {
     savedAt: new Date("2026-03-12T10:00:00Z"),
     savedBy: "claude",
     lastOpenedAt: null,
-    tidyKeptAt: null,
+    intent: "explore",
+    intentSource: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
     state: "active",
@@ -189,7 +190,7 @@ describe("Worth a look today", () => {
     expect(slide("snooze")?.firstElementChild?.tagName.toLowerCase()).toBe("svg");
   });
 
-  it("gives a row the six-row menu and the featured card the menu without its visible two", () => {
+  it("gives a row the seven-row menu and the featured card the menu without its visible two", () => {
     const [first, second] = [card([]), card([])];
     const copies = new Map([
       [first?.link.id as string, COPY],
@@ -198,6 +199,8 @@ describe("Worth a look today", () => {
     const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
     expect(menuRows(d.querySelector(".worth-row"))).toEqual([
       "snooze",
+      "intent-keep",
+      "intent-explore (hidden)",
       "archive",
       "keep",
       "not-handy (hidden)",
@@ -206,6 +209,8 @@ describe("Worth a look today", () => {
       "delete-link",
     ]);
     expect(menuRows(d.querySelector(".worth-feature"))).toEqual([
+      "intent-keep",
+      "intent-explore (hidden)",
       "keep",
       "not-handy (hidden)",
       "edit",
@@ -1202,8 +1207,8 @@ describe("the Worth a look gone row (#128)", () => {
           `${(b as HTMLElement).dataset.act} ${b.querySelector(".slide-words > span")?.textContent}`,
       ),
     ).toEqual(["still-works It still works", "gone-archive Archive"]);
-    expect(menuRows(last).slice(0, 2)).toEqual(["snooze", "archive"]);
-    expect(menuRows(last)).toHaveLength(6);
+    expect(menuRows(last).slice(0, 2)).toEqual(["snooze", "intent-keep"]);
+    expect(menuRows(last)).toHaveLength(8);
     expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
     expect(last.querySelector(".ask")).toBeNull();
   });

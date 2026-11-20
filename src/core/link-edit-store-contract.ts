@@ -11,13 +11,14 @@ import type { SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
 import type { LinkRemover, LinkStore } from "./store.js";
 import type { TagEditStore } from "./tag-edit-store.js";
-import type { Labelled, LinkTag, Tag } from "./types.js";
+import type { ToolRecord, ToolStore } from "./tool-store.js";
+import type { Labelled, LinkTag, Source, Tag } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
 /** What the contract suite needs from a store under test. */
 export type EditHarness = {
-  links: LinkStore & SnapshotStore & LinkRemover;
+  links: LinkStore & SnapshotStore & LinkRemover & ToolStore;
   images: ImageStore & LinkImageReader;
   edits: LinkEditStore;
   tagEdits: TagEditStore;
@@ -490,6 +491,147 @@ export function describeLinkEditStoreContract(
         expect(await h.edits.applyEdit(B, id, withTags([tag("a")], [tag("x")]), at(10))).toBeNull();
         expect(await keys(A, id)).toEqual([["a", "stated"]]);
         expect((await h.links.listTags(B)).map((t) => t.key)).not.toContain("x");
+      });
+    });
+
+    describe("intent", () => {
+      type Pair = { intent: "explore" | "keep"; intentSource: Source | null };
+      const explore: Pair = { intent: "explore", intentSource: null };
+      const guess: Pair = { intent: "keep", intentSource: "inferred" };
+      const said: Pair = { intent: "keep", intentSource: "stated" };
+      const intentOf = async (id: string) => {
+        const l = await h.links.get(A, id);
+        return { intent: l?.intent, intentSource: l?.intentSource };
+      };
+      const linkWithIntent = async (pair: Pair) => {
+        const id = await linkWith(A);
+        await h.links.update(A, id, pair);
+        return id;
+      };
+
+      it("sets the intent with a receipt; Undo puts back the intent and its source", async () => {
+        const id = await linkWithIntent(guess);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { intent: { expected: guess, set: said } }, at(10)),
+        );
+        expect(await intentOf(id)).toEqual(said);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await intentOf(id)).toEqual(guess);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+      });
+
+      it("writes nothing when the intent already is what it asks, or the title is edited alone", async () => {
+        const id = await linkWithIntent(said);
+        expect(
+          await h.edits.applyEdit(A, id, { intent: { expected: said, set: said } }, at(10)),
+        ).toEqual({ editId: null });
+        await editId(h.edits.applyEdit(A, id, { title: "New" }, at(11)));
+        expect(await intentOf(id)).toEqual(said);
+      });
+
+      it("answers intent_conflict and writes nothing, the title included, when the link's intent moved on", async () => {
+        const id = await linkWithIntent(said);
+        const before = structuredClone(await h.links.get(A, id));
+        for (const expected of [
+          explore,
+          guess,
+          { intent: "keep", intentSource: "asked" } as const,
+        ]) {
+          expect(
+            await h.edits.applyEdit(
+              A,
+              id,
+              { title: "X", intent: { expected, set: explore } },
+              at(10),
+            ),
+          ).toBe("intent_conflict");
+        }
+        expect(await h.links.get(A, id)).toEqual(before);
+      });
+
+      it("refuses the Undo that would put explore back under a kept tool, as a conflict that changes nothing", async () => {
+        const id = await linkWithIntent(explore);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { intent: { expected: explore, set: said } }, at(10)),
+        );
+        const tool: ToolRecord = {
+          status: "kept" as const,
+          source: "stated" as const,
+          since: at(11),
+          answeredAt: null,
+          waitDays: 30,
+        };
+        await h.links.updateToolIf(A, id, null, tool);
+        const before = structuredClone(await h.links.get(A, id));
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+        expect(await h.links.get(A, id)).toEqual(before);
+        expect(await h.links.getTool(A, id)).toEqual(tool);
+        await h.links.updateToolIf(A, id, tool, { ...tool, status: "declined" });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await intentOf(id)).toEqual(explore);
+      });
+
+      it("answers kept_tool for an explore on a kept tool, writing nothing, and allows a keep", async () => {
+        const id = await linkWithIntent(said);
+        await h.links.updateToolIf(A, id, null, {
+          status: "kept",
+          source: "stated",
+          since: at(1),
+          answeredAt: null,
+          waitDays: 30,
+        });
+        const before = structuredClone(await h.links.get(A, id));
+        expect(
+          await h.edits.applyEdit(
+            A,
+            id,
+            { title: "X", intent: { expected: said, set: explore } },
+            at(10),
+          ),
+        ).toBe("kept_tool");
+        expect(await h.links.get(A, id)).toEqual(before);
+        const edit = await editId(
+          h.edits.applyEdit(
+            A,
+            id,
+            { intent: { expected: said, set: { intent: "keep", intentSource: "asked" } } },
+            at(11),
+          ),
+        );
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await intentOf(id)).toEqual(said);
+      });
+
+      it("Undo conflicts once the intent changed since, and keeps what is there", async () => {
+        const id = await linkWithIntent(guess);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { intent: { expected: guess, set: said } }, at(10)),
+        );
+        await h.links.update(A, id, { intent: "keep", intentSource: "asked" });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+        expect(await intentOf(id)).toEqual({ intent: "keep", intentSource: "asked" });
+      });
+
+      it("an AI edit that changes the intent gets a receipt that restores it", async () => {
+        const id = await linkWithIntent(explore);
+        const result = await h.links.updateWithReceipt(
+          A,
+          id,
+          { intent: "keep", intentSource: "inferred", intentOver: [null, "inferred"] },
+          at(20),
+        );
+        expect(await intentOf(id)).toEqual(guess);
+        expect(result?.editId).not.toBeNull();
+        expect(await h.edits.undoEdit(A, id, result?.editId as string)).toBe("undone");
+        expect(await intentOf(id)).toEqual(explore);
+      });
+
+      it("never touches another owner's link", async () => {
+        const id = await linkWithIntent(guess);
+        expect(
+          await h.edits.applyEdit(B, id, { intent: { expected: guess, set: said } }, at(10)),
+        ).toBeNull();
+        expect(await intentOf(id)).toEqual(guess);
       });
     });
 

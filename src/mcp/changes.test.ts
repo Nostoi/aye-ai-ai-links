@@ -75,14 +75,26 @@ describe("the change record", () => {
     await s.call("update_link", { id: "1", handy: { action: "keep", source: "asked" } });
 
     expect(after?.status).toBe("kept");
-    expect(first).toEqual({ kind: "handy", linkId: "1", change: { previous: null, tool: after } });
+    const moved = {
+      before: { intent: "explore", intentSource: null },
+      after: { intent: "keep", intentSource: "stated" },
+    };
+    expect(first).toEqual({
+      kind: "handy",
+      linkId: "1",
+      change: { previous: null, tool: after, intent: moved },
+    });
     const changes = s.changes();
     expect(changes).toHaveLength(2);
     expect(changes[0]).toEqual(firstAsRecorded);
     expect(changes[1]).toEqual({
       kind: "handy",
       linkId: "1",
-      change: { previous: after, tool: await deps.tools.getTool(CALLER.owner, "1") },
+      change: {
+        previous: after,
+        tool: await deps.tools.getTool(CALLER.owner, "1"),
+        intent: null,
+      },
     });
   });
 

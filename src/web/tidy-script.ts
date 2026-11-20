@@ -3,10 +3,22 @@ import { ARCHIVE_UNDO, ARCHIVE_WORKING } from "./done-link.js";
 /** What Keep says while it waits for the answer (#314). */
 const KEEP_WORKING = "Keeping…";
 
-/** What each choice posts, the bar its Undo is offered on (Keep has none), and its working word. */
+/** What each choice posts, the bar and route of its Undo, and its working word. Keep is Keep it (#339). */
 const ACTS = {
-  keep: { route: "/tidy/keep", undo: null, word: KEEP_WORKING },
-  archive: { route: "/home/archive", undo: ARCHIVE_UNDO, word: ARCHIVE_WORKING },
+  keep: {
+    route: "/home/keep",
+    undo: {
+      title: "Kept.",
+      text: "Marked To keep. Tidy up won't ask about it again.",
+      route: "/home/undo-intent",
+    },
+    word: KEEP_WORKING,
+  },
+  archive: {
+    route: "/home/archive",
+    undo: { ...ARCHIVE_UNDO, route: "/home/undo-state" },
+    word: ARCHIVE_WORKING,
+  },
 };
 const KEYS = { 1: "keep", 2: "archive" };
 
@@ -23,7 +35,8 @@ const KEYS = { 1: "keep", 2: "archive" };
  * marks the link decided, and, while open, shows the next undecided link or the finish screen and
  * moves focus to its heading. An answer that comes after Stop here or Close still counts, and shows
  * nothing. Archive answers the `StateChange` that its Undo posts back to
- * `/home/undo-state` exactly as received, then the link is undecided again: an open tray shows it
+ * `/home/undo-state` exactly as received, and Keep the intent change its Undo posts to
+ * `/home/undo-intent`; then the link is undecided again: an open tray shows it
  * (the finish screen too), a closed or ended one only returns to `closed`, never open. A refusal is
  * shown in `#tidy-error`.
  *
@@ -68,18 +81,17 @@ const choose = (step, act) =>
     tidyAlert.textContent = "";
     const res = await post(route, { id });
     answered();
-    const change = undo && res && res.status === 200 ? await res.json().catch(() => null) : null;
-    if (undo ? !change || !change.before || !change.after : !res || res.status !== 204) {
+    const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
+    if (!change || !change.before || !change.after) {
       tidyAlert.textContent = await failure(res);
       return;
     }
     decided.add(step);
     if (state === "open") go("open");
-    if (!undo) return;
     showUndo(ticket, undo.text, () =>
       whenFree(tidyRoot, async () => {
         tidyAlert.textContent = "";
-        const back = await post("/home/undo-state", { id, change });
+        const back = await post(undo.route, { id, change });
         if (!back || back.status !== 204) {
           tidyAlert.textContent = await failure(back);
           return;

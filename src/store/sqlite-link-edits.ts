@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import { sameTags } from "../core/covered-fields.js";
 import type { ImageType } from "../core/fetch.js";
-import type { LinkEdit, LinkEditStore, UndoOutcome } from "../core/link-edit-store.js";
+import type { EditRefusal, LinkEdit, LinkEditStore, UndoOutcome } from "../core/link-edit-store.js";
 import type { OwnerId } from "../core/types.js";
 import {
   attachTags,
@@ -32,25 +32,38 @@ export class SqliteLinkEditStore implements LinkEditStore {
   async applyEdit(owner: OwnerId, linkId: string, edit: LinkEdit, at: Date) {
     const n = parseId(linkId);
     if (n === null) return null;
-    const set = edit.picture !== undefined && edit.picture !== "page" ? edit.picture.set : null;
-    const setSha = set ? sha256(set.bytes) : null;
+    const picked = edit.picture !== undefined && edit.picture !== "page" ? edit.picture.set : null;
+    const setSha = picked ? sha256(picked.bytes) : null;
     return this.db
-      .transaction((): { editId: string | null } | "conflict" | null => {
+      .transaction((): { editId: string | null } | EditRefusal | null => {
         const current = readCovered(this.db, owner, n);
         if (!current) return null;
         if (edit.tags && !sameTags(current.tags, edit.tags.expected)) return "conflict";
+        const seen = edit.intent?.expected;
+        if (
+          seen &&
+          (seen.intent !== current.intent || seen.intentSource !== current.intentSource)
+        ) {
+          return "intent_conflict";
+        }
+        const set = edit.intent?.set;
+        const intent =
+          set && (set.intent !== current.intent || set.intentSource !== current.intentSource)
+            ? set
+            : null;
+        if (intent?.intent === "explore" && this.keptTool(owner, n)) return "kept_tool";
         const own = this.own(owner, n);
         const titleChanged = edit.title !== undefined && edit.title !== current.title;
         const pictureChanged =
           edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
         const tags = edit.tags && !sameTags(current.tags, edit.tags.set) ? edit.tags.set : null;
-        if (!titleChanged && !pictureChanged && !tags) return { editId: null };
+        if (!titleChanged && !pictureChanged && !tags && !intent) return { editId: null };
         if (titleChanged) this.writeTitle(owner, n, edit.title ?? null);
         if (pictureChanged) {
-          if (set && setSha) {
+          if (picked && setSha) {
             this.writeOwn(owner, n, {
-              content_type: set.contentType,
-              bytes: Buffer.from(set.bytes),
+              content_type: picked.contentType,
+              bytes: Buffer.from(picked.bytes),
               sha256: setSha,
               set_at: at.getTime(),
             });
@@ -62,6 +75,11 @@ export class SqliteLinkEditStore implements LinkEditStore {
           attachTags(this.db, owner, n, tags);
           writtenTags = JSON.stringify(readCovered(this.db, owner, n)?.tags);
         }
+        if (intent) {
+          this.db
+            .prepare("UPDATE links SET intent = ?, intent_source = ? WHERE owner_id = ? AND id = ?")
+            .run(intent.intent, intent.intentSource, owner, n);
+        }
         const editId = randomUUID();
         const prior = pictureChanged ? own : undefined;
         this.db
@@ -69,8 +87,9 @@ export class SqliteLinkEditStore implements LinkEditStore {
             `INSERT OR REPLACE INTO link_edits (owner_id, link_id, edit_id, title_changed,
                picture_changed, prior_title, written_title, prior_content_type, prior_bytes,
                prior_sha256, prior_set_at, written_sha256, tags_changed, prior_tags, written_tags,
-               at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               at, intent_changed, prior_intent, prior_intent_source, written_intent,
+               written_intent_source)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             owner,
@@ -89,6 +108,11 @@ export class SqliteLinkEditStore implements LinkEditStore {
             tags ? JSON.stringify(current.tags) : null,
             writtenTags,
             at.getTime(),
+            intent ? 1 : 0,
+            intent ? current.intent : null,
+            intent ? current.intentSource : null,
+            intent?.intent ?? null,
+            intent ? intent.intentSource : null,
           );
         return { editId };
       })
@@ -109,6 +133,9 @@ export class SqliteLinkEditStore implements LinkEditStore {
         const pictureHolds =
           row.picture_changed === 0 || (this.own(owner, n)?.sha256 ?? null) === row.written_sha256;
         if (!receiptHolds(row, current) || !pictureHolds) return "conflict";
+        if (row.intent_changed === 1 && row.prior_intent === "explore" && this.keptTool(owner, n)) {
+          return "conflict";
+        }
         if (row.title_changed === 1) this.writeTitle(owner, n, row.prior_title);
         restoreCovered(this.db, owner, n, row);
         if (row.picture_changed === 1) {
@@ -126,6 +153,14 @@ export class SqliteLinkEditStore implements LinkEditStore {
         return "undone";
       })
       .immediate();
+  }
+
+  private keptTool(owner: OwnerId, n: number): boolean {
+    return (
+      this.db
+        .prepare("SELECT 1 FROM link_tools WHERE owner_id = ? AND link_id = ? AND status = 'kept'")
+        .get(owner, n) !== undefined
+    );
   }
 
   private own(owner: OwnerId, n: number) {

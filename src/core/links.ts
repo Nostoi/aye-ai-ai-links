@@ -1,4 +1,5 @@
 import { CoreError } from "./errors.js";
+import { checkIntent, intentExpectation, keptToolStays } from "./intent.js";
 import type { CopyInfo, SavedCopyReader } from "./saved-copy.js";
 import { logOpen, type SearchLog } from "./search-log.js";
 import type { SnapshotRunner } from "./snapshot-runner.js";
@@ -13,6 +14,7 @@ import type { EventWrite, LinkStore } from "./store.js";
 import { REPLACEABLE_SUMMARY_SOURCES } from "./summary-rule.js";
 import { isTagKind, normalizeTags } from "./tags.js";
 import {
+  type Intent,
   type Labelled,
   type Link,
   type LinkPatch,
@@ -52,6 +54,9 @@ export type SaveLinkInput = {
   why?: Labelled | null;
   tags?: TagInput;
   savedBy: string;
+  /** Only a new link takes them; a repeat save leaves the saved link's intent as it is. Both or neither. */
+  intent?: Intent;
+  intentSource?: Source;
 };
 
 /** Plain text is an AI's own wording (inferred); `{text, source}` says who really wrote it. */
@@ -59,7 +64,7 @@ type SummaryInput = string | Labelled;
 
 export type UpdateLinkInput = Omit<
   LinkPatch,
-  "tags" | "lastOpenedAt" | "summary" | "summarySource" | "summaryOver"
+  "tags" | "lastOpenedAt" | "summary" | "summarySource" | "summaryOver" | "intentOver"
 > & {
   summary?: SummaryInput | null;
   tags?: TagInput;
@@ -180,6 +185,7 @@ export async function saveLink(
   const title = normalizeTitle(input.title ?? null);
   const why = cleanWhy(input.why);
   const summary = cleanSummary(input.summary);
+  const intent = checkIntent(input.intent, input.intentSource);
   const result = await store.insertIfAbsent(owner, {
     url: input.url.trim(),
     urlKey: key,
@@ -193,7 +199,8 @@ export async function saveLink(
     lastOpenedAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
-    tidyKeptAt: null,
+    intent: intent?.intent ?? "explore",
+    intentSource: intent?.intentSource ?? null,
     state: "active",
   });
   let link = result.link;
@@ -258,6 +265,7 @@ export async function getLinkWithText(
 /** Checks the input and builds the patch; throws before anything is written. */
 function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   const { tags, why, title, summary, state, snoozedUntil, opened } = input;
+  const intent = checkIntent(input.intent, input.intentSource);
   if (state !== undefined && !isState(state)) {
     throw invalid(`The state "${state}" is not valid. Use active or archived.`);
   }
@@ -277,6 +285,12 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
     patch.summarySource = cleaned.summarySource;
     // An AI's own summary, or its blank one, touches only a gap or another AI's; the store decides that atomically.
     if (cleaned.aiOwn) patch.summaryOver = REPLACEABLE_SUMMARY_SOURCES;
+  }
+  if (intent) {
+    patch.intent = intent.intent;
+    patch.intentSource = intent.intentSource;
+    // An AI's guess touches only a gap or another AI's; the store decides that atomically.
+    if (intent.intentSource === "inferred") patch.intentOver = [null, "inferred"];
   }
   if (state !== undefined) patch.state = state;
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
@@ -311,14 +325,17 @@ export async function updateLink(
   input: UpdateLinkInput,
 ): Promise<Link> {
   const at = now();
-  const link = await store.update(
-    owner,
-    id,
-    buildPatch(() => at, input),
-    eventsOf(input, at),
-  );
-  if (!link) throw notFound(id);
-  return link;
+  const patch = buildPatch(() => at, input);
+  const events = eventsOf(input, at);
+  if (patch.intent !== "explore") {
+    const link = await store.update(owner, id, patch, events);
+    if (!link) throw notFound(id);
+    return link;
+  }
+  const result = await store.updateIf(owner, id, intentExpectation(patch), patch, events);
+  if (!result) throw notFound(id);
+  if (!result.applied) throw keptToolStays();
+  return result.link;
 }
 
 /** `updateLink` for the in-app AI: the store also records what the edit replaced, and `editId` is its id for Undo (null when no covered field changed). */
@@ -330,16 +347,19 @@ export async function updateLinkWithReceipt(
   extend?: string,
 ): Promise<{ link: Link; editId: string | null }> {
   const at = now();
+  const patch = buildPatch(() => at, input);
   const result = await store.updateWithReceipt(
     owner,
     id,
-    buildPatch(() => at, input),
+    patch,
     at,
     extend,
     eventsOf(input, at),
+    intentExpectation(patch),
   );
   if (!result) throw notFound(id);
-  return result;
+  if (!result.applied) throw keptToolStays();
+  return { link: result.link, editId: result.editId };
 }
 
 /**

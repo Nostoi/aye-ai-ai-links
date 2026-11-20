@@ -66,7 +66,8 @@ async function seedOwner(
       lastOpenedAt: at(n + 100),
       lastSurfacedAt: at(n + 200),
       snoozedUntil: null,
-      tidyKeptAt: null,
+      intent: "explore",
+      intentSource: null,
       state: "active",
       ...extra,
     };
@@ -88,6 +89,7 @@ async function seedOwner(
     )
     .run(at(3).getTime(), `${mark} page title`, `${mark} snapshot body`, Number(first));
   await deps.store.pinTag(owner, `${mark} space`, { pinned: true, color: "teal" });
+  await deps.store.update(owner, first, { intent: "keep", intentSource: "stated" });
   await deps.tools.updateToolIf(owner, first, null, {
     status: "kept",
     source: "stated",

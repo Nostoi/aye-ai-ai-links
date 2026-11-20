@@ -1,4 +1,5 @@
 import type {
+  Intent,
   Labelled,
   Link,
   LinkEventKind,
@@ -64,7 +65,9 @@ export interface LinkStore {
    * Otherwise it replaces the link's edit record (see `LinkEditStore`) with what the write
    * replaced and wrote, and returns that record's new id. Null when absent or foreign; then
    * nothing is written. `update`, `updateIf` and `fillWhyIfMissing` never write a receipt.
-   * `events` are applied whenever the link write happened, with or without a receipt.
+   * `events` are applied whenever the link write happened, with or without a receipt. With
+   * `expected`, the write happens only while the link matches it, as `updateIf` does; otherwise
+   * `applied` is false, nothing is written (no receipt, no events) and `editId` is null.
    */
   updateWithReceipt(
     owner: OwnerId,
@@ -73,7 +76,8 @@ export interface LinkStore {
     at: Date,
     extend?: string,
     events?: EventWrite[],
-  ): Promise<{ link: Link; editId: string | null } | null>;
+    expected?: LinkExpectation,
+  ): Promise<{ link: Link; editId: string | null; applied: boolean } | null>;
 
   /**
    * Conditional write: set why only if it is currently null. Returns the link
@@ -209,6 +213,9 @@ export interface LinkRemover {
  * What a conditional write expects of a link. `snoozedUntil` matches to the millisecond,
  * `whySource` lists the accepted sources of its why, with null for no why, and `summary` matches the
  * summary text while `summarySource` lists the accepted sources of its label, with null for none.
+ * `intent` matches the intent and `intentSource` lists the accepted sources of its label, with
+ * null for none. `notKeptTool` holds only while the link's Keep handy row is not `kept`, judged
+ * in the same write.
  */
 export type LinkExpectation = {
   state?: LinkState;
@@ -216,6 +223,9 @@ export type LinkExpectation = {
   whySource?: (Source | null)[];
   summary?: string | null;
   summarySource?: (SummarySource | null)[];
+  intent?: Intent;
+  intentSource?: (Source | null)[];
+  notKeptTool?: true;
 };
 
 /**

@@ -1,10 +1,11 @@
 import { CoreError } from "./errors.js";
+import { checkPair, keptToolStays } from "./intent.js";
 import { type GoneView, goneView, isGone } from "./link-check.js";
 import type { LinkCheck, LinkCheckStore } from "./link-check-store.js";
 import { notFound } from "./links.js";
 import type { EventWrite, LinkStore } from "./store.js";
-import type { ToolRecord, ToolStore, WaitDays } from "./tool-store.js";
-import type { Link, OwnerId, Source, ToolStatus } from "./types.js";
+import type { IntentPair, ToolRecord, ToolStore, WaitDays } from "./tool-store.js";
+import type { Intent, Link, OwnerId, Source, ToolStatus } from "./types.js";
 
 /**
  * Keep handy: every rule about tools. The doors only translate requests into these calls.
@@ -66,8 +67,43 @@ export type ToolsDeps = {
   now: () => Date;
 };
 
-/** What a tool action did: the row it wrote, and the row it replaced (null: there was none). */
-export type ToolChange = { tool: ToolRecord; previous: ToolRecord | null };
+/**
+ * What a tool action did: the row it wrote, the row it replaced (null: there was none), and the
+ * intent it moved with it (null: none). A link kept handy is To keep, so a move to `kept` writes
+ * keep with the row's source, unless the owner already said keep.
+ */
+export type ToolChange = {
+  tool: ToolRecord;
+  previous: ToolRecord | null;
+  intent: { before: IntentPair; after: IntentPair } | null;
+};
+
+/** The intent a move to `next` carries: keep with the row's source, unless an owner already kept the link. */
+function intentFor(link: Link, next: ToolRecord): { set: IntentPair; onlyIf: IntentPair } | null {
+  if (next.status !== "kept") return null;
+  const owned =
+    link.intent === "keep" && (link.intentSource === "stated" || link.intentSource === "asked");
+  if (owned) return null;
+  return {
+    set: { intent: "keep", intentSource: next.source },
+    onlyIf: { intent: link.intent, intentSource: link.intentSource },
+  };
+}
+
+/**
+ * A call that keeps a link handy and also sets it to explore asks for two things that cannot both
+ * stand, so it is refused before anything is written. A suggestion (inferred) keeps nothing.
+ */
+export function checkIntentWithHandy(
+  handy: { action: string; source: Source } | undefined,
+  intent: Intent | undefined,
+): void {
+  const keeps =
+    handy?.action === "still_using" || (handy?.action === "keep" && handy.source !== "inferred");
+  if (keeps && intent === "explore") {
+    throw keptToolStays();
+  }
+}
 
 const CHANGED =
   "That link's Keep handy state changed at the same moment. Read the link again and retry.";
@@ -108,17 +144,23 @@ async function change(
   if (!link) throw notFound(id);
   const current = await deps.tools.getTool(owner, id);
   const next = decide(current, link, now);
-  if (next === current) return { tool: next, previous: current };
+  if (next === current) return { tool: next, previous: current, intent: null };
+  const moved = intentFor(link, next);
   const result = await deps.tools.updateToolIf(
     owner,
     id,
     current,
     next,
     declinedEvent(current, next),
+    moved ?? undefined,
   );
   if (!result) throw notFound(id);
   if (!result.applied) throw new CoreError("conflict", CHANGED);
-  return { tool: next, previous: current };
+  return {
+    tool: next,
+    previous: current,
+    intent: moved && { before: moved.onlyIf, after: moved.set },
+  };
 }
 
 function ownerOnly(source: Source): void {
@@ -227,7 +269,9 @@ function isProducible(row: ToolRecord, now: Date): boolean {
  * still holds the values `expectedCurrent` (the action's written row) has, compared by value. If
  * it differs, that is a conflict and nothing changes, as with home's Undo. A later change that
  * leaves the row with identical values is not detected. A `previous` no action could have
- * written is refused as invalid_input.
+ * written is refused as invalid_input. With `intent` (what the action returned), the same step
+ * puts the intent's `before` back, but only while the link still holds its `after`; otherwise the
+ * intent is left alone. The row goes first, so an explore `before` waits for a row no longer kept.
  */
 export async function restoreTool(
   deps: Pick<ToolsDeps, "tools" | "now">,
@@ -235,16 +279,25 @@ export async function restoreTool(
   id: string,
   previous: ToolRecord | null,
   expectedCurrent: ToolRecord,
+  intent: ToolChange["intent"] = null,
 ): Promise<void> {
   if (previous && !isProducible(previous, deps.now())) {
     throw new CoreError("invalid_input", "That Keep handy state can't be restored.");
   }
+  const back = intent && { set: checkPair(intent.before), onlyIf: checkPair(intent.after) };
   // Undoing the decline takes back its event, found by the declined row's own `since`.
   const events: EventWrite[] =
     expectedCurrent.status === "declined" && previous?.status !== "declined"
       ? [{ unrecord: "not_handy", at: expectedCurrent.since }]
       : [];
-  const result = await deps.tools.updateToolIf(owner, id, expectedCurrent, previous, events);
+  const result = await deps.tools.updateToolIf(
+    owner,
+    id,
+    expectedCurrent,
+    previous,
+    events,
+    back ?? undefined,
+  );
   if (!result) throw notFound(id);
   if (!result.applied) {
     throw new CoreError(

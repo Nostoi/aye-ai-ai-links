@@ -31,7 +31,8 @@ export const newLink = (n: number, savedAt: Date): NewLink => ({
   lastOpenedAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
-  tidyKeptAt: null,
+  intent: "explore",
+  intentSource: null,
   state: "active",
 });
 

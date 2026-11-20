@@ -275,7 +275,7 @@ if (handy) {
         }
         if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from, tile);
-        offerUndo(ticket, "Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous }, from);
+        offerUndo(ticket, "Marked as working.", "/links/still-works/undo", { id, check: moved.check, previous: moved.previous, intent: moved.intent }, from);
         return;
       }
       const [route, body, undo] = make(id);
@@ -287,7 +287,7 @@ if (handy) {
         return;
       }
       dropped = await refreshShelf(from, tile);
-      if (undo) offerUndo(ticket, undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous }, from);
+      if (undo) offerUndo(ticket, undo, "/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent }, from);
     } finally {
       look.clear();
       if (!dropped) cardBusy.delete(tile);

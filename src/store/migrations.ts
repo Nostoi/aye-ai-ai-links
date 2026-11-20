@@ -451,7 +451,93 @@ export const MIGRATIONS: Migration[] = [
     FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE
   );
   `,
+  addIntent,
 ];
+
+/**
+ * Intent (#339): every link says To explore or To keep, and who said so. A link kept handy is To
+ * keep with the tool's source, and one Tidy up kept within its 180-day wait is To keep as stated;
+ * nothing is read from `put_away_at`. Both old columns go, and `link_edits` is rebuilt (with
+ * literal DDL) so an intent-only edit receipt passes its at-least-one-field check.
+ */
+function addIntent(db: Database): void {
+  db.exec(`
+    ALTER TABLE links ADD COLUMN intent TEXT NOT NULL DEFAULT 'explore'
+      CHECK (intent IN ('explore', 'keep'));
+    ALTER TABLE links ADD COLUMN intent_source TEXT
+      CHECK (intent_source IN ('stated', 'asked', 'inferred'))
+      CHECK (intent = 'explore' OR intent_source IS NOT NULL);
+    UPDATE links SET intent = 'keep', intent_source = 'stated'
+      WHERE tidy_kept_at IS NOT NULL
+        AND tidy_kept_at > CAST(ROUND(unixepoch('subsec') * 1000) AS INTEGER) - 15552000000;
+    UPDATE links SET intent = 'keep',
+      intent_source = (SELECT t.source FROM link_tools t
+        WHERE t.owner_id = links.owner_id AND t.link_id = links.id)
+      WHERE EXISTS (SELECT 1 FROM link_tools t
+        WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept');
+    ALTER TABLE links DROP COLUMN put_away_at;
+    ALTER TABLE links DROP COLUMN tidy_kept_at;`);
+  const triggers = (
+    db
+      .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY rowid")
+      .all() as { name: string; sql: string }[]
+  ).filter((t) => /\blink_edits\b/.test(t.sql));
+  const indexes = db
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'link_edits' AND sql IS NOT NULL",
+    )
+    .all() as { sql: string }[];
+  const cols =
+    "owner_id, link_id, edit_id, title_changed, picture_changed, prior_title, written_title, prior_content_type, prior_bytes, prior_sha256, prior_set_at, written_sha256, at, summary_changed, prior_summary, written_summary, why_changed, prior_why_text, prior_why_source, written_why_text, written_why_source, tags_changed, prior_tags, written_tags, prior_summary_source, written_summary_source";
+  db.exec(`
+    CREATE TABLE link_edits_new (
+      owner_id TEXT NOT NULL,
+      link_id INTEGER NOT NULL,
+      edit_id TEXT NOT NULL,
+      title_changed INTEGER NOT NULL CHECK (title_changed IN (0, 1)),
+      picture_changed INTEGER NOT NULL CHECK (picture_changed IN (0, 1)),
+      prior_title TEXT,
+      written_title TEXT,
+      prior_content_type TEXT
+        CHECK (prior_content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+      prior_bytes BLOB
+        CHECK (prior_bytes IS NULL OR (typeof(prior_bytes) = 'blob' AND length(prior_bytes) <= 2097152)),
+      prior_sha256 TEXT,
+      prior_set_at INTEGER,
+      written_sha256 TEXT,
+      at INTEGER NOT NULL,
+      summary_changed INTEGER NOT NULL DEFAULT 0 CHECK (summary_changed IN (0, 1)),
+      prior_summary TEXT,
+      written_summary TEXT,
+      why_changed INTEGER NOT NULL DEFAULT 0 CHECK (why_changed IN (0, 1)),
+      prior_why_text TEXT,
+      prior_why_source TEXT,
+      written_why_text TEXT,
+      written_why_source TEXT,
+      tags_changed INTEGER NOT NULL DEFAULT 0 CHECK (tags_changed IN (0, 1)),
+      prior_tags TEXT,
+      written_tags TEXT,
+      prior_summary_source TEXT,
+      written_summary_source TEXT,
+      intent_changed INTEGER NOT NULL DEFAULT 0 CHECK (intent_changed IN (0, 1)),
+      prior_intent TEXT,
+      prior_intent_source TEXT,
+      written_intent TEXT,
+      written_intent_source TEXT,
+      PRIMARY KEY (owner_id, link_id),
+      FOREIGN KEY (owner_id, link_id) REFERENCES links(owner_id, id) ON DELETE CASCADE,
+      CHECK (title_changed = 1 OR picture_changed = 1 OR summary_changed = 1
+        OR why_changed = 1 OR tags_changed = 1 OR intent_changed = 1),
+      CHECK ((prior_bytes IS NULL) = (prior_sha256 IS NULL)
+        AND (prior_bytes IS NULL) = (prior_content_type IS NULL)
+        AND (prior_bytes IS NULL) = (prior_set_at IS NULL))
+    );
+    INSERT INTO link_edits_new (${cols}) SELECT ${cols} FROM link_edits;`);
+  for (const t of triggers) db.exec(`DROP TRIGGER ${t.name}`);
+  db.exec("DROP TABLE link_edits; ALTER TABLE link_edits_new RENAME TO link_edits;");
+  for (const t of triggers) db.exec(t.sql);
+  for (const i of indexes) db.exec(i.sql);
+}
 
 /**
  * Link edits widen (#181): `link_edits` also holds the summary, why and tags an AI edit changed,

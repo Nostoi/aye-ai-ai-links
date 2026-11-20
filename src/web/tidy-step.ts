@@ -50,7 +50,7 @@ function whySection(why: Link["why"]): string {
 }
 
 const CHOICES = `<div class="tidy-choices">
-<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>Stays where it is.</span><kbd class="key" aria-hidden="true">1</kbd></button>
+<button type="button" data-act="keep" aria-keyshortcuts="1"><b>Keep</b><span>To keep. Tidy won't ask again.</span><kbd class="key" aria-hidden="true">1</kbd></button>
 <button type="button" data-act="archive" aria-keyshortcuts="2"><b>Archive</b><span>Still findable in search.</span><kbd class="key" aria-hidden="true">2</kbd></button>
 </div>`;
 

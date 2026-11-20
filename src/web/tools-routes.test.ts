@@ -74,6 +74,10 @@ describe("POST /tools/keep", () => {
         waitDays: 30,
       },
       previous: null,
+      intent: {
+        before: { intent: "explore", intentSource: null },
+        after: { intent: "keep", intentSource: "stated" },
+      },
     });
     expect(toolRow(world, id)).toEqual({
       status: "kept",
@@ -367,7 +371,7 @@ describe("POST /tools/undo", () => {
       expect(res.status, JSON.stringify(change)).toBe(400);
       expect(res.body).toEqual({
         code: "BAD_REQUEST",
-        message: "Send a JSON body with id and tool and previous.",
+        message: "Send a JSON body with id and tool and previous and intent.",
       });
     }
     expect(allRows(world)).toEqual(before);

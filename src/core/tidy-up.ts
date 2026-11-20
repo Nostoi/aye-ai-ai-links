@@ -2,15 +2,11 @@ import { compareIds, type DigestDeps, FOCUS_WINDOW_MS, NOT_OPENED_MS } from "./d
 import { isGone } from "./link-check.js";
 import { recentFocus } from "./profile.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
-import { ALREADY_ARCHIVED, changeIf } from "./worth-a-look.js";
 
-/** The Tidy up queue and Keep's wait: the use cases behind Home's Tidy up tray. */
+/** The Tidy up queue: the use cases behind Home's Tidy up tray. Keep is `keepLink` (To keep). */
 
-const DAY_MS = 86_400_000;
 /** Links in one Tidy up session; `tidySession` offers one only when this many are left to show. */
 export const TIDY_SESSION = 5;
-/** After Keep, a link stays out of Tidy up this long. */
-export const TIDY_KEEP_WAIT_MS = 180 * DAY_MS;
 
 export type TidyDeps = Pick<
   DigestDeps,
@@ -22,8 +18,8 @@ export type TidyLink = { link: Link; fit: FocusEntry | null };
 
 /**
  * The owner's links that qualify, oldest saved first, then lowest id. A link qualifies when it is
- * active, saved and last opened at least NOT_OPENED_MS ago, not a kept tool, not gone (Home's gone
- * row asks about those), not kept in Tidy up within TIDY_KEEP_WAIT_MS, and not in `skip`.
+ * active, saved and last opened at least NOT_OPENED_MS ago, To explore (a To keep link is never
+ * asked about), not a kept tool, not gone (Home's gone row asks about those), and not in `skip`.
  */
 async function qualifying(
   deps: TidyDeps,
@@ -32,7 +28,6 @@ async function qualifying(
   skip: ReadonlySet<string>,
 ): Promise<Link[]> {
   const oldBefore = now.getTime() - NOT_OPENED_MS;
-  const keptBefore = now.getTime() - TIDY_KEEP_WAIT_MS;
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
   return (await deps.store.listLinks(owner))
@@ -40,11 +35,11 @@ async function qualifying(
       (l) =>
         !skip.has(l.id) &&
         l.state === "active" &&
+        l.intent === "explore" &&
         l.savedAt.getTime() <= oldBefore &&
         (l.lastOpenedAt === null || l.lastOpenedAt.getTime() <= oldBefore) &&
         tools.get(l.id)?.status !== "kept" &&
-        !isGone(checks.get(l.id) ?? null) &&
-        (l.tidyKeptAt === null || l.tidyKeptAt.getTime() <= keptBefore),
+        !isGone(checks.get(l.id) ?? null),
     )
     .sort((a, b) => a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id));
 }
@@ -91,16 +86,4 @@ export async function tidySession(
 ): Promise<TidyLink[] | null> {
   const queue = await tidyQueue(deps, owner, TIDY_SESSION, skip);
   return queue.length < TIDY_SESSION ? null : queue;
-}
-
-/** Keep: sets tidyKeptAt = now while the link is active; a link that changed since is a conflict. */
-export async function keepInTidy(deps: TidyDeps, owner: OwnerId, id: string): Promise<void> {
-  await changeIf(
-    deps,
-    owner,
-    id,
-    { state: "active" },
-    { tidyKeptAt: deps.now() },
-    ALREADY_ARCHIVED,
-  );
 }

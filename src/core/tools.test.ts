@@ -23,10 +23,12 @@ import {
   stillUsing,
 } from "./tools.js";
 import type { Link } from "./types.js";
+import { exploreLink } from "./worth-a-look.js";
 
 const DAY = 86_400_000;
 const T0 = new Date("2026-10-01T00:00:00Z");
 const day = (d: number) => new Date(T0.getTime() + d * DAY);
+const EXPLORE = { intent: "explore", intentSource: null } as const;
 
 const linkWith = (over: Partial<Link> = {}): Link => ({
   id: "1",
@@ -40,7 +42,8 @@ const linkWith = (over: Partial<Link> = {}): Link => ({
   savedAt: day(-100),
   savedBy: "t",
   lastOpenedAt: null,
-  tidyKeptAt: null,
+  intent: "explore",
+  intentSource: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -152,6 +155,7 @@ const saved = async (owner = A): Promise<string> =>
   (await store.insertIfAbsent(owner, newLink(++n, day(-100)))).link.id;
 /** Puts a row in place directly, for a starting state the rules would take days to reach. */
 const put = async (id: string, row: ToolRecord) => {
+  if (row.status === "kept") await store.update(A, id, { intent: "keep", intentSource: "stated" });
   await store.updateToolIf(A, id, await store.getTool(A, id), row);
 };
 /** Flags the link as gone, as two dead checks a week apart would. */
@@ -185,11 +189,16 @@ describe("keepHandy", () => {
 
   it("returns the row it wrote with the row it replaced", async () => {
     const id = await saved();
-    expect(await keepHandy(deps(), A, id, "stated")).toEqual({ tool: tool(), previous: null });
+    expect(await keepHandy(deps(), A, id, "stated")).toEqual({
+      tool: tool(),
+      previous: null,
+      intent: { before: EXPLORE, after: { intent: "keep", intentSource: "stated" } },
+    });
     clock = day(2);
     expect(await notHandy(deps(), A, id, "asked")).toEqual({
       tool: tool({ status: "declined", source: "asked", since: day(2) }),
       previous: tool(),
+      intent: null,
     });
     const suggested = await saved();
     await keepHandy(deps(), A, suggested, "inferred");
@@ -197,6 +206,7 @@ describe("keepHandy", () => {
     expect(await answerSuggestion(deps(), A, suggested, true)).toEqual({
       tool: tool({ source: "asked", since: day(2) }),
       previous: suggestion,
+      intent: { before: EXPLORE, after: { intent: "keep", intentSource: "asked" } },
     });
   });
 
@@ -339,6 +349,7 @@ describe("stillUsing", () => {
     expect(await stillUsing(deps(), A, id, "stated")).toEqual({
       tool: tool({ answeredAt: day(30), waitDays: 60 }),
       previous: tool(),
+      intent: null,
     });
   });
 
@@ -439,6 +450,21 @@ describe("stillUsing", () => {
 });
 
 describe("restoreTool", () => {
+  it("refuses the Undo of Not handy anymore after Explore it, as a conflict that changes nothing", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(1);
+    const declined = await notHandy(deps(), A, id, "stated");
+    await exploreLink(deps(), A, id);
+    const link = await store.get(A, id);
+    expect(await code(restoreTool(deps(), A, id, declined.previous, declined.tool))).toBe(
+      "conflict",
+    );
+    expect(await store.getTool(A, id)).toEqual(declined.tool);
+    expect(await store.get(A, id)).toEqual(link);
+    expect([link?.intent, link?.intentSource]).toEqual(["explore", "stated"]);
+  });
+
   it("undoing a first keep restores exact absence, so the link can be suggested again", async () => {
     const id = await saved();
     const kept = await keepHandy(deps(), A, id, "stated");

@@ -1,0 +1,1310 @@
+{
+  "capturedFrom": "tools/list on main 9a0c643 (#339's base), before the intent fields; both protocol eras advertise the same schemas",
+  "save_link": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "urlKey": {
+            "type": "string"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "summarySource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["stated", "asked", "inferred", "server"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["text", "source"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "kindSource": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                }
+              },
+              "required": ["key", "name", "source", "kind", "kindSource"]
+            }
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "savedBy": {
+            "type": "string"
+          },
+          "lastOpenedAt": {
+            "type": ["string", "null"]
+          },
+          "lastSurfacedAt": {
+            "type": ["string", "null"]
+          },
+          "snoozedUntil": {
+            "type": ["string", "null"]
+          },
+          "putAwayAt": {
+            "type": "null"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["active", "archived"]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "retrying",
+                      "ok",
+                      "failed",
+                      "refused",
+                      "not_html",
+                      "extract_timeout",
+                      "extract_out_of_memory",
+                      "extract_crashed"
+                    ]
+                  },
+                  "fetchedAt": {
+                    "type": ["string", "null"]
+                  },
+                  "title": {
+                    "type": ["string", "null"]
+                  },
+                  "description": {
+                    "type": ["string", "null"]
+                  },
+                  "imageUrl": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "handy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["kept", "suggested", "declined"]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  },
+                  "due": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["status", "source", "due"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gone": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string"
+                  },
+                  "checkedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": ["since", "checkedAt"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "openUrl": {
+            "description": "The address to show the owner when they may click the link: it opens the page and records the opening. Fetch url yourself, never this. Null when there is none: show url.",
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "urlKey",
+          "title",
+          "summary",
+          "summarySource",
+          "why",
+          "tags",
+          "savedAt",
+          "savedBy",
+          "lastOpenedAt",
+          "lastSurfacedAt",
+          "snoozedUntil",
+          "putAwayAt",
+          "state",
+          "snapshot",
+          "handy",
+          "gone",
+          "openUrl"
+        ]
+      },
+      "created": {
+        "type": "boolean"
+      },
+      "snapshotText": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": ["text", "truncated"]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "filingContext": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "kindSource": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "color": {
+                  "type": ["string", "null"]
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": ["string", "null"]
+                },
+                "projectStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["active", "done"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "name",
+                "kind",
+                "kindSource",
+                "color",
+                "pinned",
+                "description",
+                "projectStatus"
+              ]
+            }
+          },
+          "activeProjects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "kindSource": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "color": {
+                  "type": ["string", "null"]
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": ["string", "null"]
+                },
+                "projectStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["active", "done"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "name",
+                "kind",
+                "kindSource",
+                "color",
+                "pinned",
+                "description",
+                "projectStatus"
+              ]
+            }
+          }
+        },
+        "required": ["tags", "activeProjects"]
+      },
+      "profile": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "writtenBy": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "text", "source", "writtenBy", "updatedAt"]
+            }
+          },
+          "recentFocus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "writtenBy": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "text", "source", "writtenBy", "createdAt"]
+            }
+          }
+        },
+        "required": ["notes", "recentFocus"]
+      }
+    },
+    "required": ["link", "created", "snapshotText", "filingContext", "profile"]
+  },
+  "get_link": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "urlKey": {
+            "type": "string"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "summarySource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["stated", "asked", "inferred", "server"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["text", "source"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "kindSource": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                }
+              },
+              "required": ["key", "name", "source", "kind", "kindSource"]
+            }
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "savedBy": {
+            "type": "string"
+          },
+          "lastOpenedAt": {
+            "type": ["string", "null"]
+          },
+          "lastSurfacedAt": {
+            "type": ["string", "null"]
+          },
+          "snoozedUntil": {
+            "type": ["string", "null"]
+          },
+          "putAwayAt": {
+            "type": "null"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["active", "archived"]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "retrying",
+                      "ok",
+                      "failed",
+                      "refused",
+                      "not_html",
+                      "extract_timeout",
+                      "extract_out_of_memory",
+                      "extract_crashed"
+                    ]
+                  },
+                  "fetchedAt": {
+                    "type": ["string", "null"]
+                  },
+                  "title": {
+                    "type": ["string", "null"]
+                  },
+                  "description": {
+                    "type": ["string", "null"]
+                  },
+                  "imageUrl": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "handy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["kept", "suggested", "declined"]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  },
+                  "due": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["status", "source", "due"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gone": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string"
+                  },
+                  "checkedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": ["since", "checkedAt"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "openUrl": {
+            "description": "The address to show the owner when they may click the link: it opens the page and records the opening. Fetch url yourself, never this. Null when there is none: show url.",
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "urlKey",
+          "title",
+          "summary",
+          "summarySource",
+          "why",
+          "tags",
+          "savedAt",
+          "savedBy",
+          "lastOpenedAt",
+          "lastSurfacedAt",
+          "snoozedUntil",
+          "putAwayAt",
+          "state",
+          "snapshot",
+          "handy",
+          "gone",
+          "openUrl"
+        ]
+      },
+      "snapshotText": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": ["text", "truncated"]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "savedCopy": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "madeAt": {
+                "type": "string"
+              }
+            },
+            "required": ["madeAt"]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": ["link", "snapshotText", "savedCopy"]
+  },
+  "list_links": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "links": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "urlKey": {
+              "type": "string"
+            },
+            "title": {
+              "type": ["string", "null"]
+            },
+            "summary": {
+              "type": ["string", "null"]
+            },
+            "summarySource": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred", "server"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "why": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": ["stated", "asked", "inferred"]
+                    }
+                  },
+                  "required": ["text", "source"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["topic", "project"]
+                  },
+                  "kindSource": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["key", "name", "source", "kind", "kindSource"]
+              }
+            },
+            "savedAt": {
+              "type": "string"
+            },
+            "savedBy": {
+              "type": "string"
+            },
+            "lastOpenedAt": {
+              "type": ["string", "null"]
+            },
+            "lastSurfacedAt": {
+              "type": ["string", "null"]
+            },
+            "snoozedUntil": {
+              "type": ["string", "null"]
+            },
+            "putAwayAt": {
+              "type": "null"
+            },
+            "state": {
+              "type": "string",
+              "enum": ["active", "archived"]
+            },
+            "snapshot": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "retrying",
+                        "ok",
+                        "failed",
+                        "refused",
+                        "not_html",
+                        "extract_timeout",
+                        "extract_out_of_memory",
+                        "extract_crashed"
+                      ]
+                    },
+                    "fetchedAt": {
+                      "type": ["string", "null"]
+                    },
+                    "title": {
+                      "type": ["string", "null"]
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "imageUrl": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "handy": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["kept", "suggested", "declined"]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": ["stated", "asked", "inferred"]
+                    },
+                    "due": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["status", "source", "due"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "gone": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["since", "checkedAt"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "openUrl": {
+              "description": "The address to show the owner when they may click the link: it opens the page and records the opening. Fetch url yourself, never this. Null when there is none: show url.",
+              "type": ["string", "null"]
+            }
+          },
+          "required": [
+            "id",
+            "url",
+            "urlKey",
+            "title",
+            "summary",
+            "summarySource",
+            "why",
+            "tags",
+            "savedAt",
+            "savedBy",
+            "lastOpenedAt",
+            "lastSurfacedAt",
+            "snoozedUntil",
+            "putAwayAt",
+            "state",
+            "snapshot",
+            "handy",
+            "gone",
+            "openUrl"
+          ]
+        }
+      },
+      "total": {
+        "type": "integer",
+        "minimum": -9007199254740991,
+        "maximum": 9007199254740991
+      },
+      "nextCursor": {
+        "type": ["string", "null"]
+      }
+    },
+    "required": ["links", "total", "nextCursor"]
+  },
+  "update_link": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "urlKey": {
+            "type": "string"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "summarySource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["stated", "asked", "inferred", "server"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["text", "source"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["topic", "project"]
+                },
+                "kindSource": {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred"]
+                }
+              },
+              "required": ["key", "name", "source", "kind", "kindSource"]
+            }
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "savedBy": {
+            "type": "string"
+          },
+          "lastOpenedAt": {
+            "type": ["string", "null"]
+          },
+          "lastSurfacedAt": {
+            "type": ["string", "null"]
+          },
+          "snoozedUntil": {
+            "type": ["string", "null"]
+          },
+          "putAwayAt": {
+            "type": "null"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["active", "archived"]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "retrying",
+                      "ok",
+                      "failed",
+                      "refused",
+                      "not_html",
+                      "extract_timeout",
+                      "extract_out_of_memory",
+                      "extract_crashed"
+                    ]
+                  },
+                  "fetchedAt": {
+                    "type": ["string", "null"]
+                  },
+                  "title": {
+                    "type": ["string", "null"]
+                  },
+                  "description": {
+                    "type": ["string", "null"]
+                  },
+                  "imageUrl": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "handy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["kept", "suggested", "declined"]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  },
+                  "due": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["status", "source", "due"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gone": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string"
+                  },
+                  "checkedAt": {
+                    "type": "string"
+                  }
+                },
+                "required": ["since", "checkedAt"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "openUrl": {
+            "description": "The address to show the owner when they may click the link: it opens the page and records the opening. Fetch url yourself, never this. Null when there is none: show url.",
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "urlKey",
+          "title",
+          "summary",
+          "summarySource",
+          "why",
+          "tags",
+          "savedAt",
+          "savedBy",
+          "lastOpenedAt",
+          "lastSurfacedAt",
+          "snoozedUntil",
+          "putAwayAt",
+          "state",
+          "snapshot",
+          "handy",
+          "gone",
+          "openUrl"
+        ]
+      }
+    },
+    "required": ["link"]
+  },
+  "search_links": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "links": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "urlKey": {
+              "type": "string"
+            },
+            "title": {
+              "type": ["string", "null"]
+            },
+            "summary": {
+              "type": ["string", "null"]
+            },
+            "summarySource": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["stated", "asked", "inferred", "server"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "why": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": ["stated", "asked", "inferred"]
+                    }
+                  },
+                  "required": ["text", "source"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["topic", "project"]
+                  },
+                  "kindSource": {
+                    "type": "string",
+                    "enum": ["stated", "asked", "inferred"]
+                  }
+                },
+                "required": ["key", "name", "source", "kind", "kindSource"]
+              }
+            },
+            "savedAt": {
+              "type": "string"
+            },
+            "savedBy": {
+              "type": "string"
+            },
+            "lastOpenedAt": {
+              "type": ["string", "null"]
+            },
+            "lastSurfacedAt": {
+              "type": ["string", "null"]
+            },
+            "snoozedUntil": {
+              "type": ["string", "null"]
+            },
+            "putAwayAt": {
+              "type": "null"
+            },
+            "state": {
+              "type": "string",
+              "enum": ["active", "archived"]
+            },
+            "snapshot": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "retrying",
+                        "ok",
+                        "failed",
+                        "refused",
+                        "not_html",
+                        "extract_timeout",
+                        "extract_out_of_memory",
+                        "extract_crashed"
+                      ]
+                    },
+                    "fetchedAt": {
+                      "type": ["string", "null"]
+                    },
+                    "title": {
+                      "type": ["string", "null"]
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "imageUrl": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["status", "fetchedAt", "title", "description", "imageUrl"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "handy": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["kept", "suggested", "declined"]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": ["stated", "asked", "inferred"]
+                    },
+                    "due": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["status", "source", "due"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "gone": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["since", "checkedAt"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "openUrl": {
+              "description": "The address to show the owner when they may click the link: it opens the page and records the opening. Fetch url yourself, never this. Null when there is none: show url.",
+              "type": ["string", "null"]
+            }
+          },
+          "required": [
+            "id",
+            "url",
+            "urlKey",
+            "title",
+            "summary",
+            "summarySource",
+            "why",
+            "tags",
+            "savedAt",
+            "savedBy",
+            "lastOpenedAt",
+            "lastSurfacedAt",
+            "snoozedUntil",
+            "putAwayAt",
+            "state",
+            "snapshot",
+            "handy",
+            "gone",
+            "openUrl"
+          ]
+        }
+      }
+    },
+    "required": ["links"]
+  }
+}

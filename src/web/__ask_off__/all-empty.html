@@ -455,6 +455,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .edit-foot button{min-height:44px}
 .edit-tags{min-width:0;margin:16px 0 0;padding:0;border:0}
 .edit-tags legend{padding:0;margin:0 0 8px;font-size:var(--text-3);font-weight:600}
+.edit-intent{min-width:0;margin:16px 0 0;padding:0;border:0}
+.edit-intent legend{padding:0;margin:0 0 8px;font-size:var(--text-3);font-weight:600}
+.edit-intent-choice{display:flex;align-items:center;gap:10px;min-height:44px}
+.edit-intent-choice input{flex:none;display:inline-block;width:auto;margin:0;padding:0;border:0}
 .edit-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px;padding:0;list-style:none}
 .edit-chips:empty{display:none}
 .edit-tag{display:inline-flex;align-items:center;min-height:44px;padding:0 0 0 14px;border:1.5px solid var(--line);border-radius:var(--radius-pill);background:var(--surface);overflow-wrap:anywhere}
@@ -642,6 +646,11 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <input id="edit-tag-input" class="edit-tag-input" autocomplete="off" maxlength="200" enterkeyhint="done">
 <ul class="edit-suggest" hidden></ul>
 </fieldset>
+<fieldset class="edit-intent">
+<legend>What is it for?</legend>
+<label class="edit-intent-choice"><input type="radio" name="edit-intent" value="explore"> To explore</label>
+<label class="edit-intent-choice"><input type="radio" name="edit-intent" value="keep"> <span data-intent-name>To keep</span></label>
+</fieldset>
 <fieldset class="edit-picture">
 <legend>Picture</legend>
 <div class="edit-picture-row">
@@ -797,9 +806,21 @@ if (orderForm) {
 }
 }
 {
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
 const keepRoot = document.getElementById("all-links");
 const keepError = document.getElementById("all-error");
-const showKept = (card, kept, menu) => {
+const showKept = (card, kept, menu, intent) => {
+  const now = intent || { intent: card.dataset.intent, intentSource: card.dataset.intentSource || null };
+  showIntent(card, now.intent, now.intentSource, kept);
   for (const b of card.querySelectorAll("button[data-act=keep]")) b.hidden = kept;
   for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
   const control = card.querySelector("[data-handy]");
@@ -829,15 +850,66 @@ if (keepRoot) {
         keepError.textContent = await failure(res);
         return;
       }
-      showKept(card, keep, menu);
+      showKept(card, keep, menu, moved.intent && moved.intent.after);
       showUndo(ticket, keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
         whenFree(card, async () => {
-          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
+          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent });
+          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu, moved.intent && moved.intent.before);
           else keepError.textContent = await failure(back);
         }),
       );
     }, { button: menu ? null : button, word: button.dataset.act === "keep" ? "Keeping handy…" : "Taking it off…" });
+  });
+}
+}
+{
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
+const intentActs = {"intent-keep":{"route":"/home/keep","undo":{"title":"Kept.","text":"Marked To keep. Today and Tidy up won't ask about it."}},"intent-explore":{"route":"/home/explore","undo":{"title":"Back to explore.","text":"Today and Tidy up may ask about it again."}}};
+const intentRoot = document.getElementById("all-links");
+const intentError = document.getElementById("all-error");
+if (intentRoot) {
+  intentRoot.addEventListener("click", (event) => {
+    const button = event.target.closest(".card-menu button");
+    if (!button || !(button.dataset.act in intentActs)) return;
+    const menu = button.closest("details");
+    menu.open = false;
+    const card = button.closest("[data-id]");
+    const { route, undo } = intentActs[button.dataset.act];
+    whileBusy(card, async (answered, ticket) => {
+      const id = card.dataset.id;
+      intentError.textContent = "";
+      const res = await post(route, { id });
+      answered();
+      const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (!change || !change.before || !change.after) {
+        menu.querySelector("summary").focus();
+        intentError.textContent = await failure(res);
+        return;
+      }
+      const putBack = null;
+      if (!putBack) {
+        showIntent(card, change.after.intent, change.after.intentSource, false);
+        menu.querySelector("summary").focus();
+      }
+      showUndo(ticket, undo.text, () => whenFree(card, async () => {
+        const back = await post("/home/undo-intent", { id, change });
+        if (!back || back.status !== 204) {
+          intentError.textContent = await failure(back);
+          return;
+        }
+        if (putBack) putBack();
+        else showIntent(card, change.before.intent, change.before.intentSource, false);
+      }), undo.title);
+    });
   });
 }
 }
@@ -905,6 +977,37 @@ const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 const tagList = dialog.querySelector(".edit-chips");
 const tagField = dialog.querySelector("#edit-tag-input");
 const suggestList = dialog.querySelector(".edit-suggest");
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
+const intentSet = dialog.querySelector(".edit-intent");
+const intentRadios = [...intentSet.querySelectorAll("input")];
+const intentName = intentSet.querySelector("[data-intent-name]");
+// openedIntent is what the card held when the dialog opened (the Save's "seen"); any press on the
+// choice marks it touched, and only a touched choice is sent. A link kept handy is To keep for
+// good, so its choice is hidden.
+let openedIntent = { intent: "explore", source: null };
+let intentTouched = false;
+const keptTool = (el) => !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
+const readIntent = (d) => {
+  openedIntent = { intent: d.intent === "keep" ? "keep" : "explore", source: d.intentSource || null };
+  intentTouched = false;
+  for (const r of intentRadios) r.checked = r.value === openedIntent.intent;
+  intentName.textContent = openedIntent.intent === "keep" && openedIntent.source === "inferred" ? "To keep (a guess)" : "To keep";
+  intentSet.hidden = keptTool(card);
+};
+intentSet.addEventListener("click", (event) => {
+  if (!event.target.closest("input")) return;
+  intentTouched = true;
+  intentName.textContent = "To keep";
+});
 // tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
 // "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
 // open are dropped.
@@ -1121,6 +1224,7 @@ const showCard = (target, answer) => {
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
   d.tags = JSON.stringify(answer.tags);
+  showIntent(target, answer.intent, answer.intentSource, keptTool(target));
   // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
   // which a Home card has none of.
   for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
@@ -1184,6 +1288,7 @@ const open = (from, menu) => {
   titleField.value = d.title;
   openedTitle = titleField.value;
   readTags(d);
+  readIntent(d);
   loadNames();
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
@@ -1330,6 +1435,14 @@ form.addEventListener("submit", async (event) => {
     body.append("tags", JSON.stringify(tags.map((t) => t.name)));
     body.append("seen", JSON.stringify(openedTags.map((t) => ({ key: t.key, source: t.source }))));
     changed = true;
+  }
+  if (intentTouched && !intentSet.hidden) {
+    const chosen = intentRadios.find((r) => r.checked);
+    if (chosen) {
+      body.append("intent", chosen.value);
+      body.append("intentSeen", JSON.stringify(openedIntent));
+      changed = true;
+    }
   }
   const listView = editRoot ? editRoot.dataset : {};
   if (listView.within) body.append("within", listView.within);

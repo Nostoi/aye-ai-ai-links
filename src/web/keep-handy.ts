@@ -1,6 +1,7 @@
 import type { HandyView } from "../core/tools.js";
 import type { Link } from "../core/types.js";
 import type { MenuItem } from "./card-menu.js";
+import { INTENT_VIEW } from "./intent.js";
 
 const PLUS = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5M8 5.25v5.5"/></svg>`;
 const MINUS = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8h5.5"/></svg>`;
@@ -36,16 +37,21 @@ export function handyControl(link: Link, view: HandyView | null | undefined): st
  * `/tools/not-handy`; every row and control on the card then shows the new state, so the two agree,
  * and focus moves to the control's visible button, or to the ⋯ when the menu was used. Each offers
  * Undo, which sends back the rows the action answered to `/tools/undo`, then shows the state those
- * rows had (`previous`): an action that changed nothing leaves it as it was. A refusal is shown in
+ * rows had (`previous`): an action that changed nothing leaves it as it was. Keeping a link handy
+ * also makes it To keep, and Undo gives its intent back (`moved.intent`): the card's Keep it and
+ * Explore it rows and its grey line follow (`showIntent`). A refusal is shown in
  * `#error`. A card takes no other action while one, or its Undo, is out (`whileBusy`); an Undo clicked
  * meanwhile waits for it (`whenFree`). A visible button shows its working word while the answer
  * is slow, and a ⋯ menu row (which closes) only dims the card (`busyLook`). A block; needs
  * `CARD_FETCH` and `showUndo`.
  */
 export const keepHandyScript = (root: string, error: string) => `{
+${INTENT_VIEW}
 const keepRoot = document.getElementById(${JSON.stringify(root)});
 const keepError = document.getElementById(${JSON.stringify(error)});
-const showKept = (card, kept, menu) => {
+const showKept = (card, kept, menu, intent) => {
+  const now = intent || { intent: card.dataset.intent, intentSource: card.dataset.intentSource || null };
+  showIntent(card, now.intent, now.intentSource, kept);
   for (const b of card.querySelectorAll("button[data-act=keep]")) b.hidden = kept;
   for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
   const control = card.querySelector("[data-handy]");
@@ -75,11 +81,11 @@ if (keepRoot) {
         keepError.textContent = await failure(res);
         return;
       }
-      showKept(card, keep, menu);
+      showKept(card, keep, menu, moved.intent && moved.intent.after);
       showUndo(ticket, keep ? "Kept on your Handy shelf." : "Not handy anymore.", () =>
         whenFree(card, async () => {
-          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous });
-          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu);
+          const back = await post("/tools/undo", { id, tool: moved.tool, previous: moved.previous, intent: moved.intent });
+          if (back && back.status === 204) showKept(card, !!moved.previous && moved.previous.status === "kept", menu, moved.intent && moved.intent.before);
           else keepError.textContent = await failure(back);
         }),
       );

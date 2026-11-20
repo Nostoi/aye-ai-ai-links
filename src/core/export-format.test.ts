@@ -40,7 +40,8 @@ const link = (n: number, over: Partial<Link> = {}): Link => ({
   savedAt: T(n),
   savedBy: "claude-code",
   lastOpenedAt: null,
-  tidyKeptAt: null,
+  intent: "explore",
+  intentSource: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -158,11 +159,11 @@ const keysDeep = (v: unknown): string[] =>
 
 describe("buildManifest", () => {
   const m = buildManifest(reads());
-  it("is a valid v3 links-only manifest, links in list order, in every state", () => {
+  it("is a valid v4 links-only manifest, links in list order, in every state", () => {
     expect(manifestSchema.safeParse(m).success).toBe(true);
     expect(m).toMatchObject({
       format: "aye-links-export",
-      version: 3,
+      version: 4,
       exportedAt: T(1000).toISOString(),
       includesFiles: false,
     });
@@ -245,7 +246,7 @@ describe("manifestSchema", () => {
       m.format = "other";
     });
     refuses((m) => {
-      m.version = 4;
+      m.version = 5;
     });
     refuses((m) => {
       m.links[0].id = "1";
@@ -305,6 +306,24 @@ describe("toNewLink", () => {
   });
 });
 
+/** A written v4 manifest as an older version wrote it: no intent, and both retired dates null (v2, v3). */
+function downTo<T extends { version: number; links: Record<string, unknown>[] }>(
+  manifest: T,
+  version: 1 | 2 | 3,
+): T {
+  manifest.version = version;
+  for (const l of manifest.links) {
+    delete l.intent;
+    delete l.intentSource;
+    if (version >= 2) {
+      l.putAwayAt = null;
+      l.tidyKeptAt = null;
+    }
+    if (version < 3) delete l.summarySource;
+  }
+  return manifest;
+}
+
 describe("summary source (version 3)", () => {
   const r = () => {
     const x = reads();
@@ -335,9 +354,7 @@ describe("summary source (version 3)", () => {
     ]);
   });
   it("reads a version-2 file without the field as unlabelled", () => {
-    const v2 = written();
-    v2.version = 2;
-    for (const l of v2.links) delete l.summarySource;
+    const v2 = downTo(written(), 2);
     expect(restored(v2)).toEqual([
       ["By the server", null],
       ["Theirs", null],
@@ -346,15 +363,17 @@ describe("summary source (version 3)", () => {
     ]);
   });
   it("refuses version 2 and 1 files that carry the field, and a version-3 link without it", () => {
-    expect(refused({ ...written(), version: 2 })).toBe(true);
-    const v1 = written();
+    const v2 = downTo(written(), 3);
+    v2.version = 2;
+    expect(refused(v2)).toBe(true);
+    const v1 = downTo(written(), 3);
     v1.version = 1;
     for (const l of v1.links) {
       delete l.putAwayAt;
       delete l.tidyKeptAt;
     }
     expect(refused(v1)).toBe(true);
-    const v3 = written();
+    const v3 = downTo(written(), 3);
     delete v3.links[0].summarySource;
     expect(refused(v3)).toBe(true);
   });
@@ -368,11 +387,14 @@ describe("summary source (version 3)", () => {
   });
 });
 
-describe("put-away and Tidy-kept dates (version 2)", () => {
-  const kept = T(400);
+describe("intent (version 4)", () => {
   const r = () => {
     const x = reads();
-    x.links = [link(1, { state: "archived" }), link(2, { tidyKeptAt: kept }), link(3)];
+    x.links = [
+      link(1),
+      link(2, { intent: "keep", intentSource: "inferred" }),
+      link(3, { state: "archived", intent: "keep", intentSource: "stated" }),
+    ];
     return x;
   };
   const written = () => JSON.parse(JSON.stringify(buildManifest(r())));
@@ -380,52 +402,53 @@ describe("put-away and Tidy-kept dates (version 2)", () => {
     const parsed = manifestSchema.parse(manifest);
     const store = new FakeStore();
     for (const l of parsed.links) await store.insertIfAbsent(A, toNewLink(l, parsed.tags));
-    return (await store.listLinks(A)).map((l) => [l.state, l.tidyKeptAt]);
+    return (await store.listLinks(A)).map((l) => [l.state, l.intent, l.intentSource]);
   };
-  it("writes putAwayAt as null on every link, and the Tidy-kept date, ISO or null", () => {
-    expect(buildManifest(r()).links.map((l) => [l.putAwayAt, l.tidyKeptAt])).toEqual([
-      [null, null],
-      [null, kept.toISOString()],
-      [null, null],
+  it("writes intent and its source on every link, and neither retired date", () => {
+    const links = buildManifest(r()).links;
+    expect(links.map((l) => [l.intent, l.intentSource])).toEqual([
+      ["explore", null],
+      ["keep", "inferred"],
+      ["keep", "stated"],
     ]);
-  });
-  it("restores the state and the Tidy-kept date, exactly", async () => {
-    expect(await restored(written())).toEqual([
-      ["archived", null],
-      ["active", kept],
-      ["active", null],
-    ]);
-  });
-  it("reads an older file's put-away entry as archived, with no putAwayAt on the link", () => {
-    const old = written();
-    old.links[0].putAwayAt = T(300).toISOString();
-    const parsed = manifestSchema.parse(old);
-    const restoredLink = toNewLink(parsed.links[0] as ManifestLink, parsed.tags);
-    expect(restoredLink.state).toBe("archived");
-    expect(restoredLink).not.toHaveProperty("putAwayAt");
-  });
-  it("reads a version-1 manifest, its links with both dates null", async () => {
-    const v1 = written();
-    v1.version = 1;
-    for (const l of v1.links) {
-      delete l.putAwayAt;
-      delete l.tidyKeptAt;
-      delete l.summarySource;
+    for (const l of links) {
+      expect(l).not.toHaveProperty("putAwayAt");
+      expect(l).not.toHaveProperty("tidyKeptAt");
     }
-    expect(await restored(v1)).toEqual([
-      ["archived", null],
-      ["active", null],
-      ["active", null],
+  });
+  it("restores the state, intent and source, exactly", async () => {
+    expect(await restored(written())).toEqual([
+      ["active", "explore", null],
+      ["active", "keep", "inferred"],
+      ["archived", "keep", "stated"],
     ]);
   });
-  it("refuses version 4", () => {
-    expect(manifestSchema.safeParse({ ...written(), version: 4 }).success).toBe(false);
+  it("refuses a version-4 link missing an intent key, or one that still carries a retired date", () => {
+    const missing = written();
+    delete missing.links[0].intent;
+    expect(manifestSchema.safeParse(missing).success).toBe(false);
+    const dated = written();
+    dated.links[0].tidyKeptAt = null;
+    expect(manifestSchema.safeParse(dated).success).toBe(false);
   });
-  it("refuses a version-2 link missing a date key, and a version-1 link that has one", () => {
-    const v2 = written();
-    delete v2.links[0].putAwayAt;
-    expect(manifestSchema.safeParse(v2).success).toBe(false);
-    expect(manifestSchema.safeParse({ ...written(), version: 1 }).success).toBe(false);
+  it("refuses an older version's link that carries intent, and a keep with no source", () => {
+    const v3 = downTo(written(), 3);
+    v3.links[0].intent = "explore";
+    v3.links[0].intentSource = null;
+    expect(manifestSchema.safeParse(v3).success).toBe(false);
+    const noSource = written();
+    noSource.links[1].intentSource = null;
+    expect(manifestSchema.safeParse(noSource).success).toBe(false);
+  });
+  it("still reads versions 1 to 3, which hold the two retired dates and no intent", () => {
+    for (const version of [1, 2, 3] as const) {
+      expect(manifestSchema.safeParse(downTo(written(), version)).success, `v${version}`).toBe(
+        true,
+      );
+    }
+  });
+  it("refuses version 5", () => {
+    expect(manifestSchema.safeParse({ ...written(), version: 5 }).success).toBe(false);
   });
 });
 

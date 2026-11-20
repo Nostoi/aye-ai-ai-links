@@ -131,8 +131,8 @@ async function focusEntries(deps: DigestDeps, owner: OwnerId, now: Date): Promis
 
 /**
  * Up to `limit` eligible links that have a reason, in digest order, with each one's focus reasons.
- * Reads only. Eligible: active, not a kept tool, not gone (#128), not snoozed at now, and surfaced at or before now -
- * SURFACE_COOLDOWN_MS.
+ * Reads only. Eligible: active, To explore (a To keep link is never picked, #339), not a kept tool,
+ * not gone (#128), not snoozed at now, and surfaced at or before now - SURFACE_COOLDOWN_MS.
  */
 async function select(
   deps: DigestDeps,
@@ -151,6 +151,7 @@ async function select(
         (l) =>
           !isGone(checks.get(l.id) ?? null) &&
           !exclude.has(l.id) &&
+          l.intent === "explore" &&
           tools.get(l.id)?.status !== "kept" &&
           eligible(l, now, notSurfacedAfter),
       )

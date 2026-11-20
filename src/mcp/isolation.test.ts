@@ -918,7 +918,10 @@ describe("owner isolation coverage", () => {
     "POST /home/undo-state":
       "the two-owner test of POST /home/undo-state in web/home-routes.test.ts",
     "POST /home/why": "the two-owner test of POST /home/why in web/home-routes.test.ts",
-    "POST /tidy/keep": "the two-owner test of POST /tidy/keep in web/tidy-routes.test.ts",
+    "POST /home/keep": "the two-owner test of POST /home/keep in web/intent-routes.test.ts",
+    "POST /home/explore": "the two-owner test of POST /home/explore in web/intent-routes.test.ts",
+    "POST /home/undo-intent":
+      "the two-owner test of POST /home/undo-intent in web/intent-routes.test.ts",
     "POST /links/opened": "the two-owner test of POST /links/opened in web/home-routes.test.ts",
     "POST /search/log":
       "the another-owner's-receipt tests of POST /search/log in web/search-receipt-routes.test.ts",

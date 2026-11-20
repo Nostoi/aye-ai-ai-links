@@ -38,7 +38,7 @@ import {
   type LinkCheckStore,
   sameCheck,
 } from "./link-check-store.js";
-import type { LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js";
+import type { EditRefusal, LinkEdit, LinkEditStore, UndoOutcome } from "./link-edit-store.js";
 import {
   hasConsistentSchedule,
   hasValidIcons,
@@ -63,7 +63,13 @@ import type { LoggedEvent } from "./store-contract.js";
 import { receiptsMeet, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
 import type { TagSuggestStore } from "./tag-suggest-store.js";
 import { strongerSource } from "./tags.js";
-import { sameTool, type ToolRecord, type ToolStore, type ToolWrite } from "./tool-store.js";
+import {
+  type IntentWith,
+  sameTool,
+  type ToolRecord,
+  type ToolStore,
+  type ToolWrite,
+} from "./tool-store.js";
 import type {
   Labelled,
   Link,
@@ -136,8 +142,11 @@ const stored = (own: OwnRecord): StoredImage => ({
 const LINK_EVENT_KINDS: readonly string[] = ["opened", "put_away", "stale", "not_now", "not_handy"];
 
 /** Whether the link still matches every field `expected` names (see `LinkStore.updateIf`). */
-function matchesExpectation(found: Link, expected: LinkExpectation): boolean {
+function matchesExpectation(found: Link, expected: LinkExpectation, keptTool: boolean): boolean {
   return (
+    (expected.intent === undefined || found.intent === expected.intent) &&
+    (expected.intentSource === undefined || expected.intentSource.includes(found.intentSource)) &&
+    (!expected.notKeptTool || !keptTool) &&
     (expected.state === undefined || found.state === expected.state) &&
     (expected.snoozedUntil === undefined ||
       (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
@@ -492,6 +501,7 @@ export class FakeStore
     expected: ToolRecord | null,
     next: ToolRecord | null,
     events?: EventWrite[],
+    intent?: IntentWith,
   ): Promise<ToolWrite | null> {
     const link = this.owned(owner).get(linkId);
     if (!link) return null;
@@ -504,13 +514,22 @@ export class FakeStore
     if (!sameTool(current, expected)) {
       return { tool: current && structuredClone(current), applied: false };
     }
-    this.writeEvents(owner, linkId, this.settleEvents(link, events));
-    if (next === null) {
-      mine.delete(linkId);
-      return { tool: null, applied: true };
+    const moves =
+      intent !== undefined &&
+      link.intent === intent.onlyIf.intent &&
+      link.intentSource === intent.onlyIf.intentSource &&
+      !(intent.set.intent === "explore" && next?.status === "kept");
+    if (next?.status === "kept" && (moves ? intent.set.intent : link.intent) !== "keep") {
+      return { tool: current && structuredClone(current), applied: false };
     }
-    mine.set(linkId, structuredClone(next));
-    return { tool: structuredClone(next), applied: true };
+    this.writeEvents(owner, linkId, this.settleEvents(owner, link, events));
+    if (next === null) mine.delete(linkId);
+    else mine.set(linkId, structuredClone(next));
+    if (moves && intent) {
+      link.intent = intent.set.intent;
+      link.intentSource = intent.set.intentSource;
+    }
+    return { tool: next === null ? null : structuredClone(next), applied: true };
   }
 
   async get(owner: OwnerId, id: string) {
@@ -521,9 +540,17 @@ export class FakeStore
   async update(owner: OwnerId, id: string, patch: LinkPatch, events?: EventWrite[]) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    const settled = this.settleEvents(found, events);
+    if (patch.intent === "explore" && this.keptTool(owner, id)) return null;
+    const settled = this.settleEvents(owner, found, events);
     this.checkEventKinds(settled);
-    const { summaryOver, ...fields } = structuredClone(patch);
+    const { summaryOver, intentOver, ...fields } = structuredClone(patch);
+    if (fields.intent !== undefined || fields.intentSource !== undefined) {
+      fields.intentSource ??= null;
+      if (intentOver && !intentOver.includes(found.intentSource)) {
+        delete fields.intent;
+        delete fields.intentSource;
+      }
+    }
     if (summaryOver && !summaryOver.includes(found.summarySource)) {
       delete fields.summary;
       delete fields.summarySource;
@@ -542,10 +569,17 @@ export class FakeStore
   }
 
   /** Drops the `record`s whose `unlessBefore` the link already matches; call it before the write. */
-  private settleEvents(link: Link, events: EventWrite[] = []): EventWrite[] {
+  private settleEvents(owner: OwnerId, link: Link, events: EventWrite[] = []): EventWrite[] {
     return events.filter(
-      (e) => !("record" in e) || !e.unlessBefore || !matchesExpectation(link, e.unlessBefore),
+      (e) =>
+        !("record" in e) ||
+        !e.unlessBefore ||
+        !matchesExpectation(link, e.unlessBefore, this.keptTool(owner, link.id)),
     );
+  }
+
+  private keptTool(owner: OwnerId, linkId: string): boolean {
+    return this.toolRows.get(owner)?.get(linkId)?.status === "kept";
   }
 
   /** A kind outside the log's five fails before anything is written, as SQLite's CHECK does. */
@@ -581,15 +615,23 @@ export class FakeStore
     _at: Date,
     extend?: string,
     events?: EventWrite[],
+    expected: LinkExpectation = {},
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
+    if (!matchesExpectation(found, expected, this.keptTool(owner, id))) {
+      return { link: this.view(owner, found), editId: null, applied: false };
+    }
     const before = coveredOf(this.view(owner, found));
     const link = (await this.update(owner, id, patch, events)) as Link;
     const after = coveredOf(link);
     const changed = changedFields(before, after);
-    if (!anyChanged(changed)) return { link, editId: null };
-    return { link, editId: this.recordReceipt(owner, id, changed, before, after, extend) };
+    if (!anyChanged(changed)) return { link, editId: null, applied: true };
+    return {
+      link,
+      editId: this.recordReceipt(owner, id, changed, before, after, extend),
+      applied: true,
+    };
   }
 
   /** Replaces the link's record; with a live `extend` it also keeps that record's changes (see `extendedPrior`). */
@@ -663,7 +705,7 @@ export class FakeStore
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    if (!matchesExpectation(found, expected)) {
+    if (!matchesExpectation(found, expected, this.keptTool(owner, id))) {
       return { link: this.view(owner, found), applied: false };
     }
     return { link: (await this.update(owner, id, patch, events)) as Link, applied: true };
@@ -1151,7 +1193,12 @@ export class FakeStore
     return info;
   }
 
-  async applyEdit(owner: OwnerId, linkId: string, edit: LinkEdit, at: Date) {
+  async applyEdit(
+    owner: OwnerId,
+    linkId: string,
+    edit: LinkEdit,
+    at: Date,
+  ): Promise<{ editId: string | null } | EditRefusal | null> {
     const link = this.owned(owner).get(linkId);
     if (!link) return null;
     const key = imageKey(owner, linkId);
@@ -1160,11 +1207,21 @@ export class FakeStore
     const setSha = set ? sha256Hex(set.bytes) : null;
     const prior = coveredOf(this.view(owner, link));
     if (edit.tags && !sameTags(prior.tags, edit.tags.expected)) return "conflict";
+    const seen = edit.intent?.expected;
+    if (seen && (seen.intent !== prior.intent || seen.intentSource !== prior.intentSource)) {
+      return "intent_conflict";
+    }
+    const wanted = edit.intent?.set;
+    const intent =
+      wanted && (wanted.intent !== prior.intent || wanted.intentSource !== prior.intentSource)
+        ? wanted
+        : null;
+    if (intent?.intent === "explore" && this.keptTool(owner, linkId)) return "kept_tool";
     const titleChanged = edit.title !== undefined && edit.title !== link.title;
     const pictureChanged =
       edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
     const tags = edit.tags && !sameTags(prior.tags, edit.tags.set) ? edit.tags.set : null;
-    if (!titleChanged && !pictureChanged && !tags) return { editId: null };
+    if (!titleChanged && !pictureChanged && !tags && !intent) return { editId: null };
     const editId = randomUUID();
     if (tags) {
       link.tags = structuredClone(tags);
@@ -1172,18 +1229,30 @@ export class FakeStore
     }
     this.editRecords.set(key, {
       editId,
-      changed: { title: titleChanged, summary: false, why: false, tags: tags !== null },
+      changed: {
+        title: titleChanged,
+        summary: false,
+        why: false,
+        tags: tags !== null,
+        intent: intent !== null,
+      },
       prior,
       written: {
         ...prior,
         title: titleChanged ? (edit.title ?? null) : prior.title,
         tags: coveredOf(this.view(owner, link)).tags,
+        intent: intent?.intent ?? prior.intent,
+        intentSource: intent ? intent.intentSource : prior.intentSource,
       },
       pictureChanged,
       priorPicture: pictureChanged && own ? structuredClone(own) : null,
       writtenSha: pictureChanged ? setSha : null,
     });
     if (titleChanged) link.title = edit.title ?? null;
+    if (intent) {
+      link.intent = intent.intent;
+      link.intentSource = intent.intentSource;
+    }
     if (pictureChanged) {
       if (set && setSha) {
         this.ownerImages.set(key, {
@@ -1211,12 +1280,19 @@ export class FakeStore
       return "conflict";
     }
     const { changed, prior } = row;
+    if (changed.intent && prior.intent === "explore" && this.keptTool(owner, linkId)) {
+      return "conflict";
+    }
     if (changed.title) link.title = prior.title;
     if (changed.summary) {
       link.summary = prior.summary;
       link.summarySource = prior.summarySource;
     }
     if (changed.why) link.why = prior.why && { ...prior.why };
+    if (changed.intent) {
+      link.intent = prior.intent;
+      link.intentSource = prior.intentSource;
+    }
     if (changed.tags) {
       link.tags = prior.tags.map((t) => ({ ...t }));
       this.ensureTags(owner, link.tags);

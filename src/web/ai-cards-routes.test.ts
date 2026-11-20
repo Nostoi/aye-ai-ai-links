@@ -170,7 +170,11 @@ describe("what the answer leaves out", () => {
     answeredAt: null,
     waitDays: 30 as const,
   };
-  const unchanged: Change = { kind: "handy", linkId: "5", change: { tool: row, previous: row } };
+  const unchanged: Change = {
+    kind: "handy",
+    linkId: "5",
+    change: { tool: row, previous: row, intent: null },
+  };
 
   it("drops a Keep handy change that left the row as it was, so a failed turn says it didn't answer", async () => {
     const world = await oauthWorld();
@@ -197,7 +201,11 @@ describe("what the answer leaves out", () => {
     ["its start by a few milliseconds", { ...row, since: new Date("2026-10-01T00:00:00.250Z") }],
   ])("keeps a Keep handy change that moved %s", async (_, previous) => {
     const world = await oauthWorld();
-    const moved: Change = { kind: "handy", linkId: "5", change: { tool: row, previous } };
+    const moved: Change = {
+      kind: "handy",
+      linkId: "5",
+      change: { tool: row, previous, intent: null },
+    };
     const ok = { ok: true as const, reply: "Done.", changes: [moved], seen: [] };
     expect((await chatAnswer(linkDeps(world), A, "Fake", ok)).changes).toEqual([moved]);
   });

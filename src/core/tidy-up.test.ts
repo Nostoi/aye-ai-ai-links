@@ -2,16 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { FocusMatch } from "./search.js";
-import {
-  keepInTidy,
-  TIDY_KEEP_WAIT_MS,
-  TIDY_SESSION,
-  type TidyDeps,
-  tidyQueue,
-  tidySession,
-} from "./tidy-up.js";
+import { TIDY_SESSION, type TidyDeps, tidyQueue, tidySession } from "./tidy-up.js";
 import { keepHandy } from "./tools.js";
 import type { Link, NewLink } from "./types.js";
+import { exploreLink, keepLink } from "./worth-a-look.js";
 
 const A = "a";
 const B = "b";
@@ -62,7 +56,8 @@ async function link(over: Partial<NewLink> = {}, owner = A): Promise<Link> {
       savedAt: ago(60 * DAY),
       savedBy: "t",
       lastOpenedAt: null,
-      tidyKeptAt: null,
+      intent: "explore",
+      intentSource: null,
       lastSurfacedAt: null,
       snoozedUntil: null,
       state: "active",
@@ -127,11 +122,13 @@ describe("which links qualify", () => {
     expect(await queueIds()).toEqual([]);
   });
 
-  it("waits 180 days after Keep, and no longer", async () => {
-    expect(TIDY_KEEP_WAIT_MS).toBe(180 * DAY);
-    await link({ tidyKeptAt: ago(180 * DAY - 1) });
-    const due = await link({ tidyKeptAt: ago(180 * DAY) });
-    expect(await queueIds()).toEqual([due.id]);
+  it("never asks about a To keep link, stated, asked or guessed", async () => {
+    await link({ intent: "keep", intentSource: "stated" });
+    await link({ intent: "keep", intentSource: "asked" });
+    await link({ intent: "keep", intentSource: "inferred" });
+    const asked = await link({ intent: "explore", intentSource: "stated" });
+    const plain = await link();
+    expect(await queueIds()).toEqual([asked.id, plain.id]);
   });
 
   it("never returns another owner's links", async () => {
@@ -249,24 +246,26 @@ describe("tidySession", () => {
   });
 });
 
-describe("keepInTidy", () => {
-  it("sets tidyKeptAt to now and takes the link out of the queue", async () => {
+describe("Keep it and Explore it in Tidy up", () => {
+  it("Keep it takes the link out of the queue for good, and Explore it puts it back", async () => {
     const l = await link();
-    await keepInTidy(deps(), A, l.id);
-    expect((await store.get(A, l.id))?.tidyKeptAt).toEqual(NOW);
+    await keepLink(deps(), A, l.id);
     expect(await queueIds()).toEqual([]);
+    expect(await store.get(A, l.id)).toMatchObject({ intent: "keep", intentSource: "stated" });
+    await exploreLink(deps(), A, l.id);
+    expect(await queueIds()).toEqual([l.id]);
   });
 
   it("refuses an archived link with a conflict and leaves it unchanged", async () => {
     const l = await link({ state: "archived" });
-    await expect(keepInTidy(deps(), A, l.id)).rejects.toMatchObject({ code: "conflict" });
-    expect((await store.get(A, l.id))?.tidyKeptAt).toBeNull();
+    await expect(keepLink(deps(), A, l.id)).rejects.toMatchObject({ code: "conflict" });
+    expect(await store.get(A, l.id)).toMatchObject({ intent: "explore", intentSource: null });
   });
 
   it("is not_found for a missing link or another owner's", async () => {
     const theirs = await link({}, B);
-    await expect(keepInTidy(deps(), A, theirs.id)).rejects.toMatchObject({ code: "not_found" });
-    await expect(keepInTidy(deps(), A, "999")).rejects.toMatchObject({ code: "not_found" });
-    expect((await store.get(B, theirs.id))?.tidyKeptAt).toBeNull();
+    await expect(keepLink(deps(), A, theirs.id)).rejects.toMatchObject({ code: "not_found" });
+    await expect(keepLink(deps(), A, "999")).rejects.toMatchObject({ code: "not_found" });
+    expect(await store.get(B, theirs.id)).toMatchObject({ intent: "explore" });
   });
 });

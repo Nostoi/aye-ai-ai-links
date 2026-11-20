@@ -7,6 +7,7 @@ import type { LinkStore } from "./store.js";
 import type { ToolRecord, ToolStore } from "./tool-store.js";
 import {
   type FocusEntry,
+  INTENTS,
   type Link,
   type NewLink,
   type OwnerId,
@@ -21,7 +22,7 @@ import {
 import { urlKey } from "./url-key.js";
 
 export const EXPORT_FORMAT = "aye-links-export";
-export const EXPORT_VERSION = 3;
+export const EXPORT_VERSION = 4;
 
 /** Exactly what `toISOString` writes for a finite date, extended years (`+010000-...`) included: the store keeps any instant. */
 const isStoredDate = (s: string) => {
@@ -84,11 +85,14 @@ const linkSchema = z.strictObject({
   lastSurfacedAt: date.nullable(),
   snoozedUntil: date.nullable(),
   /**
-   * Version 2 and later: present there, absent in version 1 (the manifest's check enforces which).
-   * Always null when written; an old file's date is read and ignored, since its link is archived.
+   * Versions 2 and 3 only: present there, absent otherwise (the manifest's check enforces which).
+   * Retired by version 4; an old file's dates are read and ignored.
    */
   putAwayAt: date.nullable().optional(),
   tidyKeptAt: date.nullable().optional(),
+  /** Version 4 and later: the owner's intent for the link and who said so, present there and absent before. */
+  intent: z.enum(INTENTS).optional(),
+  intentSource: source.nullable().optional(),
   page: z
     .strictObject({
       title: z.string().nullable(),
@@ -130,11 +134,11 @@ const linkSchema = z.strictObject({
   copy: copySchema.nullable(),
 });
 
-/** Versions 1 to 3 of `links.json` (docs/specs/2026-10-18-export-design.md). #131 parses with it; a new key is a new version. */
+/** Versions 1 to 4 of `links.json` (docs/specs/2026-10-18-export-design.md). #131 parses with it; a new key is a new version. */
 export const manifestSchema = z
   .strictObject({
     format: z.literal(EXPORT_FORMAT),
-    version: z.union([z.literal(1), z.literal(2), z.literal(EXPORT_VERSION)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(EXPORT_VERSION)]),
     exportedAt: date,
     includesFiles: z.boolean(),
     links: z.array(linkSchema),
@@ -159,12 +163,25 @@ export const manifestSchema = z
   .superRefine((m, ctx) => {
     m.links.forEach((l, i) => {
       for (const key of ["putAwayAt", "tidyKeptAt"] as const)
-        if ((l[key] !== undefined) !== m.version >= 2)
+        if ((l[key] !== undefined) !== (m.version === 2 || m.version === 3))
           ctx.addIssue({
             code: "custom",
             path: ["links", i, key],
-            message: "present exactly when the version is 2 or later",
+            message: "present exactly when the version is 2 or 3",
           });
+      for (const key of ["intent", "intentSource"] as const)
+        if ((l[key] !== undefined) !== m.version >= 4)
+          ctx.addIssue({
+            code: "custom",
+            path: ["links", i, key],
+            message: "present exactly when the version is 4 or later",
+          });
+      if (l.intent === "keep" && !l.intentSource)
+        ctx.addIssue({
+          code: "custom",
+          path: ["links", i, "intentSource"],
+          message: "a keep needs a source",
+        });
       if ((l.summarySource !== undefined) !== m.version >= 3)
         ctx.addIssue({
           code: "custom",
@@ -258,8 +275,8 @@ function manifestLink(link: Link, r: ManifestReads): ManifestLink {
     lastOpenedAt: isoOrNull(link.lastOpenedAt),
     lastSurfacedAt: isoOrNull(link.lastSurfacedAt),
     snoozedUntil: isoOrNull(link.snoozedUntil),
-    putAwayAt: null,
-    tidyKeptAt: isoOrNull(link.tidyKeptAt),
+    intent: link.intent,
+    intentSource: link.intentSource,
     page: snap?.fetchedAt
       ? {
           title: snap.title,
@@ -349,7 +366,8 @@ export function toNewLink(entry: ManifestLink, catalog: ExportManifest["tags"]):
     lastOpenedAt: orNull(entry.lastOpenedAt),
     lastSurfacedAt: orNull(entry.lastSurfacedAt),
     snoozedUntil: orNull(entry.snoozedUntil),
-    tidyKeptAt: orNull(entry.tidyKeptAt ?? null),
+    intent: entry.intent ?? "explore",
+    intentSource: entry.intentSource ?? null,
     state: entry.state,
   };
 }

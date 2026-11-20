@@ -27,6 +27,7 @@ import type { Link } from "./types.js";
 const DAY = 86_400_000;
 const T0 = new Date("2026-10-01T00:00:00Z");
 const day = (d: number) => new Date(T0.getTime() + d * DAY);
+const EXPLORE = { intent: "explore", intentSource: null } as const;
 
 const linkWith = (over: Partial<Link> = {}): Link => ({
   id: "1",
@@ -40,7 +41,8 @@ const linkWith = (over: Partial<Link> = {}): Link => ({
   savedAt: day(-100),
   savedBy: "t",
   lastOpenedAt: null,
-  tidyKeptAt: null,
+  intent: "explore",
+  intentSource: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
   state: "active",
@@ -185,11 +187,16 @@ describe("keepHandy", () => {
 
   it("returns the row it wrote with the row it replaced", async () => {
     const id = await saved();
-    expect(await keepHandy(deps(), A, id, "stated")).toEqual({ tool: tool(), previous: null });
+    expect(await keepHandy(deps(), A, id, "stated")).toEqual({
+      tool: tool(),
+      previous: null,
+      intent: { before: EXPLORE, after: { intent: "keep", intentSource: "stated" } },
+    });
     clock = day(2);
     expect(await notHandy(deps(), A, id, "asked")).toEqual({
       tool: tool({ status: "declined", source: "asked", since: day(2) }),
       previous: tool(),
+      intent: null,
     });
     const suggested = await saved();
     await keepHandy(deps(), A, suggested, "inferred");
@@ -197,6 +204,7 @@ describe("keepHandy", () => {
     expect(await answerSuggestion(deps(), A, suggested, true)).toEqual({
       tool: tool({ source: "asked", since: day(2) }),
       previous: suggestion,
+      intent: { before: EXPLORE, after: { intent: "keep", intentSource: "asked" } },
     });
   });
 
@@ -339,6 +347,7 @@ describe("stillUsing", () => {
     expect(await stillUsing(deps(), A, id, "stated")).toEqual({
       tool: tool({ answeredAt: day(30), waitDays: 60 }),
       previous: tool(),
+      intent: null,
     });
   });
 

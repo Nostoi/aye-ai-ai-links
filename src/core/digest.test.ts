@@ -81,7 +81,8 @@ async function link(over: Partial<NewLink> = {}): Promise<Link> {
       savedAt: at(-DAY),
       savedBy: "t",
       lastOpenedAt: null,
-      tidyKeptAt: null,
+      intent: "explore",
+      intentSource: null,
       lastSurfacedAt: CUTOFF,
       snoozedUntil: null,
       state: "active",
@@ -541,6 +542,21 @@ describe("previewDigest", () => {
     const all = (await previewDigest(deps(), OWNER, Number.POSITIVE_INFINITY)).links;
     expect(all.length).toBe(DIGEST_SIZE + 5);
     expect(all.slice(0, DIGEST_SIZE).map((l) => l.link.id)).toEqual(first);
+  });
+});
+
+describe("intent", () => {
+  it("leaves a To keep link out of the preview and the digest, and picks the same link as To explore", async () => {
+    const keep = await link({ why: null, intent: "keep", intentSource: "stated" });
+    const guess = await link({ why: null, intent: "keep", intentSource: "inferred" });
+    const explore = await link({ why: null });
+    await focus("bills", at(-DAY));
+    keyword.hits.set("bills", [keep.id, guess.id, explore.id]);
+    expect((await previewDigest(deps(), OWNER)).links.map((l) => l.link.id)).toEqual([explore.id]);
+    expect(await digestIds()).toEqual([explore.id]);
+    expect((await store.get(OWNER, keep.id))?.lastSurfacedAt).toEqual(CUTOFF);
+    await store.update(OWNER, keep.id, { intent: "explore", intentSource: "stated" });
+    expect(await digestIds()).toContain(keep.id);
   });
 });
 

@@ -2,6 +2,8 @@ export const SOURCES = ["stated", "asked", "inferred"] as const;
 export type Source = (typeof SOURCES)[number];
 export const TAG_KINDS = ["topic", "project"] as const;
 export type TagKind = (typeof TAG_KINDS)[number];
+export const INTENTS = ["explore", "keep"] as const;
+export type Intent = (typeof INTENTS)[number];
 export const STATES = ["active", "archived"] as const;
 export type LinkState = (typeof STATES)[number];
 /** Who wrote a summary: the owner (stated, asked), an AI on its own (inferred), or the server. */
@@ -65,8 +67,10 @@ export type Link = {
   lastOpenedAt: Date | null;
   lastSurfacedAt: Date | null;
   snoozedUntil: Date | null;
-  /** When Tidy up last kept this link; internal, never sent over MCP. */
-  tidyKeptAt: Date | null;
+  /** What the owner means to do with the link. Every link starts as "explore". */
+  intent: Intent;
+  /** Who said so. Null means nobody did, the default To explore; a "keep" always has a source. */
+  intentSource: Source | null;
   state: LinkState;
   /** Null only for a link that has no snapshot row. */
   snapshot: SnapshotSummary | null;
@@ -93,7 +97,8 @@ export type NewLink = Omit<Link, "id" | "snapshot">;
  * Fields a patch may set; an absent (undefined) field is left untouched. A `summary` written
  * without a `summarySource` is unlabelled. With `summaryOver`, the summary and its source are
  * written only while the row's summary source is one of those listed (null for none), decided in
- * the same write; the rest of the patch is written either way.
+ * the same write; the rest of the patch is written either way. `intent` and `intentSource` are
+ * one pair, written together (a missing source is null), and `intentOver` guards it the same way.
  */
 export type LinkPatch = Partial<
   Pick<
@@ -106,9 +111,10 @@ export type LinkPatch = Partial<
     | "state"
     | "snoozedUntil"
     | "lastOpenedAt"
-    | "tidyKeptAt"
+    | "intent"
+    | "intentSource"
   >
-> & { summaryOver?: (SummarySource | null)[] };
+> & { summaryOver?: (SummarySource | null)[]; intentOver?: (Source | null)[] };
 
 /** A note about the owner. `source` says how the writer learned it. */
 export type ProfileNote = {

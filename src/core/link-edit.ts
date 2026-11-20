@@ -1,24 +1,30 @@
 import { CoreError } from "./errors.js";
 import { checkImage } from "./image-type.js";
+import { checkIntent, keptToolStays } from "./intent.js";
 import type { LinkEdit, LinkEditStore } from "./link-edit-store.js";
 import { isSource, normalizeTitle, notFound } from "./links.js";
 import { normalizeTags } from "./tags.js";
-import type { OwnerId, Source } from "./types.js";
+import type { Intent, OwnerId, Source } from "./types.js";
 
 export type EditDeps = { edits: LinkEditStore; now: () => Date };
 
 /**
  * What the owner asked to change: a title (null or blank removes it), the picture's bytes or
  * "page", and the link's tags. `tags.names` is the final list in order; `tags.seen` is the
- * ordered key and source of each tag the owner's dialog opened with.
+ * ordered key and source of each tag the owner's dialog opened with. `intent` is the owner's
+ * choice, with the intent and source the dialog opened with in `seen` (a null source: nobody
+ * said).
  */
 export type EditInput = {
   title?: string | null;
   picture?: Uint8Array | "page";
   tags?: { names: string[]; seen: { key: string; source: string }[] };
+  intent?: { value: Intent; seen: { intent: string; source: string | null } };
 };
 
 export const BAD_PICTURE = "That picture can't be used. Try a PNG, JPEG, GIF or WebP under 2 MB.";
+export const INTENT_CONFLICT =
+  "This link's intent changed since you opened it. Reload the page and edit again.";
 export const UNDO_CONFLICT = "This link changed since, so nothing was undone.";
 export const TAGS_CONFLICT =
   "This link's tags changed since you opened it. Reload the page and edit again.";
@@ -47,10 +53,29 @@ export async function editLink(
     edit.picture = { set: { contentType: check.type, bytes: input.picture } };
   }
   if (input.tags) edit.tags = tagEdit(input.tags);
+  if (input.intent) edit.intent = intentEdit(input.intent);
   const result = await deps.edits.applyEdit(owner, id, edit, deps.now());
   if (!result) throw notFound(id);
   if (result === "conflict") throw new CoreError("conflict", TAGS_CONFLICT);
+  if (result === "intent_conflict") throw new CoreError("conflict", INTENT_CONFLICT);
+  if (result === "kept_tool") throw keptToolStays();
   return result.editId;
+}
+
+/** The owner's choice is stated. What the dialog opened with is checked as the store compares it. */
+function intentEdit({
+  value,
+  seen,
+}: NonNullable<EditInput["intent"]>): NonNullable<LinkEdit["intent"]> {
+  const set = checkIntent(value, "stated");
+  const opened = seen.source === null ? undefined : checkIntent(seen.intent, seen.source);
+  if (seen.source === null && seen.intent !== "explore") {
+    throw new CoreError("invalid_input", "A link with no intent source is To explore.");
+  }
+  return {
+    expected: opened ?? { intent: "explore", intentSource: null },
+    set: set as { intent: Intent; intentSource: Source },
+  };
 }
 
 function tagEdit({ names, seen }: NonNullable<EditInput["tags"]>): NonNullable<LinkEdit["tags"]> {

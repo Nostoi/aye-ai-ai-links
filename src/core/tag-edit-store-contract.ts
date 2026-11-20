@@ -156,7 +156,7 @@ export function describeTagEditStoreContract(
       expect(renamed).toMatchObject({ key: "game art", name: "Game Art" });
       expect(await keys(A)).toEqual(["game art"]);
       // A rename that keeps the key cancels no link-edit receipt.
-      if (edit === "conflict" || !edit?.editId) throw new Error("expected an edit id");
+      if (typeof edit === "string" || !edit?.editId) throw new Error("expected an edit id");
       expect(await h.edits.undoEdit(A, id, edit.editId)).toBe("undone");
       expect((await h.links.get(A, id))?.tags).toEqual([
         { ...mention("game art"), name: "Game Art" },
@@ -652,7 +652,7 @@ export function describeTagEditStoreContract(
             { tags: { expected: [{ key, source: "stated" }], set: [] } },
             at(1),
           );
-          if (r === "conflict" || !r?.editId) throw new Error("expected an edit id");
+          if (typeof r === "string" || !r?.editId) throw new Error("expected an edit id");
           return r.editId;
         };
         return { one, two, oneEdit: await off(one, "x"), twoEdit: await off(two, "q") };
@@ -732,7 +732,7 @@ export function describeTagEditStoreContract(
         { tags: { expected: [{ key: "x", source: "stated" }], set: [] } },
         at(1),
       );
-      if (bEdit === "conflict" || !bEdit?.editId) throw new Error("expected an edit id");
+      if (typeof bEdit === "string" || !bEdit?.editId) throw new Error("expected an edit id");
       const ids = [...bIds, edited];
       const reach = () => Promise.all(["v", "w", "x", "y"].map((k) => h.tagEdits.currentKey(B, k)));
       const before = { world: await world(B, ids), reach: await reach() };

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import { type Changed, type Covered, extendedPrior, holdsWritten } from "../core/covered-fields.js";
-import type { LinkTag, OwnerId, Source, SummarySource } from "../core/types.js";
+import type { Intent, LinkTag, OwnerId, Source, SummarySource } from "../core/types.js";
 
 /** A link's tags joined to the catalog; `WHERE` and `ORDER BY` are the caller's. */
 export const TAG_SELECT = `SELECT lt.link_id AS linkId, t.key AS key, t.name AS name, lt.source AS source,
@@ -15,6 +15,7 @@ export type ReceiptRow = {
   summary_changed: number;
   why_changed: number;
   tags_changed: number;
+  intent_changed: number;
   prior_title: string | null;
   written_title: string | null;
   prior_summary: string | null;
@@ -27,6 +28,10 @@ export type ReceiptRow = {
   written_why_source: Source | null;
   prior_tags: string | null;
   written_tags: string | null;
+  prior_intent: Intent | null;
+  prior_intent_source: Source | null;
+  written_intent: Intent | null;
+  written_intent_source: Source | null;
 };
 
 const why = (text: string | null, source: Source | null) =>
@@ -36,7 +41,7 @@ const why = (text: string | null, source: Source | null) =>
 export function readCovered(db: Database, owner: OwnerId, linkId: number): Covered | null {
   const row = db
     .prepare(
-      `SELECT title, summary, summary_source, why_text, why_source FROM links
+      `SELECT title, summary, summary_source, why_text, why_source, intent, intent_source FROM links
        WHERE owner_id = ? AND id = ? AND deleted_at IS NULL`,
     )
     .get(owner, linkId) as
@@ -46,6 +51,8 @@ export function readCovered(db: Database, owner: OwnerId, linkId: number): Cover
         summary_source: SummarySource | null;
         why_text: string | null;
         why_source: Source | null;
+        intent: Intent;
+        intent_source: Source | null;
       }
     | undefined;
   if (!row) return null;
@@ -57,6 +64,8 @@ export function readCovered(db: Database, owner: OwnerId, linkId: number): Cover
     summary: row.summary,
     summarySource: row.summary_source,
     why: why(row.why_text, row.why_source),
+    intent: row.intent,
+    intentSource: row.intent_source,
     tags: tags.map(({ key, name, source, kind, kindSource }) => ({
       key,
       name,
@@ -108,6 +117,8 @@ const priorOf = (row: ReceiptRow): Covered => ({
   summarySource: row.prior_summary_source,
   why: why(row.prior_why_text, row.prior_why_source),
   tags: JSON.parse(row.prior_tags ?? "[]") as LinkTag[],
+  intent: row.prior_intent ?? "explore",
+  intentSource: row.prior_intent_source,
 });
 
 /**
@@ -140,8 +151,10 @@ export function writeReceipt(
        prior_content_type, prior_bytes, prior_sha256, prior_set_at, written_sha256,
        prior_title, written_title, summary_changed, prior_summary, written_summary,
        prior_summary_source, written_summary_source, why_changed, prior_why_text, prior_why_source,
-       written_why_text, written_why_source, tags_changed, prior_tags, written_tags, at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       written_why_text, written_why_source, tags_changed, prior_tags, written_tags, at,
+       intent_changed, prior_intent, prior_intent_source, written_intent, written_intent_source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+       ?, ?, ?, ?, ?)`,
   ).run(
     owner,
     linkId,
@@ -169,6 +182,11 @@ export function writeReceipt(
     total.changed.tags ? JSON.stringify(total.prior.tags) : null,
     total.changed.tags ? JSON.stringify(after.tags) : null,
     at.getTime(),
+    total.changed.intent ? 1 : 0,
+    total.changed.intent ? total.prior.intent : null,
+    total.changed.intent ? total.prior.intentSource : null,
+    total.changed.intent ? after.intent : null,
+    total.changed.intent ? after.intentSource : null,
   );
   return editId;
 }
@@ -178,6 +196,7 @@ const flagged = (row: ReceiptRow): Changed => ({
   summary: row.summary_changed === 1,
   why: row.why_changed === 1,
   tags: row.tags_changed === 1,
+  intent: row.intent_changed === 1,
 });
 
 /** True while the link still holds what the receipt wrote, in every field the receipt changed. */
@@ -190,6 +209,8 @@ export function receiptHolds(row: ReceiptRow, current: Covered): boolean {
       summarySource: row.written_summary_source,
       why: why(row.written_why_text, row.written_why_source),
       tags: JSON.parse(row.written_tags ?? "[]") as LinkTag[],
+      intent: row.written_intent ?? "explore",
+      intentSource: row.written_intent_source,
     },
     current,
   );
@@ -210,6 +231,14 @@ export function restoreCovered(db: Database, owner: OwnerId, linkId: number, row
     db.prepare("UPDATE links SET why_text = ?, why_source = ? WHERE owner_id = ? AND id = ?").run(
       row.prior_why_text,
       row.prior_why_source,
+      owner,
+      linkId,
+    );
+  }
+  if (changed.intent) {
+    db.prepare("UPDATE links SET intent = ?, intent_source = ? WHERE owner_id = ? AND id = ?").run(
+      row.prior_intent,
+      row.prior_intent_source,
       owner,
       linkId,
     );

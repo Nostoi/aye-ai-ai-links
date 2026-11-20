@@ -18,6 +18,7 @@ const found = (db: Db, word: string) =>
 
 let db: Db;
 let triggersBefore: unknown[];
+let atPutAway: unknown[];
 
 beforeEach(() => {
   db = new Database(":memory:");
@@ -30,6 +31,12 @@ beforeEach(() => {
       VALUES (1, 'a', 'https://ex.com/1', 'ex.com/1', 'quokka', 5, 'x', 'active', NULL),
              (2, 'a', 'https://ex.com/2', 'ex.com/2', 'bilby', 5, 'x', 'archived', 99);`);
   triggersBefore = triggers(db);
+  migrate(db, MIGRATIONS.slice(0, PUT_AWAY + 1));
+  atPutAway = db
+    .prepare(
+      "SELECT id, title, state, snoozed_until, put_away_at, tidy_kept_at FROM links ORDER BY id",
+    )
+    .all();
   migrate(db);
 });
 
@@ -37,18 +44,12 @@ afterEach(() => db.close());
 
 describe("put-away migration", () => {
   it("is the entry after the links rebuilds", () => {
-    expect(LATEST_VERSION).toBe(PUT_AWAY + 9);
+    expect(LATEST_VERSION).toBe(PUT_AWAY + 10);
     expect(db.pragma("user_version", { simple: true })).toBe(LATEST_VERSION);
   });
 
-  it("keeps an active and an archived link intact, with both new fields null", () => {
-    expect(
-      db
-        .prepare(
-          "SELECT id, title, state, snoozed_until, put_away_at, tidy_kept_at FROM links ORDER BY id",
-        )
-        .all(),
-    ).toEqual([
+  it("keeps an active and an archived link intact, with both new fields null (read at its own version; #339 drops them later)", () => {
+    expect(atPutAway).toEqual([
       {
         id: 1,
         title: "quokka",
@@ -67,6 +68,12 @@ describe("put-away migration", () => {
       },
     ]);
     expect(db.pragma("foreign_key_check")).toEqual([]);
+    expect(
+      db.prepare("SELECT id, title, state, snoozed_until FROM links ORDER BY id").all(),
+    ).toEqual([
+      { id: 1, title: "quokka", state: "active", snoozed_until: null },
+      { id: 2, title: "bilby", state: "archived", snoozed_until: 99 },
+    ]);
   });
 
   it("keeps the search triggers and the links_deleted index", () => {

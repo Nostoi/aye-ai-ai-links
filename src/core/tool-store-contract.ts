@@ -105,6 +105,77 @@ export function describeToolStoreContract(
       expect(await store.updateToolIf(A, id, null, null)).toEqual({ tool: null, applied: true });
     });
 
+    describe("intent", () => {
+      const keep = { intent: "keep", intentSource: "stated" } as const;
+      const explore = { intent: "explore", intentSource: null } as const;
+      const intentOf = async (id: string) => {
+        const l = await store.get(A, id);
+        return { intent: l?.intent, intentSource: l?.intentSource };
+      };
+
+      it("writes the intent with the row, only while the intent is still onlyIf", async () => {
+        const id = await save(A);
+        const result = await store.updateToolIf(A, id, null, kept(), undefined, {
+          set: keep,
+          onlyIf: explore,
+        });
+        expect(result?.applied).toBe(true);
+        expect(await intentOf(id)).toEqual(keep);
+        const other = await save(A);
+        await store.update(A, other, { intent: "keep", intentSource: "asked" });
+        const kept2 = await store.updateToolIf(A, other, null, kept(), undefined, {
+          set: keep,
+          onlyIf: explore,
+        });
+        expect(kept2?.applied).toBe(true);
+        expect(await store.getTool(A, other)).toEqual(kept());
+        expect(await intentOf(other)).toEqual({ intent: "keep", intentSource: "asked" });
+      });
+
+      it("writes no intent when the row write is not applied", async () => {
+        const id = await save(A);
+        await store.updateToolIf(A, id, null, kept());
+        const result = await store.updateToolIf(A, id, null, kept({ waitDays: 60 }), undefined, {
+          set: keep,
+          onlyIf: explore,
+        });
+        expect(result?.applied).toBe(false);
+        expect(await intentOf(id)).toEqual(explore);
+      });
+
+      it("puts an explore back only once the row is no longer kept", async () => {
+        const id = await save(A);
+        await store.update(A, id, keep);
+        await store.updateToolIf(A, id, null, kept());
+        await store.updateToolIf(A, id, kept(), kept({ waitDays: 60 }), undefined, {
+          set: explore,
+          onlyIf: keep,
+        });
+        expect(await intentOf(id)).toEqual(keep);
+        await store.updateToolIf(A, id, kept({ waitDays: 60 }), null, undefined, {
+          set: explore,
+          onlyIf: keep,
+        });
+        expect(await intentOf(id)).toEqual(explore);
+      });
+    });
+
+    it("notKeptTool holds only while the row is not kept, for updateIf and updateWithReceipt", async () => {
+      const id = await save(A);
+      const patch = { intent: "explore", intentSource: "stated" } as const;
+      expect((await store.updateIf(A, id, { notKeptTool: true }, patch))?.applied).toBe(true);
+      await store.update(A, id, { intent: "keep", intentSource: "stated" });
+      await store.updateToolIf(A, id, null, kept());
+      expect((await store.updateIf(A, id, { notKeptTool: true }, patch))?.applied).toBe(false);
+      const receipt = await store.updateWithReceipt(A, id, patch, at(5), undefined, undefined, {
+        notKeptTool: true,
+      });
+      expect([receipt?.applied, receipt?.editId]).toEqual([false, null]);
+      expect(await store.get(A, id)).toMatchObject({ intent: "keep", intentSource: "stated" });
+      await store.updateToolIf(A, id, kept(), kept({ status: "declined" }));
+      expect((await store.updateIf(A, id, { notKeptTool: true }, patch))?.applied).toBe(true);
+    });
+
     it("lists every row of the owner's, by link id", async () => {
       const first = await save(A);
       const second = await save(A);

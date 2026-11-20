@@ -143,18 +143,19 @@ const copyFiles = (files: Map<string, Uint8Array>, n: number) =>
   [...files.keys()].filter((k) => k.startsWith(`copies/${n}/`));
 
 describe("writeExport", () => {
-  it("writes a version-3 links.json with putAwayAt null on every link and the Tidy-kept date kept", async () => {
+  it("writes a version-4 links.json with each link's intent and source, and neither retired date", async () => {
     const h = setup();
     await h.save(A, 1, { state: "archived" });
-    await h.save(A, 2, { tidyKeptAt: at(400) });
+    await h.save(A, 2, { intent: "keep", intentSource: "stated" });
     await h.save(A, 3);
     const { manifest } = await built(h.deps, A);
-    expect(manifest.version).toBe(3);
-    expect(manifest.links.map((l) => [l.putAwayAt, l.tidyKeptAt])).toEqual([
-      [null, null],
-      [null, at(400).toISOString()],
-      [null, null],
+    expect(manifest.version).toBe(4);
+    expect(manifest.links.map((l) => [l.intent, l.intentSource])).toEqual([
+      ["explore", null],
+      ["keep", "stated"],
+      ["explore", null],
     ]);
+    for (const l of manifest.links) expect(Object.keys(l)).not.toContain("tidyKeptAt");
   });
   it("contents match the manifest both ways; pictures and copies are the stored bytes; copy.md is front matter + Markdown", async () => {
     const h = setup();

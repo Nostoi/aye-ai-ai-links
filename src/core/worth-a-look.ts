@@ -8,10 +8,12 @@ import {
   unclaimSurfaced,
 } from "./digest.js";
 import { CoreError } from "./errors.js";
+import { checkPair, intentExpectation, KEPT_TOOL_STAYS } from "./intent.js";
 import { recordOpening } from "./links.js";
 import type { EventWrite, LinkExpectation } from "./store.js";
+import type { IntentPair } from "./tool-store.js";
 import type { ToolItem } from "./tools.js";
-import type { Link, LinkPatch, LinkState, OwnerId } from "./types.js";
+import type { Intent, Link, LinkPatch, LinkState, OwnerId } from "./types.js";
 
 /** The home page's "Worth a look today": the use cases behind its cards and buttons. */
 
@@ -193,6 +195,71 @@ export async function undoStateChange(
   const events: EventWrite[] =
     change.after.state === "archived" ? [{ unrecord: "stale", at: change.at }] : [];
   await changeIf(deps, owner, id, change.after, change.before, undefined, events);
+}
+
+/**
+ * What Keep it or Explore it replaced and wrote, and when; Undo sends it back. It holds only the
+ * intent pair, so an Undo never touches state or a snooze made in between.
+ */
+export type IntentChange = { before: IntentPair; after: IntentPair; at: Date };
+
+/** Keep it: the link becomes To keep, as the owner's own word (stated). */
+export const keepLink = (deps: StateDeps, owner: OwnerId, id: string): Promise<IntentChange> =>
+  setIntent(deps, owner, id, "keep");
+
+/** Explore it: the link becomes To explore, as the owner's own word. A kept tool refuses it. */
+export const exploreLink = (deps: StateDeps, owner: OwnerId, id: string): Promise<IntentChange> =>
+  setIntent(deps, owner, id, "explore");
+
+async function setIntent(
+  deps: StateDeps,
+  owner: OwnerId,
+  id: string,
+  intent: Intent,
+): Promise<IntentChange> {
+  const link = await current(deps, owner, id);
+  if (link.state === "archived") throw new CoreError("conflict", ALREADY_ARCHIVED);
+  const after: IntentPair = { intent, intentSource: "stated" };
+  const patch = { intent, intentSource: "stated" } as const;
+  const result = await deps.store.updateIf(
+    owner,
+    id,
+    { state: "active", ...intentExpectation(patch) },
+    patch,
+  );
+  if (!result) throw new CoreError("not_found", "That link is gone. Reload the page.");
+  if (!result.applied) {
+    throw new CoreError(
+      "conflict",
+      result.link.state === "archived" ? ALREADY_ARCHIVED : KEPT_TOOL_STAYS,
+    );
+  }
+  return {
+    before: { intent: link.intent, intentSource: link.intentSource },
+    after,
+    at: deps.now(),
+  };
+}
+
+/**
+ * Undo of Keep it or Explore it: only while the link's intent still is change.after; restores
+ * change.before and nothing else. Both pairs must be ones the store can hold.
+ */
+export async function undoIntentChange(
+  deps: StateDeps,
+  owner: OwnerId,
+  id: string,
+  change: IntentChange,
+): Promise<void> {
+  const before = checkPair(change.before);
+  const after = checkPair(change.after);
+  await changeIf(
+    deps,
+    owner,
+    id,
+    { intent: after.intent, intentSource: [after.intentSource], ...intentExpectation(before) },
+    before,
+  );
 }
 
 /**

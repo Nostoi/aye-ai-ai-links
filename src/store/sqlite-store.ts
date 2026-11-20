@@ -17,6 +17,7 @@ import type {
   SurfacedClaim,
 } from "../core/store.js";
 import {
+  type IntentWith,
   sameTool,
   type ToolRecord,
   type ToolStore,
@@ -67,7 +68,8 @@ type LinkRow = {
   last_opened_at: number | null;
   last_surfaced_at: number | null;
   snoozed_until: number | null;
-  tidy_kept_at: number | null;
+  intent: Link["intent"];
+  intent_source: Source | null;
   state: Link["state"];
 };
 
@@ -122,19 +124,24 @@ export class SqliteStore
     at: Date,
     extend?: string,
     events?: EventWrite[],
+    expected: LinkExpectation = {},
   ) {
     const n = parseId(id);
     if (n === null) return null;
     return this.db
       .transaction(() => {
         const before = readCovered(this.db, owner, n);
-        const link = this.updateSync(owner, n, patch, {}, events);
-        if (!before || !link) return null;
+        const link = this.updateSync(owner, n, patch, expected, events);
+        if (!before) return null;
+        if (!link) {
+          const current = this.read(owner, n);
+          return current ? { link: current, editId: null, applied: false } : null;
+        }
         const changed = changedFields(before, link);
         const editId = anyChanged(changed)
           ? writeReceipt(this.db, owner, n, changed, before, link, at, extend)
           : null;
-        return { link, editId };
+        return { link, editId, applied: true };
       })
       .immediate();
   }
@@ -482,6 +489,7 @@ export class SqliteStore
     expected: ToolRecord | null,
     next: ToolRecord | null,
     events?: EventWrite[],
+    intent?: IntentWith,
   ): Promise<ToolWrite | null> {
     const n = parseId(linkId);
     if (n === null) return null;
@@ -498,6 +506,7 @@ export class SqliteStore
           this.db
             .prepare("DELETE FROM link_tools WHERE owner_id = ? AND link_id = ?")
             .run(owner, n);
+          if (intent) this.moveIntent(owner, n, intent);
           return { tool: null, applied: true };
         }
         this.db
@@ -517,9 +526,21 @@ export class SqliteStore
             toMs(next.answeredAt),
             next.waitDays,
           );
+        if (intent) this.moveIntent(owner, n, intent);
         return { tool: this.readTool(owner, n), applied: true };
       })
       .immediate();
+  }
+
+  /** `IntentWith`, after the tool row is written: an explore is also held off by a kept row. */
+  private moveIntent(owner: OwnerId, id: number, { set: pair, onlyIf }: IntentWith): void {
+    this.db
+      .prepare(
+        `UPDATE links SET intent = ?, intent_source = ?
+         WHERE id = ? AND owner_id = ? AND intent = ? AND intent_source IS ?
+           ${pair.intent === "explore" ? `AND ${NOT_KEPT_TOOL}` : ""}`,
+      )
+      .run(pair.intent, pair.intentSource, id, owner, onlyIf.intent, onlyIf.intentSource);
   }
 
   private insertSync(owner: OwnerId, link: NewLink): { link: Link; created: boolean } {
@@ -532,8 +553,8 @@ export class SqliteStore
         .prepare(
           `INSERT INTO links (owner_id, url, url_key, title, summary, summary_source, why_text,
              why_source, saved_at, saved_by, last_opened_at, last_surfaced_at, snoozed_until,
-             tidy_kept_at, state)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             intent, intent_source, state)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (owner_id, url_key) DO NOTHING RETURNING id`,
         )
         .get(
@@ -550,7 +571,8 @@ export class SqliteStore
           toMs(link.lastOpenedAt),
           toMs(link.lastSurfacedAt),
           toMs(link.snoozedUntil),
-          toMs(link.tidyKeptAt),
+          link.intent,
+          link.intentSource,
           link.state,
         ) as { id: number } | undefined;
     } catch (e) {
@@ -637,12 +659,20 @@ export class SqliteStore
         }
       }
     }
-    if (patch.state !== undefined) {
-      // Until #339 drops put_away_at, a changed state clears it, so a revert finds no stale date.
-      sets.push("put_away_at = CASE WHEN state = ? THEN put_away_at END");
-      values.push(patch.state);
-      set("state", patch.state);
+    if (patch.intent !== undefined || patch.intentSource !== undefined) {
+      const pair: [string, unknown][] = [];
+      if (patch.intent !== undefined) pair.push(["intent", patch.intent]);
+      pair.push(["intent_source", patch.intentSource ?? null]);
+      for (const [column, value] of pair) {
+        if (patch.intentOver === undefined) set(column, value);
+        else {
+          const guard = sourceIn("intent_source", patch.intentOver);
+          sets.push(`${column} = CASE WHEN ${guard.sql} THEN ? ELSE ${column} END`);
+          values.push(...guard.values, value);
+        }
+      }
     }
+    if (patch.state !== undefined) set("state", patch.state);
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));
     if (patch.lastOpenedAt === null) set("last_opened_at", null);
     else if (patch.lastOpenedAt !== undefined) {
@@ -651,7 +681,6 @@ export class SqliteStore
       sets.push("last_opened_at = MAX(COALESCE(last_opened_at, ?), ?)");
       values.push(at, at);
     }
-    if (patch.tidyKeptAt !== undefined) set("tidy_kept_at", toMs(patch.tidyKeptAt));
     if (patch.why !== undefined) {
       set("why_text", patch.why?.text ?? null);
       set("why_source", patch.why?.source ?? null);
@@ -809,9 +838,15 @@ function expectationWhere(owner: OwnerId, id: number, expected: LinkExpectation)
     where.push("snoozed_until IS ?");
     values.push(toMs(expected.snoozedUntil));
   }
+  if (expected.intent !== undefined) {
+    where.push("intent = ?");
+    values.push(expected.intent);
+  }
+  if (expected.notKeptTool) where.push(NOT_KEPT_TOOL);
   for (const [column, list] of [
     ["why_source", expected.whySource],
     ["summary_source", expected.summarySource],
+    ["intent_source", expected.intentSource],
   ] as const) {
     if (list === undefined) continue;
     const guard = sourceIn(column, list);
@@ -824,6 +859,10 @@ function expectationWhere(owner: OwnerId, id: number, expected: LinkExpectation)
   }
   return { where, values };
 }
+
+/** True of a `links` row whose Keep handy row is not `kept`. */
+const NOT_KEPT_TOOL = `NOT EXISTS (SELECT 1 FROM link_tools t
+  WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept')`;
 
 function sourceIn(column: string, list: readonly (string | null)[]) {
   const sources = list.filter((s) => s !== null);
@@ -882,7 +921,8 @@ function toLink(row: LinkRow, tagRows: LinkTag[], snap: SnapshotRow | undefined)
     lastOpenedAt: fromMs(row.last_opened_at),
     lastSurfacedAt: fromMs(row.last_surfaced_at),
     snoozedUntil: fromMs(row.snoozed_until),
-    tidyKeptAt: fromMs(row.tidy_kept_at),
+    intent: row.intent,
+    intentSource: row.intent_source,
     state: row.state,
     snapshot: snap
       ? {

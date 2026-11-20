@@ -47,8 +47,8 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     insertIfAbsent: (owner, link) => inner.insertIfAbsent(owner, link),
     get: (owner, id) => inner.get(owner, id),
     update: (owner, id, patch, events) => inner.update(owner, id, patch, events),
-    updateWithReceipt: (owner, id, patch, at, extend, events) =>
-      inner.updateWithReceipt(owner, id, patch, at, extend, events),
+    updateWithReceipt: (owner, id, patch, at, extend, events, expected) =>
+      inner.updateWithReceipt(owner, id, patch, at, extend, events, expected),
     fillWhyIfMissing: (owner, id, why) => inner.fillWhyIfMissing(owner, id, why),
     fillWhyWithReceipt: (owner, id, why, at, extend) =>
       inner.fillWhyWithReceipt(owner, id, why, at, extend),
@@ -1313,7 +1313,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt: null,
             snoozedUntil: null,
-            tidyKeptAt: null,
+            intent: "explore",
+            intentSource: null,
             state: "active",
             ...over,
           })
@@ -1425,7 +1426,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt,
             snoozedUntil: null,
-            tidyKeptAt: null,
+            intent: "explore",
+            intentSource: null,
             state: "active",
           })
         ).link;
@@ -1479,7 +1481,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt: null,
             snoozedUntil: null,
-            tidyKeptAt: null,
+            intent: "explore",
+            intentSource: null,
             state: "active",
             ...over,
           })
@@ -1692,7 +1695,8 @@ export function describeStoreContract(
             lastOpenedAt: null,
             lastSurfacedAt: null,
             snoozedUntil: null,
-            tidyKeptAt: null,
+            intent: "explore",
+            intentSource: null,
             state: "active",
             ...over,
           })
@@ -1750,16 +1754,71 @@ export function describeStoreContract(
         expect((await h.store.get(A, asked.id))?.why).toEqual({ text: "a", source: "asked" });
       });
 
-      it("starts a new link with no Keep date, and update sets and clears it", async () => {
-        const saved = await saveLink(deps(), A, { url: "https://ex.com/new", savedBy: "t" });
-        expect(saved.link).toMatchObject({ tidyKeptAt: null });
+      const intentOf = async (id: string) => {
+        const l = await h.store.get(A, id);
+        return [l?.intent, l?.intentSource];
+      };
+
+      it("stores intent with its source: update sets and restores the pair", async () => {
         const link = await seed(A, 1);
-        const date = new Date("2026-05-06T07:08:09.123Z");
-        const kept = await h.store.update(A, link.id, { tidyKeptAt: date });
-        expect(kept).toMatchObject({ tidyKeptAt: date });
-        const cleared = await h.store.update(A, link.id, { tidyKeptAt: null });
-        expect(cleared).toMatchObject({ tidyKeptAt: null });
-        expect(await h.store.get(A, link.id)).toEqual(cleared);
+        expect(await intentOf(link.id)).toEqual(["explore", null]);
+        await h.store.update(A, link.id, { intent: "keep", intentSource: "asked" });
+        expect(await intentOf(link.id)).toEqual(["keep", "asked"]);
+        await h.store.update(A, link.id, { intent: "explore", intentSource: null });
+        expect(await intentOf(link.id)).toEqual(["explore", null]);
+        const kept = await seed(A, 2, { intent: "keep", intentSource: "inferred" });
+        expect(await intentOf(kept.id)).toEqual(["keep", "inferred"]);
+      });
+
+      it("matches intent by its source, with null for none", async () => {
+        const none = await seed(A, 1);
+        const guess = await seed(A, 2, { intent: "keep", intentSource: "inferred" });
+        const said = await seed(A, 3, { intent: "keep", intentSource: "stated" });
+        const results = [];
+        for (const link of [none, guess, said]) {
+          const result = await h.store.updateIf(
+            A,
+            link.id,
+            { intentSource: [null, "inferred"] },
+            { title: "t2" },
+          );
+          results.push(result?.applied);
+        }
+        expect(results).toEqual([true, true, false]);
+        expect((await h.store.get(A, said.id))?.title).toBe("t");
+        expect(
+          (await h.store.updateIf(A, said.id, { intent: "keep" }, { title: "t3" }))?.applied,
+        ).toBe(true);
+        expect(
+          (await h.store.updateIf(A, said.id, { intent: "explore" }, { title: "t4" }))?.applied,
+        ).toBe(false);
+      });
+
+      it("intentOver writes the pair over no label or an inferred one, keeps a stated or asked one, and writes the rest either way", async () => {
+        const none = await seed(A, 1);
+        const guess = await seed(A, 2, { intent: "keep", intentSource: "inferred" });
+        const said = await seed(A, 3, { intent: "keep", intentSource: "stated" });
+        const asked = await seed(A, 4, { intent: "explore", intentSource: "asked" });
+        const patch = {
+          title: "T",
+          intent: "keep" as const,
+          intentSource: "inferred" as const,
+          intentOver: [null, "inferred" as const],
+        };
+        for (const link of [none, guess, said, asked]) await h.store.update(A, link.id, patch);
+        expect(await intentOf(none.id)).toEqual(["keep", "inferred"]);
+        expect(await intentOf(guess.id)).toEqual(["keep", "inferred"]);
+        expect(await intentOf(said.id)).toEqual(["keep", "stated"]);
+        expect(await intentOf(asked.id)).toEqual(["explore", "asked"]);
+        for (const link of [said, asked]) {
+          expect((await h.store.get(A, link.id))?.title, link.id).toBe("T");
+        }
+        const viaIf = await h.store.updateIf(A, said.id, {}, { ...patch, title: "U" });
+        expect([viaIf?.applied, viaIf?.link.title, viaIf?.link.intentSource]).toEqual([
+          true,
+          "U",
+          "stated",
+        ]);
       });
 
       it("never matches another owner's link: null, and that link is unchanged", async () => {

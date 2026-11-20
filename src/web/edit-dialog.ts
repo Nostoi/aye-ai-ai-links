@@ -132,7 +132,8 @@ const readIntent = (d) => {
   intentName.textContent = openedIntent.intent === "keep" && openedIntent.source === "inferred" ? "To keep (a guess)" : "To keep";
   intentSet.hidden = keptTool(card);
 };
-intentSet.addEventListener("change", () => {
+intentSet.addEventListener("click", (event) => {
+  if (!event.target.closest("input")) return;
   intentTouched = true;
   intentName.textContent = "To keep";
 });

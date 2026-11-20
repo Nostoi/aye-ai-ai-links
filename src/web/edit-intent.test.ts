@@ -7,6 +7,7 @@ import { linkTitle } from "./open-link.js";
 import { type Answer, type Post, runPage, stubDialog } from "./opened-test-kit.js";
 import { page } from "./page.js";
 import { CARD_FETCH } from "./tell-why.js";
+import { themeCss } from "./theme.js";
 
 const link = (over: Partial<Link> = {}): Link => ({
   id: "1",
@@ -82,7 +83,7 @@ const radio = (p: Page, value: string) =>
 const choose = (p: Page, value: string) => {
   // The test DOM has no radio groups: a browser unchecks the other one itself.
   for (const other of ["explore", "keep"]) radio(p, other).checked = other === value;
-  p.dispatch(radio(p, value), "change");
+  p.dispatch(radio(p, value), "click");
 };
 const submit = async (p: Page) => {
   p.dispatch(p.$("#edit-link form"), "submit");
@@ -126,7 +127,8 @@ describe("the edit dialog's intent choice (#339)", () => {
 
   it("counts a press on the value it already had, and sends it with its source", async () => {
     const p = await open(link({ intent: "keep", intentSource: "inferred" }));
-    choose(p, "keep");
+    p.dispatch(radio(p, "keep"), "click");
+    expect(p.$("#edit-link [data-intent-name]").textContent).toBe("To keep");
     await submit(p);
     expect(sent(p)?.intent).toBe("keep");
     expect(JSON.parse(sent(p)?.intentSeen ?? "")).toEqual({ intent: "keep", source: "inferred" });
@@ -152,5 +154,15 @@ describe("the edit dialog's intent choice (#339)", () => {
     expect((p.$("[data-id='1'] button[data-act=intent-explore]") as HTMLElement).hidden).toBe(
       false,
     );
+  });
+});
+
+describe("the intent radios' layout (#339)", () => {
+  it("undoes the generic full-width input rule, so each radio sits beside its label", () => {
+    const rule = themeCss.match(/\.edit-intent-choice input\{([^{}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("width:auto");
+    expect(rule).toContain("flex:none");
+    expect(rule).toContain("padding:0");
+    expect(rule).toContain("border:0");
   });
 });

@@ -6,6 +6,9 @@ const KIND_SOURCE_RULE = `When you send kind, source also labels the kind: send 
 
 const SUMMARY_RULE = `The server may replace a summary you wrote yourself. Send the owner's as {text, source} with "stated" or "asked".`;
 
+/** Intent (#339): in the server instructions, save_link and update_link. */
+export const INTENT_RULE = `Intent says what the owner means to do with a link. "explore" (To explore) is a link saved to read, try or watch, and every new link starts there. "keep" (To keep) is something they hold on to and return to, such as bills, accounts, docs or a tool; Today and Tidy up never ask about it. Send intent with intentSource: "stated" or "asked" if the owner said it, "inferred" if you worked it out; an inferred keep is shown as a guess. An inferred intent never replaces one the owner gave: the returned link shows what stands. A link kept handy stays To keep, so "explore" on it is refused until the owner says Not handy anymore.`;
+
 /** Open links (#133): every tool that hands out links carries it; the digest has room for this part only. */
 const OPEN_RULE = `To give the owner a link to click, show its openUrl (url if openUrl is null): opening it records the opening, so don't also send opened: true.`;
 
@@ -13,42 +16,46 @@ const OPEN_NOTE = `${OPEN_RULE} To read a page yourself, fetch url, never openUr
 
 export const INSTRUCTIONS = `This is the owner's personal link library. You save, find and update links for them.
 
-The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline or it is a bad moment, infer it and record it as "inferred"; inferred values are shown as guesses. Reuse existing tags from save_link's filingContext instead of inventing near-duplicates.
+The "why" is the reason the owner saved a link. If they told you, record it as "stated". If not, ask once and record the answer as "asked". If they decline or it is a bad moment, infer it and record it as "inferred"; inferred values are shown as guesses. Reuse tags from save_link's filingContext instead of inventing near-duplicates. Intent (explore or keep) is labelled like the why.
 
 Saving:
-- If you know the summary, why and tags, send them in one save_link call; otherwise save first, then update_link.
-- A URL already saved returns the existing link (created: false). It only fills in a missing why and discards any tags you sent. Use update_link for anything else, with the full tag set to change tags.
+- Send what you know (summary, why, tags) in one save_link call; otherwise save first, then update_link.
+- A URL already saved returns the existing link (created: false), filling in only a missing why and discarding any tags you sent. Use update_link for anything else, with the full tag set to change tags.
 - After saving, if a tag you used or one in filingContext nearly duplicates another (same meaning, different spelling or plural), offer merge_tags once. Not for topic overlap.
 
 Tag kinds: ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
 
 Dates are ISO-8601 with an offset or Z, such as 2026-10-01T09:30:00Z.
 
-Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). Links are also matched by meaning. Results are ranked, not filtered, so check that each one fits; when none does, try other words or a filter before saying it isn't saved. To list or count all, use list_links.
+Searching: use the few words that carry the meaning of what the owner remembers ("home batteries", not "that article about home batteries"). Links also match by meaning. Results are ranked, not filtered: check each one fits, and when none does, try other words or a filter before saying it isn't saved. To list or count all, use list_links.
 
-Profile: get_profile (or save_link's profile) has notes about the owner and what they are working on. Read it before you infer a why or tags. Label what you add the same way, and present inferred notes as guesses. When the owner says what they are working on, add a focus entry with add_profile. Change or remove a note with edit_profile only when the owner asks or confirms.`;
+Profile: get_profile (or save_link's profile) holds notes about the owner and their work; read it before you infer a why or tags. Label what you add the same way; present inferred notes as guesses. Add what they say they are working on as a focus entry (add_profile). Change or remove a note with edit_profile only when the owner asks or confirms.`;
 
 export const SAVE_LINK = `Save a link to the owner's library.
 
 Send summary, why and tags in one call when you know them. Give the why as {text, source}: "stated" if the owner said it, "asked" if they answered your question, "inferred" if you worked it out. ${SUMMARY_RULE}
 
-A URL already saved returns the existing link with created: false. Only a missing why is filled in, and the tags you sent (a requested project too) are discarded; use update_link to change anything else, with the full tag set.
+A URL already saved returns the existing link with created: false. Only a missing why is filled in, and the tags you sent are discarded; use update_link to change anything else, with the full tag set.
 
-Reuse tags from the returned filingContext rather than inventing near-duplicates. The kind you ask for applies only when the tag is new. If the returned kind differs from your request, the tag already existed: call update_tag if the owner wants it changed.
+Reuse tags from the returned filingContext. The kind you ask for applies only when the tag is new; if the returned kind differs, the tag already existed: call update_tag if the owner wants it changed.
 
 ${KIND_SOURCE_RULE} Present a project whose kindSource is "inferred" as a guess, and call update_tag only when the owner confirms or changes it.
 
 Saving a new link fetches its page. Within a few seconds link.snapshot shows its status, title, description and image, and snapshotText its opening text ({text, truncated}, or null). A "pending" status means the page has not been fetched yet: call get_link later.
 
-After saving, if a tag you used or one in filingContext nearly duplicates another (same meaning, different spelling or plural), offer merge_tags once. Not for topic overlap.
+After saving, offer merge_tags once for a near-duplicate tag (same meaning, different spelling or plural), not for topic overlap.
 
-Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" at most once, only after a save returns created: true: send "keep" or "not_handy" with "asked" through update_link. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.`;
+Keep handy: if the owner says they use a link regularly, send handy {action: "keep", source: "stated"}. If the page only looks like a tool (a login page, form or dashboard), ask "Is this something you'll use regularly?" at most once, only after a save returns created: true: send "keep" or "not_handy" with "asked" through update_link. If you don't ask about such a page, send "keep" with "inferred", which only suggests it. A repeat save ignores handy: use update_link.
+
+Intent: send "explore" (the default) or "keep" (bills, accounts, docs) with intentSource. A repeat save ignores it too.`;
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
 title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner archived it: out of their lists, still findable in search. Opening a link never changes its state. Send opened: true when the owner opens the link other than through its openUrl, which records the opening itself.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
+
+${INTENT_RULE} Send both intent and intentSource, or neither.
 
 Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
 

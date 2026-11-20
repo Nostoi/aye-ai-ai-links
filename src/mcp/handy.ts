@@ -23,7 +23,7 @@ import type { McpDeps } from "./server.js";
  * A link as the door returns it: with its Keep handy view (null for an ordinary link), its gone
  * view (null unless flagged) and its open link for the calling agent (#133; null when none).
  */
-export type HandyLink = Omit<Link, "tidyKeptAt"> & {
+export type HandyLink = Link & {
   handy: HandyView | null;
   gone: GoneView | null;
   openUrl: string | null;
@@ -45,9 +45,9 @@ async function openUrls(
 
 /**
  * The link fields `linkOutput` declares, picked by name so an internal field never reaches its
- * strict schema. `putAwayAt` is always null on the wire.
+ * strict schema.
  */
-function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> & { putAwayAt: null } {
+function mcpLink(l: Link): Link {
   return {
     id: l.id,
     url: l.url,
@@ -62,7 +62,8 @@ function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> & { putAwayAt: null } {
     lastOpenedAt: l.lastOpenedAt,
     lastSurfacedAt: l.lastSurfacedAt,
     snoozedUntil: l.snoozedUntil,
-    putAwayAt: null,
+    intent: l.intent,
+    intentSource: l.intentSource,
     state: l.state,
     snapshot: l.snapshot,
   };

@@ -704,15 +704,14 @@ type Wire<T> = T extends Date
     : T extends object
       ? { [K in keyof T]: Wire<T[K]> }
       : T;
-/** What the door adds to each link it returns: its Keep handy view, its gone view, its open link and a putAwayAt that is always null. */
+/** What the door adds to each link it returns: its Keep handy view, its gone view and its open link. */
 type Handied<T> = T extends Date
   ? T
   : T extends Link
-    ? Omit<T, "tidyKeptAt"> & {
+    ? T & {
         handy: HandyView | null;
         gone: GoneView | null;
         openUrl: string | null;
-        putAwayAt: null;
       }
     : T extends (infer U)[]
       ? Handied<U>[]
@@ -772,8 +771,7 @@ describe("output schemas against core's types (checked by tsc)", () => {
   });
 });
 
-describe.each(ERAS)("the retired put-away date on the wire, %s era", (era) => {
-  const AWAY = new Date("2026-10-01T08:00:00.123Z");
+describe.each(ERAS)("intent on the wire, and the retired put-away date, %s era", (era) => {
   const callOf = async (app: ReturnType<typeof freshApp>["app"]) => {
     const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
     const validators = new AjvJsonSchemaValidator();
@@ -786,16 +784,13 @@ describe.each(ERAS)("the retired put-away date on the wire, %s era", (era) => {
     };
   };
 
-  it("active, archived and formerly put-away links pass every link tool's schema, carry putAwayAt null and never tidyKeptAt", async () => {
+  it("active, archived and kept links pass every link tool's schema, carry intent and its source, and never putAwayAt or tidyKeptAt", async () => {
     const { db, app } = freshApp();
     const run = await callOf(app);
-    const urls = ["active", "archived", "away"].map((n) => `https://example.com/${n}`);
+    const urls = ["active", "archived", "kept"].map((n) => `https://example.com/${n}`);
     for (const url of urls) await run("save_link", { url });
     db.prepare("UPDATE links SET state = 'archived' WHERE id IN (2, 3)").run();
-    db.prepare("UPDATE links SET put_away_at = ?, tidy_kept_at = ? WHERE id = 3").run(
-      AWAY.getTime(),
-      AWAY.getTime(),
-    );
+    db.prepare("UPDATE links SET intent = 'keep', intent_source = 'stated' WHERE id = 3").run();
     const links: Json[] = [];
     links.push(...(await run("list_links", {})).links);
     for (const [i, url] of urls.entries()) {
@@ -806,12 +801,61 @@ describe.each(ERAS)("the retired put-away date on the wire, %s era", (era) => {
     }
     expect(links).toHaveLength(12);
     for (const link of links) {
-      expect(link.putAwayAt, `link ${link.id}`).toBeNull();
+      expect(link, `link ${link.id}`).not.toHaveProperty("putAwayAt");
       expect(link).not.toHaveProperty("tidyKeptAt");
+      expect([link.intent, link.intentSource]).toEqual(
+        link.id === "3" ? ["keep", "stated"] : ["explore", null],
+      );
     }
   });
 
-  it("get_digest leaves a formerly put-away link out, and a focus_words reason passes the schema", async () => {
+  it("advertises intent and no putAwayAt on every link tool, and refuses nothing for a client holding the new list", async () => {
+    const { app } = freshApp();
+    const tools = Object.fromEntries((await listTools(app, era)).map((t) => [t.name, t]));
+    for (const name of ["save_link", "get_link", "update_link"]) {
+      const link = tools[name].outputSchema.properties.link;
+      expect(Object.keys(link.properties), name).toEqual(
+        expect.arrayContaining(["intent", "intentSource"]),
+      );
+      expect(link.properties, name).not.toHaveProperty("putAwayAt");
+      expect(link.required, name).toEqual(expect.arrayContaining(["intent", "intentSource"]));
+    }
+    expect(tools.save_link.inputSchema.properties).toHaveProperty("intent");
+    expect(tools.update_link.inputSchema.properties).toHaveProperty("intentSource");
+  });
+
+  it("a result with no putAwayAt fails a tool list taken before this change, and passes the current one", async () => {
+    const frozen = JSON.parse(
+      readFileSync(join(import.meta.dirname, "fixtures/pre-339-output-schemas.json"), "utf8"),
+    );
+    const ajv = new Ajv({
+      strict: false,
+      validateFormats: true,
+      validateSchema: false,
+      allErrors: true,
+    });
+    addFormats(ajv);
+    const { app } = freshApp();
+    const run = await callOf(app);
+    await run("save_link", { url: "https://example.com/a" });
+    const results = {
+      get_link: await run("get_link", { id: "1" }),
+      list_links: await run("list_links", {}),
+      update_link: await run("update_link", { id: "1", summary: "s" }),
+    };
+    for (const [tool, result] of Object.entries(results)) {
+      const old = ajv.compile(frozen[tool]);
+      expect(old(result), `${tool} against the old list`).toBe(false);
+      expect(
+        old.errors?.some(
+          (e) => e.keyword === "required" && e.params.missingProperty === "putAwayAt",
+        ),
+        tool,
+      ).toBe(true);
+    }
+  });
+
+  it("get_digest leaves an archived link out, and a focus_words reason passes the schema", async () => {
     const { db, app } = freshApp();
     const run = await callOf(app);
     for (const url of ["away", "quokka"]) {
@@ -821,9 +865,7 @@ describe.each(ERAS)("the retired put-away date on the wire, %s era", (era) => {
         why: { text: "w", source: "stated" },
       });
     }
-    db.prepare("UPDATE links SET state = 'archived', put_away_at = ? WHERE id = 1").run(
-      AWAY.getTime(),
-    );
+    db.prepare("UPDATE links SET state = 'archived' WHERE id = 1").run();
     await run("add_profile", { addFocus: [{ text: "quokka", source: "inferred" }] });
     const digest = await run("get_digest", {});
     expect(digest.links.map((d: Json) => d.link.id)).toEqual(["2"]);
@@ -848,9 +890,10 @@ describe("the MCP link projection", () => {
   it("drops fields the output schema does not declare, so an extra field still validates", async () => {
     const { deps } = freshApp();
     const { link } = await saveLink(deps, A.owner, { url: "https://example.com/x", savedBy: "t" });
-    const extra = { ...link, tidyKeptAt: new Date(), futureField: 1 };
+    const extra = { ...link, tidyKeptAt: new Date(), putAwayAt: null, futureField: 1 };
     const projected = await linkWithHandy(deps, A.owner, extra as Link, "t");
     expect(projected).not.toHaveProperty("tidyKeptAt");
+    expect(projected).not.toHaveProperty("putAwayAt");
     expect(projected).not.toHaveProperty("futureField");
     expect(linkOutput.safeParse(JSON.parse(JSON.stringify(projected))).success).toBe(true);
   });

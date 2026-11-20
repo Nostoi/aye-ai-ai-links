@@ -9,6 +9,7 @@ import type { Caller } from "../auth/caller.js";
 import { getDigest } from "../core/digest.js";
 import { CoreError } from "../core/errors.js";
 import { filingContext } from "../core/filing-context.js";
+import { checkIntent } from "../core/intent.js";
 import type { LinkCheckStore } from "../core/link-check-store.js";
 import {
   getLinkWithText,
@@ -53,7 +54,8 @@ import type { TagEditStore } from "../core/tag-edit-store.js";
 import { changeTagKind } from "../core/tag-kind.js";
 import { normalizeTags } from "../core/tags.js";
 import type { ToolStore } from "../core/tool-store.js";
-import { SOURCES, STATES, TAG_KINDS } from "../core/types.js";
+import { checkIntentWithHandy } from "../core/tools.js";
+import { INTENTS, SOURCES, STATES, TAG_KINDS } from "../core/types.js";
 import type { ProfileEntry, RecordChange } from "./changes.js";
 import * as guidance from "./guidance.js";
 import {
@@ -154,6 +156,18 @@ const tags = z.array(
   }),
 );
 
+const intentFields = {
+  intent: z
+    .enum(INTENTS)
+    .optional()
+    .describe('"explore" (To explore) or "keep" (To keep). Send intentSource with it.'),
+  intentSource: source
+    .optional()
+    .describe(
+      '"stated" or "asked" only if the owner said it; "inferred" is your guess and never replaces the owner\'s.',
+    ),
+};
+
 const handy = z
   .object({ action: z.enum(HANDY_ACTIONS), source })
   .describe(
@@ -167,6 +181,7 @@ const saveLinkInput = z.object({
   why: why.optional(),
   tags: tags.optional(),
   handy: handy.optional(),
+  ...intentFields,
 });
 const updateLinkFields = {
   id: z.string(),
@@ -175,6 +190,7 @@ const updateLinkFields = {
   why: why.nullable().optional(),
   tags: tags.optional(),
   handy: handy.optional(),
+  ...intentFields,
   state: z.enum(STATES).optional(),
   snoozedUntil: timestamp.nullable().optional(),
   opened: z.literal(true).optional(),
@@ -344,6 +360,9 @@ export function buildMcpServer(
       const now = deps.now();
       const at = { ...deps, now: () => now };
       const input = { ...args, savedBy };
+      // Checked before the save, so a refused call saves nothing.
+      checkIntent(args.intent, args.intentSource);
+      checkIntentWithHandy(handy, args.intent);
       const { whyFilled, whyEditId, ...saved } = receipts
         ? await saveLink(at, owner, input, { receipt: true, extend: (id) => lastEdit.get(id) })
         : { ...(await saveLink(at, owner, input)), whyEditId: null };
@@ -400,6 +419,8 @@ export function buildMcpServer(
       if (handy) {
         if (rest.tags) normalizeTags(rest.tags);
         if (rest.title !== undefined) normalizeTitle(rest.title);
+        checkIntent(rest.intent, rest.intentSource);
+        checkIntentWithHandy(handy, rest.intent);
         record({ kind: "handy", linkId: id, change: await applyHandy(at, owner, id, handy) });
       }
       const patch = {

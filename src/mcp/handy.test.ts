@@ -484,7 +484,7 @@ describe("update_link's retired putAway", () => {
     expect(await stored()).toMatchObject({ state: "archived", lastOpenedAt: NOW });
   });
 
-  it("advertises no putAway on update_link, no came_back reason, and a null putAwayAt on a link", async () => {
+  it("advertises no putAway on update_link, no came_back reason, and no putAwayAt on a link", async () => {
     const res = await app.fetch(
       new Request("http://localhost/mcp", {
         method: "POST",
@@ -501,9 +501,9 @@ describe("update_link's retired putAway", () => {
     const named = (name: string) => tools.find((t) => t.name === name);
     expect(Object.keys(named("update_link")?.inputSchema.properties)).not.toContain("putAway");
     expect(JSON.stringify(named("get_digest")?.outputSchema)).not.toContain("came_back");
-    expect(named("get_link")?.outputSchema.properties.link.properties.putAwayAt).toEqual({
-      type: "null",
-    });
+    const link = named("get_link")?.outputSchema.properties.link;
+    expect(link.properties).not.toHaveProperty("putAwayAt");
+    expect(link.required).not.toContain("putAwayAt");
   });
 });
 
@@ -546,5 +546,145 @@ describe("an AI's opening sent with a handy change (#260)", () => {
 
     expect((await ai).isError).toBe(false);
     expect((await deps.store.get(A.owner, "1"))?.lastOpenedAt).toEqual(at(60_000));
+  });
+});
+
+const intentRow = () =>
+  db.prepare("SELECT intent, intent_source AS intentSource FROM links WHERE id = 1").get();
+const toolRows = () => db.prepare("SELECT status, source FROM link_tools WHERE link_id = 1").all();
+const KEPT = "This link is kept handy, so it stays To keep. Choose Not handy anymore first.";
+
+describe("intent on links", () => {
+  it("every link result carries intent and intentSource, explore with no source by default", async () => {
+    const saved = await call("save_link", { url: "https://example.com/i" });
+    expect(saved.data.link).toMatchObject({ intent: "explore", intentSource: null });
+    expect(saved.data.link).not.toHaveProperty("putAwayAt");
+    for (const link of [
+      (await call("get_link", { id: "1" })).data.link,
+      (await call("list_links", {})).data.links[0],
+      (await call("search_links", { query: "" })).data.links[0],
+    ]) {
+      expect(link).toMatchObject({ intent: "explore", intentSource: null });
+    }
+  });
+
+  it("save_link and update_link take intent with its source, each naming the one that is missing", async () => {
+    const saved = await call("save_link", {
+      url: "https://example.com/i",
+      intent: "keep",
+      intentSource: "inferred",
+    });
+    expect(saved.data.link).toMatchObject({ intent: "keep", intentSource: "inferred" });
+    const again = await call("save_link", {
+      url: "https://example.com/i",
+      intent: "explore",
+      intentSource: "stated",
+    });
+    expect(again.data.link).toMatchObject({ intent: "keep", intentSource: "inferred" });
+    const said = await call("update_link", { id: "1", intent: "explore", intentSource: "stated" });
+    expect(said.data.link).toMatchObject({ intent: "explore", intentSource: "stated" });
+    const noSource = await call("update_link", { id: "1", title: "T", intent: "keep" });
+    expect(noSource.isError).toBe(true);
+    expect(noSource.text).toContain("intentSource");
+    const noIntent = await call("update_link", { id: "1", intentSource: "stated" });
+    expect(noIntent.isError).toBe(true);
+    expect(noIntent.text).toContain("intent");
+    expect(intentRow()).toEqual({ intent: "explore", intentSource: "stated" });
+    expect((await call("get_link", { id: "1" })).data.link.title).toBeNull();
+  });
+
+  it("an inferred intent never replaces the owner's, and the rest of the update is written", async () => {
+    await call("save_link", { url: "https://example.com/i" });
+    await call("update_link", { id: "1", intent: "explore", intentSource: "stated" });
+    const res = await call("update_link", {
+      id: "1",
+      title: "T",
+      intent: "keep",
+      intentSource: "inferred",
+    });
+    expect(res.data.link).toMatchObject({ title: "T", intent: "explore", intentSource: "stated" });
+    expect(intentRow()).toEqual({ intent: "explore", intentSource: "stated" });
+  });
+
+  it("refuses an explore on a kept tool by name, writing nothing, however it arrives", async () => {
+    await call("save_link", { url: "https://example.com/i" });
+    await keptDaysAgo("1", 0);
+    const before = {
+      link: db.prepare("SELECT * FROM links WHERE id = 1").get(),
+      tools: toolRows(),
+    };
+    for (const args of [
+      { id: "1", title: "T", intent: "explore", intentSource: "stated" },
+      { id: "1", title: "T", intent: "explore", intentSource: "inferred" },
+      {
+        id: "1",
+        title: "T",
+        intent: "explore",
+        intentSource: "stated",
+        handy: { action: "keep", source: "stated" },
+      },
+    ]) {
+      const res = await call("update_link", args);
+      expect(res.isError, JSON.stringify(args)).toBe(true);
+      expect(res.text).toContain(KEPT);
+    }
+    expect({
+      link: db.prepare("SELECT * FROM links WHERE id = 1").get(),
+      tools: toolRows(),
+    }).toEqual(before);
+  });
+
+  it("refuses one call that keeps a link handy and explores it, before writing either, and allows a suggestion with it", async () => {
+    await call("save_link", { url: "https://example.com/i" });
+    const keep = {
+      id: "1",
+      intent: "explore",
+      intentSource: "stated",
+      handy: { action: "keep", source: "stated" },
+    };
+    const res = await call("update_link", keep);
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain(KEPT);
+    expect(toolRows()).toEqual([]);
+    expect(intentRow()).toEqual({ intent: "explore", intentSource: null });
+    const saved = await call("save_link", {
+      url: "https://example.com/j",
+      intent: "explore",
+      intentSource: "stated",
+      handy: { action: "keep", source: "stated" },
+    });
+    expect(saved.isError).toBe(true);
+    expect(saved.text).toContain(KEPT);
+    expect(db.prepare("SELECT count(*) AS n FROM links").get()).toEqual({ n: 1 });
+    const suggest = await call("update_link", {
+      ...keep,
+      handy: { action: "keep", source: "inferred" },
+    });
+    expect(suggest.isError).toBe(false);
+    expect(toolRows()).toEqual([{ status: "suggested", source: "inferred" }]);
+  });
+
+  it("allows an explore in the call that says Not handy anymore, which declines the tool first", async () => {
+    await call("save_link", { url: "https://example.com/i" });
+    await keptDaysAgo("1", 0);
+    const res = await call("update_link", {
+      id: "1",
+      intent: "explore",
+      intentSource: "stated",
+      handy: { action: "not_handy", source: "stated" },
+    });
+    expect(res.isError).toBe(false);
+    expect(toolRows()).toEqual([{ status: "declined", source: "stated" }]);
+    expect(intentRow()).toEqual({ intent: "explore", intentSource: "stated" });
+  });
+
+  it("a kept tool arrives as To keep with its source, so a get_link shows it", async () => {
+    await call("save_link", { url: "https://example.com/i" });
+    await call("update_link", { id: "1", handy: { action: "keep", source: "asked" } });
+    expect((await call("get_link", { id: "1" })).data.link).toMatchObject({
+      intent: "keep",
+      intentSource: "asked",
+      handy: { status: "kept" },
+    });
   });
 });

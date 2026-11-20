@@ -1710,6 +1710,8 @@ describe("startServer", () => {
           requestLog: (line) => logged.push(line),
           summaryPollMs: 20,
           summaryGapMs: 0,
+          intentPollMs: 20,
+          intentGapMs: 0,
         },
       );
       started.push(s);
@@ -1749,6 +1751,48 @@ describe("startServer", () => {
       } finally {
         await fake.close();
       }
+    });
+
+    /** A saved link the migration would have queued for the To keep guess. */
+    const seedQueued = async () => {
+      const db = openDatabase(dbPath);
+      try {
+        const deps = createDeps(db, new FakeEmbedder(DIMS));
+        const { link } = await saveLink(deps, "owner", { url: PAGE_URL, savedBy: "seed" });
+        db.prepare("INSERT INTO intent_guesses (owner_id, link_id) VALUES ('owner', ?)").run(
+          Number(link.id),
+        );
+      } finally {
+        db.close();
+      }
+    };
+    const guessed = () =>
+      read<{ intent: string; source: string | null; outcome: string | null }>(
+        `SELECT l.intent, l.intent_source AS source, g.outcome FROM links l
+         JOIN intent_guesses g ON g.link_id = l.id`,
+      );
+
+    it("with an AI set up, guesses To keep for a queued link, labelled inferred, and records the outcome", async () => {
+      await seedQueued();
+      const fake = await fakeAi('{"keep":[1]}');
+      try {
+        await startWith(fake.ai);
+        await vi.waitFor(
+          () =>
+            expect(guessed()).toEqual([{ intent: "keep", source: "inferred", outcome: "keep" }]),
+          { timeout: 3_000 },
+        );
+        expect(fake.bodies.join("\n")).toContain("example.com/cats");
+      } finally {
+        await fake.close();
+      }
+    });
+
+    it("with no AI set up, guesses nothing and leaves the queue as it was", async () => {
+      await seedQueued();
+      await startWith(undefined);
+      await sleep(300);
+      expect(guessed()).toEqual([{ intent: "explore", source: null, outcome: null }]);
     });
 
     it("with no AI set up, summarises nothing", async () => {

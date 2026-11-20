@@ -215,7 +215,8 @@ export interface LinkRemover {
  * summary text while `summarySource` lists the accepted sources of its label, with null for none.
  * `intent` matches the intent and `intentSource` lists the accepted sources of its label, with
  * null for none. `notKeptTool` holds only while the link's Keep handy row is not `kept`, judged
- * in the same write.
+ * in the same write. The store owns that rule: a patch that writes explore is always held to it,
+ * whether or not the caller names it, and answers `applied: false` (`update` answers null).
  */
 export type LinkExpectation = {
   state?: LinkState;

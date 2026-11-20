@@ -156,6 +156,10 @@ function matchesExpectation(found: Link, expected: LinkExpectation, keptTool: bo
   );
 }
 
+/** The store, not the caller, refuses an explore under a kept tool (as SQLite's `updateSync`). */
+const withKeptToolRule = (expected: LinkExpectation, patch: LinkPatch): LinkExpectation =>
+  patch.intent === "explore" ? { ...expected, notKeptTool: true } : expected;
+
 /** A tag pair as one string, the keys sorted so either order gives the same one. */
 const pairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
 const pairOf = (p: string): [string, string] => p.split("\0") as [string, string];
@@ -619,7 +623,7 @@ export class FakeStore
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    if (!matchesExpectation(found, expected, this.keptTool(owner, id))) {
+    if (!matchesExpectation(found, withKeptToolRule(expected, patch), this.keptTool(owner, id))) {
       return { link: this.view(owner, found), editId: null, applied: false };
     }
     const before = coveredOf(this.view(owner, found));
@@ -705,7 +709,7 @@ export class FakeStore
   ) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
-    if (!matchesExpectation(found, expected, this.keptTool(owner, id))) {
+    if (!matchesExpectation(found, withKeptToolRule(expected, patch), this.keptTool(owner, id))) {
       return { link: this.view(owner, found), applied: false };
     }
     return { link: (await this.update(owner, id, patch, events)) as Link, applied: true };

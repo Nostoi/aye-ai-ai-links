@@ -2,10 +2,11 @@ import { compareIds, type DigestDeps, FOCUS_WINDOW_MS, NOT_OPENED_MS } from "./d
 import { isGone } from "./link-check.js";
 import { recentFocus } from "./profile.js";
 import type { FocusEntry, Link, OwnerId } from "./types.js";
+import { SNOOZE_MS } from "./worth-a-look.js";
 
 /** The Tidy up queue: the use cases behind Home's Tidy up tray. Keep is `keepLink` (To keep). */
 
-/** Links in one Tidy up session; `tidySession` offers one only when this many are left to show. */
+/** Links in one Tidy up session, at most. */
 export const TIDY_SESSION = 5;
 
 export type TidyDeps = Pick<
@@ -13,35 +14,57 @@ export type TidyDeps = Pick<
   "store" | "tools" | "checks" | "profile" | "focusMatch" | "now"
 >;
 
-/** `fit`: the newest current focus entry whose words match the link, if any. */
-export type TidyLink = { link: Link; fit: FocusEntry | null };
+/**
+ * `gone`: the page seems gone, so the question is whether it still works. `fit`: the newest
+ * current focus entry whose words match the link, if any.
+ */
+export type TidyLink = { link: Link; gone: boolean; fit: FocusEntry | null };
 
 /**
- * The owner's links that qualify, oldest saved first, then lowest id. A link qualifies when it is
- * active, saved and last opened at least NOT_OPENED_MS ago, To explore (a To keep link is never
- * asked about), not a kept tool, not gone (Home's gone row asks about those), and not in `skip`.
+ * The owner's links that qualify: first the ones whose page seems gone (whatever their intent or
+ * age), by when they were flagged, then the old To explore ones, oldest saved first, then lowest
+ * id. Both are active, not a kept tool, not in `skip`, and not under a Skip: a snooze that ends
+ * after now but within SNOOZE_MS. A longer snooze (an agent's) does not hold Tidy back. An old
+ * link was saved and last opened at least NOT_OPENED_MS ago.
  */
 async function qualifying(
   deps: TidyDeps,
   owner: OwnerId,
   now: Date,
   skip: ReadonlySet<string>,
-): Promise<Link[]> {
+): Promise<{ link: Link; gone: boolean }[]> {
   const oldBefore = now.getTime() - NOT_OPENED_MS;
+  const skippedUntil = now.getTime() + SNOOZE_MS;
   const tools = await deps.tools.listTools(owner);
   const checks = await deps.checks.listChecks(owner);
-  return (await deps.store.listLinks(owner))
+  const asked = (await deps.store.listLinks(owner)).filter(
+    (l) =>
+      !skip.has(l.id) &&
+      l.state === "active" &&
+      !(
+        l.snoozedUntil !== null &&
+        l.snoozedUntil > now &&
+        l.snoozedUntil.getTime() <= skippedUntil
+      ) &&
+      tools.get(l.id)?.status !== "kept",
+  );
+  const flaggedAt = (l: Link) => checks.get(l.id)?.flaggedAt?.getTime() ?? 0;
+  const gone = asked
+    .filter((l) => isGone(checks.get(l.id) ?? null))
+    .sort((a, b) => flaggedAt(a) - flaggedAt(b) || compareIds(a.id, b.id));
+  const old = asked
     .filter(
       (l) =>
-        !skip.has(l.id) &&
-        l.state === "active" &&
+        !isGone(checks.get(l.id) ?? null) &&
         l.intent === "explore" &&
         l.savedAt.getTime() <= oldBefore &&
-        (l.lastOpenedAt === null || l.lastOpenedAt.getTime() <= oldBefore) &&
-        tools.get(l.id)?.status !== "kept" &&
-        !isGone(checks.get(l.id) ?? null),
+        (l.lastOpenedAt === null || l.lastOpenedAt.getTime() <= oldBefore),
     )
     .sort((a, b) => a.savedAt.getTime() - b.savedAt.getTime() || compareIds(a.id, b.id));
+  return [
+    ...gone.map((link) => ({ link, gone: true })),
+    ...old.map((link) => ({ link, gone: false })),
+  ];
 }
 
 /** The focus entries that count as "working on now": created within FOCUS_WINDOW_MS, newest first. */
@@ -51,9 +74,9 @@ export async function currentFocus(deps: TidyDeps, owner: OwnerId): Promise<Focu
 }
 
 /**
- * Up to `limit` old links, oldest saved first, then lowest id. Gone links are left out: Home's
- * gone row asks about them. Links in `skip` (what Home already shows) are left out before the
- * limit applies. One focus match per current focus entry, newest first.
+ * Up to `limit` links to ask about, gone pages first, then old links oldest saved first. Links in
+ * `skip` (what Home already shows) are left out before the limit applies. One focus match per
+ * current focus entry, newest first.
  */
 export async function tidyQueue(
   deps: TidyDeps,
@@ -72,12 +95,12 @@ export async function tidyQueue(
       }
     }
   }
-  return picked.map((link) => ({ link, fit: fits.get(link.id) ?? null }));
+  return picked.map(({ link, gone }) => ({ link, gone, fit: fits.get(link.id) ?? null }));
 }
 
 /**
  * One Tidy up session for Home: the queue, with `skip` (what Home shows above it) left out, or
- * null unless a full TIDY_SESSION of links is left, so Home never offers five and shows fewer.
+ * null when no link qualifies.
  */
 export async function tidySession(
   deps: TidyDeps,
@@ -85,5 +108,5 @@ export async function tidySession(
   skip: ReadonlySet<string>,
 ): Promise<TidyLink[] | null> {
   const queue = await tidyQueue(deps, owner, TIDY_SESSION, skip);
-  return queue.length < TIDY_SESSION ? null : queue;
+  return queue.length === 0 ? null : queue;
 }

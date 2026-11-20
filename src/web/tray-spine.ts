@@ -4,8 +4,8 @@ const SPINES = {
     word: "Handy",
     icon: `<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>`,
   },
-  today: {
-    word: "Today",
+  explore: {
+    word: "Explore",
     icon: `<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>`,
   },
   tidy: {

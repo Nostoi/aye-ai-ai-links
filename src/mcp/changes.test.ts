@@ -4,7 +4,6 @@ import type { Caller } from "../auth/caller.js";
 import { getDigest } from "../core/digest.js";
 import { undoEdit } from "../core/link-edit.js";
 import { saveLink } from "../core/links.js";
-import type { LinkStore } from "../core/store.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -121,31 +120,20 @@ describe("the change record", () => {
     ]);
   });
 
-  it("lists every link a digest marked, even one it left out", async () => {
+  it("get_digest returns the link, records no change and writes no surfacing", async () => {
     const { deps, entry } = setup();
     await saveLink({ ...deps, now: () => new Date("2026-10-01T09:00:00Z") }, CALLER.owner, {
       url: URL,
       savedBy: "seed",
     });
-    await getDigest({ ...deps, now: () => new Date("2026-10-04T09:00:00Z") }, CALLER.owner);
-    const store = deps.store;
-    // Another caller gives the link its why after the digest picked it and before it claims it.
-    const racing = Object.assign(Object.create(store) as LinkStore, {
-      claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
-        await store.update(CALLER.owner, "1", {
-          why: { text: "choosing tiles", source: "stated" },
-        });
-        return store.claimSurfaced(...args);
-      },
-    });
-    const s = await session(entry, { ...deps, store: racing });
+    const s = await session(entry, deps);
 
     const result = await s.call("get_digest", {});
 
     expect(result.isError).toBe(false);
-    expect(result.structured).toEqual({ links: [] });
-    expect((await store.get(CALLER.owner, "1"))?.lastSurfacedAt).toEqual(NOW);
-    expect(s.changes()).toEqual([{ kind: "surfaced", linkIds: ["1"] }]);
+    expect((result.structured as { links: unknown[] }).links).toHaveLength(1);
+    expect((await deps.store.get(CALLER.owner, "1"))?.lastSurfacedAt).toBeNull();
+    expect(s.changes()).toEqual([]);
   });
 
   it("lists a removed note with its text and source", async () => {
@@ -312,7 +300,7 @@ describe("the change record", () => {
       ["get_link", { id: "1" }, false],
       ["get_profile", {}, false],
       ["get_stats", { window: 30 }, false],
-      // The one link was surfaced just now: the digest has nothing to mark.
+      // The digest writes nothing.
       ["get_digest", {}, false],
       // A repeat save whose why is already set changes nothing.
       ["save_link", { url: URL, why: { text: "other", source: "stated" } }, false],

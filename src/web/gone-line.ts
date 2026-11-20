@@ -10,6 +10,9 @@ export const GONE_TEXT = "This page seems gone";
 /** The small line under It still works. */
 export const STILL_WORKS_HINT = "Clears this warning";
 
+/** It still works' line in a Tidy up step. */
+export const STILL_WORKS_TIDY_LINE = "Clears the warning.";
+
 /** What It still works says while it waits for the answer (#314). */
 export const STILL_WORKS_WORKING = "Checking…";
 

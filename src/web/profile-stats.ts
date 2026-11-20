@@ -31,7 +31,7 @@ function tagRow(t: TagStat, largest: number): string {
 const PARTIAL_LABELS: Record<PartialCount, string> = {
   opened: "openings",
   setAside: "set-asides",
-  notNow: "Not now",
+  notNow: "skipping",
 };
 
 function partialNote(stats: Stats, now: Date): string {
@@ -74,7 +74,7 @@ ${card("Opened", stats.opened)}
 ${card("Not opened yet", stats.notOpenedYet)}
 ${card("Set aside", stats.setAside, "archived or not handy")}
 </div>
-${stats.notNow > 0 ? `<p>Put off with Not now: ${stats.notNow}</p>` : ""}
+${stats.notNow > 0 ? `<p>Skipped: ${stats.notNow}</p>` : ""}
 ${partialNote(stats, now)}
 <p class="small">Openings from bookmarks or outside the app aren't counted.</p>
 ${tagBlock(stats.tags)}${readingBlock(reading, now)}

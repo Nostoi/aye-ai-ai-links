@@ -51,7 +51,7 @@ describe("GET /", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const html = String(res.body);
-    expect(html).toContain("Worth a look today");
+    expect(html).toContain(">Explore</h2>");
     expect(html).toContain("A&#39;s home card");
     expect(html).toContain(`data-id="${id}"`);
     expect(html).toContain("Tell me why");
@@ -131,24 +131,30 @@ describe("GET /", () => {
 });
 
 describe("the home card actions", () => {
-  it("/home/opened records the opening and the surfacing: 204, uncached", async () => {
+  it("the address Home's own script posts an opening to records the opening and nothing else, and the card stays with its opened line (#340)", async () => {
     const { world, browser, id } = await home();
-    const res = await browser.send("/home/opened", post({ id }));
+    const html = String((await browser.send("/")).body);
+    const at = html.indexOf('const openRoot = document.getElementById("worth-cards");');
+    expect(at).toBeGreaterThan(-1);
+    const address = html.slice(at).match(/fetch\("([^"]+)"/)?.[1] as string;
+    expect(address).toBe("/links/opened");
+    const before = row(world, id);
+    const res = await browser.send(address, post({ id }));
     expect(res.status).toBe(204);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(row(world, id).last_opened_at).toEqual(expect.any(Number));
-    expect(row(world, id).last_surfaced_at).toEqual(row(world, id).last_opened_at);
+    expect(row(world, id)).toEqual({ ...before, last_opened_at: expect.any(Number) });
+    expect(row(world, id).last_surfaced_at).toBeNull();
+    const again = String((await browser.send("/")).body);
+    expect(again).toContain(`data-id="${id}"`);
+    expect(again).toMatch(/<p class="opened" data-opened>/);
     expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
-  it("/home/opened on an archived link records the opening and leaves it archived", async () => {
+  it("/home/opened is gone: a 404 that changes nothing", async () => {
     const { world, browser, id } = await home();
-    await linkDeps(world).store.update(A, id, { state: "archived" });
-    expect((await browser.send("/home/opened", post({ id }))).status).toBe(204);
-    expect(row(world, id)).toMatchObject({
-      state: "archived",
-      last_opened_at: expect.any(Number),
-    });
+    const before = allRows(world);
+    expect((await browser.send("/home/opened", post({ id }))).status).toBe(404);
+    expect(allRows(world)).toEqual(before);
   });
 
   it("/links/opened, from any other page, records the opening only: not surfaced, not logged", async () => {
@@ -161,7 +167,7 @@ describe("the home card actions", () => {
     expect(world.links.prepare("SELECT count(*) AS n FROM search_log").get()).toEqual({ n: 0 });
   });
 
-  it("/home/snooze marks it surfaced and snoozes two weeks, answering both; /home/unsnooze reverses both, so the card is back", async () => {
+  it("/home/snooze snoozes two weeks and answers until; it writes no surfacing, and /home/unsnooze reverses it, so the card is back (#340)", async () => {
     const { world, browser, id } = await home();
     const res = await browser.send("/home/snooze", post({ id }));
     expect(res.status).toBe(200);
@@ -170,15 +176,28 @@ describe("the home card actions", () => {
     const r = row(world, id);
     expect(snooze).toEqual({
       until: new Date(r.snoozed_until as number).toISOString(),
-      claimedAt: new Date(r.last_surfaced_at as number).toISOString(),
-      previousSurfacedAt: null,
+      previous: null,
     });
-    expect(r.snoozed_until).toBe((r.last_surfaced_at as number) + SNOOZE_MS);
-    expect(String((await browser.send("/")).body)).not.toContain("Worth a look today");
+    expect(r.snoozed_until as number).toBeGreaterThan(Date.now() + SNOOZE_MS - 60_000);
+    expect(r.last_surfaced_at).toBeNull();
+    expect(String((await browser.send("/")).body)).not.toContain(`data-id="${id}"`);
     const back = await browser.send("/home/unsnooze", post({ id, ...snooze }));
     expect(back.status).toBe(204);
     expect(row(world, id)).toMatchObject({ snoozed_until: null, last_surfaced_at: null });
     expect(String((await browser.send("/")).body)).toContain(`data-id="${id}"`);
+  });
+
+  it("/home/snooze on a link an agent snoozed far ahead answers the old date, and /home/unsnooze with it puts that date back exactly (#340)", async () => {
+    const { world, browser, id } = await home();
+    const far = new Date("2099-01-01T00:00:00.000Z");
+    await updateLink(linkDeps(world), A, id, { snoozedUntil: far });
+    const res = await browser.send("/home/snooze", post({ id }));
+    expect(res.status).toBe(200);
+    const snooze = res.body as { until: string; previous: string | null };
+    expect(snooze.previous).toBe(far.toISOString());
+    expect(row(world, id).snoozed_until).toBe(Date.parse(snooze.until));
+    expect((await browser.send("/home/unsnooze", post({ id, ...snooze }))).status).toBe(204);
+    expect(row(world, id).snoozed_until).toBe(far.getTime());
   });
 
   it("/home/unsnooze after an AI changed the snooze is a 409 and leaves the AI's value", async () => {
@@ -191,7 +210,7 @@ describe("the home card actions", () => {
     expect(row(world, id).snoozed_until).toBe(ai.getTime());
   });
 
-  it("/home/snooze after an AI snoozed the link is a 409, leaving its snooze and surfacing as they were", async () => {
+  it("/home/snooze after an AI snoozed the link is a 409, leaving its snooze as it was", async () => {
     const { world, browser, id } = await home();
     await browser.send("/");
     const ai = new Date(Date.now() + 3 * 86_400_000);
@@ -386,26 +405,19 @@ describe("the home card actions", () => {
   });
 });
 
-/** A snooze and its claim the two-owner test seeds, which the unsnooze body names. */
+/** A snooze the two-owner test seeds, which the unsnooze body names. */
 const SEED_UNTIL = new Date("2030-01-01T00:00:00.000Z");
-const SEED_CLAIM = new Date("2029-12-18T00:00:00.000Z");
 
-type Seed = LinkPatch & { lastSurfacedAt?: Date };
+type Seed = LinkPatch;
 
 /** Each POST, with a body naming the card's link, and the state of A's link it acts on. */
 const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
-  ["/home/opened", (id) => ({ id }), {}],
   ["/links/opened", (id) => ({ id }), {}],
   ["/home/snooze", (id) => ({ id }), {}],
   [
     "/home/unsnooze",
-    (id) => ({
-      id,
-      until: SEED_UNTIL.toISOString(),
-      claimedAt: SEED_CLAIM.toISOString(),
-      previousSurfacedAt: null,
-    }),
-    { snoozedUntil: SEED_UNTIL, lastSurfacedAt: SEED_CLAIM },
+    (id) => ({ id, until: SEED_UNTIL.toISOString(), previous: null }),
+    { snoozedUntil: SEED_UNTIL },
   ],
   ["/home/archive", (id) => ({ id }), {}],
   ["/home/bring-back", (id) => ({ id }), { state: "archived" }],
@@ -427,13 +439,7 @@ const ROUTES: [string, (id: string) => Record<string, unknown>, Seed][] = [
 describe.each(ROUTES)("POST %s", (path, body, seed) => {
   it("acts for the signed-in owner only: B naming A's link gets 404 and A's rows are unchanged", async () => {
     const { world, browser, id } = await home();
-    const { lastSurfacedAt, ...patch } = seed;
-    await updateLink(linkDeps(world), A, id, patch);
-    if (lastSurfacedAt) {
-      world.links
-        .prepare("UPDATE links SET last_surfaced_at = ? WHERE id = ?")
-        .run(lastSurfacedAt.getTime(), Number(id));
-    }
+    await updateLink(linkDeps(world), A, id, seed);
     const bBrowser = await addSecondUser(world);
     const before = ownedRows(world, A);
     const res = await bBrowser.send(path, post(body(id)));
@@ -441,7 +447,6 @@ describe.each(ROUTES)("POST %s", (path, body, seed) => {
     expect(ownedRows(world, A)).toEqual(before);
     // The same request from A is accepted, so B's 404 is down to whose link it is.
     expect((await browser.send(path, post(body(id)))).status).toBeLessThan(300);
-    if (lastSurfacedAt) expect(row(world, id).last_surfaced_at).toBeNull();
   });
 
   const OVER = "x".repeat(AUTH_BODY_LIMIT);
@@ -474,20 +479,13 @@ describe.each(ROUTES)("POST %s", (path, body, seed) => {
 it("POST /home/unsnooze refuses a time that is missing or not a date, and /home/why a text that is not a string", async () => {
   const { world, browser, id } = await home();
   const before = allRows(world);
-  const undo = {
-    id,
-    until: SEED_UNTIL.toISOString(),
-    claimedAt: SEED_CLAIM.toISOString(),
-    previousSurfacedAt: null,
-  };
+  const undo = { id, until: SEED_UNTIL.toISOString(), previous: null };
   for (const bad of [
     { until: "soon" },
     { until: null },
-    { claimedAt: "soon" },
-    { claimedAt: undefined },
-    { previousSurfacedAt: "soon" },
-    { previousSurfacedAt: undefined },
-    { previousSurfacedAt: SEED_UNTIL.toISOString() },
+    { until: undefined },
+    { previous: "soon" },
+    { previous: undefined },
   ]) {
     const res = await browser.send("/home/unsnooze", post({ ...undo, ...bad }));
     expect(res.status, JSON.stringify(bad)).toBe(400);
@@ -502,7 +500,7 @@ async function signedIn(world: World) {
   return browser;
 }
 
-describe("GET / with a link that seems gone (#128)", () => {
+describe("GET / with a link that seems gone (#128, #340)", () => {
   afterEach(() => vi.restoreAllMocks());
 
   const withGone = async () => {
@@ -527,17 +525,23 @@ describe("GET / with a link that seems gone (#128)", () => {
     return { world, deps, browser, gone: link };
   };
 
-  it("shows it once, as the gone row with its warning, though it is also a reading candidate", async () => {
+  it("draws no gone card in Explore, and Tidy's first step is the gone page with It still works and Archive and no Keep", async () => {
     const { browser, gone } = await withGone();
     const html = String((await browser.send("/")).body);
-    expect(html.split(`data-id="${gone.id}"`)).toHaveLength(2);
-    expect(html).toMatch(new RegExp(`class="worth-row worth-gone[^"]*" data-id="${gone.id}"`));
-    expect(html).toContain("This page seems gone");
-    expect(html).not.toContain('class="worth-card worth-feature');
+    expect(html).not.toMatch(/class="[^"]*worth-gone/);
+    expect(html).not.toMatch(/class="[^"]*gone-band/);
+    expect(html).not.toMatch(new RegExp(`class="worth-[^"]*" data-id="${gone.id}"`));
+    const tidy = html.slice(html.indexOf('<section class="tidy-tray"'));
+    const step = tidy.slice(tidy.indexOf(`data-id="${gone.id}"`));
+    expect(step.slice(0, step.indexOf("</article>"))).toContain("This page seems gone.");
+    const acts = [
+      ...step.slice(0, step.indexOf("</article>")).matchAll(/data-act="([a-z]+)"/g),
+    ].map((m) => m[1]);
+    expect(acts).toEqual(["works", "archive"]);
   });
 
-  it("reads the pictures and saved copies of every card it shows, the gone one too", async () => {
-    const { world, deps, browser, gone } = await withGone();
+  it("reads the pictures and saved copies of every Explore card", async () => {
+    const { world, deps, browser } = await withGone();
     const { link: pick } = await saveLink(deps, A, {
       url: "https://a.example/pick",
       savedBy: "seed",
@@ -549,7 +553,7 @@ describe("GET / with a link that seems gone (#128)", () => {
     expect(html).toContain(`data-id="${pick.id}"`);
     const asked = (calls: unknown[][]) => calls.flatMap((c) => c[1] as string[]);
     for (const spy of [copies, pictures]) {
-      expect(asked(spy.mock.calls)).toEqual(expect.arrayContaining([pick.id, gone.id]));
+      expect(asked(spy.mock.calls)).toEqual(expect.arrayContaining([pick.id]));
     }
     expect(html.match(/<dialog class="edit-link"/g)).toHaveLength(1);
   });

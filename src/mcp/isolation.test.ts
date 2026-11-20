@@ -909,7 +909,6 @@ describe("owner isolation coverage", () => {
     "POST /connections/keys": "the two-owner agent keys test in web/http.test.ts",
     "POST /connections/keys/turn-off": "the two-owner agent keys test in web/http.test.ts",
     "POST /connections/keys/turn-on": "the two-owner agent keys test in web/http.test.ts",
-    "POST /home/opened": "the two-owner test of POST /home/opened in web/home-routes.test.ts",
     "POST /home/snooze": "the two-owner test of POST /home/snooze in web/home-routes.test.ts",
     "POST /home/unsnooze": "the two-owner test of POST /home/unsnooze in web/home-routes.test.ts",
     "POST /home/archive": "the two-owner test of POST /home/archive in web/home-routes.test.ts",

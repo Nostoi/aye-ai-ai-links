@@ -21,7 +21,7 @@ import type { addProfile, editProfile, getProfile, profileContext } from "../cor
 import { copyLimits } from "../core/saved-copy.js";
 import type { searchLinks } from "../core/search-links.js";
 import type { changeTagKind } from "../core/tag-kind.js";
-import { type HandyView, keepHandy, notHandy } from "../core/tools.js";
+import { type HandyView, keepHandy, notHandy, stillUsing } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
@@ -270,7 +270,7 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     await run(addToProfile({ addFocus: [{ text: "quokka", source: "inferred" }] }));
     db.prepare("UPDATE links SET saved_at = ? WHERE id = 5").run(NOW.getTime() - 60 * 86_400_000);
     // Keep handy rows: 9 kept and due (never opened), 10 suggested, 11 declined, 12 kept and due (opened
-    // 45 days ago). 10 and 11 are ordinary links, so they are shown recently enough to stay out.
+    // 45 days ago). 10 and 11 are ordinary links; 10 is picked with no reason.
     const w = { text: "w", source: "stated" };
     for (const path of ["f", "g", "h", "i"]) {
       await run(save({ url: `https://example.com/${path}`, why: w }));
@@ -286,8 +286,9 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
     db.prepare("UPDATE links SET last_surfaced_at = ? WHERE id IN (10, 11)").run(NOW.getTime());
     await run(list({ limit: 50 }));
     const digest = await run(digestStep); // the reading picks, then one check
-    const secondDigest = await run(digestStep); // only the other due tool's check
-    const emptyDigest = await run(digestStep); // everything due was just surfaced
+    const repeat = await run(digestStep); // writes nothing, so the same
+    await stillUsing(deps, A.owner, "9", "stated");
+    const secondDigest = await run(digestStep); // the same picks, then the other due tool's check
     await run(listTagsStep);
     await run(tagStep("update_tag", { name: "Side", newName: "Sideline" }));
     const merged = await run(tagStep("merge_tags", { name: "Sideline", into: "Reading" }));
@@ -296,18 +297,20 @@ describe.each(ERAS)("output schemas, %s era", (era) => {
 
     expect([...sampled].sort()).toEqual(Object.keys(tools).sort());
 
-    expect(emptyDigest).toEqual({ links: [] });
+    expect(repeat).toEqual(digest);
     expect(digest.links.map((d: Json) => [d.link.id, d.reasons.map((r: Json) => r.kind)])).toEqual([
-      ["8", ["focus_words", "never_surfaced"]],
-      ["5", ["no_why", "not_opened_recently", "never_surfaced"]],
-      ["7", ["no_why", "never_surfaced"]],
+      ["8", ["focus_words"]],
+      ["5", ["no_why", "not_opened_recently"]],
+      ["7", ["no_why"]],
+      ["10", []],
       ["9", ["still_using_check"]],
     ]);
-    expect(digest.links[3].reasons[0]).toEqual({
+    expect(digest.links[4].reasons[0]).toEqual({
       kind: "still_using_check",
       daysSinceOpened: null,
     });
-    expect(secondDigest.links.map((d: Json) => [d.link.id, d.reasons])).toEqual([
+    expect(secondDigest.links.slice(0, 4)).toEqual(digest.links.slice(0, 4));
+    expect(secondDigest.links.slice(4).map((d: Json) => [d.link.id, d.reasons])).toEqual([
       ["12", [{ kind: "still_using_check", daysSinceOpened: 45 }]],
     ]);
     expect(digest.links[0].reasons[0].focus).toMatchObject({ text: "quokka", source: "inferred" });

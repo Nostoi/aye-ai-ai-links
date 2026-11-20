@@ -689,15 +689,6 @@ describe("the change lines", () => {
     expect(t.messages().querySelector("button")).toBeNull();
   });
 
-  it("counts the links marked as shown in today's picks", async () => {
-    expect((await lineFor({ kind: "surfaced", linkIds: ["1", "2", "3"] })).lines()).toEqual([
-      "Marked 3 links as shown in today's picks.",
-    ]);
-    expect((await lineFor({ kind: "surfaced", linkIds: ["1"] })).lines()).toEqual([
-      "Marked 1 link as shown in today's picks.",
-    ]);
-  });
-
   it("draws a changed link's card above its line, once", async () => {
     const t = await lineFor(link("5", { created: true }), { cards: { "5": CARD("5") } });
     const block = t.messages().querySelector(".ask-change");
@@ -763,7 +754,7 @@ describe("Edit under a change line (#183)", () => {
     expect(rows(t).map(rowButtons)).toEqual([["Edit", "Undo"], ["Edit"]]);
   });
 
-  it("gives handy, tag, profile and surfaced lines no Edit", async () => {
+  it("gives handy, tag and profile lines no Edit", async () => {
     const t = await answered({
       changes: [
         { kind: "handy", linkId: "9", change: { tool: ROW, previous: null } },
@@ -774,11 +765,10 @@ describe("Edit under a change line (#183)", () => {
           edited: [],
           removed: [],
         },
-        { kind: "surfaced", linkIds: ["9"] },
       ],
       cards: { "9": editable("9") },
     });
-    expect(rows(t).map(rowButtons)).toEqual([["Undo"], [], [], []]);
+    expect(rows(t).map(rowButtons)).toEqual([["Undo"], [], []]);
   });
 
   it("gives a reply's cards no buttons", async () => {

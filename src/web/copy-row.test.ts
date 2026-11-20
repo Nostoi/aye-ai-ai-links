@@ -303,14 +303,6 @@ describe("the pages' routes", () => {
     expect(rows(await get(older as string), oldest)).toEqual(ROW(oldest, "/spaces?tag=kitchen"));
   });
 
-  it("home: the gone pick with a copy shows Read the saved copy", async () => {
-    const { save, flag, get } = await world();
-    const id = await save("owner", "Old page", { copy: true });
-    await flag(id);
-    const reads = dom(await get("/")).querySelectorAll(`#worth-cards [data-id="${id}"] .gone-copy`);
-    expect([...reads].map((a) => a.getAttribute("href"))).toEqual([`/links/${id}/copy?from=%2F`]);
-  });
-
   it("home: reads copyInfo once, for the cards it shows, and links a pick's copy on its grey line", async () => {
     const { w, save, get } = await world();
     const id = await save("owner", "Plain", { copy: true });

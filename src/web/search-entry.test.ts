@@ -16,7 +16,7 @@ const search = (query: string, ask?: typeof ASK) =>
   searchPage({ query, links: [], now: NOW, ...(ask ? { ask } : {}) });
 const doc = (html: string) => parseHTML(html).document;
 const HOME = {
-  worth: { links: [], images: new Map(), now: new Date(0), catalog: [], gone: null },
+  worth: { links: [], images: new Map(), now: new Date(0), catalog: [] },
   shelf: "",
   spaces: "",
 };

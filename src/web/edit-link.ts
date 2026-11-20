@@ -11,8 +11,8 @@ import { ARCHIVE_ITEM, BRING_BACK_ITEM } from "./done-link.js";
 import { initialsText } from "./initials.js";
 import { EXPLORE_IT_ITEM, KEEP_IT_ITEM } from "./intent.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
-import { NOT_NOW_ITEM } from "./not-now.js";
 import { escapeHtml } from "./page.js";
+import { SKIP_ITEM } from "./skip.js";
 
 export const PENCIL = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>`;
 
@@ -26,20 +26,20 @@ export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit link
  * scripts swap them. A link kept handy is To keep for good, so it shows neither intent row. An archived link starts
  * at Edit and offers Bring it back after it. Then Remove saved copy when `copy` is there, and
  * Delete link last. The copy itself opens from the card's grey line (`cardLine`). Home's rows put
- * Not now first (`notNow`); Home's featured card shows Archive and Not now as buttons, so
- * its menu leaves those two out (`onCard`).
+ * Skip first (`skip`); Home's featured card shows Keep, Skip and Archive as buttons, so its menu
+ * leaves out those three and the two intent rows (`onCard`), and starts at Keep handy.
  */
 export const editMenu = (
   link: Link,
   {
     copy,
     handy,
-    notNow = false,
+    skip = false,
     onCard = false,
   }: {
     copy?: CopyInfo | undefined;
     handy?: HandyView | null | undefined;
-    notNow?: boolean;
+    skip?: boolean;
     onCard?: boolean;
   } = {},
 ) => {
@@ -47,10 +47,14 @@ export const editMenu = (
   const active = link.state === "active";
   const first = active
     ? [
-        ...(notNow && !onCard ? [NOT_NOW_ITEM] : []),
-        { ...KEEP_IT_ITEM, hidden: kept || link.intent === "keep" },
-        { ...EXPLORE_IT_ITEM, hidden: kept || link.intent === "explore" },
-        ...(onCard ? [] : [ARCHIVE_ITEM]),
+        ...(skip && !onCard ? [SKIP_ITEM] : []),
+        ...(onCard
+          ? []
+          : [
+              { ...KEEP_IT_ITEM, hidden: kept || link.intent === "keep" },
+              { ...EXPLORE_IT_ITEM, hidden: kept || link.intent === "explore" },
+              ARCHIVE_ITEM,
+            ]),
         { ...KEEP_ITEM, hidden: kept },
         { ...NOT_HANDY, hidden: !kept },
         DIVIDER,

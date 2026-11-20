@@ -58,8 +58,6 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     colorTag: (owner, key, color) => inner.colorTag(owner, key, color),
     listLinks: (owner) => inner.listLinks(owner),
     listLinksAndTags: (owner) => inner.listLinksAndTags(owner),
-    claimSurfaced: (owner, ids, when) => inner.claimSurfaced(owner, ids, when),
-    unclaimSurfaced: (owner, id, claim) => inner.unclaimSurfaced(owner, id, claim),
     updateIf: (owner, id, expected, patch, events) =>
       inner.updateIf(owner, id, expected, patch, events),
     ...over,
@@ -1291,180 +1289,6 @@ export function describeStoreContract(
       });
     });
 
-    describe("claimSurfaced", () => {
-      const now = new Date("2026-03-01T00:00:00Z");
-      const cutoff = new Date(now.getTime() - 14 * 86_400_000);
-      const when = { at: now, notSurfacedAfter: cutoff, now };
-      const ms = (d: Date, delta: number) => new Date(d.getTime() + delta);
-
-      /** Insert straight through the store, so lastSurfacedAt can be seeded. */
-      const insert = async (owner: string, n: number, over: Partial<Link> = {}) =>
-        (
-          await h.store.insertIfAbsent(owner, {
-            url: `https://ex.com/${n}`,
-            urlKey: `https://ex.com/${n}`,
-            title: null,
-            summary: null,
-            summarySource: null,
-            why: null,
-            tags: [],
-            savedAt: new Date("2026-01-01T00:00:00Z"),
-            savedBy: "t",
-            lastOpenedAt: null,
-            lastSurfacedAt: null,
-            snoozedUntil: null,
-            intent: "explore",
-            intentSource: null,
-            state: "active",
-            ...over,
-          })
-        ).link;
-
-      it("claims only active, unsnoozed links outside the cutoff, at the exact boundaries, in input order", async () => {
-        const never = await insert(A, 1);
-        const atCutoff = await insert(A, 2, { lastSurfacedAt: cutoff });
-        const inside = await insert(A, 3, { lastSurfacedAt: ms(cutoff, 1) });
-        const snoozeEnded = await insert(A, 4, { snoozedUntil: now });
-        const snoozed = await insert(A, 5, { snoozedUntil: ms(now, 1) });
-        const archived = await insert(A, 6, { state: "archived" });
-        const theirs = await insert(B, 7);
-        const absent = theirs.id.replace(/\d+$/, (n) => String(Number(n) + 1000));
-        const beforeB = structuredClone(await h.all(B));
-
-        const claimed = await h.store.claimSurfaced(
-          A,
-          [
-            snoozed.id,
-            snoozeEnded.id,
-            never.id,
-            atCutoff.id,
-            inside.id,
-            archived.id,
-            theirs.id,
-            absent,
-            "zzz",
-            "",
-            never.id,
-          ],
-          when,
-        );
-
-        expect(claimed.map((c) => [c.link.id, c.previousSurfacedAt])).toEqual([
-          [snoozeEnded.id, null],
-          [never.id, null],
-          [atCutoff.id, cutoff],
-        ]);
-        for (const c of claimed) {
-          expect(c.link.lastSurfacedAt).toEqual(now);
-          expect(c.link).toEqual(await h.store.get(A, c.link.id));
-        }
-        expect((await h.store.get(A, inside.id))?.lastSurfacedAt).toEqual(ms(cutoff, 1));
-        expect((await h.store.get(A, snoozed.id))?.lastSurfacedAt).toBeNull();
-        expect((await h.store.get(A, archived.id))?.lastSurfacedAt).toBeNull();
-        expect(await h.all(B)).toEqual(beforeB);
-      });
-
-      it("reads back the link as it is at the claim, with tags from the catalog", async () => {
-        const { link } = await saveLink(deps(), A, {
-          url: "https://ex.com/a",
-          savedBy: "a",
-          tags: [{ name: "Solar", source: "stated" }],
-        });
-        await updateLink(deps(), A, link.id, { why: { text: "late", source: "asked" } });
-        await h.store.updateTag(A, "solar", { kind: "project" }, "topic");
-
-        const [claim] = await h.store.claimSurfaced(A, [link.id], when);
-
-        expect(claim?.link.why).toEqual({ text: "late", source: "asked" });
-        expect(claim?.link.tags.map((t) => t.kind)).toEqual(["project"]);
-        expect(claim?.link.snapshot?.status).toBe("pending");
-      });
-
-      it("makes two claims over the same links disjoint, even when they start together", async () => {
-        const links = await Promise.all([1, 2, 3, 4].map((n) => insert(A, n)));
-        const ids = links.map((l) => l.id);
-
-        const [one, two] = await Promise.all([
-          h.store.claimSurfaced(A, ids, when),
-          h.store.claimSurfaced(A, [...ids].reverse(), when),
-        ]);
-        const got = [...(one ?? []), ...(two ?? [])].map((c) => c.link.id);
-
-        expect([...got].sort()).toEqual([...ids].sort());
-        expect(await h.store.claimSurfaced(A, ids, when)).toEqual([]);
-      });
-
-      it("skips an archived link, leaving it unmarked", async () => {
-        const archived = await insert(A, 1, { state: "archived" });
-        expect(await h.store.claimSurfaced(A, [archived.id], when)).toEqual([]);
-        expect((await h.store.get(A, archived.id))?.lastSurfacedAt).toBeNull();
-      });
-
-      it("claims nothing for an empty list, and never for another owner", async () => {
-        const mine = await insert(A, 1);
-        expect(await h.store.claimSurfaced(A, [], when)).toEqual([]);
-        expect(await h.store.claimSurfaced(B, [mine.id], when)).toEqual([]);
-        expect((await h.store.get(A, mine.id))?.lastSurfacedAt).toBeNull();
-      });
-    });
-
-    describe("unclaimSurfaced", () => {
-      const at = new Date("2026-03-01T10:20:30.456Z");
-      const earlier = new Date("2026-02-01T00:00:00.000Z");
-      const insert = async (owner: string, n: number, lastSurfacedAt: Date | null) =>
-        (
-          await h.store.insertIfAbsent(owner, {
-            url: `https://ex.com/${n}`,
-            urlKey: `https://ex.com/${n}`,
-            title: null,
-            summary: null,
-            summarySource: null,
-            why: null,
-            tags: [],
-            savedAt: new Date("2026-01-01T00:00:00Z"),
-            savedBy: "t",
-            lastOpenedAt: null,
-            lastSurfacedAt,
-            snoozedUntil: null,
-            intent: "explore",
-            intentSource: null,
-            state: "active",
-          })
-        ).link;
-
-      it("puts back the previous value, null or a date, while lastSurfacedAt is still the claim's", async () => {
-        const never = await insert(A, 1, at);
-        const before = await insert(A, 2, at);
-        expect(
-          await h.store.unclaimSurfaced(A, never.id, { at: new Date(at), previous: null }),
-        ).toBe(true);
-        expect(await h.store.unclaimSurfaced(A, before.id, { at, previous: earlier })).toBe(true);
-        expect(await h.store.get(A, never.id)).toEqual({ ...never, lastSurfacedAt: null });
-        expect(await h.store.get(A, before.id)).toEqual({ ...before, lastSurfacedAt: earlier });
-      });
-
-      it("writes nothing once lastSurfacedAt moved on, even by a millisecond, or was never set", async () => {
-        const later = await insert(A, 1, new Date(at.getTime() + 1));
-        const unset = await insert(A, 2, null);
-        const before = structuredClone(await h.all(A));
-        expect(await h.store.unclaimSurfaced(A, later.id, { at, previous: earlier })).toBe(false);
-        expect(await h.store.unclaimSurfaced(A, unset.id, { at, previous: earlier })).toBe(false);
-        expect(await h.all(A)).toEqual(before);
-      });
-
-      it("never touches another owner's link, and an unknown or malformed id is false", async () => {
-        const theirs = await insert(B, 1, at);
-        const mine = await insert(A, 2, at);
-        const absent = theirs.id.replace(/\d+$/, (n) => String(Number(n) + 1000));
-        const before = [structuredClone(await h.all(A)), structuredClone(await h.all(B))];
-        for (const id of [theirs.id, absent, "zzz", "", "9223372036854775808"]) {
-          expect(await h.store.unclaimSurfaced(A, id, { at, previous: null }), id).toBe(false);
-        }
-        expect(await h.store.unclaimSurfaced(B, mine.id, { at, previous: null })).toBe(false);
-        expect([await h.all(A), await h.all(B)]).toEqual(before);
-      });
-    });
-
     describe("summary source", () => {
       const seed = async (n: number, over: Partial<Link> = {}) =>
         (
@@ -2279,37 +2103,15 @@ export function describeStoreContract(
         expect(await h.store.get(A, kept)).not.toBeNull();
       });
 
-      it("claimSurfaced claims the other links and skips a hidden one", async () => {
-        const { gone, kept } = await twoLinks();
-        const at = new Date("2026-03-01T00:00:00Z");
-        const claimed = await h.store.claimSurfaced(A, [gone, kept], {
-          at,
-          notSurfacedAfter: at,
-          now: at,
-        });
-        expect(claimed.map((c) => c.link.id)).toEqual([kept]);
-      });
-
       it("writes on a hidden link return absent and change nothing", async () => {
         const { gone } = await twoLinks();
-        const at = new Date("2026-03-01T00:00:00Z");
-        const later = new Date("2026-04-01T00:00:00Z");
         await h.store.unmarkDeleted(A, gone, EPOCH);
-        await h.store.claimSurfaced(A, [gone], { at, notSurfacedAfter: at, now: at });
         const before = await h.store.get(A, gone);
         await h.store.markDeleted(A, gone, clock);
 
         expect(await h.store.update(A, gone, { title: "x", tags: [] })).toBeNull();
         expect(await h.store.updateIf(A, gone, {}, { title: "x" })).toBeNull();
         expect(await h.store.fillWhyIfMissing(A, gone, { text: "w", source: "stated" })).toBeNull();
-        expect(
-          await h.store.claimSurfaced(A, [gone], {
-            at: later,
-            notSurfacedAfter: later,
-            now: later,
-          }),
-        ).toEqual([]);
-        expect(await h.store.unclaimSurfaced(A, gone, { at, previous: null })).toBe(false);
 
         await h.store.unmarkDeleted(A, gone, EPOCH);
         expect(await h.store.get(A, gone)).toEqual(before);

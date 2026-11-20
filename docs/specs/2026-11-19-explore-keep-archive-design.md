@@ -115,3 +115,16 @@ The same cards stay until the owner decides: the newest undecided links (focus m
 ## Left to the builder
 
 The mockup decides layout and words of the small lines. The plan decides the migration's SQL, the event kinds' exact names and test structure.
+
+## Owner rulings from the mockup, 2026-11-19 (#340)
+
+Earlier text stays; these decide what it left open. Reference: `docs/design/today-explore-mockup.html`; plan `docs/plans/2026-11-20-explore-tray.md`.
+
+- **Name:** the tray is Explore (its spine and hidden heading); the rows' label is "More to explore".
+- **Featured card (2d):** Open it, then Keep (a check in a circle), Skip (two chevrons) and Archive as sliding icon buttons. On a phone and without hover they stack.
+- **Rows:** the verbs stay in the card's ⋯ menu, Skip first, seven items. The featured card's ⋯ drops Keep it, Explore it and Archive.
+- **The opened line:** "Opened. Keep it or archive it?" sits above the verbs once a link has been opened.
+- **Gone pages:** Home no longer shows them. Tidy up asks about them first, with It still works and Archive.
+- **Order:** oldest saved first, the same cards on every visit (#340 comment 7041204284).
+- **Words:** hints "Moves to To keep", "Back on Explore", "Back in two weeks", "Out of lists, still in search", and "Not asked again" on the featured Keep.
+

@@ -74,7 +74,6 @@ const variants: Record<string, () => string> = {
         images: new Map(),
         now: NOW,
         catalog: [KITCHEN],
-        gone: null,
       },
       shelf: "",
       spaces: "",

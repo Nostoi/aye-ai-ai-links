@@ -154,34 +154,6 @@ export interface LinkStore {
   listLinksAndTags(owner: OwnerId): Promise<{ links: Link[]; tags: Tag[] }>;
 
   /**
-   * Conditional write, in one atomic step: for each id in input order that is the owner's, active,
-   * not snoozed at `now` (snoozedUntil null or <= now) and has lastSurfacedAt null or <=
-   * `notSurfacedAfter`, set lastSurfacedAt to `at` and return the link as read inside that step,
-   * with the value it replaced. Core supplies the cutoffs, as with updateTag's `expectedKind`.
-   * Foreign, unknown, malformed and no-longer-eligible ids are skipped, never an error; an id
-   * given twice is claimed once. With `exceptKeptTools`, a link whose Keep handy row is `kept` is
-   * skipped too; with `exceptGone`, a link flagged as gone by its dead-link check (#128) is. Both
-   * are judged in the same step; core says when (the digest's picks). On an error nothing is written.
-   */
-  claimSurfaced(
-    owner: OwnerId,
-    ids: string[],
-    when: {
-      at: Date;
-      notSurfacedAfter: Date;
-      now: Date;
-      exceptKeptTools?: boolean;
-      exceptGone?: boolean;
-    },
-  ): Promise<SurfacedClaim[]>;
-
-  unclaimSurfaced(
-    owner: OwnerId,
-    id: string,
-    claim: { at: Date; previous: Date | null },
-  ): Promise<boolean>;
-
-  /**
    * Conditional write, in one atomic step: apply `patch` as `update` does, but only while the
    * link still matches every field `expected` names. Returns the link as it is afterwards, with
    * `applied` saying whether the patch was written, or null when absent or foreign; then nothing
@@ -239,8 +211,6 @@ export type LinkExpectation = {
 export type EventWrite =
   | { record: LinkEventKind; at: Date; unlessBefore?: LinkExpectation }
   | { unrecord: LinkEventKind; at: Date };
-
-export type SurfacedClaim = { link: Link; previousSurfacedAt: Date | null };
 
 /** A link the server may summarise. */
 export type SummaryCandidate = { owner: OwnerId; id: string };

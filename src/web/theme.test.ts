@@ -926,17 +926,16 @@ describe("Home's Worth a look cards (#195)", () => {
         .filter((v) => v !== undefined)
         .at(-1);
 
-    it("is a closed 44px-or-taller circle with a soft fill and no border, on both widths", () => {
-      for (const width of ["desktop", "phone"] as const) {
-        expect(px(computed(slide, "height", width)), width).toBeGreaterThanOrEqual(44);
-        expect(px(computed(slide, "min-width", width)), width).toBeGreaterThanOrEqual(44);
-        expect(computed(slide, "max-width", width), width).toBe(
-          computed(slide, "min-width", width),
-        );
-        expect(computed(slide, "border-radius", width), width).toBe("var(--radius-pill)");
-        expect(computed(slide, "border", width), width).toBe("0");
-        expect(computed(slide, "background", width), width).toBe("var(--fill)");
-        expect(computed(slide, "overflow", width), width).toBe("hidden");
+    it("is a closed 44px-or-taller circle with a soft fill and no border on a wide screen, and keeps the fill and no border when stacked on a phone", () => {
+      const width = "desktop";
+      expect(px(computed(slide, "height", width)), width).toBeGreaterThanOrEqual(44);
+      expect(px(computed(slide, "min-width", width)), width).toBeGreaterThanOrEqual(44);
+      expect(computed(slide, "max-width", width), width).toBe(computed(slide, "min-width", width));
+      expect(computed(slide, "overflow", width), width).toBe("hidden");
+      for (const w of ["desktop", "phone"] as const) {
+        expect(computed(slide, "border-radius", w), w).toBe("var(--radius-pill)");
+        expect(computed(slide, "border", w), w).toBe("0");
+        expect(computed(slide, "background", w), w).toBe("var(--fill)");
       }
       expect(computed(slide, "transition", "desktop")).toContain("max-width");
     });
@@ -970,10 +969,11 @@ describe("Home's Worth a look cards (#195)", () => {
       expect(themeCss).not.toContain(".feature-quiet button");
     });
 
-    it("puts the pair side by side on its own row under a full-width Open it on a phone", () => {
+    it("stacks the three buttons full width under a full-width Open it on a phone", () => {
       const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
-      expect(computed(quiet, "flex-wrap", "phone")).toBeUndefined();
-      expect(computed(slide, "flex", "phone")).toBe("1 1 0");
+      expect(computed(quiet, "flex-direction", "phone")).toBe("column");
+      expect(computed(slide, "flex", "phone")).toBe("none");
+      expect(computed(slide, "width", "phone")).toBe("100%");
     });
 
     it("scopes the phone share-the-row rule to the pair, leaving other slide buttons alone", () => {
@@ -1003,10 +1003,24 @@ describe("Home's Worth a look cards (#195)", () => {
       };
       const FADE = "opacity:0;pointer-events:none";
 
-      it("on a screen with hover above 600px, keeps the closed pair at the row's right end in a box of its own width", () => {
-        has(hoverBlock(".feature-quiet{position:relative;flex:none;width:106px;height:48px}"));
+      // Widths measured in headless Chrome 1280px wide, Open Runde loaded, transitions off, each
+      // slide forced open with data-working: Open it 102.4px; opened Keep 149.8px, Skip 163.2px,
+      // Archive 199.8px. The Open it row holds Open it, a 10px gap and the 164px closed trio from a
+      // container of 277px (wraps below). An opened button reaches Open it when its left edge is
+      // under Open it's right edge plus the gap (112.4px): Keep below 378.2px (116px offset), Skip
+      // below 333.5px (58px), Archive below 312.2px. Re-run for every container width from 260 to
+      // 440px: a button covers Open it exactly when Open it is faded, and none leaves the row's left edge.
+      const trio = (n: number) =>
+        `.slide:nth-child(${n}):hover,.slide:nth-child(${n}):focus-visible,.slide:nth-child(${n})[data-working]`;
+      const reach = (n: number) => `.feature-buttons:has(${trio(n)})>.feature-open{${FADE}}`;
+      const grow = (n: number, off: number) =>
+        `.feature-quiet .slide:nth-child(${n}):hover,.feature-quiet .slide:nth-child(${n}):focus-visible,.feature-quiet .slide:nth-child(${n})[data-working]{max-width:min(260px,calc(100cqw - ${off}px))}`;
+
+      it("on a screen with hover above 600px, keeps the closed trio at the row's right end in a box of its own width", () => {
+        has(hoverBlock(".feature-quiet{position:relative;flex:none;width:164px;height:48px}"));
         inHover(".feature-quiet .slide{position:absolute;top:0;right:0}");
-        inHover(".feature-quiet .slide:first-child{right:58px}");
+        inHover(".feature-quiet .slide:nth-child(1){right:116px}");
+        inHover(".feature-quiet .slide:nth-child(2){right:58px}");
         expect(decl(".feature-buttons", null, "container-type")).toBe("inline-size");
       });
 
@@ -1014,22 +1028,18 @@ describe("Home's Worth a look cards (#195)", () => {
         inHover(
           ".feature-quiet .slide:hover,.feature-quiet .slide:focus-visible,.feature-quiet .slide[data-working]{z-index:var(--layer-lift);max-width:min(260px,100cqw)}",
         );
-        inHover(
-          ".feature-quiet .slide:first-child:hover,.feature-quiet .slide:first-child:focus-visible,.feature-quiet .slide:first-child[data-working]{max-width:min(260px,calc(100cqw - 58px))}",
-        );
+        inHover(grow(1, 116));
+        inHover(grow(2, 58));
       });
 
-      it("wraps the pair onto its own row only when Open it and the closed pair no longer fit", () => {
-        inHover("@container (max-width:223px){.feature-quiet{flex:1 1 100%;width:auto}}");
+      it("wraps the trio onto its own row only when Open it and the closed trio no longer fit", () => {
+        inHover("@container (max-width:276px){.feature-quiet{flex:1 1 100%;width:auto}}");
       });
 
       it("fades Open it per button, only in a row its opened button reaches, never in a wrapped row", () => {
-        inHover(
-          `@container (min-width:224px) and (max-width:402px){.feature-buttons:has(.slide:first-child:hover,.slide:first-child:focus-visible,.slide:first-child[data-working])>.feature-open{${FADE}}}`,
-        );
-        inHover(
-          `@container (min-width:224px) and (max-width:301px){.feature-buttons:has(.slide:last-child:hover,.slide:last-child:focus-visible,.slide:last-child[data-working])>.feature-open{${FADE}}}`,
-        );
+        inHover(`@container (min-width:277px) and (max-width:378px){${reach(1)}}`);
+        inHover(`@container (min-width:277px) and (max-width:333px){${reach(2)}}`);
+        inHover(`@container (min-width:277px) and (max-width:312px){${reach(3)}}`);
         expect(decl(".feature-open", null, "transition")).toContain("opacity");
         expect(themeCss).not.toMatch(/\.feature-open\{[^}]*visibility:hidden/);
       });
@@ -1045,7 +1055,7 @@ describe("Home's Worth a look cards (#195)", () => {
         const viewportRules = parseCss(themeCss).filter(
           (r) => r.media?.startsWith("(max-width:") && r.selectors.includes(".feature-quiet"),
         );
-        expect(viewportRules.map((r) => r.media)).toEqual([]);
+        expect(viewportRules.map((r) => r.media)).toEqual(["(max-width:600px)"]);
       });
 
       it("leaves the phone block's stacked layout alone: the hover rules start above 600px", () => {
@@ -1054,7 +1064,19 @@ describe("Home's Worth a look cards (#195)", () => {
       });
     });
 
-    it("never reorders or stacks the pair, so Done with it stays rightmost", () => {
+    it("stacks the three buttons full width, words showing, on a phone and on a screen that cannot hover", () => {
+      const stack =
+        ".feature-quiet{flex:1 1 100%;flex-direction:column;align-items:stretch}.feature-quiet .slide{flex:none;width:100%;max-width:none;justify-content:flex-start;padding-inline:18px;gap:10px}.feature-quiet .slide-words{opacity:1}";
+      expect(themeCss).toContain(`@media (hover:none){`);
+      expect(
+        themeCss.match(
+          /\.feature-quiet\{flex:1 1 100%;flex-direction:column;align-items:stretch\}/g,
+        ),
+      ).toHaveLength(2);
+      expect(themeCss).toContain(stack);
+    });
+
+    it("reflows the buttons only in the phone and no-hover stack, never reordering them", () => {
       const quiet = feature('<div class="feature-quiet"></div>', ".feature-quiet");
       for (const target of [quiet, slide]) {
         const reflow = parseCss(themeCss).filter(
@@ -1066,8 +1088,14 @@ describe("Home's Worth a look cards (#195)", () => {
                 !s.includes("::") && target.matches(s.replace(/:(hover|focus-visible)\b/g, "")),
             ),
         );
-        expect(reflow.map((r) => `${r.media ?? ""} ${r.selectors}`)).toEqual([]);
+        const medias = reflow.map((r) => r.media).sort();
+        expect(medias, target === quiet ? "the row" : "a button").toEqual(
+          target === quiet ? ["(hover:none)", "(max-width:600px)"] : [],
+        );
       }
+      expect(
+        parseCss(themeCss).filter((r) => r.decls.has("order") && r.selectors.includes(".slide")),
+      ).toEqual([]);
     });
 
     it("lets the words wrap inside a button that cannot hover, keeping it at least 48px tall", () => {
@@ -1156,7 +1184,7 @@ describe("Home's Worth a look cards (#195)", () => {
     '<div class="gone-band" data-gone><p>This page seems gone</p><div class="gone-actions"><button type="button" class="slide"></button></div></div>';
 
   it("draws the gone band in amber ink on the amber ground, with bare 44px icon buttons, on every card", () => {
-    for (const card of ["worth-row", "link-row", "handy-tile", "result-body"]) {
+    for (const card of ["link-row", "handy-tile", "result-body"]) {
       const band = el(`<div class="${card}">${BAND}</div>`, ".gone-band");
       const warning = el(`<div class="${card}">${BAND}</div>`, ".gone-band > p");
       const button = el(`<div class="${card}">${BAND}</div>`, "button");
@@ -1173,7 +1201,6 @@ describe("Home's Worth a look cards (#195)", () => {
   it("spans the band across its card at the card's own padding, on desktop and phone", () => {
     const margin = (card: string, w: "desktop" | "phone") =>
       computed(el(`<div class="${card}">${BAND}</div>`, ".gone-band"), "margin", w);
-    expect(margin("worth-row", "desktop")).toBe("8px -12px -10px");
     expect(margin("link-row", "desktop")).toBe("0 -60px -14px -16px");
     expect(margin("link-row", "phone")).toBe("0 -52px -12px -12px");
     expect(margin("result", "desktop")).toBe("12px -22px -18px");
@@ -1181,7 +1208,7 @@ describe("Home's Worth a look cards (#195)", () => {
   });
 
   it("lets the warning fill the band so the icons end at the band's own right padding, on every card", () => {
-    for (const card of ["worth-row", "link-row", "handy-tile", "result"]) {
+    for (const card of ["link-row", "handy-tile", "result"]) {
       const warning = el(`<main><div class="${card}">${BAND}</div></main>`, ".gone-band > p");
       for (const w of ["desktop", "phone"] as const) {
         expect(computed(warning, "max-width", w), `${card} ${w}`).toBe("none");

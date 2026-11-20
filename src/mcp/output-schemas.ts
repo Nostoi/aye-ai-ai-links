@@ -229,7 +229,6 @@ const digestReasonOutput = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput, words: matchedWords }),
   z.strictObject({ kind: z.literal("no_why") }),
   z.strictObject({ kind: z.literal("not_opened_recently") }),
-  z.strictObject({ kind: z.literal("never_surfaced") }),
   z.strictObject({
     kind: z.literal("still_using_check"),
     daysSinceOpened: z.number().int().nullable(),

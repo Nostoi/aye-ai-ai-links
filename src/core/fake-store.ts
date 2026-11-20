@@ -59,7 +59,6 @@ import type {
   LinkStore,
   SummaryCandidate,
   SummaryCandidates,
-  SurfacedClaim,
 } from "./store.js";
 import type { LoggedEvent } from "./store-contract.js";
 import { receiptsMeet, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
@@ -1059,49 +1058,6 @@ export class FakeStore
     }
     mine.set(linkId, structuredClone(next));
     return { check: structuredClone(next), applied: true };
-  }
-
-  async claimSurfaced(
-    owner: OwnerId,
-    ids: string[],
-    {
-      at,
-      notSurfacedAfter,
-      now,
-      exceptKeptTools,
-      exceptGone,
-    }: {
-      at: Date;
-      notSurfacedAfter: Date;
-      now: Date;
-      exceptKeptTools?: boolean;
-      exceptGone?: boolean;
-    },
-  ): Promise<SurfacedClaim[]> {
-    const claimed: SurfacedClaim[] = [];
-    for (const id of new Set(ids)) {
-      const found = this.owned(owner).get(id);
-      if (
-        found?.state !== "active" ||
-        (found.snoozedUntil !== null && found.snoozedUntil > now) ||
-        (exceptKeptTools === true && this.toolRows.get(owner)?.get(id)?.status === "kept") ||
-        (exceptGone === true && (this.checkRows.get(owner)?.get(id)?.flaggedAt ?? null) !== null) ||
-        (found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
-      ) {
-        continue;
-      }
-      const previousSurfacedAt = found.lastSurfacedAt;
-      found.lastSurfacedAt = new Date(at);
-      claimed.push({ link: this.view(owner, found), previousSurfacedAt });
-    }
-    return claimed;
-  }
-
-  async unclaimSurfaced(owner: OwnerId, id: string, claim: { at: Date; previous: Date | null }) {
-    const found = this.owned(owner).get(id);
-    if (found?.lastSurfacedAt?.getTime() !== claim.at.getTime()) return false;
-    found.lastSurfacedAt = claim.previous && new Date(claim.previous);
-    return true;
   }
 
   async pendingImages(afterId: string | null, limit: number): Promise<PendingImage[]> {

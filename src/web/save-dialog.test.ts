@@ -778,7 +778,7 @@ describe("every page with the menu", () => {
     });
   const home = () =>
     homePage({
-      worth: { links: [], images: new Map(), now: NOW, catalog: [], gone: null },
+      worth: { links: [], images: new Map(), now: NOW, catalog: [] },
       shelf: "",
       spaces: "",
     });

@@ -356,7 +356,7 @@ export function buildMcpServer(
       },
     },
     async ({ handy, ...args }) => {
-      // One instant for the save and its keep, as getDigest and markOpened do.
+      // One instant for the save and its keep.
       const now = deps.now();
       const at = { ...deps, now: () => now };
       const input = { ...args, savedBy };
@@ -759,20 +759,18 @@ export function buildMcpServer(
       description: guidance.GET_DIGEST,
       inputSchema: getDigestInput,
       outputSchema: getDigestOutput,
-      // Not read-only or idempotent: each call marks the links it returns as surfaced.
       annotations: {
-        readOnlyHint: false,
+        readOnlyHint: true,
         destructiveHint: false,
-        idempotentHint: false,
+        idempotentHint: true,
         openWorldHint: false,
       },
     },
     async () => {
-      // One instant: getDigest reads now once and claims at it, so each item's handy uses that now too.
+      // One instant: getDigest reads now once, so each item's handy uses that now too.
       const now = deps.now();
       const at = { ...deps, now: () => now };
-      const { links, claimed } = await getDigest(at, owner);
-      if (claimed.length > 0) record({ kind: "surfaced", linkIds: claimed });
+      const { links } = await getDigest(at, owner);
       const handied = await linksWithHandy(
         at,
         owner,

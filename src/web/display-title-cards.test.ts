@@ -54,12 +54,11 @@ const list = {
   now: NOW,
   done: false,
 };
-const worth = (links: Link[], gone: Link | null = null) => ({
+const worth = (links: Link[]) => ({
   links: links.map((l) => ({ link: l, reasons: [] as [] })),
   images: new Map(),
   now: NOW,
   catalog: [KITCHEN],
-  gone,
 });
 const tool = (l: Link) => ({
   link: l,
@@ -98,12 +97,12 @@ const CASES: Case[] = [
     html: (ls) => searchPage({ query: "x", links: ls, now: NOW, catalog: [KITCHEN] }),
   },
   {
-    name: "Home's Worth a look",
+    name: "Home's Explore card",
     heading: "h3",
     html: (ls) => homePage({ worth: worth(ls), shelf: "", spaces: "" }),
   },
   {
-    name: "Home's Also today row",
+    name: "Home's More to explore row",
     heading: "h4",
     html: (ls) =>
       homePage({
@@ -111,11 +110,6 @@ const CASES: Case[] = [
         shelf: "",
         spaces: "",
       }),
-  },
-  {
-    name: "Home's gone row",
-    heading: "h4",
-    html: (ls) => homePage({ worth: worth([], ls[0] ?? null), shelf: "", spaces: "" }),
   },
   {
     name: "Home's Tidy up step",
@@ -126,7 +120,7 @@ const CASES: Case[] = [
         shelf: "",
         spaces: "",
         tidy: {
-          queue: ls.map((l) => ({ link: l, fit: null })),
+          queue: ls.map((l) => ({ link: l, gone: false, fit: null })),
           hasFocus: false,
           images: new Map(),
           catalog: [KITCHEN],
@@ -179,8 +173,7 @@ describe("a link with no title", () => {
         "a space page",
         "search results",
         "the Handy shelf",
-        "Home's Worth a look",
-        "Home's gone row",
+        "Home's Explore card",
       ].includes(x.name),
     )) {
       const { document } = parseHTML(c.html([link()]));

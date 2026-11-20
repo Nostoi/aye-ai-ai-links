@@ -262,8 +262,8 @@ describe("hidden links in the intent guess queue (#339)", () => {
   });
 });
 
-describe("hidden links in the digest, Handy and the gone pick", () => {
-  it("digest, Handy and the gone pick leave out a hidden link", async () => {
+describe("hidden links in the digest and Handy", () => {
+  it("digest and Handy leave out a hidden link", async () => {
     const { deps, save, hide } = setup();
     const tool = await save();
     const gone = await save({ why: { text: "for later", source: "stated" } });
@@ -274,14 +274,14 @@ describe("hidden links in the digest, Handy and the gone pick", () => {
     const now = () => new Date(Date.UTC(2026, 5, 1));
     const view = async () => ({
       shelf: (await listShelf({ ...deps, now }, A)).map((i) => i.link.id),
-      gone: (await worthALook({ ...deps, now }, A, [])).gone?.id ?? null,
+      explore: (await worthALook({ ...deps, now }, A, [])).links.map((d) => d.link.id),
       digest: (await previewDigest({ ...deps, now }, A)).links.map((d) => d.link.id),
     });
-    expect(await view()).toEqual({ shelf: [tool], gone, digest: [plain] });
+    expect(await view()).toEqual({ shelf: [tool], explore: [plain], digest: [plain] });
 
     await hide(tool, gone, plain);
 
-    expect(await view()).toEqual({ shelf: [], gone: null, digest: [] });
+    expect(await view()).toEqual({ shelf: [], explore: [], digest: [] });
   });
 });
 

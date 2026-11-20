@@ -1,25 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  claimDueTool,
   compareIds,
   DIGEST_SIZE,
   type DigestReason,
   dueTool,
-  FOCUS_MATCHES_PER_ENTRY,
   FOCUS_SLOTS,
   FOCUS_WINDOW_MS,
   getDigest,
   NOT_OPENED_MS,
   previewDigest,
-  SURFACE_COOLDOWN_MS,
 } from "./digest.js";
 import { FakeProfileStore } from "./fake-profile-store.js";
 import { FakeStore } from "./fake-store.js";
 import type { LinkCheck } from "./link-check-store.js";
-import { recordOpening } from "./links.js";
 import type { FocusHit, FocusMatch, SearchFilters } from "./search.js";
-import type { LinkStore } from "./store.js";
-import { keepHandy, notHandy, stillUsing } from "./tools.js";
+import { keepHandy, notHandy } from "./tools.js";
 import type { FocusEntry, Link, NewLink, Source } from "./types.js";
 
 const OWNER = "o";
@@ -27,19 +22,14 @@ const DAY = 86_400_000;
 const HOUR = 3_600_000;
 const NOW = new Date("2026-06-01T00:00:00Z");
 const at = (delta: number) => new Date(NOW.getTime() + delta);
-const CUTOFF = at(-SURFACE_COOLDOWN_MS);
 
 /** Focus matching with hits set per text; each hit's `words` is the text unless a test sets them. */
 class FakeFocusMatch implements FocusMatch {
   hits = new Map<string, string[]>();
-  words = new Map<string, string[]>();
   calls: { text: string; filters: SearchFilters }[] = [];
   async match(_owner: string, text: string, filters: SearchFilters): Promise<FocusHit[]> {
     this.calls.push({ text, filters });
-    return (this.hits.get(text) ?? []).map((id) => ({
-      id,
-      words: this.words.get(id) ?? [text],
-    }));
+    return (this.hits.get(text) ?? []).map((id) => ({ id, words: [text] }));
   }
 }
 
@@ -47,14 +37,13 @@ let store: FakeStore;
 let profile: FakeProfileStore;
 let keyword: FakeFocusMatch;
 let clock: Date;
-const deps = (over: { store?: LinkStore } = {}) => ({
+const deps = () => ({
   store,
   tools: store,
   checks: store,
   profile,
   focusMatch: keyword,
   now: () => clock,
-  ...over,
 });
 
 beforeEach(() => {
@@ -65,7 +54,7 @@ beforeEach(() => {
 });
 
 let n = 0;
-/** A link with a why, saved yesterday and surfaced exactly at the cutoff: eligible, with no reason. */
+/** A link with a why, saved yesterday: To explore and eligible, with no reason. */
 async function link(over: Partial<NewLink> = {}): Promise<Link> {
   n += 1;
   const url = `https://ex.com/${n}`;
@@ -83,7 +72,7 @@ async function link(over: Partial<NewLink> = {}): Promise<Link> {
       lastOpenedAt: null,
       intent: "explore",
       intentSource: null,
-      lastSurfacedAt: CUTOFF,
+      lastSurfacedAt: null,
       snoozedUntil: null,
       state: "active",
       ...over,
@@ -124,7 +113,7 @@ const flag = async (id: string) => {
 };
 
 describe("getDigest reasons", () => {
-  it("gives no_why to a link without a why, surfaced exactly at the cooldown cutoff", async () => {
+  it("gives no_why to a link without a why", async () => {
     const l = await link({ why: null });
     expect(await reasonsOf(l.id)).toEqual([{ kind: "no_why" }]);
   });
@@ -135,14 +124,11 @@ describe("getDigest reasons", () => {
     const savedLater = await link({ savedAt: at(-NOT_OPENED_MS + 1) });
     const openedLater = await link({ savedAt: old, lastOpenedAt: at(-NOT_OPENED_MS + 1) });
     const neverOpened = await link({ savedAt: old });
-    expect(await digestIds()).toEqual([l.id, neverOpened.id]);
-    expect(store.all(OWNER).find((x) => x.id === savedLater.id)?.lastSurfacedAt).toEqual(CUTOFF);
-    expect(store.all(OWNER).find((x) => x.id === openedLater.id)?.lastSurfacedAt).toEqual(CUTOFF);
-  });
-
-  it("gives never_surfaced to a link never surfaced before", async () => {
-    const l = await link({ lastSurfacedAt: null });
-    expect(await reasonsOf(l.id)).toEqual([{ kind: "never_surfaced" }]);
+    const reasons = async (id: string) => (await reasonsOf(id))?.map((r) => r.kind);
+    expect(await reasons(l.id)).toEqual(["not_opened_recently"]);
+    expect(await reasons(neverOpened.id)).toEqual(["not_opened_recently"]);
+    expect(await reasons(savedLater.id)).toEqual([]);
+    expect(await reasons(openedLater.id)).toEqual([]);
   });
 
   it("gives focus_words with the whole entry, inferred source included", async () => {
@@ -154,7 +140,7 @@ describe("getDigest reasons", () => {
   });
 
   it("gives every reason that applies, focus first, including several focus entries", async () => {
-    const l = await link({ why: null, savedAt: at(-60 * DAY), lastSurfacedAt: null });
+    const l = await link({ why: null, savedAt: at(-60 * DAY) });
     const older = await focus("solar", at(-2 * DAY));
     const newer = await focus("batteries", at(-DAY));
     keyword.hits.set("solar", [l.id]);
@@ -164,44 +150,44 @@ describe("getDigest reasons", () => {
       focusWords(older),
       { kind: "no_why" },
       { kind: "not_opened_recently" },
-      { kind: "never_surfaced" },
     ]);
   });
 
-  it("leaves out, and does not mark, an eligible link with no reason", async () => {
+  it("returns a link with no reason at all, as the new To explore link it is", async () => {
     const l = await link();
-    expect(await digestIds()).toEqual([]);
-    expect((await store.get(OWNER, l.id))?.lastSurfacedAt).toEqual(CUTOFF);
+    expect(await digestIds()).toEqual([l.id]);
+    expect(await reasonsOf(l.id)).toEqual([]);
   });
 });
 
 describe("getDigest eligibility", () => {
-  it("excludes archived, snoozed and recently surfaced links, at the exact boundaries", async () => {
-    const archived = await link({ why: null, state: "archived" });
-    const snoozed = await link({ why: null, snoozedUntil: at(1) });
-    const snoozeEnded = await link({ why: null, snoozedUntil: NOW });
-    const inside = await link({ why: null, lastSurfacedAt: at(-SURFACE_COOLDOWN_MS + 1) });
-    const atCutoff = await link({ why: null });
-    expect(await digestIds()).toEqual([snoozeEnded.id, atCutoff.id]);
-    const after = Object.fromEntries(store.all(OWNER).map((l) => [l.id, l.lastSurfacedAt]));
-    expect(after[archived.id]).toEqual(CUTOFF);
-    expect(after[snoozed.id]).toEqual(CUTOFF);
-    expect(after[inside.id]).toEqual(at(-SURFACE_COOLDOWN_MS + 1));
+  it("excludes archived and snoozed links, at the exact snooze boundary", async () => {
+    await link({ state: "archived" });
+    await link({ snoozedUntil: at(1) });
+    const snoozeEnded = await link({ snoozedUntil: NOW });
+    expect(await digestIds()).toEqual([snoozeEnded.id]);
   });
 
-  it("marks what it returns at now, and the next call at the same time returns others", async () => {
-    const links = [];
-    for (let i = 0; i < DIGEST_SIZE + 2; i++) links.push(await link({ why: null }));
-    const first = await getDigest(deps(), OWNER);
-    expect(first.links).toHaveLength(DIGEST_SIZE);
-    for (const { link: l } of first.links) {
-      expect(l.lastSurfacedAt).toEqual(NOW);
-      expect((await store.get(OWNER, l.id))?.lastSurfacedAt).toEqual(NOW);
-    }
-    const second = await digestIds();
-    expect(second).toHaveLength(2);
-    expect(second.some((id) => first.links.some((l) => l.link.id === id))).toBe(false);
-    expect(await digestIds()).toEqual([]);
+  it("does not look at lastSurfacedAt: a link marked surfaced a moment ago is still picked", async () => {
+    const l = await link({ lastSurfacedAt: NOW });
+    expect(await digestIds()).toEqual([l.id]);
+  });
+});
+
+describe("getDigest writes nothing", () => {
+  it("returns the same links on a repeat call, and leaves every row as it was", async () => {
+    for (let i = 0; i < DIGEST_SIZE + 2; i++) await link({ why: null });
+    const before = structuredClone(store.all(OWNER));
+    const first = await digestIds();
+    expect(first).toHaveLength(DIGEST_SIZE);
+    expect(await digestIds()).toEqual(first);
+    expect(store.all(OWNER)).toEqual(before);
+  });
+
+  it("returns an empty digest for an empty library without searching", async () => {
+    await focus("topic", at(-DAY));
+    expect(await getDigest(deps(), OWNER)).toEqual({ links: [] });
+    expect(keyword.calls).toEqual([]);
   });
 });
 
@@ -213,7 +199,9 @@ describe("getDigest focus", () => {
     await focus("stale", at(-FOCUS_WINDOW_MS - 1));
     keyword.hits.set("edge", [inWindow.id]);
     keyword.hits.set("stale", [outOfWindow.id]);
-    expect(await digestIds()).toEqual([inWindow.id]);
+    const reasons = (id: string) => reasonsOf(id).then((r) => r?.map((x) => x.kind));
+    expect(await reasons(inWindow.id)).toEqual(["focus_words"]);
+    expect(await reasons(outOfWindow.id)).toEqual([]);
   });
 
   it("uses only the newest 10 entries", async () => {
@@ -221,26 +209,29 @@ describe("getDigest focus", () => {
     await focus("oldest", at(-20 * DAY));
     for (let i = 0; i < 10; i++) await focus(`f${i}`, at(-DAY));
     keyword.hits.set("oldest", [l.id]);
-    expect(await digestIds()).toEqual([]);
+    expect(await reasonsOf(l.id)).toEqual([]);
   });
 
-  it("gives an entry's reason to its first 3 eligible hits, skipping excluded ones", async () => {
-    const archived = await link({ state: "archived" });
-    const snoozed = await link({ snoozedUntil: at(DAY) });
+  it("gives every hit its reason: no per-entry cut and no rank", async () => {
     const hits = [];
-    for (let i = 0; i < FOCUS_MATCHES_PER_ENTRY + 1; i++) hits.push(await link());
+    for (let i = 0; i < 8; i++) hits.push(await link());
     await focus("topic", at(-DAY));
-    keyword.hits.set("topic", [archived.id, snoozed.id, ...hits.map((h) => h.id)]);
-    expect(await digestIds()).toEqual(hits.slice(0, FOCUS_MATCHES_PER_ENTRY).map((h) => h.id));
+    keyword.hits.set(
+      "topic",
+      [...hits].reverse().map((h) => h.id),
+    );
+    const all = (await previewDigest(deps(), OWNER, Number.POSITIVE_INFINITY)).links;
+    expect(all).toHaveLength(8);
+    for (const d of all) expect(d.reasons.map((r) => r.kind)).toEqual(["focus_words"]);
   });
 
-  it("finds an eligible match ranked behind more excluded matches than a search page holds", async () => {
+  it("skips excluded hits, however many a search page holds", async () => {
     const excluded = [];
     for (let i = 0; i < 60; i++) excluded.push(await link({ snoozedUntil: at(DAY) }));
     const behind = await link();
     await focus("topic", at(-DAY));
     keyword.hits.set("topic", [...excluded.map((l) => l.id), behind.id]);
-    expect(await digestIds()).toEqual([behind.id]);
+    expect(await reasonsOf(behind.id)).toHaveLength(1);
   });
 
   it("asks the focus matcher directly and unfiltered, so nothing is logged", async () => {
@@ -253,66 +244,54 @@ describe("getDigest focus", () => {
 });
 
 describe("getDigest order", () => {
-  it("puts focus links first by newest entry then rank, then rotates the rest", async () => {
-    const f1 = await link();
-    const f2 = await link();
-    const f3 = await link();
-    const rest = await link({ why: null, lastSurfacedAt: null });
-    const older = await focus("older", at(-2 * DAY));
-    const newer = await focus("newer", at(-DAY));
-    keyword.hits.set("newer", [f2.id, f1.id]);
-    keyword.hits.set("older", [f3.id, f2.id]);
-    const digest = await getDigest(deps(), OWNER);
-    expect(digest.links.map((l) => l.link.id)).toEqual([f2.id, f1.id, f3.id, rest.id]);
-    expect(digest.links[0]?.reasons).toEqual([focusWords(newer), focusWords(older)]);
+  it("puts focus links first, oldest saved first, then the rest oldest saved first", async () => {
+    const day = (d: number, over: Partial<NewLink> = {}) =>
+      link({ savedAt: at(-d * DAY), ...over });
+    const rest1 = await day(9);
+    const f1 = await day(5);
+    const rest2 = await day(7);
+    const f2 = await day(3);
+    await focus("topic", at(-DAY));
+    keyword.hits.set("topic", [f2.id, f1.id]);
+    expect(await digestIds()).toEqual([f1.id, f2.id, rest1.id, rest2.id]);
   });
 
-  it("orders other links by last touched (surfaced, or saved if never), then oldest saved, then id, and keeps 5", async () => {
-    const q = await link({ why: null, savedAt: at(-DAY), lastSurfacedAt: null });
-    const u = await link({ why: null, savedAt: at(-3 * DAY), lastSurfacedAt: null });
-    const w = await link({ why: null, savedAt: at(-15 * DAY), lastSurfacedAt: null });
-    const p = await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: at(-20 * DAY) });
-    const t = await link({ why: null, savedAt: at(-3 * DAY), lastSurfacedAt: null });
-    const v = await link({ why: null, savedAt: at(-30 * DAY), lastSurfacedAt: at(-15 * DAY) });
-    expect(await digestIds()).toEqual([p.id, v.id, w.id, u.id, t.id]);
-    expect((await store.get(OWNER, q.id))?.lastSurfacedAt).toBeNull();
+  it("breaks a tie on the lowest id, as a number", () => {
+    expect(compareIds("9", "10")).toBeLessThan(0);
+    expect(compareIds("10", "10")).toBe(0);
+    expect(compareIds("link-9", "link-10")).toBeGreaterThan(0);
   });
 
-  it("holds FOCUS_SLOTS focus picks, then rotation links, when focus matches outnumber the slots", async () => {
-    const newerHits = [await link(), await link(), await link()];
-    const olderHits = [await link(), await link(), await link()];
-    const rotating = [];
-    for (let i = 0; i < 3; i++) {
-      rotating.push(await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: null }));
-    }
-    await focus("older", at(-2 * DAY));
-    await focus("newer", at(-DAY));
+  it("orders links saved at the same instant by id, whatever order the store lists them in", async () => {
+    const same = at(-3 * DAY);
+    const made = [
+      await link({ savedAt: same }),
+      await link({ savedAt: same }),
+      await link({ savedAt: same }),
+    ];
+    const reversed = Object.assign(Object.create(store), {
+      listLinks: async (owner: string) => (await store.listLinks(owner)).reverse(),
+    });
+    const got = await previewDigest({ ...deps(), store: reversed }, OWNER);
+    expect(got.links.map((d) => d.link.id)).toEqual(made.map((l) => l.id));
+  });
+
+  it("holds FOCUS_SLOTS focus picks; further focus matches follow in age order with the rest", async () => {
+    const hits = [];
+    for (let d = 20; d > 20 - (FOCUS_SLOTS + 1); d--)
+      hits.push(await link({ savedAt: at(-d * DAY) }));
+    const [fourth, ...firstThree] = [...hits].reverse();
+    const older = await link({ savedAt: at(-30 * DAY) });
+    await focus("topic", at(-DAY));
     keyword.hits.set(
-      "newer",
-      newerHits.map((l) => l.id),
-    );
-    keyword.hits.set(
-      "older",
-      olderHits.map((l) => l.id),
+      "topic",
+      hits.map((l) => l.id),
     );
     expect(FOCUS_SLOTS).toBe(3);
-    expect(await digestIds()).toEqual([
-      ...newerHits.slice(0, FOCUS_SLOTS).map((l) => l.id),
-      rotating[0]?.id,
-      rotating[1]?.id,
-    ]);
-  });
-
-  it("lets rotation fill the slots focus does not use", async () => {
-    const hit = await link();
-    const rotating = [];
-    for (let i = 0; i < 5; i++) rotating.push(await link({ why: null, lastSurfacedAt: null }));
-    await focus("topic", at(-DAY));
-    keyword.hits.set("topic", [hit.id]);
-    expect(await digestIds()).toEqual([
-      hit.id,
-      ...rotating.slice(0, DIGEST_SIZE - 1).map((l) => l.id),
-    ]);
+    const got = await digestIds();
+    expect(got.slice(0, FOCUS_SLOTS)).toEqual(hits.slice(0, FOCUS_SLOTS).map((l) => l.id));
+    expect(got.slice(FOCUS_SLOTS)).toEqual([older.id, (fourth as Link).id]);
+    expect(firstThree).toHaveLength(FOCUS_SLOTS);
   });
 
   it("returns a link that is both a focus match and without a why once", async () => {
@@ -322,174 +301,21 @@ describe("getDigest order", () => {
     keyword.hits.set("topic", [both.id]);
     const ids = await digestIds();
     expect(ids).toHaveLength(DIGEST_SIZE);
-    expect(new Set(ids).size).toBe(DIGEST_SIZE);
     expect(ids.filter((id) => id === both.id)).toHaveLength(1);
   });
 
-  it("gives every link a turn in 30 days although two broad focus entries match 120 links", async () => {
-    const newerHits = [];
-    const olderHits = [];
-    for (let i = 0; i < 60; i++) newerHits.push(await link());
-    for (let i = 0; i < 60; i++) olderHits.push(await link());
-    const lone = await link({ why: null, savedAt: at(-90 * DAY), lastSurfacedAt: null });
-    const oldestOnly = await link({ savedAt: NOW });
-    await focus("oldest", at(-2 * HOUR));
-    await focus("older", at(-HOUR));
-    await focus("newer", NOW);
-    keyword.hits.set(
-      "newer",
-      newerHits.map((l) => l.id),
-    );
-    keyword.hits.set(
-      "older",
-      olderHits.map((l) => l.id),
-    );
-    keyword.hits.set("oldest", [oldestOnly.id]);
-    const seen = new Set<string>();
-    for (let day = 0; day < 30; day++) {
+  it("is the same on every day: no rotation", async () => {
+    for (let i = 0; i < 12; i++) await link({ why: null, savedAt: at(-(i + 2) * DAY) });
+    const first = await digestIds();
+    for (const day of [1, 2, 3, 40]) {
       clock = at(day * DAY);
-      for (const id of await digestIds()) seen.add(id);
+      expect(await digestIds()).toEqual(first);
     }
-    expect(seen.has(lone.id), "the link with no why").toBe(true);
-    expect(seen.has(oldestOnly.id), "the link matched only by the oldest entry").toBe(true);
-  });
-
-  it("compares decimal ids as numbers and other ids as strings", () => {
-    expect(compareIds("9", "10")).toBeLessThan(0);
-    expect(compareIds("10", "10")).toBe(0);
-    expect(compareIds("link-9", "link-10")).toBeGreaterThan(0);
-  });
-
-  it("rotates through every link over 60 daily digests, whatever their reasons", async () => {
-    // 75 links without a why could fill every digest for good; 26 with only not_opened_recently must still appear.
-    const ids = new Set<string>();
-    for (let i = 0; i < 75; i++) ids.add((await link({ why: null, lastSurfacedAt: null })).id);
-    for (let i = 0; i < 26; i++) {
-      ids.add((await link({ savedAt: at(-60 * DAY), lastSurfacedAt: null })).id);
-    }
-    const seen = new Set<string>();
-    for (let day = 0; day < 60; day++) {
-      clock = at(day * DAY);
-      const today = await digestIds();
-      expect(today).toHaveLength(DIGEST_SIZE);
-      for (const id of today) seen.add(id);
-    }
-    expect(seen).toEqual(ids);
-  });
-
-  it("brings shown links back although more new links are saved each day than a digest holds", async () => {
-    const first: string[] = [];
-    for (let i = 0; i < 10; i++) {
-      first.push((await link({ why: null, savedAt: at(-60 * DAY), lastSurfacedAt: null })).id);
-    }
-    const shown = new Map<string, number>();
-    for (let day = 0; day < 60; day++) {
-      clock = at(day * DAY);
-      for (const id of await digestIds()) shown.set(id, (shown.get(id) ?? 0) + 1);
-      for (let i = 0; i < DIGEST_SIZE; i++) {
-        await link({ why: null, savedAt: clock, lastSurfacedAt: null });
-      }
-    }
-    for (const id of first) expect(shown.get(id) ?? 0, `link ${id}`).toBeGreaterThanOrEqual(2);
-  });
-});
-
-/** Runs `meanwhile` after selection and before the claim reaches the store. */
-const racing = (meanwhile: () => Promise<unknown>): LinkStore =>
-  Object.assign(Object.create(store) as FakeStore, {
-    claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
-      await meanwhile();
-      return store.claimSurfaced(...args);
-    },
-  });
-
-describe("getDigest claim", () => {
-  it("judges reasons from the claimed link, dropping one left with none and skipping one snoozed", async () => {
-    const filled = await link({ why: null });
-    const halfFilled = await link({ why: null, savedAt: at(-20 * DAY), lastSurfacedAt: null });
-    const snoozed = await link({ why: null });
-    const kept = await link({ why: null });
-    const digest = await getDigest(
-      deps({
-        store: racing(async () => {
-          for (const l of [filled, halfFilled]) {
-            await store.update(OWNER, l.id, { why: { text: "now", source: "asked" } });
-          }
-          await store.update(OWNER, snoozed.id, { snoozedUntil: at(DAY) });
-        }),
-      }),
-      OWNER,
-    );
-    expect(digest.links.map((l) => [l.link.id, l.reasons])).toEqual([
-      [halfFilled.id, [{ kind: "never_surfaced" }]],
-      [kept.id, [{ kind: "no_why" }]],
-    ]);
-    expect(digest.links[0]?.link.why).toEqual({ text: "now", source: "asked" });
-    expect((await store.get(OWNER, filled.id))?.lastSurfacedAt).toEqual(NOW);
-    expect((await store.get(OWNER, snoozed.id))?.lastSurfacedAt).toEqual(CUTOFF);
-  });
-
-  it("returns every link it claimed, including one it left out, and none it skipped", async () => {
-    const filled = await link({ why: null });
-    const snoozed = await link({ why: null });
-    const kept = await link({ why: null });
-    const digest = await getDigest(
-      deps({
-        store: racing(async () => {
-          await store.update(OWNER, filled.id, { why: { text: "now", source: "asked" } });
-          await store.update(OWNER, snoozed.id, { snoozedUntil: at(DAY) });
-        }),
-      }),
-      OWNER,
-    );
-    expect(digest.links.map((l) => l.link.id)).toEqual([kept.id]);
-    expect([...digest.claimed].sort()).toEqual([filled.id, kept.id].sort());
-  });
-
-  it("claims the still-using check's link even when the check is then dropped", async () => {
-    const tool = await link({ lastOpenedAt: at(-45 * DAY) });
-    clock = at(-40 * DAY);
-    await keepHandy(deps(), OWNER, tool.id, "stated");
-    clock = NOW;
-    const digest = await getDigest(
-      deps({ store: racing(() => recordOpening(deps(), OWNER, tool.id)) }),
-      OWNER,
-    );
-    expect(digest.links).toEqual([]);
-    expect(digest.claimed).toEqual([tool.id]);
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
-  });
-
-  it("leaves a still-using check skipped at its claim out of claimed", async () => {
-    const tool = await link({ lastOpenedAt: at(-45 * DAY) });
-    clock = at(-40 * DAY);
-    await keepHandy(deps(), OWNER, tool.id, "stated");
-    clock = NOW;
-    const digest = await getDigest(deps({ store: racing(() => flag(tool.id)) }), OWNER);
-    expect(digest.claimed).toEqual([]);
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
-  });
-
-  it("leaves out a link kept handy between selection and the claim, without marking it", async () => {
-    const tool = await link({ why: null, savedAt: at(-100 * DAY), lastSurfacedAt: null });
-    const other = await link({ why: null });
-    const digest = await getDigest(
-      deps({ store: racing(() => keepHandy(deps(), OWNER, tool.id, "stated")) }),
-      OWNER,
-    );
-    expect(digest.links.map((l) => l.link.id)).toEqual([other.id]);
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toBeNull();
-  });
-
-  it("returns an empty digest for an empty library without searching", async () => {
-    await focus("topic", at(-DAY));
-    expect(await getDigest(deps(), OWNER)).toEqual({ links: [], claimed: [] });
-    expect(keyword.calls).toEqual([]);
   });
 });
 
 describe("gone links (#128)", () => {
-  it("leaves a gone link out of previewDigest and getDigest, unmarked, while a dead link not yet flagged keeps its reason", async () => {
+  it("leaves a gone link out of previewDigest and getDigest, while a dead link not yet flagged stays", async () => {
     const gone = await link({ why: null });
     const dead = await link({ why: null });
     await flag(gone.id);
@@ -500,35 +326,17 @@ describe("gone links (#128)", () => {
     });
     expect((await previewDigest(deps(), OWNER)).links.map((d) => d.link.id)).toEqual([dead.id]);
     expect(await digestIds()).toEqual([dead.id]);
-    expect((await store.get(OWNER, gone.id))?.lastSurfacedAt).toEqual(CUTOFF);
-  });
-
-  it("leaves out a link flagged between selection and the claim, without marking it", async () => {
-    const goneLater = await link({ why: null });
-    const other = await link({ why: null });
-    const digest = await getDigest(deps({ store: racing(() => flag(goneLater.id)) }), OWNER);
-    expect(digest.links.map((l) => l.link.id)).toEqual([other.id]);
-    expect((await store.get(OWNER, goneLater.id))?.lastSurfacedAt).toEqual(CUTOFF);
   });
 });
 
 describe("previewDigest", () => {
-  /** A mix of focus, no-why, old and never-shown links, more than one digest holds. */
-  async function library() {
+  it("picks what getDigest then returns, in its order and with its reasons", async () => {
     await focus("solar", at(-DAY));
     const focused = await link();
     keyword.hits.set("solar", [focused.id]);
     for (let i = 0; i < DIGEST_SIZE + 2; i++)
       await link({ why: null, savedAt: at(-(i + 2) * DAY) });
-    await link({ lastSurfacedAt: null });
-    await link({ savedAt: at(-60 * DAY) });
-  }
-
-  it("writes nothing, and picks what getDigest then returns, in its order and with its reasons", async () => {
-    await library();
-    const before = structuredClone(store.all(OWNER));
     const preview = await previewDigest(deps(), OWNER);
-    expect(store.all(OWNER)).toEqual(before);
     expect(preview.links).toHaveLength(DIGEST_SIZE);
     const digest = await getDigest(deps(), OWNER);
     expect(preview.links.map((l) => [l.link.id, l.reasons])).toEqual(
@@ -536,12 +344,26 @@ describe("previewDigest", () => {
     );
   });
 
-  it("with a larger limit returns the same order, then the rest of the queue", async () => {
-    await library();
+  it("with a larger limit returns the same order, then the rest", async () => {
+    for (let i = 0; i < DIGEST_SIZE + 3; i++)
+      await link({ why: null, savedAt: at(-(i + 2) * DAY) });
     const first = (await previewDigest(deps(), OWNER)).links.map((l) => l.link.id);
     const all = (await previewDigest(deps(), OWNER, Number.POSITIVE_INFINITY)).links;
-    expect(all.length).toBe(DIGEST_SIZE + 5);
+    expect(all).toHaveLength(DIGEST_SIZE + 3);
     expect(all.slice(0, DIGEST_SIZE).map((l) => l.link.id)).toEqual(first);
+  });
+
+  it("takes `focusSlots` focus picks first and leaves out `exclude`", async () => {
+    const old = await link({ savedAt: at(-30 * DAY) });
+    const a = await link({ savedAt: at(-3 * DAY) });
+    const b = await link({ savedAt: at(-2 * DAY) });
+    await focus("topic", at(-DAY));
+    keyword.hits.set("topic", [a.id, b.id]);
+    const ids = async (...args: [number, Set<string>, number]) =>
+      (await previewDigest(deps(), OWNER, ...args)).links.map((l) => l.link.id);
+    expect(await ids(3, new Set(), 1)).toEqual([a.id, old.id, b.id]);
+    expect(await ids(3, new Set(), 2)).toEqual([a.id, b.id, old.id]);
+    expect(await ids(3, new Set([a.id]), 1)).toEqual([b.id, old.id]);
   });
 });
 
@@ -554,25 +376,23 @@ describe("intent", () => {
     keyword.hits.set("bills", [keep.id, guess.id, explore.id]);
     expect((await previewDigest(deps(), OWNER)).links.map((l) => l.link.id)).toEqual([explore.id]);
     expect(await digestIds()).toEqual([explore.id]);
-    expect((await store.get(OWNER, keep.id))?.lastSurfacedAt).toEqual(CUTOFF);
     await store.update(OWNER, keep.id, { intent: "explore", intentSource: "stated" });
     expect(await digestIds()).toContain(keep.id);
   });
 });
 
 describe("kept tools", () => {
-  it("gives a kept tool no reading reason and leaves it unmarked", async () => {
-    const tool = await link({ why: null, savedAt: at(-60 * DAY), lastSurfacedAt: null });
+  it("leaves a kept tool out, even one a focus entry matches", async () => {
+    const tool = await link({ why: null, savedAt: at(-60 * DAY) });
     await focus("lunch", at(-DAY));
     keyword.hits.set("lunch", [tool.id]);
     await keepHandy(deps(), OWNER, tool.id, "stated");
     expect((await previewDigest(deps(), OWNER)).links).toEqual([]);
     expect((await getDigest(deps(), OWNER)).links).toEqual([]);
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toBeNull();
   });
 
-  it("does not let a kept tool use up a focus entry's matches", async () => {
-    const tool = await link();
+  it("does not let a kept tool use up a focus entry's slots", async () => {
+    const tool = await link({ savedAt: at(-90 * DAY) });
     const others = [await link(), await link(), await link()];
     const entry = await focus("lunch", at(-DAY));
     keyword.hits.set("lunch", [tool.id, ...others.map((l) => l.id)]);
@@ -613,37 +433,17 @@ describe("dueTool", () => {
     expect(await dueTool(deps(), OWNER)).toBeNull();
   });
 
-  it("skips a gone tool, writing nothing (#128)", async () => {
+  it("skips a gone tool", async () => {
     const tool = await dueLink();
     await flag(tool.id);
     expect(await dueTool(deps(), OWNER)).toBeNull();
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
   });
 
-  it("claimDueTool drops a tool flagged between selection and claim, leaving it unmarked (#128)", async () => {
-    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
-    expect(await claimDueTool(deps({ store: racing(() => flag(tool.id)) }), OWNER)).toBeNull();
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(CUTOFF);
-  });
-
-  it("claimDueTool drops a tool flagged gone after its claim succeeded, leaving it marked (#128)", async () => {
-    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
-    const flaggedAfterClaim = Object.assign(Object.create(store) as FakeStore, {
-      claimSurfaced: async (...args: Parameters<LinkStore["claimSurfaced"]>) => {
-        const claimed = await store.claimSurfaced(...args);
-        await flag(tool.id);
-        return claimed;
-      },
-    });
-    expect(await claimDueTool(deps({ store: flaggedAfterClaim }), OWNER)).toBeNull();
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
-  });
-
-  it("returns one due tool, first in the digest's rotation, with whole days since its opening", async () => {
-    await dueLink({ lastSurfacedAt: null });
-    const first = await dueLink({ lastOpenedAt: at(-45 * DAY - HOUR) });
+  it("returns the oldest saved due tool, with whole days since its opening", async () => {
+    await dueLink({ savedAt: at(-10 * DAY) });
+    const oldest = await dueLink({ savedAt: at(-50 * DAY), lastOpenedAt: at(-45 * DAY - HOUR) });
     expect(await dueTool(deps(), OWNER)).toEqual({
-      link: await store.get(OWNER, first.id),
+      link: await store.get(OWNER, oldest.id),
       daysSinceOpened: 45,
     });
   });
@@ -656,40 +456,13 @@ describe("dueTool", () => {
     });
   });
 
-  it("skips a due tool surfaced within the cooldown, snoozed or archived, and writes nothing", async () => {
-    const recent = await dueLink({ lastSurfacedAt: at(-DAY) });
+  it("skips a due tool that is snoozed or archived, and does not look at lastSurfacedAt", async () => {
     await dueLink({ snoozedUntil: at(DAY) });
     await dueLink({ state: "archived" });
     expect(await dueTool(deps(), OWNER)).toBeNull();
-    expect((await store.get(OWNER, recent.id))?.lastSurfacedAt).toEqual(at(-DAY));
-    const ready = await dueLink({ lastSurfacedAt: CUTOFF });
-    expect((await dueTool(deps(), OWNER))?.link.id).toBe(ready.id);
+    const surfaced = await dueLink({ lastSurfacedAt: at(-DAY) });
+    expect((await dueTool(deps(), OWNER))?.link.id).toBe(surfaced.id);
   });
-
-  it("claimDueTool claims the due tool, marking it surfaced", async () => {
-    const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
-    expect(await claimDueTool(deps(), OWNER)).toEqual({
-      link: await store.get(OWNER, tool.id),
-      daysSinceOpened: 45,
-    });
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
-    expect(await claimDueTool(deps(), OWNER)).toBeNull();
-  });
-
-  it.each([
-    ["an opening", (id: string) => recordOpening(deps(), OWNER, id)],
-    ["Not handy anymore", (id: string) => notHandy(deps(), OWNER, id, "stated")],
-    ["a Still using answer", (id: string) => stillUsing(deps(), OWNER, id, "stated")],
-  ])(
-    "claimDueTool drops a tool %s made not due between selection and claim, leaving it marked",
-    async (_, meanwhile) => {
-      const tool = await dueLink({ lastOpenedAt: at(-45 * DAY) });
-      expect(
-        await claimDueTool(deps({ store: racing(() => meanwhile(tool.id)) }), OWNER),
-      ).toBeNull();
-      expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
-    },
-  );
 });
 
 describe("getDigest's still_using_check", () => {
@@ -708,14 +481,13 @@ describe("getDigest's still_using_check", () => {
   const shown = async () =>
     (await getDigest(deps(), OWNER)).links.map((d) => [d.link.id, d.reasons]);
 
-  it("adds the due tool last, as its own item with whole days since its opening, and marks it surfaced", async () => {
+  it("adds the due tool last, as its own item with whole days since its opening", async () => {
     const reading = await link({ why: null });
     const tool = await due({ lastOpenedAt: at(-45 * DAY - HOUR) });
     expect(await shown()).toEqual([
       [reading.id, [{ kind: "no_why" }]],
       [tool.id, [check(45)]],
     ]);
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
   });
 
   it("asks nothing about a gone tool, and the reading link keeps its slot (#128)", async () => {
@@ -730,45 +502,24 @@ describe("getDigest's still_using_check", () => {
     expect(await shown()).toEqual([[tool.id, [check(null)]]]);
   });
 
-  it("holds at most one check, leaving a second due tool unmarked", async () => {
-    const first = await due();
-    const second = await due();
+  it("holds at most one check, and asks about the same tool on a repeat call", async () => {
+    const first = await due({ savedAt: at(-50 * DAY) });
+    await due();
     expect(await shown()).toEqual([[first.id, [check(null)]]]);
-    expect((await store.get(OWNER, second.id))?.lastSurfacedAt).toEqual(CUTOFF);
+    expect(await shown()).toEqual([[first.id, [check(null)]]]);
   });
 
-  it("takes one of the DIGEST_SIZE slots: the reading link it displaces is neither returned nor marked", async () => {
+  it("takes one of the DIGEST_SIZE slots: the oldest reading links fill the rest", async () => {
     const reading: Link[] = [];
-    for (let i = 0; i < DIGEST_SIZE; i++) reading.push(await link({ why: null }));
+    for (let i = 0; i < DIGEST_SIZE; i++) {
+      reading.push(await link({ why: null, savedAt: at(-(DIGEST_SIZE + 3 - i) * DAY) }));
+    }
     const tool = await due();
     const digest = await getDigest(deps(), OWNER);
     expect(digest.links.map((d) => d.link.id)).toEqual([
       ...reading.slice(0, DIGEST_SIZE - 1).map((l) => l.id),
       tool.id,
     ]);
-    const displaced = reading[DIGEST_SIZE - 1] as Link;
-    expect((await store.get(OWNER, displaced.id))?.lastSurfacedAt).toEqual(CUTOFF);
-  });
-
-  it("frees its slot when the tool is no longer due once claimed, leaving the tool marked", async () => {
-    const reading: Link[] = [];
-    for (let i = 0; i < DIGEST_SIZE; i++) reading.push(await link({ why: null }));
-    const tool = await due();
-    const digest = await getDigest(
-      deps({ store: racing(() => recordOpening(deps(), OWNER, tool.id)) }),
-      OWNER,
-    );
-    expect(digest.links.map((d) => d.link.id)).toEqual(reading.map((l) => l.id));
-    expect((await store.get(OWNER, tool.id))?.lastSurfacedAt).toEqual(NOW);
-  });
-
-  it("uses the digest's cooldown: no check again until SURFACE_COOLDOWN_MS after it was shown", async () => {
-    const tool = await due();
-    await getDigest(deps(), OWNER);
-    clock = at(SURFACE_COOLDOWN_MS - 1);
-    expect(await shown()).toEqual([]);
-    clock = at(SURFACE_COOLDOWN_MS);
-    expect(await shown()).toEqual([[tool.id, [check(null)]]]);
   });
 
   it("previewDigest leaves the check out and writes nothing", async () => {
@@ -781,15 +532,11 @@ describe("getDigest's still_using_check", () => {
 });
 
 describe("an archived link and a focus entry written after it", () => {
-  it("is not offered, and nothing is marked surfaced", async () => {
-    const archived = await link({ state: "archived", lastSurfacedAt: null });
+  it("is not offered", async () => {
+    const archived = await link({ state: "archived" });
     await focus("solar", at(-DAY));
     keyword.hits.set("solar", [archived.id]);
-
     expect((await previewDigest(deps(), OWNER)).links).toEqual([]);
-    const digest = await getDigest(deps(), OWNER);
-    expect(digest.links).toEqual([]);
-    expect(digest.claimed).toEqual([]);
-    expect((await store.get(OWNER, archived.id))?.lastSurfacedAt).toBeNull();
+    expect((await getDigest(deps(), OWNER)).links).toEqual([]);
   });
 });

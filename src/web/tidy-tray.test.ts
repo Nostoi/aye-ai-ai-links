@@ -42,9 +42,9 @@ const focus = (text: string, source: Source): FocusEntry => ({
   createdAt: NOW,
 });
 const queue = (count: number): TidyLink[] =>
-  Array.from({ length: count }, () => ({ link: link(), fit: null }));
+  Array.from({ length: count }, () => ({ link: link(), gone: false, fit: null }));
 
-const NO_WORTH = { links: [], images: new Map(), now: NOW, catalog: [], gone: null };
+const NO_WORTH = { links: [], images: new Map(), now: NOW, catalog: [] };
 const render = (q: TidyLink[], hasFocus = true, spaces = spacesSection([])) =>
   homePage({
     worth: NO_WORTH,
@@ -67,8 +67,8 @@ describe("Home's Tidy up tray", () => {
     expect(heading.className).toBe("visually-hidden");
     const closed = tray.querySelector(".tidy-closed") as Element;
     expect(closed.hasAttribute("hidden")).toBe(false);
-    expect(closed.textContent).toContain("Clear out a few old links?");
-    expect(closed.textContent).toContain("Five, one at a time. Nothing gets deleted.");
+    expect(closed.textContent).toContain("Clear out a few links?");
+    expect(closed.textContent).toContain("One at a time. Nothing gets deleted.");
     const start = closed.querySelector("button[data-tidy=start]") as Element;
     expect(start.textContent).toBe("Start");
     expect(start.getAttribute("type")).toBe("button");
@@ -108,7 +108,7 @@ describe("Home's Tidy up tray", () => {
   });
 
   it("shows the title as a heading, the why, and the picture box of the card", () => {
-    const t = { link: link({ title: "Home batteries" }), fit: null };
+    const t = { link: link({ title: "Home batteries" }), gone: false, fit: null };
     const section = first([t]);
     const title = section.querySelector("h3.tidy-title") as Element;
     expect(title.textContent).toBe("Home batteries");
@@ -119,7 +119,7 @@ describe("Home's Tidy up tray", () => {
   });
 
   describe("the why", () => {
-    const why = (w: Link["why"]) => first([{ link: link({ why: w }), fit: null }]);
+    const why = (w: Link["why"]) => first([{ link: link({ why: w }), gone: false, fit: null }]);
 
     it("labels an inferred why as a guess in the label, and drops the prefix from the text", () => {
       const s = why({ text: "maybe", source: "inferred" });
@@ -158,6 +158,7 @@ describe("Home's Tidy up tray", () => {
         savedAt: new Date("2024-03-12T10:00:00Z"),
         lastOpenedAt: new Date("2026-05-02T10:00:00Z"),
       }),
+      gone: false,
       fit: null,
     };
     expect(first([t]).textContent).toContain("Saved in March 2024. Last opened in May.");
@@ -174,25 +175,49 @@ describe("Home's Tidy up tray", () => {
     expect(render(queue(1))).toContain('"/links/opened"');
   });
 
-  it("offers exactly Keep and Archive, in that order, with their exact lines and keys 1 and 2", () => {
+  it("offers Keep, Skip and Archive on an explore step, in that order, with their lines and keys 1 to 3", () => {
     const buttons = [...first(queue(1)).querySelectorAll("button[data-act]")];
-    expect(buttons.map((b) => b.getAttribute("data-act"))).toEqual(["keep", "archive"]);
+    expect(buttons.map((b) => b.getAttribute("data-act"))).toEqual(["keep", "skip", "archive"]);
     expect(buttons.every((b) => b.getAttribute("type") === "button")).toBe(true);
-    const [keep, archive] = buttons;
+    const [keep, skip, archive] = buttons;
     expect(keep?.textContent).toContain("Keep");
-    expect(keep?.textContent).toContain("To keep. Tidy won't ask again.");
+    expect(keep?.textContent).toContain("Moves to To keep. Not asked again.");
+    expect(skip?.textContent).toContain("Skip");
+    expect(skip?.textContent).toContain("Back in two weeks.");
     expect(archive?.textContent).toContain("Archive");
-    expect(archive?.textContent).toContain("Still findable in search.");
-    expect(buttons.map((b) => b.getAttribute("aria-keyshortcuts"))).toEqual(["1", "2"]);
+    expect(archive?.textContent).toContain("Out of your lists. Still found by search.");
+    expect(buttons.map((b) => b.getAttribute("aria-keyshortcuts"))).toEqual(["1", "2", "3"]);
     for (const b of buttons) {
       expect(b.textContent).not.toContain("If you're not sure");
       expect(b.className).not.toContain("safe");
     }
   });
 
+  describe("a gone step", () => {
+    const goneStep = () => first([{ link: link(), gone: true, fit: focus("solar", "stated") }]);
+
+    it("says the page seems gone in place of the fit line, and offers It still works and Archive with keys 1 and 2", () => {
+      const step = goneStep();
+      expect(step.textContent).toContain("This page seems gone.");
+      expect(step.querySelector(".fit")).toBeNull();
+      const buttons = [...step.querySelectorAll("button[data-act]")];
+      expect(buttons.map((b) => b.getAttribute("data-act"))).toEqual(["works", "archive"]);
+      expect(buttons[0]?.textContent).toContain("It still works");
+      expect(buttons[0]?.textContent).toContain("Clears the warning.");
+      expect(buttons[1]?.textContent).toContain("Out of your lists. Still found by search.");
+      expect(buttons.map((b) => b.getAttribute("aria-keyshortcuts"))).toEqual(["1", "2"]);
+    });
+
+    it("offers no Keep, and an explore step says nothing about a gone page", () => {
+      expect(goneStep().querySelector("button[data-act=keep], button[data-act=skip]")).toBeNull();
+      expect(first(queue(1)).textContent).not.toContain("seems gone");
+    });
+  });
+
   describe("the fit line", () => {
     const fits = (f: FocusEntry | null, hasFocus = true) =>
-      first([{ link: link(), fit: f }], hasFocus).querySelector(".fit")?.textContent ?? null;
+      first([{ link: link(), gone: false, fit: f }], hasFocus).querySelector(".fit")?.textContent ??
+      null;
 
     it("says it might fit a stated or asked focus the owner is working on", () => {
       expect(fits(focus("Solar for the house", "stated"))).toBe(
@@ -210,7 +235,9 @@ describe("Home's Tidy up tray", () => {
     });
 
     it("bolds the focus text and escapes it", () => {
-      const html = first([{ link: link(), fit: focus("<i>x</i>", "stated") }]).innerHTML;
+      const html = first([
+        { link: link(), gone: false, fit: focus("<i>x</i>", "stated") },
+      ]).innerHTML;
       expect(html).toContain("<b>&lt;i&gt;x&lt;/i&gt;</b>");
     });
 
@@ -230,9 +257,10 @@ describe("Home's Tidy up tray", () => {
   describe("the finish screen", () => {
     const done = (q: TidyLink[]) => doc(q).querySelector(".tidy-done") as Element;
 
-    it("follows the last link, hidden, says That's five. Done for now., and offers Close", () => {
+    it("follows the last link, hidden, says Done for now., and offers Close", () => {
       const d = done(queue(5));
-      expect(d.querySelector("h3")?.textContent).toBe("That's five. Done for now.");
+      expect(d.hasAttribute("hidden")).toBe(true);
+      expect(d.querySelector("h3")?.textContent).toBe("Done for now.");
       expect(d.textContent).toContain(
         "Everything you archive is still saved and still searchable.",
       );
@@ -242,13 +270,14 @@ describe("Home's Tidy up tray", () => {
       expect(d.querySelector("a")).toBeNull();
     });
 
-    it("says only Done for now. for a shorter session", () => {
+    it("says the same for a shorter session: no counts", () => {
       expect(done(queue(3)).querySelector("h3")?.textContent).toBe("Done for now.");
+      expect(done(queue(3)).textContent).not.toMatch(/five|\b3\b/i);
     });
   });
 
   it("leaves a link without a web address unlinked", () => {
-    const t = { link: link({ url: "ftp://example.com/x" }), fit: null };
+    const t = { link: link({ url: "ftp://example.com/x" }), gone: false, fit: null };
     expect(first([t]).querySelector("a[data-open]")).toBeNull();
   });
 
@@ -315,17 +344,27 @@ const KEEP_CHANGE = {
   before: { intent: "explore", intentSource: null },
   after: { intent: "keep", intentSource: "stated" },
 };
-/** The answers when nothing is wrong: Archive and Keep their changes, Undo 204. */
+const SNOOZE = { until: "2026-11-04T10:00:00.000Z", previous: "2099-01-01T00:00:00.000Z" };
+const STILL_WORKS = { check: { result: "ok" }, previous: { result: "dead" } };
+/** The answers when nothing is wrong: each choice its answer, Undo 204. */
 const fine = (s: Post): Answer =>
   s.url === "/home/archive"
     ? { status: 200, body: ARCHIVE_CHANGE }
     : s.url === "/home/keep"
       ? { status: 200, body: KEEP_CHANGE }
-      : { status: 204 };
+      : s.url === "/home/snooze"
+        ? { status: 200, body: SNOOZE }
+        : s.url === "/links/still-works"
+          ? { status: 200, body: STILL_WORKS }
+          : { status: 204 };
 
 describe("the Tidy up session", () => {
-  const load = (answer: (s: Post) => Answer = fine, count = 5, spaces = spacesSection([])) => {
-    const q = queue(count);
+  const load = (
+    answer: (s: Post) => Answer = fine,
+    count = 5,
+    spaces = spacesSection([]),
+    q: TidyLink[] = queue(count),
+  ) => {
     const p = runPage(render(q, true, spaces), answer);
     const ids = q.map((t) => t.link.id);
     const shown = () =>
@@ -483,11 +522,22 @@ describe("the Tidy up session", () => {
     await start();
     await choose("keep");
     expect(p.$("#undo-bar").hidden).toBe(false);
-    expect(p.$("#undo-bar span").textContent).toBe(
-      "Kept. Marked To keep. Tidy up won't ask about it again.",
-    );
+    expect(p.$("#undo-bar span").textContent).toBe("Kept. Marked To keep. Explore won't show it.");
     await undo();
     expect(p.sent[1]).toEqual(post("/home/undo-intent", { id: ids[0], change: KEEP_CHANGE }));
+    expect(shown()).toEqual([ids[0]]);
+  });
+
+  it("Skip posts /home/snooze, offers its bar, and its Undo posts /home/unsnooze with the until it got", async () => {
+    const { p, ids, shown, start, choose, undo } = load();
+    await start();
+    await choose("skip");
+    expect(p.sent).toEqual([post("/home/snooze", { id: ids[0] })]);
+    expect(p.$("#undo-bar strong").textContent).toBe("Skipped.");
+    expect(p.$("#undo-bar span").textContent).toBe("Skipped. Back in two weeks.");
+    expect(shown()).toEqual([ids[1]]);
+    await undo();
+    expect(p.sent[1]).toEqual(post("/home/unsnooze", { id: ids[0], ...SNOOZE }));
     expect(shown()).toEqual([ids[0]]);
   });
 
@@ -639,7 +689,8 @@ describe("the Tidy up session", () => {
   describe("the keys", () => {
     it.each([
       ["1", "/home/keep"],
-      ["2", "/home/archive"],
+      ["2", "/home/snooze"],
+      ["3", "/home/archive"],
     ])("key %s posts %s for the shown link", async (k, url) => {
       const { p, ids, start, key } = load();
       await start();
@@ -647,14 +698,14 @@ describe("the Tidy up session", () => {
       expect(p.sent).toEqual([post(url, { id: ids[0] })]);
     });
 
-    it.each(["1", "2"])("key %s does nothing while the tray is closed", async (k) => {
+    it.each(["1", "2", "3"])("key %s does nothing while the tray is closed", async (k) => {
       const { p, shown, key } = load();
       await key(k);
       expect(p.sent).toEqual([]);
       expect(shown()).toEqual([]);
     });
 
-    it.each(["1", "2"])("key %s does nothing after Stop here, or after Close", async (k) => {
+    it.each(["1", "2", "3"])("key %s does nothing after Stop here, or after Close", async (k) => {
       const { p, start, stop, close, choose, key } = load(fine, 2);
       await start();
       await stop();
@@ -668,7 +719,7 @@ describe("the Tidy up session", () => {
       expect(p.sent).toHaveLength(2);
     });
 
-    it.each(["1", "2"])("key %s does nothing while a dialog is open", async (k) => {
+    it.each(["1", "2", "3"])("key %s does nothing while a dialog is open", async (k) => {
       const { p, shown, ids, start, key } = load();
       await start();
       const dialog = p.$("dialog");
@@ -681,7 +732,7 @@ describe("the Tidy up session", () => {
       expect(p.sent).toHaveLength(1);
     });
 
-    it.each(["1", "2"])("key %s does nothing while the Ask AI panel is open", async (k) => {
+    it.each(["1", "2", "3"])("key %s does nothing while the Ask AI panel is open", async (k) => {
       const { p, shown, ids, start, key } = load();
       await start();
       p.document.body.setAttribute("data-panel", "");
@@ -702,7 +753,7 @@ describe("the Tidy up session", () => {
       expect(p.sent.at(-1)).toEqual(post("/home/keep", { id: ids[0] }));
     });
 
-    it.each(["1", "2"])("an auto-repeated key %s picks nothing", async (k) => {
+    it.each(["1", "2", "3"])("an auto-repeated key %s picks nothing", async (k) => {
       const { p, ids, shown, start, key } = load();
       await start();
       await key(k, { repeat: true });
@@ -750,7 +801,7 @@ describe("the Tidy up session", () => {
 
   it("hints each choice's key, off the screen reader's path", () => {
     const keys = [...first(queue(1)).querySelectorAll("button[data-act] .key")];
-    expect(keys.map((k) => k.textContent)).toEqual(["1", "2"]);
+    expect(keys.map((k) => k.textContent)).toEqual(["1", "2", "3"]);
     expect(keys.every((k) => k.getAttribute("aria-hidden") === "true")).toBe(true);
   });
 });
@@ -758,7 +809,8 @@ describe("the Tidy up session", () => {
 describe("a Tidy up choice that is slow to answer (#314)", () => {
   const WORDS = [
     ["keep", "Keeping…", "1"],
-    ["archive", "Archiving…", "2"],
+    ["skip", "Skipping…", "2"],
+    ["archive", "Archiving…", "3"],
   ] as const;
 
   const slow = async () => {
@@ -827,12 +879,78 @@ describe("a Tidy up choice that is slow to answer (#314)", () => {
     p.dispatch(choice(step, "keep"), "click");
     await p.settle();
     p.dispatch(choice(step, "archive"), "click");
-    p.dispatch(p.document.body, "keydown", { key: "2" });
+    p.dispatch(p.document.body, "keydown", { key: "3" });
     await p.settle();
     p.timers.fire();
     expect(choice(step, "archive").querySelector("b")?.textContent).toBe("Archive");
     expect(p.sent.map((s) => s.url)).toEqual(["/home/keep"]);
     release();
     await p.settle();
+  });
+});
+
+describe("the Tidy up session on a gone page (#340)", () => {
+  const goneQueue = (): TidyLink[] => [
+    { link: link(), gone: true, fit: null },
+    { link: link(), gone: false, fit: null },
+  ];
+  const start = (answer: (s: Post) => Answer = fine) => {
+    const q = goneQueue();
+    const p = runPage(render(q), answer);
+    const shown = () =>
+      [...p.document.querySelectorAll(".tidy-step")]
+        .filter((s) => !s.hasAttribute("hidden"))
+        .map((s) => s.getAttribute("data-id"));
+    const key = async (k: string) => {
+      p.dispatch(p.document.body, "keydown", { key: k });
+      await p.settle();
+    };
+    return { p, q, shown, key };
+  };
+
+  it("key 1 posts /links/still-works, and its Undo posts the check and previous it got, bringing the step back", async () => {
+    const { p, q, shown, key } = start();
+    p.dispatch(p.$("button[data-tidy=start]"), "click");
+    await p.settle();
+    expect(shown()).toEqual([q[0]?.link.id]);
+    await key("1");
+    expect(p.sent).toEqual([post("/links/still-works", { id: q[0]?.link.id })]);
+    expect(p.$("#undo-bar span").textContent).toBe("Marked as working.");
+    expect(shown()).toEqual([q[1]?.link.id]);
+    p.dispatch(p.$("#undo-bar button"), "click");
+    await p.settle();
+    expect(p.sent[1]).toEqual(
+      post("/links/still-works/undo", {
+        id: q[0]?.link.id,
+        check: STILL_WORKS.check,
+        previous: STILL_WORKS.previous,
+      }),
+    );
+    expect(shown()).toEqual([q[0]?.link.id]);
+  });
+
+  it("key 3 does nothing on a gone step, and key 2 archives it", async () => {
+    const { p, q, shown, key } = start();
+    p.dispatch(p.$("button[data-tidy=start]"), "click");
+    await p.settle();
+    await key("3");
+    expect(p.sent).toEqual([]);
+    expect(shown()).toEqual([q[0]?.link.id]);
+    await key("2");
+    expect(p.sent).toEqual([post("/home/archive", { id: q[0]?.link.id })]);
+  });
+
+  it("a refused It still works shows the message, does not advance and offers no Undo", async () => {
+    const { p, q, shown, key } = start((s) =>
+      s.url === "/links/still-works"
+        ? { status: 409, body: { code: "conflict", message: "That page was checked since." } }
+        : fine(s),
+    );
+    p.dispatch(p.$("button[data-tidy=start]"), "click");
+    await p.settle();
+    await key("1");
+    expect(p.$("#tidy-error").textContent).toBe("That page was checked since.");
+    expect(shown()).toEqual([q[0]?.link.id]);
+    expect(p.$("#undo-bar").hidden).toBe(true);
   });
 });

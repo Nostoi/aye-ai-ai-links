@@ -116,10 +116,10 @@ describe("the card menu and the card data", () => {
       return `${e.tagName} ${e.getAttribute("data-act")} ${text}${hint ? ` · ${hint}` : ""}${e.hasAttribute("hidden") ? " (hidden)" : ""}`;
     });
   const KEPT = { status: "kept", source: "stated", due: false } as const;
-  const ROW_ARCHIVE = "BUTTON archive Archive · Still findable in search";
-  const ROW_NOW = "BUTTON snooze Not now · Not suggested for two weeks";
-  const KEEP_IT = "BUTTON intent-keep Keep it · Today and Tidy up won't ask about it";
-  const EXPLORE_IT = "BUTTON intent-explore Explore it · Back in Today and Tidy up";
+  const ROW_ARCHIVE = "BUTTON archive Archive · Out of lists, still in search";
+  const ROW_NOW = "BUTTON snooze Skip · Back in two weeks";
+  const KEEP_IT = "BUTTON intent-keep Keep it · Moves to To keep";
+  const EXPLORE_IT = "BUTTON intent-explore Explore it · Back on Explore";
   const INTENT_ROWS = [KEEP_IT, `${EXPLORE_IT} (hidden)`];
 
   it("runs mildest first: Keep it, Archive, Keep handy, then Edit, Remove saved copy and Delete link (#284, #339)", () => {
@@ -186,8 +186,8 @@ describe("the card menu and the card data", () => {
     expect(html).not.toContain("intent-");
   });
 
-  it("puts Not now first on Home's rows, the one menu with Not now (#195, #284)", () => {
-    expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
+  it("puts Skip first on Home's rows, the one menu with Skip (#195, #284, #340)", () => {
+    expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, skip: true }))).toEqual([
       ROW_NOW,
       ...INTENT_ROWS,
       ROW_ARCHIVE,
@@ -199,15 +199,14 @@ describe("the card menu and the card data", () => {
       "—",
       "BUTTON delete-link Delete link",
     ]);
-    const svg = parseHTML(editMenu(link("7"), { notNow: true })).document.querySelector(
+    const svg = parseHTML(editMenu(link("7"), { skip: true })).document.querySelector(
       "[data-act=snooze] svg",
     );
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("leaves out Archive and Not now when the card shows them as buttons (#195)", () => {
-    expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
-      ...INTENT_ROWS,
+  it("leaves out Keep it, Explore it, Archive and Skip when the card shows its own buttons (#195, #340)", () => {
+    expect(labels(editMenu(link("7"), { onCard: true, skip: true }))).toEqual([
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",

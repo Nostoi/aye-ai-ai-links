@@ -5,7 +5,7 @@ import { openDatabase } from "./database.js";
 const REMOVAL_TESTS = readFileSync(new URL("./link-removal.test.ts", import.meta.url), "utf8");
 
 const RUNNER_AND_BYTE_READS = "runner and byte reads skip a hidden link";
-const DIGEST_AND_HANDY = "digest, Handy and the gone pick leave out a hidden link";
+const DIGEST_AND_HANDY = "digest and Handy leave out a hidden link";
 const HIDDEN_WRITES =
   "tool, edit, check, vector and copy writes refuse a hidden link and change nothing";
 const COPY_PAGE_READS = "copy page reads return nothing for a hidden link";

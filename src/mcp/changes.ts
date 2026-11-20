@@ -8,7 +8,7 @@ export type ProfileEntry = { entry: "note" | "focus"; id: string; text: string; 
  * What one write committed, recorded as it commits, so a call that then fails still lists it.
  * It says which operation ran and what it wrote, not that a value differs. `fields` names the
  * link fields an `update_link` sent; it is [] for a new save, and ["why"] for a repeat save that
- * filled a missing why. `surfaced` holds every link a digest marked, shown or not.
+ * filled a missing why.
  */
 export type Change =
   | {
@@ -28,8 +28,7 @@ export type Change =
   | { kind: "tag-delete"; name: string; links: number; undoId: string }
   /** An `undo_tag_change` that worked: `tags` are the names it put back. The panel marks the change with this `undoId` as undone. */
   | { kind: "tag-undo"; undoId: string; tags: string[] }
-  | { kind: "profile"; added: ProfileEntry[]; edited: ProfileEntry[]; removed: ProfileEntry[] }
-  | { kind: "surfaced"; linkIds: string[] };
+  | { kind: "profile"; added: ProfileEntry[]; edited: ProfileEntry[]; removed: ProfileEntry[] };
 
 /** The in-app AI's recorder. The MCP door passes none, and its results never carry these. */
 export type RecordChange = (change: Change) => void;

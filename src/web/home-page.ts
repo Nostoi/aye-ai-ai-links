@@ -8,18 +8,16 @@ import { isWebUrl } from "../core/url-key.js";
 import type { Ask } from "./ask-panel.js";
 import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
-import { copyHref } from "./copy-page.js";
 import { deleteLinkScript } from "./delete-link.js";
 import { ARCHIVE, ARCHIVE_HINT, ARCHIVE_LABEL, archiveLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
-import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
-import { intentLinkScript } from "./intent.js";
+import { CHECK, intentLinkScript, KEEP_HINT } from "./intent.js";
 import { whyText } from "./link-rows.js";
-import { CLOCK, NOT_NOW_HINT, NOT_NOW_WORKING } from "./not-now.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
 import { SEARCH_PLACEHOLDER, spaceClass, tile } from "./pages.js";
+import { SKIP_HINT, SKIP_ICON, SKIP_UNDO, SKIP_WORKING } from "./skip.js";
 import { slideButton } from "./slide-button.js";
 import { SPACES_ID } from "./spaces-section.js";
 import { askWhy, CARD_FETCH, tellWhyScript, WHY_LABEL, whyAnswer } from "./tell-why.js";
@@ -28,17 +26,16 @@ import { type TidyTrayInput, tidyTray } from "./tidy-tray.js";
 import { spine } from "./tray-spine.js";
 
 /**
- * What "Worth a look today" shows: the picks, the image version of each that has one, now, the
- * owner's tags, which give each card its space (`linkSpace`), and the one link that seems gone
- * (#128). For every card shown, the gone one too: what the edit dialog needs about its picture
- * (`pictures`), its saved copy (`copies`), and its Keep handy state and gone check (`views`).
+ * What Explore shows: the picks, the image version of each that has one, now, and the owner's
+ * tags, which give each card its space (`linkSpace`). For every card shown: what the edit dialog
+ * needs about its picture (`pictures`), its saved copy (`copies`), and its Keep handy state and
+ * gone check (`views`).
  */
 export type WorthCards = {
   links: DigestLink[];
   images: Map<string, ShownPicture>;
   now: Date;
   catalog: Tag[];
-  gone: Link | null;
   pictures?: Map<string, PictureInfo>;
   copies?: Map<string, CopyInfo>;
   views?: Map<string, LinkView>;
@@ -69,17 +66,27 @@ function reason({ link, reasons }: DigestLink, now: Date): string {
   return `saved ${savedOn(link.savedAt, now)}`;
 }
 
-/** A card's opening tag: its classes and space, its id, and what the edit dialog reads. */
+/**
+ * A card's opening tag: its classes and space, its id, and what the edit dialog reads. Every card
+ * is To explore, so `showIntent` hides it once the link is not (`data-explore-only`).
+ */
 function opening(classes: string, link: Link, cards: WorthCards): string {
   const space = spaceClass(linkSpace(link, cards.catalog));
-  return `<article class="${classes}${space}" data-id="${escapeHtml(link.id)}"${editData(link, cards.images.get(link.id), cards.pictures?.get(link.id))}>`;
+  return `<article class="${classes}${space}" data-id="${escapeHtml(link.id)}" data-explore-only${editData(link, cards.images.get(link.id), cards.pictures?.get(link.id))}>`;
 }
 
 /**
+ * "Opened. Keep it or archive it?", drawn hidden until the link has been opened, and shown at once
+ * by Home's script when the card's link is opened.
+ */
+const openedLine = (link: Link, className: string) =>
+  `<p class="${className}" data-opened${link.lastOpenedAt === null ? " hidden" : ""}><b>Opened.</b> Keep it or archive it?</p>\n`;
+
+/**
  * The featured card: a small picture on the left, the title, the why (or Tell me why, in amber),
- * the grey line ending with the reason and Saved copy, then Open it (the page's one filled
- * button), then Not now and Archive as icon buttons that open to show their label and a
- * small line saying what happens (`slideButton`). The ⋯ is without those two.
+ * the grey line ending with the reason and Saved copy, the opened line, then Open it (the page's one
+ * filled button), then Keep, Skip and Archive as icon buttons that open to show their label and a
+ * small line saying what happens (`slideButton`). The ⋯ is without those three.
  */
 function featured(d: DigestLink, cards: WorthCards): string {
   const { link } = d;
@@ -93,9 +100,10 @@ function featured(d: DigestLink, cards: WorthCards): string {
   return `${opening(`worth-card worth-feature${link.why ? "" : " needs-you"}`, link, cards)}
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>
-${cardLine(link, { copy, reason: reason(d, cards.now), from: "/" })}<div class="feature-buttons">
+${cardLine(link, { copy, reason: reason(d, cards.now), from: "/" })}${openedLine(link, "opened")}<div class="feature-buttons">
 ${open}<div class="feature-quiet">
-${slideButton("snooze", CLOCK, "Not now", NOT_NOW_HINT)}
+${slideButton("intent-keep", CHECK, "Keep", KEEP_HINT)}
+${slideButton("snooze", SKIP_ICON, "Skip", SKIP_HINT)}
 ${slideButton("archive", ARCHIVE, ARCHIVE_LABEL, ARCHIVE_HINT)}
 </div>
 </div>
@@ -104,58 +112,44 @@ ${tile(link, cards.images.get(link.id), "feature-pic")}
 </article>`;
 }
 
-/** An Also today row: a small picture (hidden on a phone), the title, `line`, and the six-row ⋯. */
-function row(link: Link, cards: WorthCards, classes: string, line: string, band = ""): string {
+/** A More to explore row: a small picture (hidden on a phone), the title, `line`, and the seven-row ⋯. */
+function row(link: Link, cards: WorthCards, line: string): string {
   const copy = cards.copies?.get(link.id);
   const handy = cards.views?.get(link.id)?.handy;
-  return `${opening(`worth-row${classes}`, link, cards)}
+  return `${opening("worth-row", link, cards)}
 ${tile(link, cards.images.get(link.id), "also-pic")}
 <div class="also-body">
 <h4 data-card-title>${linkTitle(link)}</h4>
 ${line}</div>
-${editMenu(link, { copy, handy, notNow: true })}${band ? `\n${band}` : ""}
+${editMenu(link, { copy, handy, skip: true })}
 </article>`;
 }
 
-/** A pick's row says its why, or else its site and when it was saved; it never links the copy. */
+/**
+ * A pick's row says its why, or else its site and when it was saved, then the opened line; it
+ * never links the copy.
+ */
 const pickRow = (link: Link, cards: WorthCards) =>
   row(
     link,
     cards,
-    "",
-    link.why
+    (link.why
       ? `<p class="also-why">${whyText(link.why)}</p>\n`
-      : cardLine(link, { saved: savedOn(link.savedAt, cards.now) }),
+      : cardLine(link, { saved: savedOn(link.savedAt, cards.now) })) +
+      openedLine(link, "also-open"),
   );
-
-/**
- * The gone link's row: the shared gone band across its bottom and, when there is a copy, Read the
- * saved copy beside the warning (owner ruling, #195 comment 6304329071), which goes with the band
- * once It still works hides it.
- */
-function goneRow(link: Link, cards: WorthCards): string {
-  const read = cards.copies?.has(link.id) ? copyHref(link.id, "/") : undefined;
-  return row(
-    link,
-    cards,
-    " worth-gone",
-    "",
-    goneLine(link, cards.views?.get(link.id)?.gone, { read }),
-  );
-}
 
 function worthSection(cards: WorthCards): string {
   const [first, ...rest] = cards.links;
   const rows = rest.map((d) => pickRow(d.link, cards));
-  if (cards.gone) rows.push(goneRow(cards.gone, cards));
   if (!first && rows.length === 0) return "";
   const also =
     rows.length === 0
       ? ""
-      : `${first ? `<h3 class="also-today">Also today</h3>\n` : ""}<div class="worth-rows">\n${rows.join("\n")}\n</div>\n`;
+      : `${first ? `<h3 class="also-today">More to explore</h3>\n` : ""}<div class="worth-rows">\n${rows.join("\n")}\n</div>\n`;
   return `<section class="worth" aria-labelledby="worth">
-${spine("today")}
-<h2 id="worth" class="visually-hidden">Worth a look today</h2>
+${spine("explore")}
+<h2 id="worth" class="visually-hidden">Explore</h2>
 <p id="home-error" role="alert"></p>
 <div id="worth-cards">
 ${first ? `${featured(first, cards)}\n` : ""}${also}</div>
@@ -164,11 +158,12 @@ ${first ? `${featured(first, cards)}\n` : ""}${also}</div>
 
 /**
  * Home's own card actions, after the shared ones (`takeOut`, `archiveCard`, `refreshShelf`):
- * - The featured card's Archive is `archiveCard`, as the menu's row is (`archiveLinkScript`).
- * - Not now, Keep handy and Not handy anymore post first and change the card only once the server
+ * - The featured card's Archive is `archiveCard`, as the menu's row is (`archiveLinkScript`), and
+ *   its Keep is the menu's Keep it (`intentLinkScript`).
+ * - Skip, Keep handy and Not handy anymore post first and change the card only once the server
  *   agrees, so a refusal never brings back a card another action took out. Each runs in
  *   `whileBusy`, so a card takes no other action, Delete link included, until it has finished.
- * - Not now and Keep handy take the card out (`takeOut`); Keep handy also refreshes the Handy
+ * - Skip and Keep handy take the card out (`takeOut`); Keep handy also refreshes the Handy
  *   shelf. Not handy anymore swaps the menu's row and refreshes the shelf. Each offers Undo, and
  *   the card stays as it is when Undo is refused.
  * - A page shown again from the back-forward cache reloads.
@@ -189,7 +184,7 @@ const showHandy = (card, kept) => {
   for (const b of card.querySelectorAll(".card-menu button[data-act=not-handy]")) b.hidden = !kept;
 };
 // What a button says while its action is slow; a ⋯ menu row has none and only dims the card.
-const homeWords = { snooze: ${JSON.stringify(NOT_NOW_WORKING)} };
+const homeWords = { snooze: ${JSON.stringify(SKIP_WORKING)} };
 const homeActs = {
   snooze: async (card, id, answered, ticket) => {
     const res = await post("/home/snooze", { id });
@@ -197,10 +192,10 @@ const homeActs = {
     const data = await answerOf(res, "until");
     if (!data) return failure(res);
     const putBack = takeOut(worthCards, card, false);
-    const { until, claimedAt, previousSurfacedAt } = data;
-    showUndo(ticket, ${JSON.stringify(`${NOT_NOW_HINT}.`)}, async () =>
-      undoOr(await post("/home/unsnooze", { id, until, claimedAt, previousSurfacedAt }), putBack),
-    );
+    const { until, previous } = data;
+    showUndo(ticket, ${JSON.stringify(SKIP_UNDO.text)}, async () =>
+      undoOr(await post("/home/unsnooze", { id, until, previous }), putBack),
+    ${JSON.stringify(SKIP_UNDO.title)});
   },
   keep: async (card, id, answered, ticket) => {
     const res = await post("/tools/keep", { id });
@@ -232,6 +227,13 @@ const homeActs = {
   },
 };
 if (worthCards) {
+  const showOpened = (event) => {
+    const link = event.target.closest("a[data-open]");
+    if (!link || (event.type === "auxclick" && event.button !== 1)) return;
+    for (const el of link.closest("[data-id]").querySelectorAll("[data-opened]")) el.hidden = false;
+  };
+  worthCards.addEventListener("click", showOpened);
+  worthCards.addEventListener("auxclick", showOpened);
   worthCards.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-act]");
     if (!button) return;
@@ -255,9 +257,9 @@ addEventListener("pageshow", (event) => {
 
 /**
  * Home: the big question, the page's one heading, and one search field, then `shelf`, the Handy
- * shelf (#125), then "Worth a look today" when there is anything to show, then `spaces`, the "Your
- * spaces" section (#96). Opening a card's link is recorded with `/home/opened`, which also marks it
- * shown; openings from the shelf are recorded without that. The cards' Delete link, Remove saved
+ * shelf (#125), then Explore when there is anything to show, then `spaces`, the "Your spaces"
+ * section (#96). Opening a card's link is recorded with `/links/opened`, as every opening is, and
+ * shows the card's opened line. The cards' Delete link, Remove saved
  * copy, Edit, Archive, gone line and Tell me why are the shared scripts'; the rest is
  * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's. `tidy`, when the route
  * offers Tidy up (#198, #332), is the last tray, `tidyTray`, which `TIDY_SCRIPT` works in place;
@@ -301,12 +303,11 @@ ${tellWhyScript("worth-cards", "home-error")}
 ${deleteLinkScript("worth-cards", "home-error")}
 ${archiveLinkScript("worth-cards", "home-error")}
 ${intentLinkScript("worth-cards", "home-error", true)}
-${goneScript("worth-cards", "home-error")}
 ${removeCopyScript("worth-cards", "home-error")}
 ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}
 ${tidy ? TIDY_SCRIPT : ""}
 </script>
-${openedScript("worth-cards", "/home/opened")}
+${openedScript("worth-cards", "/links/opened")}
 ${openedScript("handy", "/links/opened")}
 ${openedScript(SPACES_ID, "/links/opened")}${tidy ? `\n${openedScript("tidy", "/links/opened")}` : ""}`,
     {

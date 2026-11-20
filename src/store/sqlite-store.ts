@@ -773,8 +773,18 @@ export class SqliteStore
       values.push(at, at);
     }
     if (patch.why !== undefined) {
-      set("why_text", patch.why?.text ?? null);
-      set("why_source", patch.why?.source ?? null);
+      const pair: [string, unknown][] = [
+        ["why_text", patch.why?.text ?? null],
+        ["why_source", patch.why?.source ?? null],
+      ];
+      for (const [column, value] of pair) {
+        if (patch.whyOver === undefined) set(column, value);
+        else {
+          const guard = sourceIn("why_source", patch.whyOver);
+          sets.push(`${column} = CASE WHEN ${guard.sql} THEN ? ELSE ${column} END`);
+          values.push(...guard.values, value);
+        }
+      }
     }
     if (sets.length === 0) sets.push("id = id");
     const settled = this.settleEvents(owner, id, events);

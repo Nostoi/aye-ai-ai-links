@@ -101,7 +101,16 @@ describe("summary guidance", () => {
 
   it("tells update_link that plain text never replaces the server's or the owner's summary", () => {
     expect(UPDATE_LINK).toContain(
-      'Plain text never replaces the server\'s or the owner\'s summary: to change one at the owner\'s request, send {text, source: "stated"} (or "asked").',
+      "Plain text never replaces the server's or the owner's summary, and",
+    );
+    expect(UPDATE_LINK).toContain(
+      'to change either at the owner\'s request, send {text, source: "stated"} (or "asked"); blank text clears.',
+    );
+  });
+
+  it("tells update_link that a null or inferred why never replaces or clears the owner's", () => {
+    expect(UPDATE_LINK).toContain(
+      "null or an inferred why never replaces or clears the owner's why",
     );
   });
 });

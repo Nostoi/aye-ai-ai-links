@@ -51,13 +51,13 @@ Intent: send "explore" (the default) or "keep" (bills, accounts, docs) with inte
 
 export const UPDATE_LINK = `Change a saved link. Only the fields you send change.
 
-title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary: to change one at the owner's request, send {text, source: "stated"} (or "asked"). tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner archived it: out of their lists, still findable in search. Opening a link never changes its state. Send opened: true when the owner opens the link other than through its openUrl, which records the opening itself.
+title, summary, why and snoozedUntil: leave out to keep, send null to clear. ${SUMMARY_RULE} Plain text never replaces the server's or the owner's summary, and null or an inferred why never replaces or clears the owner's why: to change either at the owner's request, send {text, source: "stated"} (or "asked"); blank text clears. tags REPLACES the whole set of tags, so send every tag you want to keep; tags: [] removes them all. state is "active" or "archived": archived means the owner archived it: out of their lists, still findable in search. Opening a link never changes its state. Send opened: true when the owner opens the link other than through its openUrl, which records the opening itself.
 
 handy: "keep" keeps the link handy as a tool ("inferred" only suggests it, and never overrides a link the owner kept or declined). "still_using" is the owner's answer to a still_using_check. "not_handy" means it is no longer a tool, so it isn't suggested again. still_using and not_handy take "stated" or "asked" only. Each link's handy is null or {status, source, due}: present a "suggested" link as a guess.
 
 ${INTENT_RULE} Send both intent and intentSource, or neither.
 
-Dates are full ISO-8601 timestamps with an offset or Z. Use this tool, not save_link, to fix anything on an existing link.`;
+Dates are full ISO-8601 timestamps with an offset or Z.`;
 
 export const UPDATE_TAG = `Change a tag: its kind between topic and project, or its name. Send kind or newName, not both; to change both, make two calls. Use this only when the owner tells you to, for example "make home batteries a project" or "rename it to X"; never on your own guess.
 

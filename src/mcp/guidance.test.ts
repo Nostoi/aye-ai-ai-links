@@ -43,8 +43,8 @@ describe("get_stats guidance", () => {
     expect(GET_STATS).not.toMatch(/treat the others as complete/);
   });
 
-  it("counts links done with in setAside, as stats.ts does, not only put away ones (#288)", () => {
-    expect(GET_STATS).toMatch(/setAside is links done with, put away or declined as a kept tool;/);
+  it("counts archived links in setAside, as stats.ts does (#288)", () => {
+    expect(GET_STATS).toMatch(/setAside is links archived or declined as a kept tool;/);
   });
 
   it("tells agents to present the reading as a guess", () => {
@@ -97,7 +97,6 @@ describe("get_digest guidance", () => {
   it("names every reason, and the cautions that go with focus words and openings", () => {
     for (const kind of [
       "focus_words",
-      "came_back",
       "no_why",
       "not_opened_recently",
       "never_surfaced",
@@ -105,12 +104,7 @@ describe("get_digest guidance", () => {
     ]) {
       expect(GET_DIGEST).toContain(`- ${kind}:`);
     }
-    const cameBack = GET_DIGEST.split("\n").find((l) => l.startsWith("- came_back:")) ?? "";
-    expect(cameBack).toContain("put this link away");
-    expect(cameBack).toContain("putAwayAt");
-    expect(cameBack).toContain('source is "inferred" as a guess');
-    expect(cameBack).toContain('state "active"');
-    expect(cameBack).toContain("`words`");
+    expect(GET_DIGEST).not.toContain("came_back");
     const focusLine = GET_DIGEST.split("\n").find((l) => l.startsWith("- focus_words:")) ?? "";
     expect(focusLine).toContain("`words`");
     expect(focusLine).toContain("own title, summary, why or tags");
@@ -130,11 +124,17 @@ describe("get_digest guidance", () => {
   });
 });
 
-describe("the owner's word for archiving is done", () => {
-  it('get_digest offers to mark a link done, still sending state "archived"', () => {
-    expect(GET_DIGEST).toContain('mark it done (state "archived")');
-    expect(GET_DIGEST).toContain("offer to mark it done or send handy");
-    expect(GET_DIGEST).not.toMatch(/archive it/);
+describe("archiving guidance", () => {
+  it('get_digest offers to archive a link, sending state "archived"', () => {
+    expect(GET_DIGEST).toContain('archive it (state "archived")');
+    expect(GET_DIGEST).toContain("offer to archive it or send handy");
+    expect(GET_DIGEST).not.toMatch(/mark it done/);
+  });
+
+  it("update_link says opening never changes state, and has no putAway", () => {
+    expect(UPDATE_LINK).toContain("Opening a link never changes its state.");
+    expect(UPDATE_LINK).not.toContain("putAway");
+    expect(UPDATE_LINK).toContain("archived means the owner archived it");
   });
 });
 
@@ -142,9 +142,9 @@ describe("gone guidance", () => {
   it("get_link, search_links and list_links end with the gone note; the shared instructions do not carry it", () => {
     const GONE_NOTE = (guidance as Record<string, string>).GONE_NOTE ?? "";
     expect(GONE_NOTE).toMatch(
-      /seems gone.*never that it is certainly dead.*offer to mark it done \(update_link state "archived"\)/s,
+      /seems gone.*never that it is certainly dead.*offer to archive it \(update_link state "archived"\)/s,
     );
-    expect(GONE_NOTE).not.toMatch(/offer to archive/);
+    expect(GONE_NOTE).not.toMatch(/mark it done/);
     for (const d of [guidance.GET_LINK, guidance.SEARCH_LINKS, guidance.LIST_LINKS]) {
       expect(d.endsWith(`\n${GONE_NOTE}`)).toBe(true);
     }
@@ -235,8 +235,6 @@ describe("open link guidance (#133)", () => {
     expect(guidance.LIST_LINKS).toMatch(/from the web page or an openUrl/);
     expect(GET_DIGEST).toMatch(/from the web page or an openUrl/);
     expect(guidance.GET_STATS).toMatch(/on the web page or through an openUrl/);
-    const cameBack = GET_DIGEST.split("\n").find((l) => l.startsWith("- came_back:")) ?? "";
-    expect(cameBack).toContain("an opening also does");
   });
 });
 

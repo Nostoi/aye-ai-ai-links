@@ -17,7 +17,7 @@ function finish(count: number): string {
   const heading = count === TIDY_SESSION ? `That's five. Done for now.` : "Done for now.";
   return `<div class="tidy-done" hidden>
 <h3>${heading}</h3>
-<p>Everything you put away is still saved and still searchable.</p>
+<p>Everything you archive is still saved and still searchable.</p>
 <p><button type="button" data-tidy="close">Close</button></p>
 </div>`;
 }

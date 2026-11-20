@@ -40,7 +40,6 @@ const linkWith = (over: Partial<Link> = {}): Link => ({
   savedAt: day(-100),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,

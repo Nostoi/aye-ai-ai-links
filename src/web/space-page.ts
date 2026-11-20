@@ -8,7 +8,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { DONE_AND_PUT_AWAY, doneLinkScript, PUT_AWAY_MARKER } from "./done-link.js";
+import { ARCHIVED, archiveLinkScript } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -22,7 +22,7 @@ import { CARD_FETCH, tellWhyScript } from "./tell-why.js";
 
 /**
  * The URL of a tag's space page in `order` (newest is the plain address), or with `done` its links
- * done or put away; `before` is a page's `older` cursor. Every part is encoded, so any key comes
+ * archived; `before` is a page's `older` cursor. Every part is encoded, so any key comes
  * back as itself.
  */
 export const spaceHref = (
@@ -62,7 +62,7 @@ ${kind ? `<p class="page-kind">${kind}</p>\n` : ""}${t.description ? `<p class="
 
 type Input = {
   tag: Tag;
-  /** How the links are ordered; newest first on Done and put away, which has no sort. */
+  /** How the links are ordered; newest first on Archived, which has no sort. */
   order?: LinkOrder;
   catalog: Tag[];
   links: Link[];
@@ -71,7 +71,7 @@ type Input = {
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
-  /** The links done or put away, rather than the active ones. */
+  /** The archived links, rather than the active ones. */
   done: boolean;
   /** A page after the first. */
   later?: boolean;
@@ -85,7 +85,7 @@ type Input = {
 };
 
 /**
- * One row. An active link with no why asks Tell me why, in amber, "needs you"; a done one never
+ * One row. An active link with no why asks Tell me why, in amber, "needs you"; an archived one never
  * does, and its picture is faded while its text stays at full contrast.
  */
 function row(
@@ -119,7 +119,7 @@ function row(
 }
 
 /**
- * Tell me why, the ⋯ menu (Done with it, Keep handy, the edit dialog, the saved copy's Remove
+ * Tell me why, the ⋯ menu (Archive, Keep handy, the edit dialog, the saved copy's Remove
  * and Delete link) and the gone line on the active cards, including those Show older links appends.
  */
 const cardsScript = (ask: boolean) => `<script>
@@ -131,26 +131,26 @@ ${keepHandyScript("space-links", "space-error")}
 ${goneScript("space-links", "space-error")}
 ${removeCopyScript("space-links", "space-error")}
 ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
-${doneLinkScript("space-links", "space-error")}
+${archiveLinkScript("space-links", "space-error")}
 </script>
 `;
 
-/** The edit dialog, Delete link, Bring it back and the saved copy's Remove on the done cards, including those Show older links appends. */
-const doneScript = (ask: boolean) => `<script>
+/** The edit dialog, Delete link, Bring it back and the saved copy's Remove on the archived cards, including those Show older links appends. */
+const archivedScript = (ask: boolean) => `<script>
 ${CARD_FETCH}
 ${viewScript}
 ${removeCopyScript("space-links", "space-error")}
 ${ask ? "" : `${editLinkScript("space-links", "space-error")}\n`}${deleteLinkScript("space-links", "space-error")}
-${doneLinkScript("space-links", "space-error")}
+${archiveLinkScript("space-links", "space-error")}
 </script>
 `;
 
 const CHEVRON = `<svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6.5 1L1.5 6l5 5"/></svg>`;
 
-/** The first Done and put away page's card for when it holds nothing. */
-const DONE_EMPTY = `<div class="done-empty">
-<p>Nothing here is done or put away yet.</p>
-<p class="small">Links you are done with or put away from this space wait here. Search still finds them.</p>
+/** The first Archived page's card for when it holds nothing. */
+const ARCHIVED_EMPTY = `<div class="archived-empty">
+<p>Nothing here is archived yet.</p>
+<p class="small">Links you archive from this space wait here. Search still finds them.</p>
 </div>
 `;
 
@@ -164,7 +164,7 @@ function emptyText({ order, later }: { order: LinkOrder; later?: boolean }) {
 
 /**
  * A tag's space: a header in its color (`spaceColor`: neutral while it is unpinned), then its
- * active links newest first, or with `done` the links done or put away. Each page has at most
+ * active links newest first, or with `done` the archived links. Each page has at most
  * the links given; `older` is the cursor of the next page, or null.
  */
 export function spacePage(input: Input): string {
@@ -193,19 +193,19 @@ ${viewSwitch(view)}
   // (and its Undo) needs no script of its own.
   const body = done
     ? `<a class="back-link${tagSpaceClass(tag)}" href="${escapeHtml(spaceHref(tag.key))}">${CHEVRON}<span class="dot" aria-hidden="true"></span>Back to ${escapeHtml(tag.name)}</a>
-<div class="list-head done-head"><h1>${DONE_AND_PUT_AWAY}</h1>${viewSwitch(view)}</div>
+<div class="list-head archived-head"><h1>${ARCHIVED}</h1>${viewSwitch(view)}</div>
 <p id="space-error" role="alert"></p>
-${later ? "" : DONE_EMPTY}${links.length === 0 && !later ? "" : `${list}\n`}${more}`
+${later ? "" : ARCHIVED_EMPTY}${links.length === 0 && !later ? "" : `${list}\n`}${more}`
     : `${tools}
 <p id="space-error" role="alert"></p>
 ${list}
-${more}<p class="small"><a class="done-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">${DONE_AND_PUT_AWAY}</a></p>`;
+${more}<p class="small"><a class="archived-link" href="${escapeHtml(spaceHref(tag.key, { done: true }))}">${ARCHIVED}</a></p>`;
   return page(
-    `${done ? `${DONE_AND_PUT_AWAY} in ` : ""}${tag.name} · Aye-AI-AI Links`,
+    `${done ? `${ARCHIVED} in ` : ""}${tag.name} · Aye-AI-AI Links`,
     `<main class="space" data-view="${view}">
 ${body}
 </main>
-${input.ask ? "" : `${editDialog()}\n`}${(done ? doneScript : cardsScript)(input.ask !== undefined)}${openedScript("space-links", "/links/opened", done ? PUT_AWAY_MARKER : undefined)}${older ? olderScript("space-links") : ""}`,
+${input.ask ? "" : `${editDialog()}\n`}${(done ? archivedScript : cardsScript)(input.ask !== undefined)}${openedScript("space-links", "/links/opened")}${older ? olderScript("space-links") : ""}`,
     {
       menu: true,
       here: "tags",

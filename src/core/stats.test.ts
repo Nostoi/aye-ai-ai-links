@@ -22,7 +22,6 @@ function link(id: string, over: Partial<Link> = {}): Link {
     lastOpenedAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
-    putAwayAt: null,
     tidyKeptAt: null,
     state: "active",
     snapshot: null,

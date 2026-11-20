@@ -193,7 +193,6 @@ export async function saveLink(
     lastOpenedAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
-    putAwayAt: null,
     tidyKeptAt: null,
     state: "active",
   });
@@ -256,39 +255,6 @@ export async function getLinkWithText(
   return { link, snapshotText, savedCopy };
 }
 
-/**
- * An opening brings a put-away link back to active; a stale link stays stale. The stamp read here
- * guards the reactivation (`reactivate`), a write of its own, so a link that changed meanwhile is
- * left as the other action set it.
- */
-async function putAwayStamp(
-  store: Pick<LinkStore, "get">,
-  owner: OwnerId,
-  id: string,
-  input: UpdateLinkInput,
-): Promise<Date | null> {
-  if (input.opened !== true || input.state !== undefined) return null;
-  const link = await store.get(owner, id);
-  return link?.state === "archived" ? link.putAwayAt : null;
-}
-
-async function reactivate(
-  store: Pick<LinkStore, "updateIf">,
-  owner: OwnerId,
-  id: string,
-  stamp: Date | null,
-  link: Link,
-): Promise<Link> {
-  if (stamp === null) return link;
-  const result = await store.updateIf(
-    owner,
-    id,
-    { state: "archived", putAwayAt: stamp },
-    { state: "active", putAwayAt: null },
-  );
-  return result?.applied ? result.link : link;
-}
-
 /** Checks the input and builds the patch; throws before anything is written. */
 function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   const { tags, why, title, summary, state, snoozedUntil, opened } = input;
@@ -312,10 +278,7 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
     // An AI's own summary, or its blank one, touches only a gap or another AI's; the store decides that atomically.
     if (cleaned.aiOwn) patch.summaryOver = REPLACEABLE_SUMMARY_SOURCES;
   }
-  if (state !== undefined) {
-    patch.state = state;
-    patch.putAwayAt = null;
-  }
+  if (state !== undefined) patch.state = state;
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
   if (opened === true) patch.lastOpenedAt = now();
   if (tags !== undefined) patch.tags = normalizeTags(tags);
@@ -324,8 +287,8 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
 }
 
 /**
- * The stats events an update means: an opening, a snooze into the future, and Stale. Archiving
- * records Stale only when the link was not already stale; the store checks that inside the write.
+ * The stats events an update means: an opening, a snooze into the future, and Archive. Archiving
+ * records the event only when the link was not already archived; the store checks that inside the write.
  */
 function eventsOf(input: UpdateLinkInput, at: Date): EventWrite[] {
   const events: EventWrite[] = [];
@@ -335,7 +298,7 @@ function eventsOf(input: UpdateLinkInput, at: Date): EventWrite[] {
     events.push({
       record: "stale",
       at,
-      unlessBefore: { state: "archived", putAwayAt: null },
+      unlessBefore: { state: "archived" },
     });
   }
   return events;
@@ -347,7 +310,6 @@ export async function updateLink(
   id: string,
   input: UpdateLinkInput,
 ): Promise<Link> {
-  const stamp = await putAwayStamp(store, owner, id, input);
   const at = now();
   const link = await store.update(
     owner,
@@ -356,7 +318,7 @@ export async function updateLink(
     eventsOf(input, at),
   );
   if (!link) throw notFound(id);
-  return reactivate(store, owner, id, stamp, link);
+  return link;
 }
 
 /** `updateLink` for the in-app AI: the store also records what the edit replaced, and `editId` is its id for Undo (null when no covered field changed). */
@@ -367,7 +329,6 @@ export async function updateLinkWithReceipt(
   input: UpdateLinkInput,
   extend?: string,
 ): Promise<{ link: Link; editId: string | null }> {
-  const stamp = await putAwayStamp(store, owner, id, input);
   const at = now();
   const result = await store.updateWithReceipt(
     owner,
@@ -378,7 +339,7 @@ export async function updateLinkWithReceipt(
     eventsOf(input, at),
   );
   if (!result) throw notFound(id);
-  return { ...result, link: await reactivate(store, owner, id, stamp, result.link) };
+  return result;
 }
 
 /**

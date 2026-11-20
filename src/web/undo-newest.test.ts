@@ -25,7 +25,6 @@ const link = (id: string): Link => ({
   savedAt: NOW,
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -41,8 +40,8 @@ const ROW = {
 } as const;
 const MOVED = { tool: { ...ROW, status: "declined" }, previous: ROW };
 const CHANGE = {
-  before: { state: "active", putAwayAt: null, snoozedUntil: null },
-  after: { state: "archived", putAwayAt: null, snoozedUntil: null },
+  before: { state: "active", snoozedUntil: null },
+  after: { state: "archived", snoozedUntil: null },
 };
 const tile = (id: string): ShelfItem => ({
   link: link(id),
@@ -76,7 +75,7 @@ const gate = () => {
 const idOf = (s: Post) => (s.body as { id?: string } | undefined)?.id;
 
 /**
- * Home whose posts answer through `post` (by default Not handy anymore's rows, Done with it's
+ * Home whose posts answer through `post` (by default Not handy anymore's rows, Archive's
  * change and 204 for an Undo), and whose shelf refreshes take the next of `refreshes`, then home.
  */
 const homeRun = (
@@ -158,17 +157,17 @@ describe("the Undo bar keeps the newest action's Undo (#324)", () => {
     expect(undos(p)).toEqual(["/tools/undo 2"]);
   });
 
-  it("P4: a tile's late Undo does not replace the featured card's Done with it, pressed after", async () => {
+  it("P4: a tile's late Undo does not replace the featured card's Archive, pressed after", async () => {
     const g = gate();
     const html = home(["1"], "8");
     const p = homeRun(html, [{ status: 200, text: html, wait: g.wait }]);
     await notHandy(p, "1");
     p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
     await p.settle();
-    expect(p.$("#undo-bar strong").textContent).toBe("Done with it.");
+    expect(p.$("#undo-bar strong").textContent).toBe("Archived.");
     g.open();
     await p.settle();
-    expect(p.$("#undo-bar strong")?.textContent).toBe("Done with it.");
+    expect(p.$("#undo-bar strong")?.textContent).toBe("Archived.");
     await pressUndo(p);
     expect(undos(p)).toEqual(["/home/undo-state 8"]);
   });
@@ -208,7 +207,7 @@ describe("the Undo bar keeps the newest action's Undo (#324)", () => {
     expect(undos(p)).toEqual(["/tools/undo 1"]);
   });
 
-  it("P8: Done with it pressed first and answering first gives way to a tile pressed after it", async () => {
+  it("P8: Archive pressed first and answering first gives way to a tile pressed after it", async () => {
     const [archive, refresh] = [gate(), gate()];
     const html = home(["1"], "8");
     const p = homeRun(html, [{ status: 200, text: html, wait: refresh.wait }], (s) =>
@@ -219,7 +218,7 @@ describe("the Undo bar keeps the newest action's Undo (#324)", () => {
     await notHandy(p, "1");
     archive.open();
     await p.settle();
-    expect(p.$("#undo-bar strong").textContent).toBe("Done with it.");
+    expect(p.$("#undo-bar strong").textContent).toBe("Archived.");
     refresh.open();
     await p.settle();
     expect(p.$("#undo-bar span").textContent).toBe("Not handy anymore.");

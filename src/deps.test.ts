@@ -11,7 +11,6 @@ import type { SearchTrace } from "./core/search.js";
 import { searchLinks } from "./core/search-links.js";
 import { tidyQueue } from "./core/tidy-up.js";
 import { createVectorIndexer } from "./core/vector-indexer.js";
-import { putAwayLink } from "./core/worth-a-look.js";
 import { createDeps } from "./deps.js";
 import { FakeEmbedder } from "./search/embedder.js";
 import { DIMS, MODEL_KEY } from "./search/model.js";
@@ -388,21 +387,6 @@ describe("focus matching through the digest, came back and Tidy up on createDeps
       words: ["using"],
     });
     expect(reasons(user.id).map((r) => r.kind)).not.toContain("focus_words");
-    w.db.close();
-  });
-
-  it("brings a put-away link back for a whole word, with the word, and not for a prefix", async () => {
-    const w = world();
-    const used = await w.save("Used sprites");
-    const user = await w.save("User research");
-    for (const l of [used, user]) await putAwayLink(w.deps, OWNER, l.id);
-    w.advance(1);
-    const entry = await w.focus("using");
-    const digest = await getDigest(w.deps, OWNER);
-    expect(digest.links.map((l) => [l.link.id, l.reasons.map((r) => r.kind)])).toEqual([
-      [used.id, ["came_back", "never_surfaced"]],
-    ]);
-    expect(digest.links[0]?.reasons[0]).toMatchObject({ focus: entry, words: ["using"] });
     w.db.close();
   });
 

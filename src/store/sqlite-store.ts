@@ -67,7 +67,6 @@ type LinkRow = {
   last_opened_at: number | null;
   last_surfaced_at: number | null;
   snoozed_until: number | null;
-  put_away_at: number | null;
   tidy_kept_at: number | null;
   state: Link["state"];
 };
@@ -320,7 +319,6 @@ export class SqliteStore
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
-      expectedPutAwayAt?: Date;
     },
   ): Promise<SurfacedClaim[]> {
     const parsed = new Set(ids.map(parseId).filter((n): n is number => n !== null));
@@ -533,9 +531,9 @@ export class SqliteStore
       row = this.db
         .prepare(
           `INSERT INTO links (owner_id, url, url_key, title, summary, summary_source, why_text,
-             why_source, saved_at, saved_by, last_opened_at, last_surfaced_at, snoozed_until, put_away_at,
+             why_source, saved_at, saved_by, last_opened_at, last_surfaced_at, snoozed_until,
              tidy_kept_at, state)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (owner_id, url_key) DO NOTHING RETURNING id`,
         )
         .get(
@@ -552,7 +550,6 @@ export class SqliteStore
           toMs(link.lastOpenedAt),
           toMs(link.lastSurfacedAt),
           toMs(link.snoozedUntil),
-          toMs(link.putAwayAt),
           toMs(link.tidyKeptAt),
           link.state,
         ) as { id: number } | undefined;
@@ -640,7 +637,12 @@ export class SqliteStore
         }
       }
     }
-    if (patch.state !== undefined) set("state", patch.state);
+    if (patch.state !== undefined) {
+      // Until #339 drops put_away_at, a changed state clears it, so a revert finds no stale date.
+      sets.push("put_away_at = CASE WHEN state = ? THEN put_away_at END");
+      values.push(patch.state);
+      set("state", patch.state);
+    }
     if (patch.snoozedUntil !== undefined) set("snoozed_until", toMs(patch.snoozedUntil));
     if (patch.lastOpenedAt === null) set("last_opened_at", null);
     else if (patch.lastOpenedAt !== undefined) {
@@ -649,7 +651,6 @@ export class SqliteStore
       sets.push("last_opened_at = MAX(COALESCE(last_opened_at, ?), ?)");
       values.push(at, at);
     }
-    if (patch.putAwayAt !== undefined) set("put_away_at", toMs(patch.putAwayAt));
     if (patch.tidyKeptAt !== undefined) set("tidy_kept_at", toMs(patch.tidyKeptAt));
     if (patch.why !== undefined) {
       set("why_text", patch.why?.text ?? null);
@@ -697,27 +698,20 @@ export class SqliteStore
       now,
       exceptKeptTools,
       exceptGone,
-      expectedPutAwayAt,
     }: {
       at: Date;
       notSurfacedAfter: Date;
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
-      expectedPutAwayAt?: Date;
     },
   ): SurfacedClaim[] {
-    // With an expected putAwayAt (a came-back claim) the link must be archived with exactly that marker,
-    // and a surfacing before the marker does not count against the cooldown.
-    const expected = expectedPutAwayAt ? toMs(expectedPutAwayAt) : null;
     const previous = this.db.prepare(
       `SELECT last_surfaced_at FROM links
        WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
-         AND (CASE WHEN ? IS NULL THEN state = 'active'
-                   ELSE state = 'archived' AND put_away_at = ? END)
+         AND state = 'active'
          AND (snoozed_until IS NULL OR snoozed_until <= ?)
-         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?
-              OR (? IS NOT NULL AND last_surfaced_at < ?))
+         AND (last_surfaced_at IS NULL OR last_surfaced_at <= ?)
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_tools t
            WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept'))
          AND (? = 0 OR NOT EXISTS (SELECT 1 FROM link_checks c
@@ -731,12 +725,8 @@ export class SqliteStore
       const row = previous.get(
         id,
         owner,
-        expected,
-        expected,
         toMs(now),
         toMs(notSurfacedAfter),
-        expected,
-        expected,
         exceptKeptTools ? 1 : 0,
         exceptGone ? 1 : 0,
       ) as { last_surfaced_at: number | null } | undefined;
@@ -819,10 +809,6 @@ function expectationWhere(owner: OwnerId, id: number, expected: LinkExpectation)
     where.push("snoozed_until IS ?");
     values.push(toMs(expected.snoozedUntil));
   }
-  if (expected.putAwayAt !== undefined) {
-    where.push("put_away_at IS ?");
-    values.push(toMs(expected.putAwayAt));
-  }
   for (const [column, list] of [
     ["why_source", expected.whySource],
     ["summary_source", expected.summarySource],
@@ -896,7 +882,6 @@ function toLink(row: LinkRow, tagRows: LinkTag[], snap: SnapshotRow | undefined)
     lastOpenedAt: fromMs(row.last_opened_at),
     lastSurfacedAt: fromMs(row.last_surfaced_at),
     snoozedUntil: fromMs(row.snoozed_until),
-    putAwayAt: fromMs(row.put_away_at),
     tidyKeptAt: fromMs(row.tidy_kept_at),
     state: row.state,
     snapshot: snap

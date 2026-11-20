@@ -37,7 +37,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -286,9 +285,7 @@ describe("a space page", () => {
     const html = space({ later: true });
     expect(html).toContain("No older links.");
     expect(html).not.toContain("No links in this space yet.");
-    expect(space({ later: true, done: true })).not.toContain(
-      "Nothing here is done or put away yet.",
-    );
+    expect(space({ later: true, done: true })).not.toContain("Nothing here is archived yet.");
   });
 
   it("shows Show older links only when older links exist, as a real link to the next page", () => {
@@ -300,8 +297,8 @@ describe("a space page", () => {
     expect(older.searchParams.get("before")).toBe("100.1");
   });
 
-  it("links to the links done and put away", () => {
-    const done = hrefs(space(), "a.done-link").map((h) => new URL(h, ORIGIN));
+  it("links to the archived links", () => {
+    const done = hrefs(space(), "a.archived-link").map((h) => new URL(h, ORIGIN));
     expect(done.map((u) => [u.pathname, u.searchParams.get("tag")])).toEqual([
       ["/spaces/done", "home batteries"],
     ]);
@@ -372,8 +369,8 @@ describe("a space's sort orders", () => {
     expect(tagIn(newest?.getAttribute("href") as string).searchParams.has("order")).toBe(false);
   });
 
-  it("sends the link to Done and put away with no order, as that view has no sort", () => {
-    const href = hrefs(space({ order: "oldest", links: [link("1")] }), "a.done-link")[0];
+  it("sends the link to Archived with no order, as that view has no sort", () => {
+    const href = hrefs(space({ order: "oldest", links: [link("1")] }), "a.archived-link")[0];
     expect(tagIn(href as string).searchParams.has("order")).toBe(false);
   });
 
@@ -404,20 +401,20 @@ describe("a space's sort orders", () => {
   });
 });
 
-describe("a space's links done and put away", () => {
+describe("a space's archived links", () => {
   const done = (over: Partial<Parameters<typeof spacePage>[0]> = {}) =>
     space({ done: true, ...over });
 
   it("is headed so, links back to the space, and pages within the done view", () => {
     const html = done({ links: [link("1", { state: "archived" })], older: "9.1" });
-    expect(html).toContain("Done and put away");
-    expect(dom(html).querySelector("title")?.textContent).toContain("Done and put away in ");
+    expect(html).toContain("Archived");
+    expect(dom(html).querySelector("title")?.textContent).toContain("Archived in ");
     const back = hrefs(html, "a.back-link").map((h) => new URL(h, ORIGIN));
     expect(back.map((u) => [u.pathname, u.searchParams.get("tag")])).toEqual([
       ["/spaces", "home batteries"],
     ]);
     expect(new URL(hrefs(html, "#older")[0] as string, ORIGIN).pathname).toBe("/spaces/done");
-    expect(dom(html).querySelector("a.done-link")).toBeNull();
+    expect(dom(html).querySelector("a.archived-link")).toBeNull();
   });
 
   it("fades its cards but keeps them, and never asks in amber, even for a missing why", () => {
@@ -434,17 +431,15 @@ describe("a space's links done and put away", () => {
   });
 
   it("says when nothing in the space is done, in a card that explains what lands here", () => {
-    const card = dom(done()).querySelector(".done-empty");
-    expect(card?.querySelector("p:first-child")?.textContent).toBe(
-      "Nothing here is done or put away yet.",
-    );
+    const card = dom(done()).querySelector(".archived-empty");
+    expect(card?.querySelector("p:first-child")?.textContent).toBe("Nothing here is archived yet.");
     expect(card?.textContent).toContain(
-      "Links you are done with or put away from this space wait here. Search still finds them.",
+      "Links you archive from this space wait here. Search still finds them.",
     );
     expect(dom(done()).querySelector("#space-links")).toBeNull();
   });
 
-  it("tops the page with Back to the space, in its dot, above an Done and put away heading with the switch", () => {
+  it("tops the page with Back to the space, in its dot, above an Archived heading with the switch", () => {
     const d = dom(done({ links: [link("1", { state: "archived" })] }));
     expect(
       d.querySelector("header.page-head, .change-link, nav.orders, .search-instead"),
@@ -456,31 +451,31 @@ describe("a space's links done and put away", () => {
     expect(back.className).toContain("space-teal");
     expect(back.querySelector(".dot")).not.toBeNull();
     const head = d.querySelector("h1");
-    expect(head?.textContent).toBe("Done and put away");
+    expect(head?.textContent).toBe("Archived");
     expect(head?.parentElement?.querySelector(".view-switch")).not.toBeNull();
     expect(d.querySelectorAll("h1")).toHaveLength(1);
   });
 
   it("keeps the card and the switch on a first page that has links, for the theme to hide", () => {
     const d = dom(done({ links: [link("1", { state: "archived" })], older: "9.1" }));
-    expect(d.querySelector(".done-empty")).not.toBeNull();
+    expect(d.querySelector(".archived-empty")).not.toBeNull();
     expect(d.querySelector(".view-switch")).not.toBeNull();
   });
 
   it("gives a later page no card, only that no older links are left", () => {
     const d = dom(done({ later: true }));
-    expect(d.querySelector(".done-empty")).toBeNull();
+    expect(d.querySelector(".archived-empty")).toBeNull();
     expect(d.querySelector("main")?.textContent).toContain("No older links.");
-    expect(d.querySelector("main")?.textContent).not.toContain("Nothing here is done and put away");
+    expect(d.querySelector("main")?.textContent).not.toContain("Nothing here is archived");
   });
 
   it("shows the card, and hides the switch, only while no row is shown and no older link waits", () => {
     const rule = (selector: string) =>
       themeCss.split("}").find((r) => r.includes(selector) && r.includes("display:"));
     const empty = ":not(:has(#space-links [data-id]:not([hidden]))):not(:has(#older))";
-    expect(rule(".done-empty{")).toMatch(/display:none/);
-    expect(rule(`${empty} .done-empty`)).toMatch(/display:block/);
-    expect(rule(`${empty} .done-head .view-switch`)).toMatch(/display:none/);
+    expect(rule(".archived-empty{")).toMatch(/display:none/);
+    expect(rule(`${empty} .archived-empty`)).toMatch(/display:block/);
+    expect(rule(`${empty} .archived-head .view-switch`)).toMatch(/display:none/);
   });
 });
 
@@ -736,21 +731,21 @@ describe("openings on a space page (#124)", () => {
   describe("its active links", () => {
     itRecordsOpenings(() => space({ links: shown }), web, "/links/opened");
   });
-  describe("its links done and put away", () => {
+  describe("its archived links", () => {
     itRecordsOpenings(() => space({ links: shown, done: true }), web, "/links/opened");
   });
-  describe("a put-away link opened on Done and put away", () => {
-    const put = link("1", { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
-    const stale = link("2", { state: "archived" });
-    const html = () => space({ links: [put, stale], done: true });
-    it("leaves the page once the opening is recorded; a stale row stays", async () => {
+  describe("an archived link opened on Archived", () => {
+    const archived = link("1", { state: "archived" });
+    const html = () => space({ links: [archived], done: true });
+    const marker = (page: ReturnType<typeof runPage>) =>
+      page.$("[data-id='1'] .card-line").lastElementChild?.textContent;
+    it("keeps the card and its Archived marker once the opening is recorded", async () => {
       const page = runPage(html());
-      page.dispatch(page.$("[data-id='2'] a[data-open]"), "click");
       page.dispatch(page.$("[data-id='1'] a[data-open]"), "click");
       await page.settle();
-      expect(page.sent.map((s) => s.body)).toEqual([{ id: "2" }, { id: "1" }]);
-      expect(page.$("[data-id='1']").hidden).toBe(true);
-      expect(page.$("[data-id='2']").hidden).toBeFalsy();
+      expect(page.sent.map((s) => s.body)).toEqual([{ id: "1" }]);
+      expect(page.$("[data-id='1']").hidden).toBeFalsy();
+      expect(marker(page)).toBe("Archived");
     });
     it("stays when the opening is refused", async () => {
       const page = runPage(html(), () => ({ status: 500 }));
@@ -827,14 +822,12 @@ describe("the space card's picture", () => {
   });
 });
 
-describe("Bring it back and the markers on a space's Done and put away", () => {
+describe("Bring it back and the markers on a space's Archived", () => {
   const CHANGE = {
-    before: { state: "archived", putAwayAt: "2026-10-01T00:00:00.000Z", snoozedUntil: null },
-    after: { state: "active", putAwayAt: null },
+    before: { state: "archived", snoozedUntil: null },
+    after: { state: "active" },
   };
-  const stale = (id: string) => link(id, { state: "archived" });
-  const put = (id: string) =>
-    link(id, { state: "archived", putAwayAt: new Date("2026-10-01T00:00:00Z") });
+  const archived = (id: string) => link(id, { state: "archived" });
   const back = (id: string) => `[data-id='${id}'] .card-menu button[data-act=bring-back]`;
   const sentPosts = (p: ReturnType<typeof runPage>) => p.sent.filter((s) => s.body !== undefined);
   const answer = (next: string) => (s: { url: string; body: unknown }) =>
@@ -844,19 +837,17 @@ describe("Bring it back and the markers on a space's Done and put away", () => {
         ? { status: 200, body: CHANGE }
         : { status: 204 };
 
-  it("ends each grey line with Put away or Stale", () => {
-    const html = space({ done: true, links: [put("1"), stale("2")] });
+  it("ends each grey line with Archived", () => {
+    const html = space({ done: true, links: [archived("1"), archived("2")] });
     const lines = [...dom(html).querySelectorAll(".link-row .card-line")].map(
       (l) => l.lastElementChild?.textContent,
     );
-    expect(lines).toEqual(["Put away", "Done"]);
+    expect(lines).toEqual(["Archived", "Archived"]);
   });
 
   it("puts no marker on an active row", () => {
     const html = space({ links: [link("1")] });
-    expect(dom(html).querySelector(".link-row .card-line")?.textContent).not.toMatch(
-      /Put away|Stale/,
-    );
+    expect(dom(html).querySelector(".link-row .card-line")?.textContent).not.toContain("Archived");
   });
 
   it.each([
@@ -865,8 +856,8 @@ describe("Bring it back and the markers on a space's Done and put away", () => {
   ])(
     "posts /home/bring-back for %s, takes the row out and Undo sends the change back",
     async (_, appended) => {
-      const first = space({ done: true, links: [put("1")], older: appended ? "c1" : null });
-      const next = space({ done: true, links: [put("9")], later: true });
+      const first = space({ done: true, links: [archived("1")], older: appended ? "c1" : null });
+      const next = space({ done: true, links: [archived("9")], later: true });
       const p = runPage(first, answer(next));
       if (appended) {
         p.dispatch(p.$("#older"), "click");

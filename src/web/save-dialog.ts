@@ -1,6 +1,6 @@
 import { SAVE_PATH } from "../auth/login-return.js";
 import { escapeHtml } from "../core/escape-html.js";
-import { BRING_BACK_WORKING, DONE_MARKER, PUT_AWAY_MARKER } from "./done-link.js";
+import { ARCHIVED, BRING_BACK_WORKING } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { CARD_FETCH, WHY_LABEL } from "./tell-why.js";
 
@@ -91,7 +91,7 @@ export const saveDialog = (fill?: { url: string; title: string }) => {
  *   answer shows in place, with Close, which closes the tab or goes Home; once an answer shows, the
  *   head's Close and Escape do the same.
  * - An address already saved shows that link in the dialog: its line, its why, Open it (recorded as
- *   an opening) and, for a link done or put away, Bring it back, which works in place.
+ *   an opening) and, for an archived link, Bring it back, which works in place.
  * - A refusal shows under its field; a sign-out, no answer or any other failure in the dialog's
  *   alert. What was typed is kept.
  * - An answer that comes after the dialog was closed (Chrome closes a modal on a second Escape)
@@ -241,7 +241,7 @@ const showFound = (data, typedWhy) => {
   found.setAttribute("data-id", data.id);
   foundPic.textContent = data.initials || "";
   foundTitle.textContent = data.title || data.url;
-  const marker = data.state === "archived" ? (data.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(DONE_MARKER)}) : "";
+  const marker = data.state === "archived" ? ${JSON.stringify(ARCHIVED)} : "";
   drawLine(data, marker);
   foundWhy.replaceChildren();
   if (data.why && data.whySource === "inferred") foundWhy.append("Why (a guess): " + data.why);

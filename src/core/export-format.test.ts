@@ -40,7 +40,6 @@ const link = (n: number, over: Partial<Link> = {}): Link => ({
   savedAt: T(n),
   savedBy: "claude-code",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -370,15 +369,10 @@ describe("summary source (version 3)", () => {
 });
 
 describe("put-away and Tidy-kept dates (version 2)", () => {
-  const putAway = T(300);
   const kept = T(400);
   const r = () => {
     const x = reads();
-    x.links = [
-      link(1, { putAwayAt: putAway, state: "archived" }),
-      link(2, { tidyKeptAt: kept }),
-      link(3),
-    ];
+    x.links = [link(1, { state: "archived" }), link(2, { tidyKeptAt: kept }), link(3)];
     return x;
   };
   const written = () => JSON.parse(JSON.stringify(buildManifest(r())));
@@ -386,21 +380,29 @@ describe("put-away and Tidy-kept dates (version 2)", () => {
     const parsed = manifestSchema.parse(manifest);
     const store = new FakeStore();
     for (const l of parsed.links) await store.insertIfAbsent(A, toNewLink(l, parsed.tags));
-    return (await store.listLinks(A)).map((l) => [l.putAwayAt, l.tidyKeptAt]);
+    return (await store.listLinks(A)).map((l) => [l.state, l.tidyKeptAt]);
   };
-  it("writes both dates, ISO or null, on every link", () => {
+  it("writes putAwayAt as null on every link, and the Tidy-kept date, ISO or null", () => {
     expect(buildManifest(r()).links.map((l) => [l.putAwayAt, l.tidyKeptAt])).toEqual([
-      [putAway.toISOString(), null],
+      [null, null],
       [null, kept.toISOString()],
       [null, null],
     ]);
   });
-  it("restores them into the store, exactly", async () => {
+  it("restores the state and the Tidy-kept date, exactly", async () => {
     expect(await restored(written())).toEqual([
-      [putAway, null],
-      [null, kept],
-      [null, null],
+      ["archived", null],
+      ["active", kept],
+      ["active", null],
     ]);
+  });
+  it("reads an older file's put-away entry as archived, with no putAwayAt on the link", () => {
+    const old = written();
+    old.links[0].putAwayAt = T(300).toISOString();
+    const parsed = manifestSchema.parse(old);
+    const restoredLink = toNewLink(parsed.links[0] as ManifestLink, parsed.tags);
+    expect(restoredLink.state).toBe("archived");
+    expect(restoredLink).not.toHaveProperty("putAwayAt");
   });
   it("reads a version-1 manifest, its links with both dates null", async () => {
     const v1 = written();
@@ -411,9 +413,9 @@ describe("put-away and Tidy-kept dates (version 2)", () => {
       delete l.summarySource;
     }
     expect(await restored(v1)).toEqual([
-      [null, null],
-      [null, null],
-      [null, null],
+      ["archived", null],
+      ["active", null],
+      ["active", null],
     ]);
   });
   it("refuses version 4", () => {

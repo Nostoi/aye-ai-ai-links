@@ -6,7 +6,7 @@ import type { Link, Tag } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { cardMenu, DIVIDER } from "./card-menu.js";
 import { deleteLinkItem, deleteLinkScript } from "./delete-link.js";
-import { BRING_BACK_ITEM, DONE_ITEM } from "./done-link.js";
+import { ARCHIVE_ITEM, BRING_BACK_ITEM } from "./done-link.js";
 import { EDIT_ITEM, editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { NOT_HANDY } from "./keep-handy.js";
@@ -51,7 +51,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: NOW,
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -116,14 +115,12 @@ describe("the card menu and the card data", () => {
       return `${e.tagName} ${e.getAttribute("data-act")} ${text}${hint ? ` · ${hint}` : ""}${e.hasAttribute("hidden") ? " (hidden)" : ""}`;
     });
   const KEPT = { status: "kept", source: "stated", due: false } as const;
-  const ROW_PUT = "BUTTON put-away Put it away · Back when you start something it fits";
-  const ROW_DONE = "BUTTON archive Done with it · Still findable in search";
+  const ROW_ARCHIVE = "BUTTON archive Archive · Still findable in search";
   const ROW_NOW = "BUTTON snooze Not now · Not suggested for two weeks";
 
-  it("runs mildest first: Put it away, Done with it, Keep handy, then Edit, Remove saved copy and Delete link (#284)", () => {
+  it("runs mildest first: Archive, Keep handy, then Edit, Remove saved copy and Delete link (#284)", () => {
     expect(labels(editMenu(link("7")))).toEqual([
-      ROW_PUT,
-      ROW_DONE,
+      ROW_ARCHIVE,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -133,8 +130,7 @@ describe("the card menu and the card data", () => {
     ]);
     const withCopy = editMenu(link("7"), { copy: { madeAt: new Date(0) } });
     expect(labels(withCopy)).toEqual([
-      ROW_PUT,
-      ROW_DONE,
+      ROW_ARCHIVE,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -151,7 +147,7 @@ describe("the card menu and the card data", () => {
     );
   });
 
-  it("gives only Delete link the trash can, and Done with it no check mark (#284)", () => {
+  it("gives only Delete link the trash can, and Archive no check mark (#284)", () => {
     const doc = parseHTML(editMenu(link("7"), { copy: { madeAt: new Date(0) } })).document;
     const icon = (act: string) => doc.querySelector(`[data-act=${act}] svg`)?.outerHTML;
     const icons = [...doc.querySelectorAll(".card-menu-list svg")].map((s) => s.outerHTML);
@@ -161,19 +157,17 @@ describe("the card menu and the card data", () => {
   });
 
   it("shows Not handy anymore in Keep handy's place once the link is kept", () => {
-    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 4)).toEqual([
-      ROW_PUT,
-      ROW_DONE,
+    expect(labels(editMenu(link("7"), { handy: KEPT })).slice(0, 3)).toEqual([
+      ROW_ARCHIVE,
       "BUTTON keep Keep handy (hidden)",
       "BUTTON not-handy Not handy anymore",
     ]);
   });
 
-  it("puts Not now first on Home's rows, the one seven-row menu (#195, #284)", () => {
+  it("puts Not now first on Home's rows, the one menu with Not now (#195, #284)", () => {
     expect(labels(editMenu(link("7"), { copy: { madeAt: new Date(0) }, notNow: true }))).toEqual([
       ROW_NOW,
-      ROW_PUT,
-      ROW_DONE,
+      ROW_ARCHIVE,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -188,9 +182,8 @@ describe("the card menu and the card data", () => {
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("leaves out Done with it and Not now, not Put it away, when the card shows them as buttons (#195)", () => {
+  it("leaves out Archive and Not now when the card shows them as buttons (#195)", () => {
     expect(labels(editMenu(link("7"), { onCard: true, notNow: true }))).toEqual([
-      ROW_PUT,
       "BUTTON keep Keep handy",
       "BUTTON not-handy Not handy anymore (hidden)",
       "—",
@@ -215,7 +208,7 @@ describe("the card menu and the card data", () => {
   });
 
   it("gives an archived card on Home (the came-back lead) the same menu, with Bring it back", () => {
-    const put = link("7", { state: "archived", putAwayAt: new Date(0) });
+    const put = link("7", { state: "archived" });
     expect(labels(editMenu(put, { onCard: true }))).toEqual([
       "BUTTON edit Edit link…",
       "BUTTON bring-back Bring it back",
@@ -359,7 +352,7 @@ describe("the card menu and the card data", () => {
     });
     const shelfMenu = parseHTML(html).document.querySelector("details.card-menu")?.outerHTML;
     expect(shelfMenu).toBe(
-      parseHTML(cardMenu("More for Link 1", [DONE_ITEM, NOT_HANDY])).document.querySelector(
+      parseHTML(cardMenu("More for Link 1", [ARCHIVE_ITEM, NOT_HANDY])).document.querySelector(
         "details",
       )?.outerHTML,
     );

@@ -42,7 +42,6 @@ describe("readSnapshotText", () => {
     savedAt: new Date(0),
     savedBy: "agent",
     lastOpenedAt: null,
-    putAwayAt: null,
     tidyKeptAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,

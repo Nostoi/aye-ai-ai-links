@@ -86,7 +86,6 @@ const CHECKED_PAGES = [
   "/home/snooze",
   "/home/unsnooze",
   "/home/archive",
-  "/home/put-away",
   "/home/bring-back",
   "/home/undo-state",
   "/home/why",

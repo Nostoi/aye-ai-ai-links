@@ -23,7 +23,6 @@ const link = (over: Partial<Link> = {}): Link => {
     savedAt: new Date("2026-09-01T00:00:00Z"),
     savedBy: "t",
     lastOpenedAt: null,
-    putAwayAt: null,
     tidyKeptAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
@@ -190,7 +189,7 @@ describe("the Handy shelf", () => {
     expect(b?.querySelector(".card-site .dot")).toBeNull();
   });
 
-  it("marks a due tile as needing you with Still using?, Yes and Done with it; a tile not due has neither", () => {
+  it("marks a due tile as needing you with Still using?, Yes and Archive; a tile not due has neither", () => {
     const html = render([kept({}, true), kept()]);
     const [due, calm] = tiles(html);
     expect(due?.classList.contains("needs-you")).toBe(true);
@@ -202,7 +201,7 @@ describe("the Handy shelf", () => {
       ]),
     ).toEqual([
       ["still-using", "Yes"],
-      ["done", "Done with it"],
+      ["archive", "Archive"],
     ]);
     expect(calm?.classList.contains("needs-you")).toBe(false);
     expect(calm?.querySelector(".ask")).toBeNull();
@@ -221,7 +220,7 @@ describe("the Handy shelf", () => {
       ]),
     ).toEqual([
       ["still-works", "It still works"],
-      ["done", "Done with it"],
+      ["archive", "Archive"],
     ]);
     expect(calm?.classList.contains("needs-you")).toBe(false);
     expect(calm?.querySelector(".ask")).toBeNull();
@@ -241,7 +240,7 @@ describe("the Handy shelf", () => {
     expect(ids(tiles(render([gone, calm])))).toEqual([gone.link.id, calm.link.id]);
   });
 
-  it("gives every kept tile a menu with Done with it then Not handy anymore, and a suggestion none", () => {
+  it("gives every kept tile a menu with Archive then Not handy anymore, and a suggestion none", () => {
     const html = render([kept({ title: "Attendance" })], [suggested()]);
     const [tool, guess] = tiles(html);
     const menu = tool?.querySelector("details.card-menu");
@@ -254,7 +253,7 @@ describe("the Handy shelf", () => {
           `${b.getAttribute("data-act")} ${b.textContent} ${b.querySelector("small")?.textContent ?? "-"}`,
       ),
     ).toEqual([
-      "archive Done with itStill findable in search Still findable in search",
+      "archive ArchiveStill findable in search Still findable in search",
       "not-handy Not handy anymore -",
     ]);
     expect(guess?.querySelector("details")).toBeNull();
@@ -505,20 +504,20 @@ describe("the shelf's script", () => {
   });
 
   const STALE_CHANGE = {
-    before: { state: "active", putAwayAt: null, snoozedUntil: null },
-    after: { state: "archived", putAwayAt: null },
+    before: { state: "active", snoozedUntil: null },
+    after: { state: "archived" },
   };
   const archiveAnswer = (s: { url: string }) =>
     s.url === "/home/archive" ? { status: 200, body: STALE_CHANGE } : { status: 204 };
 
-  it("Done with it archives through /home/archive and offers Undo through /home/undo-state with the change it got", async () => {
+  it("Archive archives through /home/archive and offers Undo through /home/undo-state with the change it got", async () => {
     const due = kept({}, true);
     const p = shelfPage(home([due]), archiveAnswer, [home([]), home([due])]);
-    p.dispatch(p.$("button[data-act=done]"), "click");
+    p.dispatch(p.$("button[data-act=archive]"), "click");
     await p.settle();
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: due.link.id } });
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
     expect(shelfIds(p)).toEqual([]);
     p.dispatch(p.$("#undo-bar button"), "click");
@@ -530,7 +529,7 @@ describe("the shelf's script", () => {
     expect(shelfIds(p)).toEqual([due.link.id]);
   });
 
-  it("the menu's Done with it archives, refreshes the shelf and offers Undo, which brings the tile back", async () => {
+  it("the menu's Archive archives, refreshes the shelf and offers Undo, which brings the tile back", async () => {
     const tool = kept();
     const p = shelfPage(home([tool]), archiveAnswer, [home([]), home([tool])]);
     p.dispatch(p.$(".card-menu button[data-act=archive]"), "click");
@@ -538,7 +537,7 @@ describe("the shelf's script", () => {
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id: tool.link.id } });
     expect(shelfIds(p)).toEqual([]);
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
@@ -655,9 +654,9 @@ describe("the shelf's script", () => {
       gone.$(`[data-id="${b.link.id}"] h3 a`),
       gone.$("#undo-bar button"),
     ]);
-    // Done with it on the only tile: nothing is left, so focus goes to the heading and then to Undo.
+    // Archive on the only tile: nothing is left, so focus goes to the heading and then to Undo.
     const done = shelfPage(home([due]), () => ({ status: 200, body: STALE_CHANGE }), [home([])]);
-    done.dispatch(done.$("button[data-act=done]"), "click");
+    done.dispatch(done.$("button[data-act=archive]"), "click");
     await done.settle();
     expect(done.focused().slice(-2)).toEqual([done.$("#handy-title"), done.$("#undo-bar button")]);
   });
@@ -707,7 +706,7 @@ describe("the shelf's script", () => {
     );
     p.dispatch(p.$("button[data-act=still-using]"), "click");
     await p.settle();
-    p.dispatch(p.$("button[data-act=done]"), "click");
+    p.dispatch(p.$("button[data-act=archive]"), "click");
     await p.settle();
     expect(urls(p).filter((u) => u !== "/")).toEqual(["/tools/still-using"]);
     release();
@@ -988,11 +987,11 @@ describe("a Handy tile that is slow to answer (#314)", () => {
       "Keeping…",
     ],
     [
-      "Still using: Done with it",
+      "Still using: Archive",
       () => [kept({}, true)],
       () => [],
-      "button[data-act=done]",
-      "Marking done…",
+      "button[data-act=archive]",
+      "Archiving…",
     ],
     ["Keep handy?: Yes", () => [], () => [suggested()], "button[data-act=suggest-yes]", "Adding…"],
     ["Keep handy?: No", () => [], () => [suggested()], "button[data-act=suggest-no]", "Skipping…"],
@@ -1004,11 +1003,11 @@ describe("a Handy tile that is slow to answer (#314)", () => {
       "Checking…",
     ],
     [
-      "the gone band's Done with it",
+      "the gone band's Archive",
       () => [goneItem()],
       () => [],
-      "[data-gone] button[data-act=done]",
-      "Marking done…",
+      "[data-gone] button[data-act=archive]",
+      "Archiving…",
     ],
   ];
   const held = () => {

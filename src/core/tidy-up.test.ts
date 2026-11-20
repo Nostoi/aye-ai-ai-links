@@ -62,7 +62,6 @@ async function link(over: Partial<NewLink> = {}, owner = A): Promise<Link> {
       savedAt: ago(60 * DAY),
       savedBy: "t",
       lastOpenedAt: null,
-      putAwayAt: null,
       tidyKeptAt: null,
       lastSurfacedAt: null,
       snoozedUntil: null,
@@ -104,9 +103,8 @@ describe("which links qualify", () => {
     expect(await queueIds()).toEqual([]);
   });
 
-  it("leaves out archived links, put away or not", async () => {
+  it("leaves out archived links", async () => {
     await link({ state: "archived" });
-    await link({ state: "archived", putAwayAt: ago(DAY) });
     expect(await queueIds()).toEqual([]);
   });
 
@@ -261,12 +259,6 @@ describe("keepInTidy", () => {
 
   it("refuses an archived link with a conflict and leaves it unchanged", async () => {
     const l = await link({ state: "archived" });
-    await expect(keepInTidy(deps(), A, l.id)).rejects.toMatchObject({ code: "conflict" });
-    expect((await store.get(A, l.id))?.tidyKeptAt).toBeNull();
-  });
-
-  it("refuses a put-away link the same way", async () => {
-    const l = await link({ state: "archived", putAwayAt: ago(DAY) });
     await expect(keepInTidy(deps(), A, l.id)).rejects.toMatchObject({ code: "conflict" });
     expect((await store.get(A, l.id))?.tidyKeptAt).toBeNull();
   });

@@ -5,7 +5,6 @@ import { isWebUrl } from "../core/url-key.js";
 import { backLink, COPY_END_SCRIPT, copyEnd } from "./copy-end.js";
 import { copyHtml } from "./copy-markdown.js";
 import { displayTitle } from "./display-title.js";
-import { PUT_AWAY_MARKER } from "./done-link.js";
 import { hostOf } from "./host.js";
 import { whyText } from "./link-rows.js";
 import { openedScript, openLink } from "./open-link.js";
@@ -23,7 +22,7 @@ export type Back = { label: string; href: string };
 
 /** The one element holding the page's frame, whose clicks on an `a[data-open]` it records. */
 const FRAME_ID = "copy-frame";
-const OPENED = openedScript(FRAME_ID, "/links/opened", PUT_AWAY_MARKER);
+const OPENED = openedScript(FRAME_ID, "/links/opened");
 const END = `<script>${COPY_END_SCRIPT}</script>`;
 
 /** The page's own scripts: its menu with the Save dialog, and the Undo bar the end row offers. */

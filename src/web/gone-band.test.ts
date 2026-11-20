@@ -5,7 +5,7 @@ import type { ShelfItem } from "../core/tools.js";
 import type { Link } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { BAND_COLLAPSE } from "./band-collapse.js";
-import { DONE_HINT } from "./done-link.js";
+import { ARCHIVE_HINT } from "./done-link.js";
 import { goneLine } from "./gone-line.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage, type WorthCards } from "./home-page.js";
@@ -30,7 +30,6 @@ const link = (id: string, over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-10-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -56,12 +55,12 @@ const rule = (selector: string) => {
 };
 
 describe("the band's markup", () => {
-  it("is the warning, then It still works (a link icon) and Done with it (the box), Done last", () => {
+  it("is the warning, then It still works (a link icon) and Archive (the box), Done last", () => {
     const band = dom(goneLine(link("1"), GONE)).querySelector("[data-gone].gone-band");
     expect(band?.querySelector("p")?.textContent).toBe("This page seems gone");
     expect(words(band)).toEqual([
       ["still-works", "It still works", "Clears this warning"],
-      ["gone-done", "Done with it", DONE_HINT],
+      ["gone-archive", "Archive", ARCHIVE_HINT],
     ]);
     expect(band?.querySelector("button svg path")?.getAttribute("d")).toBe(
       "M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1",
@@ -74,11 +73,11 @@ describe("the band's markup", () => {
     expect(band?.querySelector("button")).toBeNull();
   });
 
-  it("can name the act Done with it carries, and carry a link beside the warning", () => {
-    const band = dom(goneLine(link("1"), GONE, { done: "done", read: "/copy/1" })).querySelector(
-      "[data-gone]",
-    );
-    expect(words(band).map((w) => w[0])).toEqual(["still-works", "done"]);
+  it("can name the act Archive carries, and carry a link beside the warning", () => {
+    const band = dom(
+      goneLine(link("1"), GONE, { archive: "archive", read: "/copy/1" }),
+    ).querySelector("[data-gone]");
+    expect(words(band).map((w) => w[0])).toEqual(["still-works", "archive"]);
     expect(band?.querySelector("p + a[data-act=read-copy]")?.getAttribute("href")).toBe("/copy/1");
   });
 });
@@ -161,7 +160,7 @@ describe("where the band sits", () => {
     expect(band?.querySelector("p")?.textContent).toBe("This page seems gone");
     expect(words(band)).toEqual([
       ["still-works", "It still works", "Clears this warning"],
-      ["done", "Done with it", DONE_HINT],
+      ["archive", "Archive", ARCHIVE_HINT],
     ]);
     expect(tile?.classList.contains("needs-you")).toBe(false);
     expect(tile?.textContent).not.toContain("Seems gone");
@@ -240,8 +239,8 @@ const CHECK = { checkedAt: "2026-10-16T10:00:00.000Z", result: "alive", stillWor
 const PREVIOUS = { checkedAt: "2026-10-13T00:00:00.000Z", result: "dead", stillWorksAt: null };
 const WORKS = { status: 200, body: { check: CHECK, previous: PREVIOUS } } as const;
 const CHANGE = {
-  before: { state: "active", putAwayAt: null, snoozedUntil: null },
-  after: { state: "archived", putAwayAt: null },
+  before: { state: "active", snoozedUntil: null },
+  after: { state: "archived" },
 };
 
 /** A search page with a gone link "7", animated (reduced motion off) so the collapse is observable. */
@@ -324,11 +323,11 @@ describe("the band's slide-away", () => {
     intact(p);
   });
 
-  it("Done with it collapses after the server accepts, hides the card, and Undo shows card and whole band", async () => {
+  it("Archive collapses after the server accepts, hides the card, and Undo shows card and whole band", async () => {
     const p = load((s) =>
       s.url === "/home/archive" ? { status: 200, body: CHANGE } : { status: 204 },
     );
-    await click(p, "button[data-act=gone-done]");
+    await click(p, "button[data-act=gone-archive]");
     expect(p.$("li[data-id]").hidden).toBe(false);
     expect(band(p).classList.contains("collapsing")).toBe(true);
     await ended(p);
@@ -346,7 +345,7 @@ describe("the band's slide-away", () => {
 
   it.each([
     ["It still works", "still-works", 409],
-    ["Done with it", "gone-done", 404],
+    ["Archive", "gone-archive", 404],
   ])("a refused %s leaves the band visible and its buttons usable", async (_, act, status) => {
     const p = load(() => ({ status, body: { code: "conflict", message: "Refused." } }));
     await click(p, `button[data-act=${act}]`);
@@ -362,7 +361,7 @@ describe("the band's slide-away", () => {
   it("sends nothing for a second action while the band is still collapsing", async () => {
     const p = load(() => WORKS);
     await click(p, "button[data-act=still-works]");
-    await click(p, "button[data-act=gone-done]");
+    await click(p, "button[data-act=gone-archive]");
     await click(p, "button[data-act=still-works]");
     expect(p.sent).toHaveLength(1);
   });
@@ -390,7 +389,7 @@ describe("the Handy tile's slide-away", () => {
 
   it.each([
     ["It still works", "still-works", "/links/still-works", { status: 200, body: WORKS.body }],
-    ["Done with it", "done", "/home/archive", { status: 200, body: CHANGE }],
+    ["Archive", "archive", "/home/archive", { status: 200, body: CHANGE }],
   ])(
     "%s collapses the band after the server agrees, then refreshes the shelf",
     async (_, act, url, ok) => {
@@ -413,7 +412,7 @@ describe("the Handy tile's slide-away", () => {
 
   it.each([
     ["It still works", "still-works"],
-    ["Done with it", "done"],
+    ["Archive", "archive"],
   ])("a refused %s leaves the band as it was", async (_, act) => {
     const p = runPage(tileHome([item(true)]), () => ({
       status: 409,
@@ -554,7 +553,7 @@ describe("the busy look and the slide-away (motion on)", () => {
   const CHANGED = { status: 200, body: CHANGE } as const;
   const SURFACES = [
     ["It still works", "button[data-act=still-works]", load, "/links/still-works", WORKS],
-    ["the gone band's Done with it", "button[data-act=gone-done]", load, "/home/archive", CHANGED],
+    ["the gone band's Archive", "button[data-act=gone-archive]", load, "/home/archive", CHANGED],
     [
       "a Handy tile's It still works",
       "[data-gone] button[data-act=still-works]",
@@ -563,8 +562,8 @@ describe("the busy look and the slide-away (motion on)", () => {
       WORKS,
     ],
     [
-      "a Handy tile's Done with it",
-      "[data-gone] button[data-act=done]",
+      "a Handy tile's Archive",
+      "[data-gone] button[data-act=archive]",
       tile,
       "/home/archive",
       CHANGED,

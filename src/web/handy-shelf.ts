@@ -4,7 +4,7 @@ import type { ShelfItem, ToolItem } from "../core/tools.js";
 import type { Link, Tag } from "../core/types.js";
 import { cardMenu } from "./card-menu.js";
 import { displayTitle } from "./display-title.js";
-import { DONE_ITEM, DONE_LABEL, DONE_UNDO, DONE_WORKING } from "./done-link.js";
+import { ARCHIVE_ITEM, ARCHIVE_LABEL, ARCHIVE_UNDO, ARCHIVE_WORKING } from "./done-link.js";
 import { goneBand, STILL_WORKS_WORKING } from "./gone-line.js";
 import { hostOf } from "./host.js";
 import { NOT_HANDY, NOT_HANDY_WORKING } from "./keep-handy.js";
@@ -31,7 +31,7 @@ const STILL_USING = `<div class="ask">
 <p class="small">Still using?</p>
 <div class="actions small-actions">
 <button type="button" data-act="still-using">Yes</button>
-<button type="button" data-act="done">${DONE_LABEL}</button>
+<button type="button" data-act="archive">${ARCHIVE_LABEL}</button>
 </div>
 </div>`;
 
@@ -53,13 +53,12 @@ const WORKING = {
   "not-handy": NOT_HANDY_WORKING,
   "suggest-yes": "Adding…",
   "suggest-no": "Skipping…",
-  done: DONE_WORKING,
-  archive: DONE_WORKING,
+  archive: ARCHIVE_WORKING,
   "still-works": STILL_WORKS_WORKING,
 };
 
 /** A kept tile's ⋯ menu: the link menu's first group (#192), with Keep handy already done. */
-const menu = (link: Link) => cardMenu(`More for ${displayTitle(link)}`, [DONE_ITEM, NOT_HANDY]);
+const menu = (link: Link) => cardMenu(`More for ${displayTitle(link)}`, [ARCHIVE_ITEM, NOT_HANDY]);
 
 /** The space's dot and the site's host, without the space's name or a saved copy (the list cards use `cardLine`). */
 function hostLine(link: Link, space: Space | null): string {
@@ -93,14 +92,14 @@ ${after}
 
 /**
  * A kept tool. Past the first SHELF_SIZE it is hidden until Show all. A due one needs you; a gone
- * one carries the gone band instead (#298), whose Done with it is this shelf's `done`.
+ * one carries the gone band instead (#298), whose Archive is this shelf's `archive`.
  */
 const keptTile = (item: ShelfItem, shelf: Shelf, more: boolean) =>
   card(
     item,
     shelf,
     item.due && !item.gone ? " needs-you" : "",
-    `${item.gone ? `${goneBand(item.link, { done: "done" })}\n` : item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
+    `${item.gone ? `${goneBand(item.link, { archive: "archive" })}\n` : item.due ? `${STILL_USING}\n` : ""}${menu(item.link)}`,
     more ? " data-more hidden" : "",
   );
 
@@ -238,9 +237,9 @@ if (handy) {
       return;
     }
     const make = SHELF_ACTS[act];
-    // Done with it on a tile's ask and the menu's Done with it (archive) are the same action.
-    const done = act === "done" || act === "archive";
-    if (!make && !done && act !== "still-works") return;
+    // Archive on a tile's ask and the menu's Archive are the same action.
+    const archive = act === "archive";
+    if (!make && !archive && act !== "still-works") return;
     const tile = button.closest("[data-id]");
     const gone = button.closest("[data-gone]");
     if (cardBusy.has(tile)) return;
@@ -253,7 +252,7 @@ if (handy) {
     const look = busyLook(tile, button.closest("details") ? null : button, working[act]);
     let dropped = false;
     try {
-      if (done) {
+      if (archive) {
         const res = await post("/home/archive", { id });
         look.answered();
         const change = res && res.status === 200 ? await res.json().catch(() => null) : null;
@@ -263,7 +262,7 @@ if (handy) {
         }
         if (gone) await collapseBand(gone);
         dropped = await refreshShelf(from, tile);
-        offerUndo(ticket, ${JSON.stringify(DONE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(DONE_UNDO.title)});
+        offerUndo(ticket, ${JSON.stringify(ARCHIVE_UNDO.text)}, "/home/undo-state", { id, change }, from, ${JSON.stringify(ARCHIVE_UNDO.title)});
         return;
       }
       if (act === "still-works") {

@@ -141,8 +141,6 @@ function matchesExpectation(found: Link, expected: LinkExpectation): boolean {
     (expected.state === undefined || found.state === expected.state) &&
     (expected.snoozedUntil === undefined ||
       (found.snoozedUntil?.getTime() ?? null) === (expected.snoozedUntil?.getTime() ?? null)) &&
-    (expected.putAwayAt === undefined ||
-      (found.putAwayAt?.getTime() ?? null) === (expected.putAwayAt?.getTime() ?? null)) &&
     (expected.whySource === undefined || expected.whySource.includes(found.why?.source ?? null)) &&
     (expected.summary === undefined || found.summary === expected.summary) &&
     (expected.summarySource === undefined || expected.summarySource.includes(found.summarySource))
@@ -1021,35 +1019,23 @@ export class FakeStore
       now,
       exceptKeptTools,
       exceptGone,
-      expectedPutAwayAt,
     }: {
       at: Date;
       notSurfacedAfter: Date;
       now: Date;
       exceptKeptTools?: boolean;
       exceptGone?: boolean;
-      expectedPutAwayAt?: Date;
     },
   ): Promise<SurfacedClaim[]> {
     const claimed: SurfacedClaim[] = [];
     for (const id of new Set(ids)) {
       const found = this.owned(owner).get(id);
-      const stateFits =
-        expectedPutAwayAt === undefined
-          ? found?.state === "active"
-          : found?.state === "archived" &&
-            found.putAwayAt?.getTime() === expectedPutAwayAt.getTime();
-      // A came-back claim is blocked only by a surfacing since the marker, and only inside the cooldown.
-      const surfacedSince =
-        expectedPutAwayAt === undefined ||
-        (found?.lastSurfacedAt != null && found.lastSurfacedAt >= expectedPutAwayAt);
       if (
-        !found ||
-        !stateFits ||
+        found?.state !== "active" ||
         (found.snoozedUntil !== null && found.snoozedUntil > now) ||
         (exceptKeptTools === true && this.toolRows.get(owner)?.get(id)?.status === "kept") ||
         (exceptGone === true && (this.checkRows.get(owner)?.get(id)?.flaggedAt ?? null) !== null) ||
-        (surfacedSince && found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
+        (found.lastSurfacedAt !== null && found.lastSurfacedAt > notSurfacedAfter)
       ) {
         continue;
       }

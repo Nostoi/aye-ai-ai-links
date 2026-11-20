@@ -7,7 +7,7 @@ import { cardMenu, DIVIDER, type MenuItem } from "./card-menu.js";
 import { removeCopyItem } from "./copy-menu.js";
 import { deleteLinkItem } from "./delete-link.js";
 import { displayTitle } from "./display-title.js";
-import { BRING_BACK_ITEM, DONE_ITEM, PUT_AWAY_ITEM } from "./done-link.js";
+import { ARCHIVE_ITEM, BRING_BACK_ITEM } from "./done-link.js";
 import { initialsText } from "./initials.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
 import { NOT_NOW_ITEM } from "./not-now.js";
@@ -20,11 +20,11 @@ export const EDIT_ITEM: MenuItem = { act: "edit", icon: PENCIL, text: "Edit link
 
 /**
  * A card's ⋯ menu on the pages with the edit dialog, mildest first (#284). An active link's menu
- * opens with Put it away, Done with it and Keep handy, which reads Not handy anymore once `handy`
- * is kept; both Keep rows are rendered and the script swaps them. A link done or put away starts
+ * opens with Archive and Keep handy, which reads Not handy anymore once `handy`
+ * is kept; both Keep rows are rendered and the script swaps them. An archived link starts
  * at Edit and offers Bring it back after it. Then Remove saved copy when `copy` is there, and
  * Delete link last. The copy itself opens from the card's grey line (`cardLine`). Home's rows put
- * Not now first (`notNow`); Home's featured card shows Done with it and Not now as buttons, so
+ * Not now first (`notNow`); Home's featured card shows Archive and Not now as buttons, so
  * its menu leaves those two out (`onCard`).
  */
 export const editMenu = (
@@ -46,8 +46,7 @@ export const editMenu = (
   const first = active
     ? [
         ...(notNow && !onCard ? [NOT_NOW_ITEM] : []),
-        PUT_AWAY_ITEM,
-        ...(onCard ? [] : [DONE_ITEM]),
+        ...(onCard ? [] : [ARCHIVE_ITEM]),
         { ...KEEP_ITEM, hidden: kept },
         { ...NOT_HANDY, hidden: !kept },
         DIVIDER,

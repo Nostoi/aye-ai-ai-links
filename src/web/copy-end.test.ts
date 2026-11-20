@@ -4,14 +4,7 @@ import type { CopyView } from "../core/copy-reading.js";
 import type { HandyView } from "../core/tools.js";
 import type { Link } from "../core/types.js";
 import { copyPage } from "./copy-page.js";
-import {
-  BRING_BACK_ITEM,
-  BRING_BACK_UNDO,
-  DONE_ITEM,
-  DONE_UNDO,
-  PUT_AWAY_ITEM,
-  PUT_AWAY_UNDO,
-} from "./done-link.js";
+import { ARCHIVE_ITEM, ARCHIVE_UNDO, BRING_BACK_ITEM, BRING_BACK_UNDO } from "./done-link.js";
 import { KEEP_ITEM, NOT_HANDY } from "./keep-handy.js";
 import { type Answer, type Post, runPage } from "./opened-test-kit.js";
 
@@ -32,7 +25,6 @@ const link = (over: Partial<Link> = {}): Link => ({
   savedAt: new Date("2026-09-01T00:00:00Z"),
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,
@@ -63,16 +55,14 @@ const visibleActs = (html: string) =>
     .filter(shown)
     .map((b) => [b.getAttribute("data-act"), squash(b)]);
 
-const PUT_AWAY = { state: "archived", putAwayAt: new Date("2026-10-20T00:00:00Z") } as const;
-const STALE = { state: "archived", putAwayAt: null } as const;
+const ARCHIVED = { state: "archived" } as const;
 
 describe("the end of the saved copy", () => {
   it("asks Finished with this link? and offers the menu's items in the menu's order on an active link", () => {
     const d = dom(render());
     expect(squash(d.querySelector("#copy-end .copy-end-label"))).toBe("Finished with this link?");
     expect(visibleActs(render())).toEqual([
-      [PUT_AWAY_ITEM.act, PUT_AWAY_ITEM.text],
-      [DONE_ITEM.act, DONE_ITEM.text],
+      [ARCHIVE_ITEM.act, ARCHIVE_ITEM.text],
       [KEEP_ITEM.act, KEEP_ITEM.text],
     ]);
     const notHandy = d.querySelector("#copy-end .handy-on button[data-act=not-handy]");
@@ -89,23 +79,19 @@ describe("the end of the saved copy", () => {
   it("shows Not handy anymore instead of Keep handy on a kept link", () => {
     const html = render({}, KEPT);
     expect(visibleActs(html)).toEqual([
-      [PUT_AWAY_ITEM.act, PUT_AWAY_ITEM.text],
-      [DONE_ITEM.act, DONE_ITEM.text],
+      [ARCHIVE_ITEM.act, ARCHIVE_ITEM.text],
       [NOT_HANDY.act, NOT_HANDY.text],
     ]);
     const keep = dom(html).querySelector("#copy-end button[data-act=keep]") as HTMLElement;
     expect(keep.hidden).toBe(true);
   });
 
-  it.each([
-    ["put away", PUT_AWAY, "Put away"],
-    ["stale", STALE, "Done"],
-  ])("a %s link shows only its marker and Bring it back", (_, over, marker) => {
-    const html = render(over);
+  it("an archived link shows only its marker and Bring it back", () => {
+    const html = render(ARCHIVED);
     const d = dom(html);
     expect((d.querySelector("#copy-end-active") as HTMLElement).hidden).toBe(true);
     expect([...d.querySelectorAll("#copy-end .card-line > span")].map((s) => squash(s))).toEqual([
-      marker,
+      "Archived",
     ]);
     expect(visibleActs(html)).toEqual([[BRING_BACK_ITEM.act, BRING_BACK_ITEM.text]]);
     expect(d.querySelector("#copy-end-active button[data-act=keep]")).not.toBeNull();
@@ -113,8 +99,7 @@ describe("the end of the saved copy", () => {
 
   it.each([
     ["active", {}],
-    ["put away", PUT_AWAY],
-    ["stale", STALE],
+    ["archived", ARCHIVED],
   ])("repeats Back after the row, to the same place as the top one (%s)", (_, over) => {
     const d = dom(render(over));
     const top = d.querySelector(".copy-nav a.back-link");
@@ -144,7 +129,7 @@ describe("the end of the saved copy", () => {
     ["unreadable", "unreadable" as const],
   ])("still shows the row when the copy is %s", (_, copy) => {
     const html = render({}, null, copy);
-    expect(visibleActs(html).map(([act]) => act)).toEqual(["put-away", "archive", "keep"]);
+    expect(visibleActs(html).map(([act]) => act)).toEqual(["archive", "keep"]);
   });
 });
 
@@ -161,15 +146,11 @@ const opened = (id: string): Post => ({
   keepalive: true,
 });
 
-const ACTIVE = { state: "active", putAwayAt: null, snoozedUntil: null } as const;
-const STALE_CHANGE = { before: ACTIVE, after: { state: "archived", putAwayAt: null } };
-const PUT_CHANGE = {
-  before: ACTIVE,
-  after: { state: "archived", putAwayAt: "2026-10-21T12:00:00.000Z" },
-};
+const ACTIVE = { state: "active", snoozedUntil: null } as const;
+const ARCHIVE_CHANGE = { before: ACTIVE, after: { state: "archived" } };
 const BRING_CHANGE = {
-  before: { state: "archived", putAwayAt: "2026-10-20T00:00:00.000Z", snoozedUntil: null },
-  after: { state: "active", putAwayAt: null },
+  before: { state: "archived", snoozedUntil: null },
+  after: { state: "active" },
 };
 const KEPT_ROW = {
   status: "kept",
@@ -200,10 +181,12 @@ const barText = (p: ReturnType<typeof runPage>) => squash(p.$("#undo-bar span"))
 const OUT_LINE = "#copy-end-out .copy-end-line";
 const ACTIVE_LINE = "#copy-end-active .copy-end-label";
 
-describe.each([
-  ["Done with it", "archive", "/home/archive", STALE_CHANGE, DONE_UNDO, "Done"],
-  ["Put it away", "put-away", "/home/put-away", PUT_CHANGE, PUT_AWAY_UNDO, "Put away"],
-])("%s at the end of the copy", (_, act, route, change, undo, marker) => {
+describe("Archive at the end of the copy", () => {
+  const act = "archive";
+  const route = "/home/archive";
+  const change = ARCHIVE_CHANGE;
+  const undo = ARCHIVE_UNDO;
+  const marker = "Archived";
   const load = (answer: (s: Post) => Answer = () => ({ status: 200, body: change })) =>
     runPage(render(), (s) => (s.url === "/home/undo-state" ? { status: 204 } : answer(s)));
 
@@ -221,16 +204,16 @@ describe.each([
     await click(p, ACT(act));
     await click(p, UNDO);
     expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change }));
-    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["archive", "keep"] });
     expect(p.focused().at(-1)).toBe(p.$(ACTIVE_LINE));
   });
 
   it("a refusal says why in an alert, changes nothing and offers no Undo", async () => {
-    const p = load(() => REFUSED("That link is already done."));
+    const p = load(() => REFUSED("This link is already archived."));
     await click(p, ACT(act));
-    expect(squash(p.$("#copy-end-error"))).toBe("That link is already done.");
+    expect(squash(p.$("#copy-end-error"))).toBe("This link is already archived.");
     expect(p.$("#copy-end-error").getAttribute("role")).toBe("alert");
-    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["archive", "keep"] });
     expect(p.$("#undo-bar").hidden).toBe(true);
   });
 
@@ -247,26 +230,26 @@ describe.each([
 
 describe("Bring it back at the end of the copy", () => {
   const load = (answer: (s: Post) => Answer = () => ({ status: 200, body: BRING_CHANGE })) =>
-    runPage(render(PUT_AWAY), (s) => (s.url === "/home/undo-state" ? { status: 204 } : answer(s)));
+    runPage(render(ARCHIVED), (s) => (s.url === "/home/undo-state" ? { status: 204 } : answer(s)));
 
-  it("posts /home/bring-back, shows the active row with Keep handy and offers Undo, which restores Put away", async () => {
+  it("posts /home/bring-back, shows the active row with Keep handy and offers Undo, which restores Archived", async () => {
     const p = load();
     await click(p, ACT("bring-back"));
     expect(p.sent).toEqual([post("/home/bring-back", { id: "7" })]);
-    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["archive", "keep"] });
     expect(barText(p)).toBe(BRING_BACK_UNDO.title);
     await click(p, UNDO);
     expect(p.sent[1]).toEqual(post("/home/undo-state", { id: "7", change: BRING_CHANGE }));
-    expect(row(p)).toEqual({ group: "out: Put away", acts: ["bring-back"] });
+    expect(row(p)).toEqual({ group: "out: Archived", acts: ["bring-back"] });
   });
 
   it("shows the state the route returned: a Bring it back that changed nothing, then Undo, leaves the row active", async () => {
-    const noOp = { before: { ...ACTIVE }, after: { state: "active", putAwayAt: null } };
+    const noOp = { before: { ...ACTIVE }, after: { state: "active" } };
     const p = load(() => ({ status: 200, body: noOp }));
     await click(p, ACT("bring-back"));
     expect(row(p).group).toBe("active");
     await click(p, UNDO);
-    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["archive", "keep"] });
   });
 
   it("takes no other action until its Undo has been answered", async () => {
@@ -274,7 +257,7 @@ describe("Bring it back at the end of the copy", () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const p = runPage(render(PUT_AWAY), (s) =>
+    const p = runPage(render(ARCHIVED), (s) =>
       s.url === "/home/undo-state"
         ? { status: 204, wait: held }
         : { status: 200, body: BRING_CHANGE },
@@ -286,7 +269,7 @@ describe("Bring it back at the end of the copy", () => {
     release();
     await p.settle();
     expect(p.sent.map((s) => s.url)).toEqual(["/home/bring-back", "/home/undo-state"]);
-    expect(row(p).group).toBe("out: Put away");
+    expect(row(p).group).toBe("out: Archived");
   });
 });
 
@@ -302,42 +285,42 @@ describe("Keep handy at the end of the copy", () => {
     const p = runPage(render(), answer);
     await click(p, ACT("keep"));
     expect(p.sent).toEqual([post("/tools/keep", { id: "7" })]);
-    expect(row(p).acts).toEqual(["put-away", "archive", "not-handy"]);
+    expect(row(p).acts).toEqual(["archive", "not-handy"]);
     expect(barText(p)).toBe("Kept on your Handy shelf.");
     await click(p, UNDO);
     expect(p.sent[1]).toEqual(post("/tools/undo", { id: "7", tool: KEPT_ROW, previous: null }));
-    expect(row(p).acts).toEqual(["put-away", "archive", "keep"]);
+    expect(row(p).acts).toEqual(["archive", "keep"]);
   });
 
   it("Not handy anymore posts /tools/not-handy, swaps to Keep handy, and Undo swaps back", async () => {
     const p = runPage(render({}, KEPT), answer);
     await click(p, ACT("not-handy"));
     expect(p.sent).toEqual([post("/tools/not-handy", { id: "7" })]);
-    expect(row(p).acts).toEqual(["put-away", "archive", "keep"]);
+    expect(row(p).acts).toEqual(["archive", "keep"]);
     expect(barText(p)).toBe("Not handy anymore.");
     await click(p, UNDO);
-    expect(row(p).acts).toEqual(["put-away", "archive", "not-handy"]);
+    expect(row(p).acts).toEqual(["archive", "not-handy"]);
   });
 
   it("a refusal says why in the row's alert", async () => {
     const p = runPage(render(), () => REFUSED("Keep handy changed."));
     await click(p, ACT("keep"));
     expect(squash(p.$("#copy-end-error"))).toBe("Keep handy changed.");
-    expect(row(p).acts).toEqual(["put-away", "archive", "keep"]);
+    expect(row(p).acts).toEqual(["archive", "keep"]);
   });
 });
 
-it("takes one action at a time: while Put it away waits, nothing else is sent", async () => {
+it("takes one action at a time: while Archive waits, nothing else is sent", async () => {
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const p = runPage(render(), () => ({ status: 200, body: PUT_CHANGE, wait: held }));
-  p.dispatch(p.$(ACT("put-away")), "click");
+  const p = runPage(render(), () => ({ status: 200, body: ARCHIVE_CHANGE, wait: held }));
+  p.dispatch(p.$(ACT("archive")), "click");
   p.dispatch(p.$(ACT("keep")), "click");
   p.dispatch(p.$(ACT("archive")), "click");
   await p.settle();
-  expect(p.sent).toEqual([post("/home/put-away", { id: "7" })]);
+  expect(p.sent).toEqual([post("/home/archive", { id: "7" })]);
   release();
   await p.settle();
   expect(p.sent).toHaveLength(1);
@@ -348,60 +331,48 @@ describe("opening the link from the end-of-copy page", () => {
   const load = (over: Partial<Link>, answer: (s: Post) => Answer = () => ({ status: 204 })) =>
     runPage(render(over), answer);
 
-  it("brings a put-away row back to the active row, with no bar and no focus moved", async () => {
-    const p = load(PUT_AWAY);
+  it("leaves an archived row archived, with no bar and no focus moved", async () => {
+    const p = load(ARCHIVED);
     await click(p, OPEN);
     expect(p.sent).toEqual([opened("7")]);
-    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
+    expect(row(p)).toEqual({ group: "out: Archived", acts: ["bring-back"] });
     expect(p.$("#undo-bar").hidden).toBe(true);
     expect(p.focused()).toEqual([]);
-  });
-
-  it("leaves a Done row Done", async () => {
-    const p = load(STALE);
-    await click(p, OPEN);
-    expect(row(p)).toEqual({ group: "out: Done", acts: ["bring-back"] });
   });
 
   it.each([
     ["a refusal", { status: 409, body: { message: "no" } }],
     ["a failed request", { status: 204, networkFails: true }],
-  ] as [string, Answer][])("leaves a put-away row put away after %s", async (_, answer) => {
-    const p = load(PUT_AWAY, () => answer);
+  ] as [string, Answer][])("leaves an archived row archived after %s", async (_, answer) => {
+    const p = load(ARCHIVED, () => answer);
     await click(p, OPEN);
-    expect(row(p)).toEqual({ group: "out: Put away", acts: ["bring-back"] });
+    expect(row(p)).toEqual({ group: "out: Archived", acts: ["bring-back"] });
   });
 
   it("changes nothing on an active page", async () => {
     const p = load({});
     await click(p, OPEN);
-    expect(row(p)).toEqual({ group: "active", acts: ["put-away", "archive", "keep"] });
+    expect(row(p)).toEqual({ group: "active", acts: ["archive", "keep"] });
     expect(p.focused()).toEqual([]);
   });
 
-  it("Put it away, then Open: the row is active, and the Undo that follows is refused and leaves it active", async () => {
+  it("Archive, then Open: the row stays archived, and Undo still brings it back", async () => {
     const p = runPage(render(), (s) =>
-      s.url === "/home/put-away"
-        ? { status: 200, body: PUT_CHANGE }
-        : s.url === "/links/opened"
-          ? { status: 204 }
-          : REFUSED("It changed since."),
+      s.url === "/home/archive" ? { status: 200, body: ARCHIVE_CHANGE } : { status: 204 },
     );
-    await click(p, ACT("put-away"));
+    await click(p, ACT("archive"));
     await click(p, OPEN);
-    expect(row(p).group).toBe("active");
+    expect(row(p).group).toBe("out: Archived");
     await click(p, UNDO);
-    expect(squash(p.$("#copy-end-error"))).toBe("It changed since.");
     expect(row(p).group).toBe("active");
   });
 });
 
 describe("the end of the copy, slow to answer (#314)", () => {
   const CASES: [string, string, () => string, Answer["body"], string][] = [
-    ["Put it away", "put-away", () => render(), PUT_CHANGE, "Putting away…"],
-    ["Done with it", "archive", () => render(), STALE_CHANGE, "Marking done…"],
+    ["Archive", "archive", () => render(), ARCHIVE_CHANGE, "Archiving…"],
     ["Keep handy", "keep", () => render(), { tool: KEPT_ROW, previous: null }, "Keeping handy…"],
-    ["Bring it back", "bring-back", () => render(PUT_AWAY), BRING_CHANGE, "Bringing back…"],
+    ["Bring it back", "bring-back", () => render(ARCHIVED), BRING_CHANGE, "Bringing back…"],
     [
       "Not handy anymore",
       "not-handy",
@@ -442,11 +413,11 @@ describe("the end of the copy, slow to answer (#314)", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const p = runPage(render(), () => ({ status: 200, body: PUT_CHANGE, wait: gate }));
-    await click(p, ACT("put-away"));
+    const p = runPage(render(), () => ({ status: 200, body: ARCHIVE_CHANGE, wait: gate }));
     await click(p, ACT("archive"));
+    await click(p, ACT("keep"));
     p.timers.fire();
-    expect(p.$(ACT("archive")).textContent).toBe("Done with it");
+    expect(p.$(ACT("keep")).textContent).toBe("Keep handy");
     expect(p.sent).toHaveLength(1);
     release();
     await p.settle();

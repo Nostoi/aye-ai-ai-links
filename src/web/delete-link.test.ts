@@ -30,7 +30,6 @@ const link = (id: string, savedAt = NOW): Link => ({
   savedAt,
   savedBy: "t",
   lastOpenedAt: null,
-  putAwayAt: null,
   tidyKeptAt: null,
   lastSurfacedAt: null,
   snoozedUntil: null,

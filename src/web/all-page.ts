@@ -9,7 +9,7 @@ import type { Link, Tag } from "../core/types.js";
 import type { Ask } from "./ask-panel.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { DONE_AND_PUT_AWAY, doneLinkScript, PUT_AWAY_MARKER } from "./done-link.js";
+import { ARCHIVED, archiveLinkScript } from "./done-link.js";
 import { editDialog, editLinkScript } from "./edit-link.js";
 import { goneScript } from "./gone-line.js";
 import { keepHandyScript } from "./keep-handy.js";
@@ -21,7 +21,7 @@ import { olderScript } from "./show-older.js";
 import { CARD_FETCH } from "./tell-why.js";
 
 /**
- * The URL of All links in `order`, or with `done` the links done or put away; `before` is a
+ * The URL of All links in `order`, or with `done` the archived links; `before` is a
  * page's `older` cursor. Newest, the default order, is the plain address.
  */
 export const allHref = (
@@ -47,7 +47,7 @@ type Input = {
   handy: Map<string, HandyView | null>;
   gone?: Map<string, GoneView | null>;
   now: Date;
-  /** The links done or put away, rather than the active ones. */
+  /** The archived links, rather than the active ones. */
   done: boolean;
   /** A page after the first. */
   later?: boolean;
@@ -115,9 +115,8 @@ function row(
 
 function empty({ order, done, later }: Input): string {
   if (later) return order === "newest" ? "No older links." : "No more links.";
-  if (done && order === "opened")
-    return "You haven't opened any of the links you're done with or put away.";
-  if (done) return "Nothing here is done or put away yet.";
+  if (done && order === "opened") return "You haven't opened any of the links you've archived.";
+  if (done) return "Nothing here is archived yet.";
   if (order === "opened") {
     return "Nothing opened yet. Links you open from this site show here.";
   }
@@ -125,7 +124,7 @@ function empty({ order, done, later }: Input): string {
 }
 
 /**
- * All links, or with `done` the links done or put away, in one of the orders, grouped by month.
+ * All links, or with `done` the archived links, in one of the orders, grouped by month.
  * It shows no count. Each page has at most the links given; `older` is the cursor of the next
  * page, or null.
  */
@@ -140,12 +139,12 @@ export function allPage(input: Input): string {
     : "";
   const other = done
     ? `<a class="back-link" href="${escapeHtml(allHref(order))}">Back to All links</a>`
-    : `<a class="done-link" href="${escapeHtml(allHref(order, { done: true }))}">${DONE_AND_PUT_AWAY}</a>`;
+    : `<a class="archived-link" href="${escapeHtml(allHref(order, { done: true }))}">${ARCHIVED}</a>`;
   return page(
-    `${done ? `${DONE_AND_PUT_AWAY} · ` : ""}All links · Aye-AI-AI Links`,
+    `${done ? `${ARCHIVED} · ` : ""}All links · Aye-AI-AI Links`,
     `<main class="all" data-view="${view}">
 <div class="all-head">
-<h1>${done ? DONE_AND_PUT_AWAY : "All links"}</h1>
+<h1>${done ? ARCHIVED : "All links"}</h1>
 <div class="all-tools">${orderSelect(order, { action: done ? "/all/done" : "/all", hidden: {} })}${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
 </div>
 ${orderNav(order, (o) => allHref(o, { done }))}
@@ -159,9 +158,9 @@ ${viewScript}
 ${orderSelectScript}
 ${done ? "" : `${keepHandyScript("all-links", "all-error")}\n${goneScript("all-links", "all-error")}\n`}${input.ask ? "" : `${editLinkScript("all-links", "all-error")}\n`}${removeCopyScript("all-links", "all-error")}
 ${deleteLinkScript("all-links", "all-error")}
-${doneLinkScript("all-links", "all-error")}
+${archiveLinkScript("all-links", "all-error")}
 </script>
-${openedScript("all-links", "/links/opened", done ? PUT_AWAY_MARKER : undefined)}${older ? olderScript("all-links") : ""}`,
+${openedScript("all-links", "/links/opened")}${older ? olderScript("all-links") : ""}`,
     {
       menu: true,
       here: "all",

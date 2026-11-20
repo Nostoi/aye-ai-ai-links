@@ -7,7 +7,7 @@ import { SPACE_COLORS } from "../core/tag-space.js";
 import type { LinkView } from "../core/tools.js";
 import type { FocusEntry, Link, Source, Tag } from "../core/types.js";
 import { copyHref } from "./copy-page.js";
-import { DONE_HINT } from "./done-link.js";
+import { ARCHIVE_HINT } from "./done-link.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage, type WorthCards } from "./home-page.js";
 import { NOT_NOW_HINT } from "./not-now.js";
@@ -33,7 +33,6 @@ const link = (over: Partial<Link> = {}): Link => {
     savedAt: new Date("2026-03-12T10:00:00Z"),
     savedBy: "claude",
     lastOpenedAt: null,
-    putAwayAt: null,
     tidyKeptAt: null,
     lastSurfacedAt: null,
     snoozedUntil: null,
@@ -140,7 +139,7 @@ describe("Worth a look today", () => {
     expect(d.querySelector(".worth-rows")).toBeNull();
   });
 
-  it("gives the featured card Open it, Done with it and Not now, and a row only its ⋯", () => {
+  it("gives the featured card Open it, Archive and Not now, and a row only its ⋯", () => {
     const d = dom(render([card([]), card([])]));
     const feature = d.querySelector(".worth-feature") as HTMLElement;
     const open = feature.querySelector("a.button.primary[data-open]") as HTMLAnchorElement;
@@ -148,14 +147,14 @@ describe("Worth a look today", () => {
     expect(open.getAttribute("href")).toBe(feature.querySelector("h3 a")?.getAttribute("href"));
     expect(shownButtons(feature)).toEqual([
       `snooze Not now${NOT_NOW_HINT}`,
-      `archive Done with it${DONE_HINT}`,
+      `archive Archive${ARCHIVE_HINT}`,
     ]);
     const row = d.querySelector(".worth-row");
     expect(shownButtons(row)).toEqual([]);
     expect(row?.querySelector("a.button")).toBeNull();
   });
 
-  it("orders the featured buttons Open it, Not now, Done with it; the last two are icon buttons with label and hint (#298)", () => {
+  it("orders the featured buttons Open it, Not now, Archive; the last two are icon buttons with label and hint (#298)", () => {
     const feature = dom(render([card([])])).querySelector(".worth-feature") as HTMLElement;
     const controls = [...feature.querySelectorAll("a.button, button.slide")].filter(
       (e) => !e.closest("details.card-menu"),
@@ -175,22 +174,22 @@ describe("Worth a look today", () => {
     const label = (act: string) => slide(act)?.querySelector(".slide-words > span")?.textContent;
     expect(slide("snooze")?.getAttribute("type")).toBe("button");
     expect(hint("snooze")).toBe(NOT_NOW_HINT);
-    expect(hint("archive")).toBe(DONE_HINT);
+    expect(hint("archive")).toBe(ARCHIVE_HINT);
     expect(hint("snooze")).toBe("Not suggested for two weeks");
     expect(hint("archive")).toBe("Still findable in search");
     expect(label("snooze")).toBe("Not now");
-    expect(label("archive")).toBe("Done with it");
+    expect(label("archive")).toBe("Archive");
     // Label and hint stay text in the button, so its accessible name carries both.
     expect(slide("archive")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
-      `Done with it${DONE_HINT}`,
+      `Archive${ARCHIVE_HINT}`,
     );
-    // A clock leads Not now and an archive box leads Done with it.
+    // A clock leads Not now and an archive box leads Archive.
     expect(slide("snooze")?.firstElementChild?.querySelector("circle")).not.toBeNull();
     expect(slide("archive")?.firstElementChild?.querySelector("rect")).not.toBeNull();
     expect(slide("snooze")?.firstElementChild?.tagName.toLowerCase()).toBe("svg");
   });
 
-  it("gives a row the seven-row menu and the featured card the menu without its visible two", () => {
+  it("gives a row the six-row menu and the featured card the menu without its visible two", () => {
     const [first, second] = [card([]), card([])];
     const copies = new Map([
       [first?.link.id as string, COPY],
@@ -199,7 +198,6 @@ describe("Worth a look today", () => {
     const d = dom(render([first as DigestLink, second as DigestLink], { copies }));
     expect(menuRows(d.querySelector(".worth-row"))).toEqual([
       "snooze",
-      "put-away",
       "archive",
       "keep",
       "not-handy (hidden)",
@@ -208,7 +206,6 @@ describe("Worth a look today", () => {
       "delete-link",
     ]);
     expect(menuRows(d.querySelector(".worth-feature"))).toEqual([
-      "put-away",
       "keep",
       "not-handy (hidden)",
       "edit",
@@ -313,62 +310,19 @@ describe("Worth a look today", () => {
       );
     });
 
-    describe("a link that came back", () => {
-      const PUT_AWAY = new Date("2026-08-20T10:00:00Z");
-      const cameBack = (
-        text: string,
-        source: Source,
-        putAwayAt = PUT_AWAY,
-        over: Partial<Link> = {},
-      ): DigestLink =>
-        card(
-          [
-            {
-              kind: "came_back",
-              focus: { id: "f", text, source, writtenBy: "agent", createdAt: NOW },
-              putAwayAt,
-              words: ["Chorequest"],
-            },
-          ],
-          { state: "archived", putAwayAt, ...over },
-        );
-
-      it("names the month it was put away and the focus it fits, for a stated or asked focus", () => {
-        for (const source of ["stated", "asked"] as const) {
-          expect(reasonOf(render([cameBack("home batteries", source)]))).toBe(
-            "put away in August, mentions Chorequest, which you're working on",
-          );
-        }
+    it("keeps Open it, Archive and Not now on the featured card, and takes its space's colour", () => {
+      const html = render([card([], on("kitchen"))], {
+        catalog: [tag("kitchen", { pinned: true, color: "clay" })],
       });
-
-      it("calls an inferred focus a guess and never says 'It fits' flatly", () => {
-        const html = render([cameBack("home batteries", "inferred")]);
-        expect(reasonOf(html)).toBe(
-          "put away in August, mentions Chorequest, which may be what you're working on (a guess)",
-        );
-      });
-
-      it("adds the year when it was put away in another year", () => {
-        const html = render([cameBack("x", "stated", new Date("2025-12-03T10:00:00Z"))]);
-        expect(reasonOf(html)).toBe(
-          "put away in December 2025, mentions Chorequest, which you're working on",
-        );
-      });
-
-      it("keeps Open it, Done with it and Not now, and takes its space's colour", () => {
-        const html = render([cameBack("x", "stated", PUT_AWAY, on("kitchen"))], {
-          catalog: [tag("kitchen", { pinned: true, color: "clay" })],
-        });
-        const feature = dom(html).querySelector(".worth-feature");
-        expect(feature?.classList.contains("space-clay")).toBe(true);
-        expect(feature?.querySelector("a.button.primary")?.textContent).toBe("Open it");
-        expect(feature?.querySelector("[data-act=archive] .slide-words > span")?.textContent).toBe(
-          "Done with it",
-        );
-        expect(feature?.querySelector("[data-act=snooze] .slide-words > span")?.textContent).toBe(
-          "Not now",
-        );
-      });
+      const feature = dom(html).querySelector(".worth-feature");
+      expect(feature?.classList.contains("space-clay")).toBe(true);
+      expect(feature?.querySelector("a.button.primary")?.textContent).toBe("Open it");
+      expect(feature?.querySelector("[data-act=archive] .slide-words > span")?.textContent).toBe(
+        "Archive",
+      );
+      expect(feature?.querySelector("[data-act=snooze] .slide-words > span")?.textContent).toBe(
+        "Not now",
+      );
     });
 
     it("says a link not opened lately was saved over a month ago", () => {
@@ -613,10 +567,10 @@ const SNOOZE = {
   previousSurfacedAt: "2026-09-01T10:00:00.000Z",
 };
 const CHANGE = {
-  before: { state: "active", putAwayAt: null, snoozedUntil: null },
-  after: { state: "archived", putAwayAt: null },
+  before: { state: "active", snoozedUntil: null },
+  after: { state: "archived" },
 };
-/** What nothing wrong answers: Done with it the change as JSON, anything else 204. */
+/** What nothing wrong answers: Archive the change as JSON, anything else 204. */
 const fine = (s: Post): Answer =>
   s.url === "/home/archive" ? { status: 200, body: CHANGE } : { status: 204 };
 const REDIRECT: Answer = { status: 0, type: "opaqueredirect" };
@@ -685,32 +639,6 @@ describe("the home page's script", () => {
     ]);
   });
 
-  it("a came-back card's three buttons post the existing routes", async () => {
-    const away = new Date("2026-08-20T10:00:00Z");
-    const came: DigestLink = {
-      link: link({ state: "archived", putAwayAt: away }),
-      reasons: [
-        {
-          kind: "came_back",
-          focus: { id: "f", text: "x", source: "stated", writtenBy: "agent", createdAt: NOW },
-          putAwayAt: away,
-          words: ["x"],
-        },
-      ],
-    };
-    const id = came.link.id;
-    const p = home([came, card([])], (s) =>
-      s.url === "/home/snooze" ? { status: 200, body: SNOOZE } : { status: 204 },
-    );
-    p.dispatch(p.$(".worth-feature a.button"), "click");
-    p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click");
-    await p.settle();
-    p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click");
-    await p.settle();
-    expect(urls(p)).toEqual(["/home/opened", "/home/snooze", "/home/archive"]);
-    expect(p.sent.map((s) => (s.body as { id: string }).id)).toEqual([id, id, id]);
-  });
-
   it("Not now on the featured card hides it once put off, and Undo sends back the snooze and shows it", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;
@@ -758,19 +686,13 @@ describe("the home page's script", () => {
   });
 
   it.each([
+    ["Not now, then Archive", "snooze", "archive", "/home/snooze", "Not suggested for two weeks."],
     [
-      "Not now, then Done with it",
-      "snooze",
-      "archive",
-      "/home/snooze",
-      "Not suggested for two weeks.",
-    ],
-    [
-      "Done with it, then Not now",
+      "Archive, then Not now",
       "archive",
       "snooze",
       "/home/archive",
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     ],
   ])("sends one action for a card: %s before the first is answered", async (_, a, b, url, undo) => {
     const cards = two();
@@ -862,7 +784,7 @@ describe("the home page's script", () => {
     expect(hidden(p, id)).toBe(true);
   });
 
-  it("Done with it on the featured card archives once, hides it, and Undo puts it back", async () => {
+  it("Archive on the featured card archives once, hides it, and Undo puts it back", async () => {
     const cards = two();
     const id = cards[0]?.link.id as string;
     const p = home(cards);
@@ -872,7 +794,7 @@ describe("the home page's script", () => {
     expect(p.sent[0]).toMatchObject({ url: "/home/archive", body: { id } });
     expect(hidden(p, id)).toBe(true);
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
     p.dispatch(p.$("#undo-bar button"), "click");
     await p.settle();
@@ -880,7 +802,7 @@ describe("the home page's script", () => {
     expect(hidden(p, id)).toBe(false);
   });
 
-  it("Done with it in a row's menu archives exactly once", async () => {
+  it("Archive in a row's menu archives exactly once", async () => {
     const cards = two();
     const id = cards[1]?.link.id as string;
     const p = home(cards);
@@ -934,7 +856,7 @@ describe("the home page's script", () => {
     expect(p.$("#home-error").textContent).toBe("Changed since.");
   });
 
-  it("★ a Not now refused after Done with it went through leaves the card out", async () => {
+  it("★ a Not now refused after Archive went through leaves the card out", async () => {
     // [Hiding at Not now's click and showing the card again on its refusal, restoring an archived card.]
     const cards = two();
     const id = cards[0]?.link.id as string;
@@ -950,7 +872,7 @@ describe("the home page's script", () => {
               status: 409,
               body: {
                 code: "conflict",
-                message: "This link is already done or put away. Reload.",
+                message: "This link is already archived. Reload.",
               },
               wait: snooze,
             }
@@ -965,7 +887,7 @@ describe("the home page's script", () => {
     await p.settle();
     expect(hidden(p, id)).toBe(true);
     expect(p.$("#undo-bar span").textContent).toBe(
-      "Done with it. Off Home, All links and your spaces. Still findable in search.",
+      "Archived. Off Home, All links and your spaces. Still findable in search.",
     );
   });
 
@@ -1048,7 +970,7 @@ describe("the home page's script", () => {
           p.dispatch(p.$(".feature-quiet button[data-act=snooze]"), "click"),
       ],
       [
-        "Done with it",
+        "Archive",
         (p: ReturnType<typeof runPage>) =>
           p.dispatch(p.$(".feature-quiet button[data-act=archive]"), "click"),
       ],
@@ -1279,9 +1201,9 @@ describe("the Worth a look gone row (#128)", () => {
         (b) =>
           `${(b as HTMLElement).dataset.act} ${b.querySelector(".slide-words > span")?.textContent}`,
       ),
-    ).toEqual(["still-works It still works", "gone-done Done with it"]);
-    expect(menuRows(last).slice(0, 3)).toEqual(["snooze", "put-away", "archive"]);
-    expect(menuRows(last)).toHaveLength(7);
+    ).toEqual(["still-works It still works", "gone-archive Archive"]);
+    expect(menuRows(last).slice(0, 2)).toEqual(["snooze", "archive"]);
+    expect(menuRows(last)).toHaveLength(6);
     expect(last.querySelector("[data-card-title] a")?.getAttribute("href")).toBe(g.url);
     expect(last.querySelector(".ask")).toBeNull();
   });
@@ -1341,9 +1263,9 @@ describe("the Worth a look gone row (#128)", () => {
     expect((row().querySelector("[data-gone]") as HTMLElement).hidden).toBe(false);
   });
 
-  it("Done with it on the warning line archives once, and Undo sends the change back", async () => {
+  it("Archive on the warning line archives once, and Undo sends the change back", async () => {
     const { p, g, row } = open();
-    p.dispatch(p.$(".worth-gone button[data-act=gone-done]"), "click");
+    p.dispatch(p.$(".worth-gone button[data-act=gone-archive]"), "click");
     await p.settle();
     expect(urls(p)).toEqual(["/home/archive"]);
     expect(p.sent[0]).toMatchObject({ body: { id: g.id } });
@@ -1442,7 +1364,7 @@ describe("a Home card that is slow to answer (#314)", () => {
   /** The featured card's visible buttons, which say their working word; the ⋯ rows only dim. */
   const SLIDES: [string, string, string][] = [
     ["Not now", "snooze", "Setting aside…"],
-    ["Done with it", "archive", "Marking done…"],
+    ["Archive", "archive", "Archiving…"],
   ];
   const slow = (p: ReturnType<typeof home>, id: string, act: string, button: string) => {
     const target = p.$(`[data-id="${id}"] ${button}`);

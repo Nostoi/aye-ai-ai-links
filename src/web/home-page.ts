@@ -10,11 +10,11 @@ import { cardLine } from "./card-line.js";
 import { removeCopyScript } from "./copy-menu.js";
 import { copyHref } from "./copy-page.js";
 import { deleteLinkScript } from "./delete-link.js";
-import { ARCHIVE, DONE_HINT, DONE_LABEL, doneLinkScript } from "./done-link.js";
+import { ARCHIVE, ARCHIVE_HINT, ARCHIVE_LABEL, archiveLinkScript } from "./done-link.js";
 import { editData, editDialog, editLinkScript, editMenu } from "./edit-link.js";
 import { goneLine, goneScript } from "./gone-line.js";
 import { SHELF_SCRIPT } from "./handy-shelf.js";
-import { monthName, whyText } from "./link-rows.js";
+import { whyText } from "./link-rows.js";
 import { CLOCK, NOT_NOW_HINT, NOT_NOW_WORKING } from "./not-now.js";
 import { linkTitle, openedScript, openLink } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
@@ -55,17 +55,11 @@ function mentions(words: string[], source: Source): string {
 }
 
 /**
- * Why a card is shown, as the end of its grey line (`cardLine`'s `reason`). A link that came back
- * says when it was put away; then a focus entry comes. One an agent inferred is a guess, never
- * something the owner said. The plain reason is the saved date, so the line shows it once.
+ * Why a card is shown, as the end of its grey line (`cardLine`'s `reason`): a focus entry first.
+ * One an agent inferred is a guess, never something the owner said. The plain reason is the saved
+ * date, so the line shows it once.
  */
 function reason({ link, reasons }: DigestLink, now: Date): string {
-  const back = reasons.find(
-    (r): r is Extract<DigestReason, { kind: "came_back" }> => r.kind === "came_back",
-  );
-  if (back) {
-    return `put away in ${monthName(back.putAwayAt, now)}, ${mentions(back.words, back.focus.source)}`;
-  }
   const focus = reasons.find(
     (r): r is Extract<DigestReason, { kind: "focus_words" }> => r.kind === "focus_words",
   );
@@ -83,7 +77,7 @@ function opening(classes: string, link: Link, cards: WorthCards): string {
 /**
  * The featured card: a small picture on the left, the title, the why (or Tell me why, in amber),
  * the grey line ending with the reason and Saved copy, then Open it (the page's one filled
- * button), then Not now and Done with it as icon buttons that open to show their label and a
+ * button), then Not now and Archive as icon buttons that open to show their label and a
  * small line saying what happens (`slideButton`). The ⋯ is without those two.
  */
 function featured(d: DigestLink, cards: WorthCards): string {
@@ -101,7 +95,7 @@ function featured(d: DigestLink, cards: WorthCards): string {
 ${cardLine(link, { copy, reason: reason(d, cards.now), from: "/" })}<div class="feature-buttons">
 ${open}<div class="feature-quiet">
 ${slideButton("snooze", CLOCK, "Not now", NOT_NOW_HINT)}
-${slideButton("archive", ARCHIVE, DONE_LABEL, DONE_HINT)}
+${slideButton("archive", ARCHIVE, ARCHIVE_LABEL, ARCHIVE_HINT)}
 </div>
 </div>
 ${editMenu(link, { copy, handy: cards.views?.get(link.id)?.handy, onCard: true })}
@@ -168,8 +162,8 @@ ${first ? `${featured(first, cards)}\n` : ""}${also}</div>
 }
 
 /**
- * Home's own card actions, after the shared ones (`takeOut`, `doneCard`, `refreshShelf`):
- * - The featured card's Done with it is `doneCard`, as the menu's row is (`doneLinkScript`).
+ * Home's own card actions, after the shared ones (`takeOut`, `archiveCard`, `refreshShelf`):
+ * - The featured card's Archive is `archiveCard`, as the menu's row is (`archiveLinkScript`).
  * - Not now, Keep handy and Not handy anymore post first and change the card only once the server
  *   agrees, so a refusal never brings back a card another action took out. Each runs in
  *   `whileBusy`, so a card takes no other action, Delete link included, until it has finished.
@@ -242,7 +236,7 @@ if (worthCards) {
     if (!button) return;
     const menu = button.closest("details.card-menu");
     const card = button.closest("[data-id]");
-    if (button.dataset.act === "archive" && !menu) return doneCard(card, undefined, button);
+    if (button.dataset.act === "archive" && !menu) return archiveCard(card, undefined, button);
     const act = homeActs[button.dataset.act];
     if (!act) return;
     if (menu) menu.open = false;
@@ -263,7 +257,7 @@ addEventListener("pageshow", (event) => {
  * shelf (#125), then "Worth a look today" when there is anything to show, then `spaces`, the "Your
  * spaces" section (#96). Opening a card's link is recorded with `/home/opened`, which also marks it
  * shown; openings from the shelf are recorded without that. The cards' Delete link, Remove saved
- * copy, Edit, Done with it, gone line and Tell me why are the shared scripts'; the rest is
+ * copy, Edit, Archive, gone line and Tell me why are the shared scripts'; the rest is
  * `HOME_ACTS`. With the Ask AI panel, the page's edit dialog is the panel's. `tidy`, when the route
  * offers Tidy up (#198, #332), is the last tray, `tidyTray`, which `TIDY_SCRIPT` works in place;
  * its opening of a link is recorded like the Handy shelf's.
@@ -304,7 +298,7 @@ ${CARD_FETCH}
 ${SHELF_SCRIPT}
 ${tellWhyScript("worth-cards", "home-error")}
 ${deleteLinkScript("worth-cards", "home-error")}
-${doneLinkScript("worth-cards", "home-error")}
+${archiveLinkScript("worth-cards", "home-error")}
 ${goneScript("worth-cards", "home-error")}
 ${removeCopyScript("worth-cards", "home-error")}
 ${ownEdit ? `${editLinkScript("worth-cards", "home-error")}\n` : ""}${HOME_ACTS}

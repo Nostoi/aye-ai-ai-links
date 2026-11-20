@@ -7,7 +7,7 @@ import { openDatabase } from "../store/database.js";
 import { saveLink } from "./links.js";
 import { openFromCode, openTarget } from "./open-codes.js";
 import type { SearchLogEntry } from "./search-log.js";
-import { putAwayLink } from "./worth-a-look.js";
+import { archiveLink } from "./worth-a-look.js";
 
 const A = "owner-a";
 const open: Database.Database[] = [];
@@ -111,16 +111,20 @@ describe("an opening through an open code (#133)", () => {
     expect(paired()).toEqual([{ query: "both", opened: Number(two.id) }]);
   });
 
-  it("brings a put-away link back, whoever clicked (owner ruling, 2026-11-15)", async () => {
-    const { deps, save, setNow } = setup();
-    const link = await save("https://ex.com/put-away");
-    await putAwayLink(deps, A, link.id);
+  it("leaves an archived link archived, and records the opening once", async () => {
+    const { deps, save, setNow, events } = setup();
+    const link = await save("https://ex.com/archived");
+    await archiveLink(deps, A, link.id);
     expect((await deps.store.get(A, link.id))?.state).toBe("archived");
     setNow(T(2));
 
     await openFromCode(deps, { owner: A, linkId: link.id, agent: "Claude" });
 
-    expect(await deps.store.get(A, link.id)).toMatchObject({ state: "active", putAwayAt: null });
+    expect(await deps.store.get(A, link.id)).toMatchObject({
+      state: "archived",
+      lastOpenedAt: T(2),
+    });
+    expect(events().filter((e) => (e as { kind: string }).kind === "opened")).toHaveLength(1);
   });
 });
 

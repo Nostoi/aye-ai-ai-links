@@ -367,7 +367,7 @@ describe("the copy page's Back line", () => {
     [undefined, "Back to All links", "/all"],
     ["/", "Back to Home", "/"],
     ["/all?order=opened&before=garbage", "Back to All links", "/all"],
-    ["/all/done", "Back to Done and put away", "/all/done"],
+    ["/all/done", "Back to Archived", "/all/done"],
     ["/spaces?tag=kitchen", "Back to Kitchen", "/spaces?tag=kitchen"],
     ["/spaces?tag=kitchen&order=banana", "Back to Kitchen", "/spaces?tag=kitchen"],
     ["/spaces/done?tag=Kitchen", "Back to Kitchen", "/spaces/done?tag=kitchen"],
@@ -531,46 +531,30 @@ describe("the end of the copy page, against the store", () => {
   const stored = async (w: Awaited<ReturnType<typeof world>>["w"], id: string) => {
     const deps = createDeps(w.links, new FakeEmbedder(DIMS));
     const link = await deps.store.get("owner", id);
-    return { state: link?.state, putAwayAt: link?.putAwayAt ?? null };
+    return { state: link?.state };
   };
-  const ACTIVE_ROW = { line: null, acts: ["put-away", "archive", "keep"] };
+  const ACTIVE_ROW = { line: null, acts: ["archive", "keep"] };
 
   it("Keep handy, then the page shows Not handy anymore", async () => {
     const { id, owner } = await world();
     expect(await endOf(owner, id)).toEqual(ACTIVE_ROW);
     expect((await owner.send("/tools/keep", post(id))).status).toBe(200);
-    expect((await endOf(owner, id)).acts).toEqual(["put-away", "archive", "not-handy"]);
+    expect((await endOf(owner, id)).acts).toEqual(["archive", "not-handy"]);
   });
 
-  it("Put it away: the store holds it archived with putAwayAt set, and the page shows the put-away row", async () => {
+  it("Archive: the store holds it archived, and the page shows the archived row", async () => {
     const { w, id, owner } = await world();
-    expect((await owner.send("/home/put-away", post(id))).status).toBe(200);
-    const link = await stored(w, id);
-    expect(link.state).toBe("archived");
-    expect(link.putAwayAt).not.toBeNull();
-    expect(await endOf(owner, id)).toEqual({
-      line: ["Put away"],
-      acts: ["bring-back"],
-    });
+    expect((await owner.send("/home/archive", post(id))).status).toBe(200);
+    expect(await stored(w, id)).toEqual({ state: "archived" });
+    expect(await endOf(owner, id)).toEqual({ line: ["Archived"], acts: ["bring-back"] });
   });
 
-  it("an opening (204) brings a put-away link back: the store is active and the page shows the active row", async () => {
-    const { w, id, owner } = await world();
-    await owner.send("/home/put-away", post(id));
-    expect((await owner.send("/links/opened", post(id))).status).toBe(204);
-    expect(await stored(w, id)).toEqual({ state: "active", putAwayAt: null });
-    expect(await endOf(owner, id)).toEqual(ACTIVE_ROW);
-  });
-
-  it("an opening of a stale link leaves it stale in the store and on the page", async () => {
+  it("an opening of an archived link leaves it archived in the store and on the page", async () => {
     const { w, id, owner } = await world();
     await owner.send("/home/archive", post(id));
     expect((await owner.send("/links/opened", post(id))).status).toBe(204);
-    expect(await stored(w, id)).toEqual({ state: "archived", putAwayAt: null });
-    expect(await endOf(owner, id)).toEqual({
-      line: ["Done"],
-      acts: ["bring-back"],
-    });
+    expect(await stored(w, id)).toEqual({ state: "archived" });
+    expect(await endOf(owner, id)).toEqual({ line: ["Archived"], acts: ["bring-back"] });
   });
 
   it("answers 404 with no end row for a deleted link, under the same CSP", async () => {

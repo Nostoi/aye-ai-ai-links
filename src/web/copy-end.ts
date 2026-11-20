@@ -3,13 +3,11 @@ import type { Link } from "../core/types.js";
 import type { MenuItem } from "./card-menu.js";
 import type { Back } from "./copy-page.js";
 import {
+  ARCHIVE_ITEM,
+  ARCHIVED,
+  archiveLinkScript,
   BRING_BACK_ITEM,
-  DONE_ITEM,
-  DONE_MARKER,
-  doneLinkScript,
   outOfListsMarker,
-  PUT_AWAY_ITEM,
-  PUT_AWAY_MARKER,
 } from "./done-link.js";
 import { KEEP_ITEM, keepHandyScript, NOT_HANDY } from "./keep-handy.js";
 import { escapeHtml } from "./page.js";
@@ -32,7 +30,7 @@ const button = ({ act, text }: MenuItem, hidden = false) =>
 
 /**
  * What follows the article: "Finished with this link?" with the menu's actions as buttons, or,
- * for a link done or put away, that and Bring it back. Both groups are always written and one is
+ * for an archived link, that and Bring it back. Both groups are always written and one is
  * hidden, so the page's script only switches them. Its Keep handy control is `keepHandyScript`'s.
  */
 export function copyEnd(link: Link, handy: HandyView | null, back: Back): string {
@@ -41,12 +39,11 @@ export function copyEnd(link: Link, handy: HandyView | null, back: Back): string
   return `<section class="copy-end" id="copy-end" aria-label="${QUESTION}">
 <div class="copy-end-acts" id="${ACTIVE_ID}" data-busy-scope${out ? " hidden" : ""}>
 <span class="copy-end-label" tabindex="-1">${QUESTION}</span>
-${button(PUT_AWAY_ITEM)}
-${button(DONE_ITEM)}
+${button(ARCHIVE_ITEM)}
 <span data-handy>${button(KEEP_ITEM, kept)}<span class="handy-on"${kept ? "" : " hidden"}>${button(NOT_HANDY)}</span></span>
 </div>
 <div class="copy-end-acts" id="${OUT_ID}" data-busy-scope${out ? "" : " hidden"}>
-<p class="card-line copy-end-line" tabindex="-1"><span>${out ?? PUT_AWAY_MARKER}</span></p>
+<p class="card-line copy-end-line" tabindex="-1"><span>${ARCHIVED}</span></p>
 ${button(BRING_BACK_ITEM)}
 </div>
 <p class="error" id="${ERROR_ID}" role="alert"></p>
@@ -56,9 +53,8 @@ ${backLink(back)}
 
 /**
  * The end row's one script, the same for every link (it holds no link data). The copy page's
- * `takeOut` keeps the frame on the page and shows the row the route's `change.after` describes (an
- * opening, which brings a put-away link back, passes none: active). Its put-back shows
- * `change.before`. Focus goes to the shown group, so the Undo bar's return stays below the article.
+ * `takeOut` keeps the frame on the page and shows the row the route's `change.after` describes. Its
+ * put-back shows `change.before`. Focus goes to the shown group, so the Undo bar's return stays below the article.
  */
 export const COPY_END_SCRIPT = `${CARD_FETCH}
 const takeOut = (listRoot, card, remove, change) => {
@@ -69,7 +65,7 @@ const takeOut = (listRoot, card, remove, change) => {
     const isOut = !!state && state.state !== "active";
     active.hidden = isOut;
     out.hidden = !isOut;
-    if (isOut) marker.textContent = state.putAwayAt ? ${JSON.stringify(PUT_AWAY_MARKER)} : ${JSON.stringify(DONE_MARKER)};
+    if (isOut) marker.textContent = ${JSON.stringify(ARCHIVED)};
     return isOut ? out.querySelector(".copy-end-line") : active.querySelector(".copy-end-label");
   };
   if (change) show(change.after).focus();
@@ -78,7 +74,7 @@ const takeOut = (listRoot, card, remove, change) => {
     if (change) show(change.before).focus();
   };
 };
-${doneLinkScript(FRAME_ID, ERROR_ID)}
+${archiveLinkScript(FRAME_ID, ERROR_ID)}
 ${keepHandyScript(FRAME_ID, ERROR_ID)}
 {
 const endRoot = document.getElementById("copy-end");

@@ -26,12 +26,7 @@ export function linkTitle(link: Link, label: string = escapeHtml(displayTitle(li
  * `withReceipt`, the search page's `main[data-receipt]` is sent along as `receipt`, which pairs the
  * opening with that search; every other list sends none (#134).
  */
-export const openedScript = (
-  root: string,
-  route: string,
-  leaveMarker?: string,
-  withReceipt = false,
-) => `<script>
+export const openedScript = (root: string, route: string, withReceipt = false) => `<script>
 {
 const openRoot = document.getElementById(${JSON.stringify(root)});${
   withReceipt
@@ -49,14 +44,7 @@ const recordOpen = (event) => {
     body: JSON.stringify({ id: card.dataset.id${withReceipt ? ", receipt" : ""} }),
     redirect: "manual",
     keepalive: true,
-  })${
-    leaveMarker === undefined
-      ? ""
-      : `.then((answer) => {
-    const last = card.querySelector(".card-line > :last-child");
-    if (answer.ok && last && last.textContent === ${JSON.stringify(leaveMarker)}) takeOut(openRoot, card, false);
-  })`
-  }.catch(() => {});
+  }).catch(() => {});
 };
 if (openRoot) {
   openRoot.addEventListener("click", recordOpen);

@@ -93,7 +93,8 @@ export const linkOutput = z.strictObject({
   lastOpenedAt: timestamp.nullable(),
   lastSurfacedAt: timestamp.nullable(),
   snoozedUntil: timestamp.nullable(),
-  putAwayAt: timestamp.nullable(),
+  /** Always null: the owner's put-away date is retired. Kept so a client holding an earlier tool list still accepts the result (ROADMAP #39). */
+  putAwayAt: z.null(),
   state: z.enum(STATES),
   snapshot: snapshotOutput.nullable(),
   handy: handyOutput.nullable(),
@@ -217,12 +218,6 @@ export const deleteTagOutput = z.strictObject({ links: z.number().int(), undoId:
 const matchedWords = z.array(z.string().regex(/\S/)).nonempty();
 const digestReasonOutput = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("focus_words"), focus: focusEntryOutput, words: matchedWords }),
-  z.strictObject({
-    kind: z.literal("came_back"),
-    focus: focusEntryOutput,
-    putAwayAt: timestamp,
-    words: matchedWords,
-  }),
   z.strictObject({ kind: z.literal("no_why") }),
   z.strictObject({ kind: z.literal("not_opened_recently") }),
   z.strictObject({ kind: z.literal("never_surfaced") }),

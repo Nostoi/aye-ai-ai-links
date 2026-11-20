@@ -105,7 +105,6 @@ import {
   archiveLink,
   bringBackLink,
   markOpened,
-  putAwayLink,
   type StateChange,
   snoozeLink,
   tellWhy,
@@ -410,7 +409,6 @@ const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
   url: link.url,
   why: link.why?.text ?? null,
   whySource: link.why?.source ?? null,
-  putAwayAt: link.putAwayAt?.toISOString() ?? null,
   initials: initialsText(link),
 });
 
@@ -449,19 +447,15 @@ export const isToolJson = (value: unknown): value is ToolJson => {
 };
 /** A state action's `StateChange` as the page holds it between the action and its Undo: dates as ISO strings. */
 type StateChangeJson = {
-  before: { state: LinkState; putAwayAt: string | null; snoozedUntil: string | null };
-  after: { state: LinkState; putAwayAt: string | null };
+  before: { state: LinkState; snoozedUntil: string | null };
+  after: { state: LinkState };
   at: string;
 };
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 const stateChangeJson = ({ before, after, at }: StateChange): StateChangeJson => ({
-  before: {
-    state: before.state,
-    putAwayAt: iso(before.putAwayAt),
-    snoozedUntil: iso(before.snoozedUntil),
-  },
-  after: { state: after.state, putAwayAt: iso(after.putAwayAt) },
+  before: { state: before.state, snoozedUntil: iso(before.snoozedUntil) },
+  after: { state: after.state },
   at: at.toISOString(),
 });
 
@@ -476,22 +470,16 @@ export const isStateChangeJson = (value: unknown): value is StateChangeJson => {
   const { before, after } = value;
   return (
     isState(before.state) &&
-    isDateOrNull(before.putAwayAt) &&
     isDateOrNull(before.snoozedUntil) &&
     isState(after.state) &&
-    isDateOrNull(after.putAwayAt) &&
     isDate(value.at)
   );
 };
 
 const date = (value: string | null) => (value === null ? null : new Date(value));
 const stateChange = ({ before, after, at }: StateChangeJson): StateChange => ({
-  before: {
-    state: before.state,
-    putAwayAt: date(before.putAwayAt),
-    snoozedUntil: date(before.snoozedUntil),
-  },
-  after: { state: after.state, putAwayAt: date(after.putAwayAt) },
+  before: { state: before.state, snoozedUntil: date(before.snoozedUntil) },
+  after: { state: after.state },
   at: new Date(at),
 });
 
@@ -995,7 +983,7 @@ export function webApp({
     const { owner } = c.get("caller");
     const before = c.req.query("before");
     const done = state === "archived";
-    // Done and put away has no sort: it never reads `order`, so its cursors are newest's.
+    // Archived has no sort: it never reads `order`, so its cursors are newest's.
     let order: LinkOrder = "newest";
     try {
       if (!done) order = checkedOrder(c.req.query("order"));
@@ -1382,11 +1370,10 @@ export function webApp({
     }),
   );
 
-  // Done with it, Put it away and Bring it back answer the change they made; the page sends it
+  // Archive and Bring it back answer the change they made; the page sends it
   // back, as it got it, to `/home/undo-state`.
   const stateActions = [
     ["/home/archive", archiveLink],
-    ["/home/put-away", putAwayLink],
     ["/home/bring-back", bringBackLink],
   ] as const;
   for (const [path, act] of stateActions) {

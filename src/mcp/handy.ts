@@ -43,8 +43,11 @@ async function openUrls(
   return new Map([...codes].map(([id, code]) => [id, openUrl(openLinks.baseUrl, code)]));
 }
 
-/** The link fields `linkOutput` declares, picked by name so an internal field never reaches its strict schema. */
-function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> {
+/**
+ * The link fields `linkOutput` declares, picked by name so an internal field never reaches its
+ * strict schema. `putAwayAt` is always null on the wire.
+ */
+function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> & { putAwayAt: null } {
   return {
     id: l.id,
     url: l.url,
@@ -59,7 +62,7 @@ function mcpLink(l: Link): Omit<Link, "tidyKeptAt"> {
     lastOpenedAt: l.lastOpenedAt,
     lastSurfacedAt: l.lastSurfacedAt,
     snoozedUntil: l.snoozedUntil,
-    putAwayAt: l.putAwayAt,
+    putAwayAt: null,
     state: l.state,
     snapshot: l.snapshot,
   };

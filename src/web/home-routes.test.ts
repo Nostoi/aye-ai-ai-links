@@ -249,14 +249,19 @@ describe("the home card actions", () => {
 
   it("/home/undo-state accepts a change with no put-away date and restores the link, with the stale event removed", async () => {
     const { world, browser, id } = await home();
-    await linkDeps(world).store.update(A, id, { state: "archived" });
+    const at = "2026-11-19T12:00:00.000Z";
+    await linkDeps(world).store.update(A, id, { state: "archived" }, [
+      { record: "stale", at: new Date(at) },
+    ]);
+    expect(eventKinds(world, id)).toEqual(["stale"]);
     const change = {
       before: { state: "active", snoozedUntil: null },
       after: { state: "archived" },
-      at: "2026-11-19T12:00:00.000Z",
+      at,
     };
     expect((await browser.send("/home/undo-state", post({ id, change }))).status).toBe(204);
     expect(row(world, id).state).toBe("active");
+    expect(eventKinds(world, id)).toEqual([]);
   });
 
   it("/home/put-away is gone: a 404, changing nothing", async () => {

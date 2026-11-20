@@ -741,11 +741,11 @@ describe("the Tidy up session", () => {
     await choose("keep");
     const title = p.$(`.tidy-step[data-id='${ids[1]}'] .tidy-title`);
     // The Undo bar then takes focus, as it does after Archive.
-    expect(p.focused()).toContain(title);
+    expect(p.focused().includes(title)).toBe(true);
     expect(p.focused().at(-1)).toBe(p.$("#undo-bar button"));
     expect(title.getAttribute("tabindex")).toBe("-1");
     await choose("keep");
-    expect(p.focused()).toContain(p.$(".tidy-done h3"));
+    expect(p.focused().includes(p.$(".tidy-done h3"))).toBe(true);
   });
 
   it("hints each choice's key, off the screen reader's path", () => {

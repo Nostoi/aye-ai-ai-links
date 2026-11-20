@@ -98,7 +98,9 @@ export function checkIntentWithHandy(
   handy: { action: string; source: Source } | undefined,
   intent: Intent | undefined,
 ): void {
-  if (handy?.action === "keep" && handy.source !== "inferred" && intent === "explore") {
+  const keeps =
+    handy?.action === "still_using" || (handy?.action === "keep" && handy.source !== "inferred");
+  if (keeps && intent === "explore") {
     throw keptToolStays();
   }
 }

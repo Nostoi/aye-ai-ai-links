@@ -634,6 +634,27 @@ describe("intent on links", () => {
     }).toEqual(before);
   });
 
+  it("refuses one call that says Still using and explores a kept tool, before writing either", async () => {
+    await call("save_link", { url: "https://example.com/i" });
+    await keptDaysAgo("1", 40);
+    const before = {
+      link: db.prepare("SELECT * FROM links WHERE id = 1").get(),
+      tools: db.prepare("SELECT * FROM link_tools WHERE link_id = 1").all(),
+    };
+    const res = await call("update_link", {
+      id: "1",
+      intent: "explore",
+      intentSource: "stated",
+      handy: { action: "still_using", source: "stated" },
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain(KEPT);
+    expect({
+      link: db.prepare("SELECT * FROM links WHERE id = 1").get(),
+      tools: db.prepare("SELECT * FROM link_tools WHERE link_id = 1").all(),
+    }).toEqual(before);
+  });
+
   it("refuses one call that keeps a link handy and explores it, before writing either, and allows a suggestion with it", async () => {
     await call("save_link", { url: "https://example.com/i" });
     const keep = {

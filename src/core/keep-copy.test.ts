@@ -41,6 +41,7 @@ describe("copy keeper", () => {
 
   it("records no copy for a kept tool", async () => {
     const { store, copies, link, keeper } = await setup();
+    await store.update(A, link.id, { intent: "keep", intentSource: "stated" });
     await store.updateToolIf(A, link.id, null, tool("kept"));
     expect(await keeper.keep(A, link.id, draft())).toBe("tool");
     expect(await copies.readCopy(A, link.id)).toBeNull();
@@ -84,6 +85,7 @@ describe("copy keeper", () => {
   describe("refuse", () => {
     it("records none and answers true for a kept tool", async () => {
       const { store, copies, link, keeper } = await setup();
+      await store.update(A, link.id, { intent: "keep", intentSource: "stated" });
       await store.updateToolIf(A, link.id, null, tool("kept"));
       const record = vi.spyOn(copies, "recordNoCopy");
       expect(await keeper.refuse(A, link.id)).toBe(true);
@@ -104,6 +106,7 @@ describe("copy keeper", () => {
 
     it("answers true and leaves an existing row alone", async () => {
       const { store, copies, link, keeper } = await setup();
+      await store.update(A, link.id, { intent: "keep", intentSource: "stated" });
       await store.updateToolIf(A, link.id, null, tool("kept"));
       await copies.recordNoCopy(A, link.id, "too_large");
       const record = vi.spyOn(copies, "recordNoCopy");

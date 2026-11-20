@@ -245,6 +245,7 @@ describe("hidden links in the digest, Handy and the gone pick", () => {
     const tool = await save();
     const gone = await save({ why: { text: "for later", source: "stated" } });
     const plain = await save();
+    await deps.store.update(A, tool, { intent: "keep", intentSource: "stated" });
     await deps.tools.updateToolIf(A, tool, null, kept);
     await deps.checks.updateCheckIf(A, gone, null, flagged);
     const now = () => new Date(Date.UTC(2026, 5, 1));
@@ -283,6 +284,7 @@ describe("writes on a hidden link", () => {
     const id = await save({ title: "before" });
     const bare = await save();
     const vector = await embedder.embedQuery("marsupial");
+    await deps.store.update(A, id, { intent: "keep", intentSource: "stated" });
     await deps.tools.updateToolIf(A, id, null, kept);
     await deps.edits.applyEdit(A, id, { title: "edited", picture: { set: PNG } }, at(3));
     await deps.checks.updateCheckIf(A, id, null, flagged);

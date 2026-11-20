@@ -493,6 +493,22 @@ export class SqliteStore
   ): Promise<ToolWrite | null> {
     const n = parseId(linkId);
     if (n === null) return null;
+    try {
+      return this.updateToolSync(owner, n, expected, next, events, intent);
+    } catch (error) {
+      if (!(error instanceof ToolNotKeep)) throw error;
+      return { tool: this.readTool(owner, n), applied: false };
+    }
+  }
+
+  private updateToolSync(
+    owner: OwnerId,
+    n: number,
+    expected: ToolRecord | null,
+    next: ToolRecord | null,
+    events?: EventWrite[],
+    intent?: IntentWith,
+  ): ToolWrite | null {
     return this.db
       .transaction((): ToolWrite | null => {
         const link = this.db
@@ -527,6 +543,12 @@ export class SqliteStore
             next.waitDays,
           );
         if (intent) this.moveIntent(owner, n, intent);
+        if (next.status === "kept") {
+          const keeps = this.db
+            .prepare("SELECT 1 FROM links WHERE id = ? AND owner_id = ? AND intent = 'keep'")
+            .get(n, owner);
+          if (!keeps) throw new ToolNotKeep();
+        }
         return { tool: this.readTool(owner, n), applied: true };
       })
       .immediate();
@@ -687,7 +709,11 @@ export class SqliteStore
     }
     if (sets.length === 0) sets.push("id = id");
     const settled = this.settleEvents(owner, id, events);
-    const guard = expectationWhere(owner, id, expected);
+    const guard = expectationWhere(
+      owner,
+      id,
+      patch.intent === "explore" ? { ...expected, notKeptTool: true } : expected,
+    );
     const matched = this.db
       .prepare(
         `UPDATE links SET ${sets.join(", ")} WHERE ${guard.where.join(" AND ")} RETURNING id`,
@@ -861,6 +887,8 @@ function expectationWhere(owner: OwnerId, id: number, expected: LinkExpectation)
 }
 
 /** True of a `links` row whose Keep handy row is not `kept`. */
+class ToolNotKeep extends Error {}
+
 const NOT_KEPT_TOOL = `NOT EXISTS (SELECT 1 FROM link_tools t
   WHERE t.owner_id = links.owner_id AND t.link_id = links.id AND t.status = 'kept')`;
 

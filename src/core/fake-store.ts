@@ -514,15 +514,18 @@ export class FakeStore
     if (!sameTool(current, expected)) {
       return { tool: current && structuredClone(current), applied: false };
     }
+    const moves =
+      intent !== undefined &&
+      link.intent === intent.onlyIf.intent &&
+      link.intentSource === intent.onlyIf.intentSource &&
+      !(intent.set.intent === "explore" && next?.status === "kept");
+    if (next?.status === "kept" && (moves ? intent.set.intent : link.intent) !== "keep") {
+      return { tool: current && structuredClone(current), applied: false };
+    }
     this.writeEvents(owner, linkId, this.settleEvents(owner, link, events));
     if (next === null) mine.delete(linkId);
     else mine.set(linkId, structuredClone(next));
-    if (
-      intent &&
-      link.intent === intent.onlyIf.intent &&
-      link.intentSource === intent.onlyIf.intentSource &&
-      !(intent.set.intent === "explore" && this.keptTool(owner, linkId))
-    ) {
+    if (moves && intent) {
       link.intent = intent.set.intent;
       link.intentSource = intent.set.intentSource;
     }
@@ -537,6 +540,7 @@ export class FakeStore
   async update(owner: OwnerId, id: string, patch: LinkPatch, events?: EventWrite[]) {
     const found = this.owned(owner).get(id);
     if (!found) return null;
+    if (patch.intent === "explore" && this.keptTool(owner, id)) return null;
     const settled = this.settleEvents(owner, found, events);
     this.checkEventKinds(settled);
     const { summaryOver, intentOver, ...fields } = structuredClone(patch);
@@ -1276,6 +1280,9 @@ export class FakeStore
       return "conflict";
     }
     const { changed, prior } = row;
+    if (changed.intent && prior.intent === "explore" && this.keptTool(owner, linkId)) {
+      return "conflict";
+    }
     if (changed.title) link.title = prior.title;
     if (changed.summary) {
       link.summary = prior.summary;

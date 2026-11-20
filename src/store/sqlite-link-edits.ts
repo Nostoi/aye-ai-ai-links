@@ -133,6 +133,9 @@ export class SqliteLinkEditStore implements LinkEditStore {
         const pictureHolds =
           row.picture_changed === 0 || (this.own(owner, n)?.sha256 ?? null) === row.written_sha256;
         if (!receiptHolds(row, current) || !pictureHolds) return "conflict";
+        if (row.intent_changed === 1 && row.prior_intent === "explore" && this.keptTool(owner, n)) {
+          return "conflict";
+        }
         if (row.title_changed === 1) this.writeTitle(owner, n, row.prior_title);
         restoreCovered(this.db, owner, n, row);
         if (row.picture_changed === 1) {

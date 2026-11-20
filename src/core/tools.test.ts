@@ -23,6 +23,7 @@ import {
   stillUsing,
 } from "./tools.js";
 import type { Link } from "./types.js";
+import { exploreLink } from "./worth-a-look.js";
 
 const DAY = 86_400_000;
 const T0 = new Date("2026-10-01T00:00:00Z");
@@ -154,6 +155,7 @@ const saved = async (owner = A): Promise<string> =>
   (await store.insertIfAbsent(owner, newLink(++n, day(-100)))).link.id;
 /** Puts a row in place directly, for a starting state the rules would take days to reach. */
 const put = async (id: string, row: ToolRecord) => {
+  if (row.status === "kept") await store.update(A, id, { intent: "keep", intentSource: "stated" });
   await store.updateToolIf(A, id, await store.getTool(A, id), row);
 };
 /** Flags the link as gone, as two dead checks a week apart would. */
@@ -448,6 +450,21 @@ describe("stillUsing", () => {
 });
 
 describe("restoreTool", () => {
+  it("refuses the Undo of Not handy anymore after Explore it, as a conflict that changes nothing", async () => {
+    const id = await saved();
+    await keepHandy(deps(), A, id, "stated");
+    clock = day(1);
+    const declined = await notHandy(deps(), A, id, "stated");
+    await exploreLink(deps(), A, id);
+    const link = await store.get(A, id);
+    expect(await code(restoreTool(deps(), A, id, declined.previous, declined.tool))).toBe(
+      "conflict",
+    );
+    expect(await store.getTool(A, id)).toEqual(declined.tool);
+    expect(await store.get(A, id)).toEqual(link);
+    expect([link?.intent, link?.intentSource]).toEqual(["explore", "stated"]);
+  });
+
   it("undoing a first keep restores exact absence, so the link can be suggested again", async () => {
     const id = await saved();
     const kept = await keepHandy(deps(), A, id, "stated");

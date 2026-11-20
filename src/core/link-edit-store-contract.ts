@@ -11,7 +11,7 @@ import type { SnapshotStore } from "./snapshot-store.js";
 import { A, at, B, newLink, record } from "./snapshot-store-contract.js";
 import type { LinkRemover, LinkStore } from "./store.js";
 import type { TagEditStore } from "./tag-edit-store.js";
-import type { ToolStore } from "./tool-store.js";
+import type { ToolRecord, ToolStore } from "./tool-store.js";
 import type { Labelled, LinkTag, Source, Tag } from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
@@ -547,6 +547,28 @@ export function describeLinkEditStoreContract(
           ).toBe("intent_conflict");
         }
         expect(await h.links.get(A, id)).toEqual(before);
+      });
+
+      it("refuses the Undo that would put explore back under a kept tool, as a conflict that changes nothing", async () => {
+        const id = await linkWithIntent(explore);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { intent: { expected: explore, set: said } }, at(10)),
+        );
+        const tool: ToolRecord = {
+          status: "kept" as const,
+          source: "stated" as const,
+          since: at(11),
+          answeredAt: null,
+          waitDays: 30,
+        };
+        await h.links.updateToolIf(A, id, null, tool);
+        const before = structuredClone(await h.links.get(A, id));
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("conflict");
+        expect(await h.links.get(A, id)).toEqual(before);
+        expect(await h.links.getTool(A, id)).toEqual(tool);
+        await h.links.updateToolIf(A, id, tool, { ...tool, status: "declined" });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await intentOf(id)).toEqual(explore);
       });
 
       it("answers kept_tool for an explore on a kept tool, writing nothing, and allows a keep", async () => {

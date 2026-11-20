@@ -177,10 +177,10 @@
 - **INFERRED.** Removing `never_surfaced` from the reason union is safe for a client holding an older `tools/list`, since the server only sends fewer values. Adding a reason kind would break that client (`output-schemas.ts:225` comment), so none is added.
 - **UNVERIFIED.** The three-button hover layout's container-query thresholds. `theme.ts:302`'s 402, 301 and 223px were measured for two buttons (#304), and the mockup gives only the 164px width and the offsets. They must be measured again in a browser.
 - **OBSERVED.** `FocusMatch.match` returns every matching link, best first (the `core/search.ts:61` contract). Explore can therefore use focus membership with no rank cut.
-- **UNVERIFIED (pending the owner).** Order (A) or (B). Also the size of the undecided backlog on the server, which decides how long new saves wait under (A).
+- **UNVERIFIED.** The size of the undecided backlog on the server, which decides how long new saves wait .
 - **RELAYED.** The save rate of about 0.8 a day comes from the challenge's `get_stats` call, not from mine.
 
-## 3. Decisions (owner rulings in section 6; the order (A)/(B) is still open)
+## 3. Decisions (owner rulings in section 6)
 
 1. **"Stays until decided", mechanically: a deterministic selection with no stored state.**
    - **Explore's filter:**
@@ -194,31 +194,22 @@
      - **Focus picks: membership only, never rank (challenge Obj 1).** A link is in the focus group if any current focus entry matches it, and the entry's words are kept for the reason line.
        - `FocusMatch.match` returns every matching link (OBSERVED, the `core/search.ts:61` contract). `select` drops the `FOCUS_MATCHES_PER_ENTRY` rank cut and the hit-rank order.
        - So a why, a summary, or an unrelated save that re-ranks bm25 cannot move a card. Only gaining or losing the focus words can, or an entry being added or ageing out.
-     - **Whether `savedAt` sorts ascending or descending is pending the owner.** Both forms are written below so either can be built: it is the `dir` parameter of one comparator.
-       - **(A) Oldest saved first.** The coordinator recommends this to the owner.
-         - **Cards don't move.** They stay until decided, and new saves wait their turn.
-         - **Skip's "Back in two weeks" is true.** `snoozedUntil` is never cleared when it runs out, and the link sorts by its old `savedAt`, so it returns to its place.
-         - **Explore it's hint is true.** An old To keep link turned To explore sorts near the front.
-         - **A link can still come in above the cards and push the third one down.** That happens when:
-           - a skip runs out;
-           - an Explore it on an old link;
-           - Bring it back on an old link;
-           - a new focus match.
-         - **With Tidy:** Explore's cards are the oldest undecided links, which are mostly also Tidy's old unopened ones. Tidy skips Explore's cards (Q2b), so it asks about the next oldest. Both then work the backlog from its old end, and a link never appears twice.
-         - **Until the backlog is cleared, new saves reach Explore only through a focus match.** INFERRED; the backlog's size on the server is not measured.
-         - **With focus picks:** the one focus card is the oldest matching link.
-       - **(B) Newest saved first.**
-         - Fresh saves show at once.
-         - **Cards turn over fast.** The coordinator relays a measured 24 saves in the last 30 days, about 0.8 a day. At that rate the non-focus cards turn over in about 4 days with no decisions, which is close to the rejected daily rotation. INFERRED from that relayed rate.
-         - **Skip's hint must change** to "Tidy may ask again later", or similar.
-         - **Explore it's hint must change** to "Explore or Tidy up may ask about it".
-         - **With Tidy:** Explore and Tidy rarely overlap.
-         - **With focus picks:** the focus card is the newest matching link.
+     - **Oldest saved first (owner ruling, issue #340 comment 7041204284).** Ascending `savedAt`, then id.
+       - **Cards don't move.** They stay until decided, and new saves wait their turn.
+       - **Skip's "Back in two weeks" is true.** `snoozedUntil` is never cleared when it runs out, and the link sorts by its old `savedAt`, so it returns to its place.
+       - **Explore it's hint is true.** An old To keep link turned To explore sorts near the front.
+       - **A link can still come in above the cards and push the third one down.** That happens when:
+         - a skip runs out;
+         - an Explore it on an old link;
+         - Bring it back on an old link;
+         - a new focus match.
+       - **With Tidy:** Explore's cards are the oldest undecided links, which are mostly also Tidy's old unopened ones. Tidy skips Explore's cards (Q2b), so it asks about the next oldest. A link never appears twice.
+       - **Until the backlog is cleared, new saves reach Explore only through a focus match.** INFERRED; the backlog's size on the server is not measured.
+       - **With focus picks:** the one focus card is the oldest matching link.
    - **What goes:** no `dayRank`, no reason gate, no cooldown, no `lastSurfacedAt` read, no rank order for focus picks.
    - **Result:** the same cards show on every load until one is decided, or one of these moves them.
    - **Where a card leaves undecided:**
-     - (B only) a newer save bumps the third card;
-     - (A only) a link above re-enters, from the list under (A);
+     - a link above re-enters, from the list above;
      - a focus entry is added or ages out. An agent can do this with an inferred `add_profile`;
      - the link's own text gains or loses the focus words;
      - the page goes gone, and then Tidy asks about it;
@@ -237,8 +228,7 @@
    - **Duration and event:** two weeks (`SNOOZE_MS`), event `not_now`, as now. Undo is `unsnoozeLink`, unchanged apart from the claim.
    - **Routes:** `/home/snooze` answers `{until}`, and `/home/unsnooze` takes `{id, until}`. Old tabs' extra keys are ignored (claims above).
    - **Re-offering:** when the two weeks run out, the link is eligible again.
-     - Under (A) it returns to its old place on Explore.
-     - Under (B) Explore re-offers it only if it is still among the newest; otherwise Tidy does once it is old.
+     - It returns to its old place on Explore.
    - **Repeated Skips are allowed.** The spec's guarantee says "or is asked about again", and that is what a Skip gives.
    - **Rejected:** a new `skipped_at` field. It would hold the same fact as `snoozedUntil`, which the spec settled on.
    - **Tidy respects Skip, but only a bounded one (challenge Obj 4).**
@@ -269,7 +259,7 @@
    - There is no migration and no export bump.
    - Remove the store's `claimSurfaced`/`unclaimSurfaced` and their contract cases.
 8. **`get_digest`.**
-   - **Selection:** the same filter and order as Explore (`select`, with the same `dir`), `DIGEST_SIZE` 5 with `FOCUS_SLOTS` 3, plus `still_using_check` as now. It writes nothing, and it has no ranking of its own.
+   - **Selection:** the same filter and order as Explore (`select`), `DIGEST_SIZE` 5 with `FOCUS_SLOTS` 3, plus `still_using_check` as now. It writes nothing, and it has no ranking of its own.
    - **Annotations:** `readOnlyHint: true`, `idempotentHint: true`.
    - **Due tool:** `claimDue` and `claimDueTool` go. `dueTool` drops the cooldown and orders by `savedAt` asc, then id. The same due tool repeats until it is answered.
    - **Reasons:** `never_surfaced` leaves the reason union and the guidance.
@@ -319,16 +309,16 @@
 13. **Words that promise Today.**
     - **Menu hints** (mockup words, Q8 yes):
       - `KEEP_IT_ITEM` hint becomes "Moves to To keep";
-      - `EXPLORE_IT_ITEM` hint becomes "Back on Explore" under (A). The mockup says "Back on Today", which is stale with the new name. Under (B) it becomes "Explore or Tidy up may ask about it";
-      - Skip's hint is "Back in two weeks" under (A). Under (B) it becomes "Tidy may ask again later";
+      - `EXPLORE_IT_ITEM` hint becomes "Back on Explore". The mockup says "Back on Today", which is stale with the new name;
+      - Skip's hint is "Back in two weeks";
       - `ARCHIVE_HINT` becomes "Out of lists, still in search", which reaches every card and the gone band.
     - **Undo bars:** `KEEP_IT_UNDO` becomes "Marked To keep. Explore won't show it." and `EXPLORE_IT_UNDO` becomes "Explore may show it again.". Neither promises anything about Tidy, which asks about a gone page whatever its intent.
     - **The tray:** spine word "Explore", hidden heading "Explore".
     - **"Also today"** (Q4, ruled yes): "More to explore".
 14. **Migrations: none.** Skip, the opened line and Tidy use existing columns.
 15. **The guarantee, as actually delivered.** Every active To explore link is, at any time, in one of these:
-    - **Shown on Explore:** first in the order, either (A) the oldest or (B) the newest, or the focus match.
-    - **Skipped from the web:** back on Explore after two weeks under (A); under (B), back on Explore only if it is still among the newest.
+    - **Shown on Explore:** first in the order (the oldest saved), or the focus match.
+    - **Skipped from the web:** back on Explore after two weeks.
     - **Snoozed further out (an agent's `snoozedUntil`):** hidden from Explore, but Tidy still asks about it (decision 3).
     - **Old:** saved and unopened for 30 days, so asked in Tidy.
     - **Gone:** asked in Tidy, whatever its age.
@@ -430,7 +420,7 @@ Each must fail on today's code for the stated reason.
 | N1 | Explore is stable: with at least six eligible links that all have a reason, two loads a day apart with no action (fake clock moved 1 day) show the same three ids in the same order; deciding the first brings the fourth up (`explore.test.ts`). Confirm it is red on today's code before changing core | `dayRank` picks a different three across days; with only three candidates it would only reorder them, so use six |
 | N2 | Open leaves Explore unchanged, through the rendered page: the address the featured card's `openedScript` posts to (read from the rendered `GET /`) is posted for that card; the next `GET /` still shows it, now with the opened line, and `lastSurfacedAt` is unchanged (`home-routes.test.ts`) | the rendered target is `/home/opened`, which claims surfaced, so the card is gone on reload. Posting `/links/opened` directly would pass today and prove nothing |
 | N1b | Focus stability on real FTS (`sqlite-store` + `FtsSearch`): one focus entry matches four or more To explore links saved 20+ days ago, and three newer links don't match. Record the featured id, call Tell me why on it with words outside the focus text, and reload: the featured id is the same. Repeat with six unrelated saves that share a focus word instead of the why (`explore-fts.test.ts`) | bm25 rank order plus the per-entry cut move the featured card (challenge probe: L2 −5.99 → −4.97, which flips it) |
-| N3 | Order, one sort key: links saved on days 1, 2, 3, 4 with no focus give featured = day 1, rows = days 2, 3 under (A), or day 4, then days 3, 2 under (B). Focus matches come first in the same direction. A link with no reason (has a why, saved yesterday) is picked. Under (A), a link skipped and then past its two weeks returns to its old place (`explore.test.ts`) | rotation is oldest-touched first; the reason gate drops it |
+| N3 | Order, one sort key: links saved on days 1, 2, 3, 4 with no focus give featured = day 1, rows = days 2, 3. Focus matches come first, oldest first too. A link with no reason (has a why, saved yesterday) is picked. A link skipped and then past its two weeks returns to its old place (`explore.test.ts`) | rotation is oldest-touched first; the reason gate drops it |
 | N4 | Skip writes no surfacing: `snoozeLink` leaves `lastSurfacedAt` as it was and records `not_now`; Undo clears the snooze and the event (`explore.test.ts`) | snoozeLink claims surfaced |
 | N5 | Tidy respects Skip: an old To explore link snoozed until tomorrow is not in `tidyQueue`; a gone link snoozed likewise is not either; after the snooze it is (`tidy-up.test.ts`) | `qualifying` has no snooze test |
 | N6 | Tidy asks about gone pages: a gone To keep link and a gone new To explore link are steps with `gone: true`, ordered first; a gone kept tool is not (`tidy-up.test.ts`) | gone links are excluded |
@@ -481,15 +471,14 @@ The owner answered "all yes" to Q1–Q9 (#340 comment 7040987391). Q6 was decide
 7. **Q7.** Explore has one focus card; `get_digest` has three, on the same order.
 8. **Q8.** The words in decision 13 and decision 9 are adopted. The Skip and Explore it hints follow whichever order is built.
 9. **Q9.** In Tidy, gone pages come first, then old links.
-
-**Still open with the owner:** order (A) oldest first or (B) newest first (decision 1). The coordinator recommends (A). The plan builds either: one `dir` and the hints in decision 13.
+10. **Order.** Oldest saved first, ruled in issue #340 comment 7041204284. Form B (newest first) is dropped.
 
 ## 7. Challenge resolutions
 
 The review is `.claude/reviews/solution-choice-6cb4e5a….md`, which returned REVISE. The coordinator's dispositions:
 
 - **Obj 1, accepted.** Focus picks are a membership with no rank and no per-entry cut, sorted by the main key (decision 1). N1b runs on real FTS.
-- **Obj 2 and Obj 3, pending the owner.** Both orders are written out (decisions 1, 3, 13 and 15). The coordinator recommends (A).
+- **Obj 2 and Obj 3, ruled by the owner:** oldest saved first (section 6, item 10).
 - **Obj 4, accepted.** Tidy honours a snooze only within `SNOOZE_MS` of now (decision 3). N15.
 - **Obj 5, accepted.** An Edit that makes a card To keep takes it off Explore (decision 11). N16.
 - **Obj 6, accepted.** Decision 7 is reworded: import still writes the column.

@@ -19,7 +19,7 @@ export type EditInput = {
   title?: string | null;
   picture?: Uint8Array | "page";
   tags?: { names: string[]; seen: { key: string; source: string }[] };
-  intent?: { value: Intent; seen: { intent: string; source: string | null } };
+  intent?: { value: string; seen: { intent: string; source: string | null } };
 };
 
 export const BAD_PICTURE = "That picture can't be used. Try a PNG, JPEG, GIF or WebP under 2 MB.";

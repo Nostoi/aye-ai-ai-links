@@ -455,6 +455,10 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .edit-foot button{min-height:44px}
 .edit-tags{min-width:0;margin:16px 0 0;padding:0;border:0}
 .edit-tags legend{padding:0;margin:0 0 8px;font-size:var(--text-3);font-weight:600}
+.edit-intent{min-width:0;margin:16px 0 0;padding:0;border:0}
+.edit-intent legend{padding:0;margin:0 0 8px;font-size:var(--text-3);font-weight:600}
+.edit-intent-choice{display:flex;align-items:center;gap:10px;min-height:44px}
+.edit-intent-choice input{margin:0}
 .edit-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px;padding:0;list-style:none}
 .edit-chips:empty{display:none}
 .edit-tag{display:inline-flex;align-items:center;min-height:44px;padding:0 0 0 14px;border:1.5px solid var(--line);border-radius:var(--radius-pill);background:var(--surface);overflow-wrap:anywhere}
@@ -660,6 +664,11 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <label for="edit-tag-input">Add a tag</label>
 <input id="edit-tag-input" class="edit-tag-input" autocomplete="off" maxlength="200" enterkeyhint="done">
 <ul class="edit-suggest" hidden></ul>
+</fieldset>
+<fieldset class="edit-intent">
+<legend>What is it for?</legend>
+<label class="edit-intent-choice"><input type="radio" name="edit-intent" value="explore"> To explore</label>
+<label class="edit-intent-choice"><input type="radio" name="edit-intent" value="keep"> <span data-intent-name>To keep</span></label>
 </fieldset>
 <fieldset class="edit-picture">
 <legend>Picture</legend>
@@ -1200,6 +1209,36 @@ const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 const tagList = dialog.querySelector(".edit-chips");
 const tagField = dialog.querySelector("#edit-tag-input");
 const suggestList = dialog.querySelector(".edit-suggest");
+const showIntent = (card, intent, source, kept) => {
+  card.dataset.intent = intent;
+  card.dataset.intentSource = source || "";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-keep]")) b.hidden = kept || intent === "keep";
+  for (const b of card.querySelectorAll(".card-menu button[data-act=intent-explore]")) b.hidden = kept || intent === "explore";
+  for (const part of card.querySelectorAll("[data-intent-line]")) {
+    part.hidden = intent !== "keep";
+    part.textContent = intent !== "keep" ? "" : source === "inferred" ? "To keep (a guess)" : "To keep";
+  }
+};
+const intentSet = dialog.querySelector(".edit-intent");
+const intentRadios = [...intentSet.querySelectorAll("input")];
+const intentName = intentSet.querySelector("[data-intent-name]");
+// openedIntent is what the card held when the dialog opened (the Save's "seen"); any press on the
+// choice marks it touched, and only a touched choice is sent. A link kept handy is To keep for
+// good, so its choice is hidden.
+let openedIntent = { intent: "explore", source: null };
+let intentTouched = false;
+const keptTool = (el) => !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
+const readIntent = (d) => {
+  openedIntent = { intent: d.intent === "keep" ? "keep" : "explore", source: d.intentSource || null };
+  intentTouched = false;
+  for (const r of intentRadios) r.checked = r.value === openedIntent.intent;
+  intentName.textContent = openedIntent.intent === "keep" && openedIntent.source === "inferred" ? "To keep (a guess)" : "To keep";
+  intentSet.hidden = keptTool(card);
+};
+intentSet.addEventListener("change", () => {
+  intentTouched = true;
+  intentName.textContent = "To keep";
+});
 // tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
 // "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
 // open are dropped.
@@ -1416,6 +1455,7 @@ const showCard = (target, answer) => {
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
   d.tags = JSON.stringify(answer.tags);
+  showIntent(target, answer.intent, answer.intentSource, keptTool(target));
   // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
   // which a Home card has none of.
   for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
@@ -1479,6 +1519,7 @@ const open = (from, menu) => {
   titleField.value = d.title;
   openedTitle = titleField.value;
   readTags(d);
+  readIntent(d);
   loadNames();
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
@@ -1625,6 +1666,14 @@ form.addEventListener("submit", async (event) => {
     body.append("tags", JSON.stringify(tags.map((t) => t.name)));
     body.append("seen", JSON.stringify(openedTags.map((t) => ({ key: t.key, source: t.source }))));
     changed = true;
+  }
+  if (intentTouched && !intentSet.hidden) {
+    const chosen = intentRadios.find((r) => r.checked);
+    if (chosen) {
+      body.append("intent", chosen.value);
+      body.append("intentSeen", JSON.stringify(openedIntent));
+      changed = true;
+    }
   }
   const listView = editRoot ? editRoot.dataset : {};
   if (listView.within) body.append("within", listView.within);

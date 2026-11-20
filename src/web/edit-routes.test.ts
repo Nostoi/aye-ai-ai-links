@@ -40,6 +40,8 @@ describe("POST /links/edit", () => {
       fit: "cover",
       picture: { own: true, pageVersion: v(PAGE), pageFit: "cover" },
       tags: [],
+      intent: "explore",
+      intentSource: null,
       space: null,
       lineSpace: null,
       editId: expect.any(String),
@@ -146,6 +148,8 @@ describe("POST /links/edit/undo", () => {
       fit: "cover",
       picture: { own: false, pageVersion: v(PAGE), pageFit: "cover" },
       tags: [],
+      intent: "explore",
+      intentSource: null,
       space: null,
       lineSpace: null,
     });

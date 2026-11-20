@@ -146,3 +146,26 @@ describe("cardLine", () => {
     expect(parts(html)).toEqual(["<b>K</b>", "ex.com"]);
   });
 });
+
+describe("cardLine intent part (#339)", () => {
+  const keep = (source: "stated" | "inferred") => ({
+    ...link(),
+    intent: "keep" as const,
+    intentSource: source,
+  });
+  const part = (l: Link, intent = true) =>
+    parseHTML(`<div>${cardLine(l, { intent })}</div>`).document.querySelector("[data-intent-line]");
+
+  it("says To keep for a stated keep, and a guess for an inferred one, after the site", () => {
+    const stated = part(keep("stated"));
+    expect([stated?.textContent, stated?.hasAttribute("hidden")]).toEqual(["To keep", false]);
+    expect(part(keep("inferred"))?.textContent).toBe("To keep (a guess)");
+    expect(parts(cardLine(keep("stated"), { intent: true }))).toEqual(["ex.com", "To keep"]);
+  });
+
+  it("holds a hidden empty part for explore, so a script can show it, and none without the option", () => {
+    const explore = part(link());
+    expect([explore?.textContent, explore?.hasAttribute("hidden")]).toEqual(["", true]);
+    expect(part(keep("stated"), false)).toBeNull();
+  });
+});

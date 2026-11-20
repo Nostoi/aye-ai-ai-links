@@ -287,6 +287,7 @@ type EditForm = View & {
   title?: string;
   picture?: Uint8Array | "page";
   tags?: { names: string[]; seen: { key: string; source: string }[] };
+  intent?: { value: string; seen: { intent: string; source: string | null } };
 };
 
 const isText = (value: unknown): value is string => typeof value === "string";
@@ -315,6 +316,27 @@ function takeTags(tags: unknown, seen: unknown): EditForm["tags"] | null | undef
     isText((m as { source?: unknown }).source);
   if (!Array.isArray(marks) || !marks.every(fits)) return null;
   return { names, seen: marks.map(({ key, source }) => ({ key, source })) };
+}
+
+/**
+ * The `intent` and `intentSeen` form fields, sent together or not at all: `undefined` when neither
+ * was sent, `null` when `intentSeen` is not JSON of `{ intent, source }` (a text and a text or
+ * null). Whether they are an intent and a source is core's to say.
+ */
+function takeIntent(intent: unknown, seen: unknown): EditForm["intent"] | null | undefined {
+  if (intent === null && seen === null) return undefined;
+  if (typeof intent !== "string" || typeof seen !== "string") return null;
+  let mark: unknown;
+  try {
+    mark = JSON.parse(seen);
+  } catch {
+    return null;
+  }
+  const { intent: was, source } = (mark ?? {}) as { intent?: unknown; source?: unknown };
+  if (typeof mark !== "object" || !isText(was) || !(source === null || isText(source))) {
+    return null;
+  }
+  return { value: intent, seen: { intent: was, source } };
 }
 
 /** An optional JSON member: absent, or passing `check`. */
@@ -363,9 +385,12 @@ const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, n
   }
   const tags = takeTags(form.get("tags"), form.get("seen"));
   if (tags === null) return bad();
+  const intent = takeIntent(form.get("intent"), form.get("intentSeen"));
+  if (intent === null) return bad();
   const edit: EditForm = { id };
   if (title !== null) edit.title = title;
   if (tags) edit.tags = tags;
+  if (intent) edit.intent = intent;
   if (within !== null) edit.within = within;
   if (own !== null) edit.own = true;
   if (picture instanceof Blob) edit.picture = new Uint8Array(await picture.arrayBuffer());
@@ -867,6 +892,8 @@ export function webApp({
         pageFit: info?.pageFit ?? null,
       },
       tags: shownTags(link.tags),
+      intent: link.intent,
+      intentSource: link.intentSource,
       space: space && { color: space.color },
       lineSpace: line && { name: line.name },
     };
@@ -1342,11 +1369,12 @@ export function webApp({
   app.post("/links/edit", session, editForm, (c) =>
     homeAction(c, async () => {
       const { owner } = c.get("caller");
-      const { id, title, picture, tags, within, own } = c.get("edit");
+      const { id, title, picture, tags, intent, within, own } = c.get("edit");
       const editId = await editLink(deps, owner, id, {
         ...(title !== undefined && { title }),
         ...(picture !== undefined && { picture }),
         ...(tags !== undefined && { tags }),
+        ...(intent !== undefined && { intent }),
       });
       const view: View = { ...(within !== undefined && { within }), ...(own && { own }) };
       return c.json({ ...(await cardState(owner, id, view)), editId }, 200, NO_STORE);

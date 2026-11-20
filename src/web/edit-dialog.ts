@@ -1,4 +1,5 @@
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
+import { INTENT_VIEW } from "./intent.js";
 
 const CLOSE = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 const REMOVE_TAG = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
@@ -32,6 +33,11 @@ export const editDialog =
 <label for="edit-tag-input">Add a tag</label>
 <input id="edit-tag-input" class="edit-tag-input" autocomplete="off" maxlength="${EDIT_MAX_TAG_TEXT}" enterkeyhint="done">
 <ul class="edit-suggest" hidden></ul>
+</fieldset>
+<fieldset class="edit-intent">
+<legend>What is it for?</legend>
+<label class="edit-intent-choice"><input type="radio" name="edit-intent" value="explore"> To explore</label>
+<label class="edit-intent-choice"><input type="radio" name="edit-intent" value="keep"> <span data-intent-name>To keep</span></label>
 </fieldset>
 <fieldset class="edit-picture">
 <legend>Picture</legend>
@@ -109,6 +115,27 @@ const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 const tagList = dialog.querySelector(".edit-chips");
 const tagField = dialog.querySelector("#edit-tag-input");
 const suggestList = dialog.querySelector(".edit-suggest");
+${INTENT_VIEW}
+const intentSet = dialog.querySelector(".edit-intent");
+const intentRadios = [...intentSet.querySelectorAll("input")];
+const intentName = intentSet.querySelector("[data-intent-name]");
+// openedIntent is what the card held when the dialog opened (the Save's "seen"); any press on the
+// choice marks it touched, and only a touched choice is sent. A link kept handy is To keep for
+// good, so its choice is hidden.
+let openedIntent = { intent: "explore", source: null };
+let intentTouched = false;
+const keptTool = (el) => !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
+const readIntent = (d) => {
+  openedIntent = { intent: d.intent === "keep" ? "keep" : "explore", source: d.intentSource || null };
+  intentTouched = false;
+  for (const r of intentRadios) r.checked = r.value === openedIntent.intent;
+  intentName.textContent = openedIntent.intent === "keep" && openedIntent.source === "inferred" ? "To keep (a guess)" : "To keep";
+  intentSet.hidden = keptTool(card);
+};
+intentSet.addEventListener("change", () => {
+  intentTouched = true;
+  intentName.textContent = "To keep";
+});
 // tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
 // "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
 // open are dropped.
@@ -325,6 +352,7 @@ const showCard = (target, answer) => {
   d.pageFit = answer.picture.pageFit || "";
   d.initials = answer.initials;
   d.tags = JSON.stringify(answer.tags);
+  showIntent(target, answer.intent, answer.intentSource, keptTool(target));
   // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
   // which a Home card has none of.
   for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
@@ -388,6 +416,7 @@ const open = (from, menu) => {
   titleField.value = d.title;
   openedTitle = titleField.value;
   readTags(d);
+  readIntent(d);
   loadNames();
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
@@ -534,6 +563,14 @@ form.addEventListener("submit", async (event) => {
     body.append("tags", JSON.stringify(tags.map((t) => t.name)));
     body.append("seen", JSON.stringify(openedTags.map((t) => ({ key: t.key, source: t.source }))));
     changed = true;
+  }
+  if (intentTouched && !intentSet.hidden) {
+    const chosen = intentRadios.find((r) => r.checked);
+    if (chosen) {
+      body.append("intent", chosen.value);
+      body.append("intentSeen", JSON.stringify(openedIntent));
+      changed = true;
+    }
   }
   const listView = editRoot ? editRoot.dataset : {};
   if (listView.within) body.append("within", listView.within);

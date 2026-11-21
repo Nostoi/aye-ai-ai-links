@@ -1,5 +1,5 @@
 import { CoreError } from "./errors.js";
-import { type Deps, saveLink } from "./links.js";
+import { cleanWhy, type Deps, saveLink } from "./links.js";
 import type { Link, OwnerId } from "./types.js";
 import { tellWhy } from "./worth-a-look.js";
 
@@ -26,7 +26,7 @@ export async function savePage(
   owner: OwnerId,
   input: SavePageInput,
 ): Promise<SavedPage> {
-  const why = input.why?.trim() || null;
+  const why = cleanWhy({ text: input.why ?? "", source: "asked" })?.text ?? null;
   const saved = await saveLink({ ...deps, saveWaitMs: 0 }, owner, {
     url: input.url,
     title: input.title,

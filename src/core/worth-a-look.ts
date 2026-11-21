@@ -1,6 +1,7 @@
 import { type DigestDeps, type DigestLink, previewDigest } from "./digest.js";
 import { CoreError } from "./errors.js";
 import { checkPair, intentExpectation, KEPT_TOOL_STAYS } from "./intent.js";
+import { cleanWhy } from "./links.js";
 import type { EventWrite, LinkExpectation } from "./store.js";
 import type { IntentPair } from "./tool-store.js";
 import type { ToolItem } from "./tools.js";
@@ -205,7 +206,7 @@ export async function tellWhy(
   id: string,
   text: string,
 ): Promise<Link> {
-  const why = text.trim();
+  const why = cleanWhy({ text, source: "asked" })?.text ?? "";
   if (why === "") throw new CoreError("invalid_input", "Write the reason first.");
   return changeIf(
     deps,

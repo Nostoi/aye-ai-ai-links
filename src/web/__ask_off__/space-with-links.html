@@ -654,7 +654,15 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <h3 data-card-title><a href="https://example.com/1" target="_blank" rel="noopener noreferrer" data-open>Title 1</a></h3>
 <p class="row-about" data-card-summary hidden>A summary</p>
 <p class="row-why" data-why-answer data-card-why="text">to compare</p>
-
+<div class="ask" hidden>
+<p class="small">Why did you save this?</p>
+<button class="tell-why" type="button" data-act="why">Tell me why</button>
+<form class="why-form" hidden>
+<label class="visually-hidden" for="why-1">Why did you save this?</label>
+<input id="why-1" name="why" autocomplete="off" required>
+<button class="primary" type="submit">Save</button>
+</form>
+</div>
 <p class="card-line"><span class="line-space" hidden><span class="dot" aria-hidden="true"></span><span data-space-name></span></span><span>example.com</span><span data-intent-line hidden></span></p>
 </div>
 <details class="card-menu" name="menu">

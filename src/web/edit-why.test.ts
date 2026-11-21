@@ -266,6 +266,18 @@ describe("a card shows the answer's why in its own wording", () => {
     await undoLast(added);
     expect(el(added, ".row-about").hidden).toBe(false);
   });
+
+  it("a row that offers Tell me why gets it back when its why is removed, loses it when one is added, and Undo reverses both", async () => {
+    const ask = (p: Page) => el(p, ".ask");
+    const removed = await edited(rows(link({ why: STATED }), true), STATED, null);
+    expect(ask(removed).hidden).toBe(false);
+    await undoLast(removed);
+    expect(ask(removed).hidden).toBe(true);
+    const added = await edited(rows(link(), true), null, STATED);
+    expect(ask(added).hidden).toBe(true);
+    await undoLast(added);
+    expect(ask(added).hidden).toBe(false);
+  });
 });
 
 describe("Home's featured card", () => {

@@ -67,7 +67,7 @@ export function linkRow(
   const about = link.summary
     ? `<p class="row-about" data-card-summary${link.why ? " hidden" : ""}>${escapeHtml(link.summary)}</p>\n`
     : "";
-  const why = `${whyAnswer("p", "row-why", undefined, link.why ? whyText(link.why) : "")}\n${ask ? `${askWhy(link)}\n` : ""}`;
+  const why = `${whyAnswer("p", "row-why", undefined, link.why ? whyText(link.why) : "")}\n${ask ? `${askWhy(link, { always: true })}\n` : ""}`;
   const warning = goneLine(link, gone);
   return `<li class="link-row${spaceClass(space)}${faded ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture, "row-pic")}

@@ -274,8 +274,8 @@ describe("a space page", () => {
     expect(needy?.querySelector(".ask")?.textContent).toContain("Why did you save this?");
     expect(needy?.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
     expect(needy?.querySelector("form.why-form")?.hasAttribute("hidden")).toBe(true);
-    expect(known?.querySelector(".ask")).toBeNull();
-    expect(d.querySelectorAll("button[data-act=why]")).toHaveLength(1);
+    expect(known?.querySelector(".ask")?.hasAttribute("hidden")).toBe(true);
+    expect(needy?.querySelector(".ask")?.hasAttribute("hidden")).toBe(false);
   });
 
   it("says when the space has no links yet", () => {

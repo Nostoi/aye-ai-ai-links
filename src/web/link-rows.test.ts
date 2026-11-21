@@ -69,9 +69,8 @@ describe("a link row", () => {
     const answer = asked.querySelector("[data-why-answer]");
     expect(answer?.className).toBe("row-why");
     expect(answer?.hasAttribute("hidden")).toBe(true);
-    // A link with a why never asks.
     const known = row(link({ why: { text: "x", source: "stated" } }), { ask: true });
-    expect(known.querySelector(".ask")).toBeNull();
+    expect(known.querySelector(".ask")?.hasAttribute("hidden")).toBe(true);
   });
 
   it("shows the summary, escaped, in the why's place when there is no why", () => {

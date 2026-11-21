@@ -28,7 +28,7 @@ export const coveredOf = (l: Covered): Covered => ({
   intentSource: l.intentSource,
 });
 
-const sameWhy = (a: Labelled | null, b: Labelled | null) =>
+export const sameWhy = (a: Labelled | null, b: Labelled | null) =>
   a?.text === b?.text && a?.source === b?.source;
 
 const sameSummary = (a: Covered, b: Covered) =>

@@ -1,6 +1,6 @@
 import type { ImageBytes } from "./image-store.js";
 import type { IntentPair } from "./tool-store.js";
-import type { LinkTag, OwnerId, Source } from "./types.js";
+import type { Labelled, LinkTag, OwnerId, Source } from "./types.js";
 
 /** A picture edit: set the owner's picture, or "page" to remove it so the fetched one shows. */
 export type PictureEdit = { set: ImageBytes } | "page";
@@ -10,17 +10,20 @@ export type PictureEdit = { set: ImageBytes } | "page";
  * `tags` replaces the link's whole ordered tag set with `set`, but only while the link still
  * holds `expected`: the ordered keys and sources the owner saw. `intent` sets the link's intent
  * and source, but only while the link still holds `expected`, the pair the owner saw; an
- * `explore` is also refused while the link's Keep handy row is `kept`.
+ * `explore` is also refused while the link's Keep handy row is `kept`. `why` sets the link's why
+ * (null removes it), but only while the link still holds `expected`, the why the owner saw
+ * (text and source, or none).
  */
 export type LinkEdit = {
   title?: string | null;
   picture?: PictureEdit;
   tags?: { expected: { key: string; source: Source }[]; set: LinkTag[] };
   intent?: { expected: IntentPair; set: IntentPair };
+  why?: { expected: Labelled | null; set: Labelled | null };
 };
 
-/** What `applyEdit` answers when it wrote nothing: tags or intent moved on, or a kept tool refuses an explore. */
-export type EditRefusal = "conflict" | "intent_conflict" | "kept_tool";
+/** What `applyEdit` answers when it wrote nothing: tags, intent or why moved on, or a kept tool refuses an explore. */
+export type EditRefusal = "conflict" | "intent_conflict" | "why_conflict" | "kept_tool";
 
 export type UndoOutcome = "undone" | "conflict";
 
@@ -41,7 +44,8 @@ export interface LinkEditStore {
    * writes nothing, title and picture included, and answers "conflict". The same for an
    * `intent` whose `expected` pair differs from the link's ("intent_conflict"), and for one
    * that would change the link to `explore` while its Keep handy row is `kept` ("kept_tool").
-   * When nothing would
+   * The same for a `why` whose `expected` differs from the link's in text or source
+   * ("why_conflict"). When nothing would
    * change (tags compared by key, source and order), it writes nothing and returns
    * `{ editId: null }`. Otherwise it replaces the link's edit record with what this edit
    * replaced and wrote, under a new random edit id, applies the edit and returns that id. Tags

@@ -635,6 +635,99 @@ export function describeLinkEditStoreContract(
       });
     });
 
+    describe("why", () => {
+      const guess: Labelled = { text: "old", source: "inferred" };
+      const stated: Labelled = { text: "mine", source: "stated" };
+      const whyOf = async (id: string) => (await h.links.get(A, id))?.why ?? null;
+      const linkWithWhy = async (why: Labelled | null) => {
+        const id = await linkWith(A);
+        if (why) await h.links.update(A, id, { why });
+        return id;
+      };
+
+      it("writes the why and records it; Undo puts the old one back", async () => {
+        const id = await linkWithWhy(guess);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { why: { expected: guess, set: stated } }, at(10)),
+        );
+        expect(await whyOf(id)).toEqual(stated);
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await whyOf(id)).toEqual(guess);
+      });
+
+      it("a null set removes the why, and Undo restores it with its source", async () => {
+        const id = await linkWithWhy(stated);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { why: { expected: stated, set: null } }, at(10)),
+        );
+        expect(await whyOf(id)).toBeNull();
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect(await whyOf(id)).toEqual(stated);
+      });
+
+      it("a why that moved since the dialog opened is a why_conflict that writes nothing", async () => {
+        const id = await linkWithWhy({ text: "now", source: "asked" });
+        const earlier = await editId(h.edits.applyEdit(A, id, { title: "Earlier" }, at(9)));
+        const before = structuredClone(await h.links.get(A, id));
+        expect(
+          await h.edits.applyEdit(
+            A,
+            id,
+            { title: "New", why: { expected: { text: "then", source: "asked" }, set: stated } },
+            at(10),
+          ),
+        ).toBe("why_conflict");
+        expect(await h.links.get(A, id)).toEqual(before);
+        expect(await h.edits.undoEdit(A, id, earlier)).toBe("undone");
+      });
+
+      it("a source-only change is a why_conflict", async () => {
+        const id = await linkWithWhy({ text: "x", source: "asked" });
+        expect(
+          await h.edits.applyEdit(
+            A,
+            id,
+            { why: { expected: { text: "x", source: "inferred" }, set: stated } },
+            at(10),
+          ),
+        ).toBe("why_conflict");
+      });
+
+      it("an expected null matches only a link with no why", async () => {
+        const has = await linkWithWhy(guess);
+        expect(
+          await h.edits.applyEdit(A, has, { why: { expected: null, set: stated } }, at(10)),
+        ).toBe("why_conflict");
+        expect(await whyOf(has)).toEqual(guess);
+        const none = await linkWithWhy(null);
+        const edit = await editId(
+          h.edits.applyEdit(A, none, { why: { expected: null, set: stated } }, at(11)),
+        );
+        expect(await whyOf(none)).toEqual(stated);
+        expect(await h.edits.undoEdit(A, none, edit)).toBe("undone");
+        expect(await whyOf(none)).toBeNull();
+      });
+
+      it("an unchanged why with a title change records no why change", async () => {
+        const id = await linkWithWhy(guess);
+        const edit = await editId(
+          h.edits.applyEdit(A, id, { title: "New", why: { expected: guess, set: guess } }, at(10)),
+        );
+        const later: Labelled = { text: "later", source: "asked" };
+        await h.links.update(A, id, { why: later });
+        expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+        expect((await h.links.get(A, id))?.title).toBe("Page");
+        expect(await whyOf(id)).toEqual(later);
+      });
+
+      it("writes nothing when the why already is what it asks", async () => {
+        const id = await linkWithWhy(stated);
+        expect(
+          await h.edits.applyEdit(A, id, { why: { expected: stated, set: stated } }, at(10)),
+        ).toEqual({ editId: null });
+      });
+    });
+
     describe("receipts for an AI edit (updateWithReceipt)", () => {
       const tag = (key: string, source: LinkTag["source"] = "stated"): LinkTag => ({
         key,

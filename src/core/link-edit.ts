@@ -2,7 +2,7 @@ import { CoreError } from "./errors.js";
 import { checkImage } from "./image-type.js";
 import { checkIntent, keptToolStays } from "./intent.js";
 import type { LinkEdit, LinkEditStore } from "./link-edit-store.js";
-import { isSource, normalizeTitle, notFound } from "./links.js";
+import { cleanWhy, isSource, normalizeTitle, notFound } from "./links.js";
 import { normalizeTags } from "./tags.js";
 import type { Intent, OwnerId, Source } from "./types.js";
 
@@ -13,18 +13,22 @@ export type EditDeps = { edits: LinkEditStore; now: () => Date };
  * "page", and the link's tags. `tags.names` is the final list in order; `tags.seen` is the
  * ordered key and source of each tag the owner's dialog opened with. `intent` is the owner's
  * choice, with the intent and source the dialog opened with in `seen` (a null source: nobody
- * said).
+ * said). `why` is the owner's text (blank removes it), with the why the dialog opened with in
+ * `seen` (null: none).
  */
 export type EditInput = {
   title?: string | null;
   picture?: Uint8Array | "page";
   tags?: { names: string[]; seen: { key: string; source: string }[] };
   intent?: { value: string; seen: { intent: string; source: string | null } };
+  why?: { text: string; seen: { text: string; source: string } | null };
 };
 
 export const BAD_PICTURE = "That picture can't be used. Try a PNG, JPEG, GIF or WebP under 2 MB.";
 export const INTENT_CONFLICT =
   "This link's intent changed since you opened it. Reload the page and edit again.";
+export const WHY_CONFLICT =
+  "This link's why changed since you opened it. Reload the page and edit again.";
 export const UNDO_CONFLICT = "This link changed since, so nothing was undone.";
 export const TAGS_CONFLICT =
   "This link's tags changed since you opened it. Reload the page and edit again.";
@@ -54,10 +58,12 @@ export async function editLink(
   }
   if (input.tags) edit.tags = tagEdit(input.tags);
   if (input.intent) edit.intent = intentEdit(input.intent);
+  if (input.why) edit.why = whyEdit(input.why);
   const result = await deps.edits.applyEdit(owner, id, edit, deps.now());
   if (!result) throw notFound(id);
   if (result === "conflict") throw new CoreError("conflict", TAGS_CONFLICT);
   if (result === "intent_conflict") throw new CoreError("conflict", INTENT_CONFLICT);
+  if (result === "why_conflict") throw new CoreError("conflict", WHY_CONFLICT);
   if (result === "kept_tool") throw keptToolStays();
   return result.editId;
 }
@@ -75,6 +81,17 @@ function intentEdit({
   return {
     expected: opened ?? { intent: "explore", intentSource: null },
     set: set as { intent: Intent; intentSource: Source },
+  };
+}
+
+/** The owner's words are stated, trimmed; blank removes the why. What the dialog opened with is checked as the store compares it. */
+function whyEdit({ text, seen }: NonNullable<EditInput["why"]>): NonNullable<LinkEdit["why"]> {
+  if (seen && !isSource(seen.source)) {
+    throw new CoreError("invalid_input", `A why's source is "${seen.source}", which is not one.`);
+  }
+  return {
+    expected: seen && { text: seen.text, source: seen.source as Source },
+    set: cleanWhy({ text, source: "stated" }),
   };
 }
 

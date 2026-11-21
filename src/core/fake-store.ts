@@ -8,6 +8,7 @@ import {
   extendedPrior,
   holdsWritten,
   sameTags,
+  sameWhy,
 } from "./covered-fields.js";
 import { FakeFavicons } from "./fake-favicons.js";
 import type { FaviconReader, FaviconStore, PendingFavicon } from "./favicon-store.js";
@@ -1177,6 +1178,7 @@ export class FakeStore
     if (seen && (seen.intent !== prior.intent || seen.intentSource !== prior.intentSource)) {
       return "intent_conflict";
     }
+    if (edit.why && !sameWhy(prior.why, edit.why.expected)) return "why_conflict";
     const wanted = edit.intent?.set;
     const intent =
       wanted && (wanted.intent !== prior.intent || wanted.intentSource !== prior.intentSource)
@@ -1187,7 +1189,10 @@ export class FakeStore
     const pictureChanged =
       edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
     const tags = edit.tags && !sameTags(prior.tags, edit.tags.set) ? edit.tags.set : null;
-    if (!titleChanged && !pictureChanged && !tags && !intent) return { editId: null };
+    const why = edit.why && !sameWhy(prior.why, edit.why.set) ? edit.why.set : undefined;
+    if (!titleChanged && !pictureChanged && !tags && !intent && why === undefined) {
+      return { editId: null };
+    }
     const editId = randomUUID();
     if (tags) {
       link.tags = structuredClone(tags);
@@ -1198,7 +1203,7 @@ export class FakeStore
       changed: {
         title: titleChanged,
         summary: false,
-        why: false,
+        why: why !== undefined,
         tags: tags !== null,
         intent: intent !== null,
       },
@@ -1206,6 +1211,7 @@ export class FakeStore
       written: {
         ...prior,
         title: titleChanged ? (edit.title ?? null) : prior.title,
+        why: why === undefined ? prior.why : why && { ...why },
         tags: coveredOf(this.view(owner, link)).tags,
         intent: intent?.intent ?? prior.intent,
         intentSource: intent ? intent.intentSource : prior.intentSource,
@@ -1215,6 +1221,7 @@ export class FakeStore
       writtenSha: pictureChanged ? setSha : null,
     });
     if (titleChanged) link.title = edit.title ?? null;
+    if (why !== undefined) link.why = why && { ...why };
     if (intent) {
       link.intent = intent.intent;
       link.intentSource = intent.intentSource;

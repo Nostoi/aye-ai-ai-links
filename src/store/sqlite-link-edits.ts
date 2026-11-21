@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
-import { sameTags } from "../core/covered-fields.js";
+import { sameTags, sameWhy } from "../core/covered-fields.js";
 import type { ImageType } from "../core/fetch.js";
 import type { EditRefusal, LinkEdit, LinkEditStore, UndoOutcome } from "../core/link-edit-store.js";
 import type { OwnerId } from "../core/types.js";
@@ -46,6 +46,7 @@ export class SqliteLinkEditStore implements LinkEditStore {
         ) {
           return "intent_conflict";
         }
+        if (edit.why && !sameWhy(current.why, edit.why.expected)) return "why_conflict";
         const set = edit.intent?.set;
         const intent =
           set && (set.intent !== current.intent || set.intentSource !== current.intentSource)
@@ -57,7 +58,8 @@ export class SqliteLinkEditStore implements LinkEditStore {
         const pictureChanged =
           edit.picture === "page" ? own !== undefined : setSha !== null && own?.sha256 !== setSha;
         const tags = edit.tags && !sameTags(current.tags, edit.tags.set) ? edit.tags.set : null;
-        if (!titleChanged && !pictureChanged && !tags && !intent) return { editId: null };
+        const why = edit.why && !sameWhy(current.why, edit.why.set) ? edit.why : null;
+        if (!titleChanged && !pictureChanged && !tags && !intent && !why) return { editId: null };
         if (titleChanged) this.writeTitle(owner, n, edit.title ?? null);
         if (pictureChanged) {
           if (picked && setSha) {
@@ -80,6 +82,11 @@ export class SqliteLinkEditStore implements LinkEditStore {
             .prepare("UPDATE links SET intent = ?, intent_source = ? WHERE owner_id = ? AND id = ?")
             .run(intent.intent, intent.intentSource, owner, n);
         }
+        if (why) {
+          this.db
+            .prepare("UPDATE links SET why_text = ?, why_source = ? WHERE owner_id = ? AND id = ?")
+            .run(why.set?.text ?? null, why.set?.source ?? null, owner, n);
+        }
         const editId = randomUUID();
         const prior = pictureChanged ? own : undefined;
         this.db
@@ -88,8 +95,9 @@ export class SqliteLinkEditStore implements LinkEditStore {
                picture_changed, prior_title, written_title, prior_content_type, prior_bytes,
                prior_sha256, prior_set_at, written_sha256, tags_changed, prior_tags, written_tags,
                at, intent_changed, prior_intent, prior_intent_source, written_intent,
-               written_intent_source)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               written_intent_source, why_changed, prior_why_text, prior_why_source,
+               written_why_text, written_why_source)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             owner,
@@ -113,6 +121,11 @@ export class SqliteLinkEditStore implements LinkEditStore {
             intent ? current.intentSource : null,
             intent?.intent ?? null,
             intent ? intent.intentSource : null,
+            why ? 1 : 0,
+            why ? (current.why?.text ?? null) : null,
+            why ? (current.why?.source ?? null) : null,
+            why ? (why.set?.text ?? null) : null,
+            why ? (why.set?.source ?? null) : null,
           );
         return { editId };
       })

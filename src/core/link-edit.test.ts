@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeStore } from "./fake-store.js";
 import { jpeg, png, svg } from "./image-test-kit.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./image-type.js";
-import { BAD_PICTURE, editLink, UNDO_CONFLICT, undoEdit } from "./link-edit.js";
+import { BAD_PICTURE, editLink, UNDO_CONFLICT, undoEdit, WHY_CONFLICT } from "./link-edit.js";
 import { updateLink } from "./links.js";
 import { newLink } from "./snapshot-store-contract.js";
 import { normalizeTags } from "./tags.js";
@@ -204,5 +204,49 @@ describe("undoEdit", () => {
     const { deps, id } = await setup();
     const editId = (await editLink(deps, "a", id, { title: "Mine" })) as string;
     await expect(undoEdit(deps, "b", id, editId)).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("editLink why", () => {
+  const seenAsked = { text: "then", source: "asked" };
+
+  it("writes the owner's why as stated, trimmed", async () => {
+    const { store, deps, id } = await setup();
+    await editLink(deps, "a", id, { why: { text: "  for my trip ", seen: null } });
+    expect((await store.get("a", id))?.why).toEqual({ text: "for my trip", source: "stated" });
+  });
+
+  it.each([[""], ["   "]])("removes the why for blank text %j", async (text) => {
+    const { store, deps, id } = await setup();
+    await store.update("a", id, { why: { text: "then", source: "asked" } });
+    await editLink(deps, "a", id, { why: { text, seen: seenAsked } });
+    expect((await store.get("a", id))?.why).toBeNull();
+  });
+
+  it("treats seen null as a link with no why", async () => {
+    const { store, deps, id } = await setup();
+    await store.update("a", id, { why: { text: "then", source: "asked" } });
+    await expect(
+      editLink(deps, "a", id, { why: { text: "mine", seen: null } }),
+    ).rejects.toMatchObject({ code: "conflict", message: WHY_CONFLICT });
+    expect((await store.get("a", id))?.why).toEqual(seenAsked);
+  });
+
+  it("refuses a seen source that is not a source", async () => {
+    const { deps, id } = await setup();
+    await expect(
+      editLink(deps, "a", id, { why: { text: "x", seen: { text: "y", source: "bogus" } } }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+  });
+
+  it("answers a moved why as a conflict in the owner's words, writing nothing", async () => {
+    const { store, deps, id } = await setup();
+    await store.update("a", id, { why: { text: "now", source: "inferred" } });
+    await expect(
+      editLink(deps, "a", id, { title: "New", why: { text: "mine", seen: seenAsked } }),
+    ).rejects.toMatchObject({ code: "conflict", message: WHY_CONFLICT });
+    const link = await store.get("a", id);
+    expect(link?.title).toBe("Quokka habitat");
+    expect(link?.why).toEqual({ text: "now", source: "inferred" });
   });
 });

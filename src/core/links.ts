@@ -95,7 +95,7 @@ function checkSources(why: Labelled | null | undefined, tags: TagInput | undefin
 }
 
 /** Trim the why text; empty text means the why is missing. */
-function cleanWhy(why: Labelled | null | undefined): Labelled | null {
+export function cleanWhy(why: Labelled | null | undefined): Labelled | null {
   const text = why?.text.trim();
   return why && text ? { text, source: why.source } : null;
 }

@@ -197,6 +197,21 @@ export function describeLinkEditStoreContract(
       expect(await h.edits.undoEdit(A, id, set)).toBe("undone");
     });
 
+    it("tags added with addTags replace no record: an earlier title edit's Undo still works", async () => {
+      const id = await linkWith(A, { title: "Old" });
+      const edit = await editId(h.edits.applyEdit(A, id, { title: "New" }, at(10)));
+      const tag: LinkTag = {
+        key: "x",
+        name: "X",
+        source: "stated",
+        kind: "topic",
+        kindSource: "inferred",
+      };
+      expect((await h.links.addTags(A, id, [tag]))?.added).toEqual(["x"]);
+      expect(await h.edits.undoEdit(A, id, edit)).toBe("undone");
+      expect((await h.links.get(A, id))?.tags.map((t) => t.key)).toEqual(["x"]);
+    });
+
     it("Undo puts back the title and owner picture the edit replaced, once", async () => {
       const id = await linkWith(A, { title: "Old", page: png(1) });
       await editId(h.edits.applyEdit(A, id, { picture: { set: png(2) } }, at(10)));

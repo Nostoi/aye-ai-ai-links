@@ -7,7 +7,15 @@ import { type SavePageInput, savePage } from "./save-page.js";
 import type { LinkRemover, LinkStore } from "./store.js";
 import { changeTagKind } from "./tag-kind.js";
 import { SPACE_COLORS, setTagColor, setTagPinned } from "./tag-space.js";
-import type { Labelled, Link, LinkEventKind, SummarySource, Tag, TagKind } from "./types.js";
+import type {
+  Labelled,
+  Link,
+  LinkEventKind,
+  LinkTag,
+  SummarySource,
+  Tag,
+  TagKind,
+} from "./types.js";
 
 type MaybeAsync<T> = T | Promise<T>;
 
@@ -56,6 +64,7 @@ function wrap(inner: LinkStore, over: Partial<LinkStore> = {}): LinkStore {
     updateTag: (owner, key, patch, expected) => inner.updateTag(owner, key, patch, expected),
     pinTag: (owner, key, pin) => inner.pinTag(owner, key, pin),
     colorTag: (owner, key, color) => inner.colorTag(owner, key, color),
+    addTags: (owner, id, tags) => inner.addTags(owner, id, tags),
     listLinks: (owner) => inner.listLinks(owner),
     listLinksAndTags: (owner) => inner.listLinksAndTags(owner),
     updateIf: (owner, id, expected, patch, events) =>
@@ -1181,6 +1190,7 @@ export function describeStoreContract(
         update: (s: LinkStore, id: string) => s.update(A, id, patch),
         fillWhyIfMissing: (s: LinkStore, id: string) => s.fillWhyIfMissing(A, id, why),
         updateIf: (s: LinkStore, id: string) => s.updateIf(A, id, {}, patch),
+        addTags: (s: LinkStore, id: string) => s.addTags(A, id, patch.tags),
       };
       const snapshot = async () => [
         await h.all(A),
@@ -1214,6 +1224,103 @@ export function describeStoreContract(
           expect(await snapshot()).toEqual(before);
         });
       }
+    });
+
+    describe("addTags", () => {
+      const tag = (key: string, over: Partial<LinkTag> = {}): LinkTag => ({
+        key,
+        name: key,
+        source: "stated",
+        kind: "topic",
+        kindSource: "inferred",
+        ...over,
+      });
+      const saveWith = async (
+        tags: { name: string; source: "stated" | "inferred"; kind?: TagKind }[],
+      ) => (await saveLink(deps(), A, { url: "https://ex.com/a", savedBy: "t", tags })).link;
+
+      it("attaches only the keys the link lacks, after its own, and answers them in order", async () => {
+        const link = await saveWith([{ name: "Old", source: "inferred", kind: "project" }]);
+        const result = await h.store.addTags(A, link.id, [
+          tag("new2", { name: "New2" }),
+          tag("old", { name: "OLD", source: "stated", kind: "topic" }),
+          tag("new1"),
+          tag("new2"),
+        ]);
+        expect(result?.added).toEqual(["new2", "new1"]);
+        expect(result?.link.tags).toMatchObject([
+          { key: "old", name: "Old", source: "inferred", kind: "project" },
+          { key: "new2", name: "New2", source: "stated" },
+          { key: "new1", source: "stated" },
+        ]);
+        expect(await h.store.get(A, link.id)).toEqual(result?.link);
+      });
+
+      it("keeps a tag another writer added meanwhile, with its own source", async () => {
+        const link = await saveWith([{ name: "a", source: "stated" }]);
+        await h.store.update(A, link.id, { tags: [tag("a"), tag("b", { source: "inferred" })] });
+        const result = await h.store.addTags(A, link.id, [tag("b"), tag("c")]);
+        expect(result?.added).toEqual(["c"]);
+        expect(result?.link.tags.map((t) => [t.key, t.source])).toEqual([
+          ["a", "stated"],
+          ["b", "inferred"],
+          ["c", "stated"],
+        ]);
+      });
+
+      it("keeps the catalog's name, kind, colour and pin for a key it knows, and adds a new key as given", async () => {
+        const known = tagOf("known", {
+          name: "Known Name",
+          kind: "project",
+          kindSource: "stated",
+          pinned: true,
+          color: SPACE_COLORS[0] ?? null,
+        });
+        await h.seedTag(A, known);
+        const link = await saveWith([]);
+        const result = await h.store.addTags(A, link.id, [
+          tag("known", { name: "known" }),
+          tag("fresh", { name: "Fresh" }),
+        ]);
+        expect(result?.link.tags).toMatchObject([
+          { key: "known", name: "Known Name", kind: "project" },
+          { key: "fresh", name: "Fresh", kind: "topic" },
+        ]);
+        const catalog = await h.catalog(A);
+        expect(catalog.find((t) => t.key === "known")).toEqual(known);
+        expect(catalog.find((t) => t.key === "fresh")).toMatchObject({
+          name: "Fresh",
+          pinned: false,
+        });
+      });
+
+      it("writes nothing when every key is already there", async () => {
+        const link = await saveWith([{ name: "a", source: "inferred" }]);
+        const before = structuredClone([await h.all(A), await h.catalog(A)]);
+        const result = await h.store.addTags(A, link.id, [tag("a")]);
+        expect(result?.added).toEqual([]);
+        expect(result?.link).toEqual(link);
+        expect([await h.all(A), await h.catalog(A)]).toEqual(before);
+      });
+
+      it("writes nothing for a link of another owner or a deleted one", async () => {
+        const mine = await saveWith([]);
+        const theirs = await saveLink(deps(), B, { url: "https://ex.com/b", savedBy: "t" });
+        const snap = async () =>
+          structuredClone([await h.all(A), await h.catalog(A), await h.all(B), await h.catalog(B)]);
+        const before = await snap();
+        expect(await h.store.addTags(A, theirs.link.id, [tag("x")])).toBeNull();
+        await h.store.markDeleted(A, mine.id, clock);
+        expect(await h.store.addTags(A, mine.id, [tag("x")])).toBeNull();
+        await h.store.unmarkDeleted(A, mine.id, EPOCH);
+        expect(await snap()).toEqual(before);
+      });
+
+      it("lists a tag added this way in the owner's catalog", async () => {
+        const link = await saveWith([]);
+        await h.store.addTags(A, link.id, [tag("wombat", { name: "Wombat" })]);
+        expect((await h.store.listTags(A)).map((t) => t.key)).toContain("wombat");
+      });
     });
 
     describe("listLinks", () => {
@@ -2050,6 +2157,67 @@ export function describeStoreContract(
           expect(theirs.link.why).toEqual({ text: "B's reason", source: "asked" });
           expect(await h.all(A)).toEqual(before);
           expect(await h.all(B)).toHaveLength(1);
+        });
+
+        it("saves a new link's typed tags as stated, in order, once per key, and answers them as added", async () => {
+          const saved = await savePage(deps(), A, page({ tags: ["Solar", " Wind ", "solar"] }));
+          expect(saved.created).toBe(true);
+          expect(saved.link.tags).toMatchObject([
+            { key: "solar", name: "Solar", source: "stated" },
+            { key: "wind", name: "Wind", source: "stated" },
+          ]);
+          expect(saved.tagsAdded).toEqual(["Solar", "Wind"]);
+          expect(saved.tagsHad).toEqual([]);
+        });
+
+        it("a repeat save adds the typed tags the link lacks, names the typed ones it had, and keeps its own tags", async () => {
+          await saveLink(deps(), A, {
+            url: URL_A,
+            savedBy: "agent",
+            tags: [
+              { name: "Kept", source: "inferred", kind: "project" },
+              { name: "Had", source: "inferred" },
+            ],
+          });
+          const again = await savePage(deps(), A, page({ tags: ["new", "HAD", "Other"] }));
+          expect(again.created).toBe(false);
+          expect(again.tagsAdded).toEqual(["new", "Other"]);
+          expect(again.tagsHad).toEqual(["Had"]);
+          expect(again.link.tags).toMatchObject([
+            { key: "kept", source: "inferred", kind: "project" },
+            { key: "had", name: "Had", source: "inferred" },
+            { key: "new", source: "stated" },
+            { key: "other", source: "stated" },
+          ]);
+          expect(await h.all(A)).toEqual([again.link]);
+        });
+
+        it("a repeat save of tags it already has writes nothing and says it had them", async () => {
+          const first = await savePage(deps(), A, page({ tags: ["a"] }));
+          const again = await savePage(deps(), A, page({ tags: ["A"] }));
+          expect(again.tagsAdded).toEqual([]);
+          expect(again.tagsHad).toEqual(["a"]);
+          expect(await h.all(A)).toEqual([first.link]);
+        });
+
+        it("a repeat save with tags and no why works, and with a why applies both", async () => {
+          await savePage(deps(), A, page());
+          const tagsOnly = await savePage(deps(), A, page({ tags: ["a"] }));
+          expect(tagsOnly.link.why).toBeNull();
+          expect(tagsOnly.tagsAdded).toEqual(["a"]);
+          const both = await savePage(deps(), A, page({ why: "to cook", tags: ["b"] }));
+          expect(both.link.why).toEqual({ text: "to cook", source: "asked" });
+          expect(both.whyKept).toBe(true);
+          expect(both.link.tags.map((t) => t.key)).toEqual(["a", "b"]);
+        });
+
+        it("answers no tags added or had when none were typed", async () => {
+          const saved = await savePage(deps(), A, page());
+          const again = await savePage(deps(), A, page());
+          for (const r of [saved, again]) {
+            expect(r.tagsAdded).toEqual([]);
+            expect(r.tagsHad).toEqual([]);
+          }
         });
       });
     });

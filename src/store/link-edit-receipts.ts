@@ -76,8 +76,17 @@ export function readCovered(db: Database, owner: OwnerId, linkId: number): Cover
   };
 }
 
-/** Adds each tag to the catalog if it is new, then attaches it in this order with this source. */
-export function attachTags(db: Database, owner: OwnerId, linkId: number, tags: LinkTag[]): void {
+/**
+ * Adds each tag to the catalog if it is new, then attaches it in this order with this source, the
+ * first at position `from`.
+ */
+export function attachTags(
+  db: Database,
+  owner: OwnerId,
+  linkId: number,
+  tags: LinkTag[],
+  from = 0,
+): void {
   const create = db.prepare(
     `INSERT INTO tags (owner_id, key, name, kind, kind_source, pinned) VALUES (?, ?, ?, ?, ?, 0)
      ON CONFLICT (owner_id, key) DO NOTHING`,
@@ -88,7 +97,7 @@ export function attachTags(db: Database, owner: OwnerId, linkId: number, tags: L
   );
   tags.forEach((t, position) => {
     create.run(owner, t.key, t.name, t.kind, t.kindSource);
-    attach.run(owner, linkId, t.source, position, owner, t.key);
+    attach.run(owner, linkId, t.source, from + position, owner, t.key);
   });
 }
 

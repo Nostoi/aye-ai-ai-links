@@ -433,3 +433,20 @@ describe("with the Ask AI panel on", () => {
     expect((p.$("#edit-title") as HTMLInputElement).value).toBe("Title 1");
   });
 });
+
+describe("Delete link in Edit link opened from the found view", () => {
+  it("is hidden there, and shows again when Edit is opened from a card", async () => {
+    const p = start(FOUND);
+    await p.open();
+    p.fill();
+    await p.save();
+    p.dispatch(p.$s("[data-save=edit]"), "click");
+    await p.settle();
+    const row = p.$("#edit-link .edit-delete-row");
+    expect(row.hidden).toBe(true);
+    p.dispatch(p.$("#edit-link [data-edit=cancel]"), "click");
+    p.dispatch(p.$('[data-id="1"] button[data-act=edit]'), "click");
+    await p.settle();
+    expect(row.hidden).toBe(false);
+  });
+});

@@ -111,6 +111,7 @@ const fileField = dialog.querySelector("[data-edit=file]");
 const removeButton = dialog.querySelector("[data-edit=remove]");
 const useTitle = dialog.querySelector("[data-edit=use-title]");
 const deleteButton = dialog.querySelector("[data-edit=delete]");
+const deleteRow = dialog.querySelector(".edit-delete-row");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 const whyField = dialog.querySelector("#edit-why");
@@ -400,6 +401,7 @@ const finish = () => {
 };
 const open = (from, menu) => {
   card = from;
+  if (offCard.has(from)) deleteRow.hidden = true;
   opener = menu ? menu.querySelector("summary") : null;
   saveTurn++;
   saving = false;
@@ -458,6 +460,7 @@ ${panel ? "if (editRoot) " : ""}editRoot.addEventListener("click", (event) => {
 });
 // Esc closes the dialog natively; focus goes back to the ⋯ unless something else already took it.
 dialog.addEventListener("close", () => {
+  deleteRow.hidden = false;
   saveTurn++;
   saving = false;
   dropPick();
@@ -628,7 +631,6 @@ form.addEventListener("submit", async (event) => {
  */
 const PANEL_BLOCK = `
 const notes = new WeakMap();
-const deleteRow = dialog.querySelector(".edit-delete-row");
 const linked = (id) => [...document.querySelectorAll("[data-id][data-title]")].some((c) => c.getAttribute("data-id") === id);
 const shown = (target, answer) => {
   const id = target.dataset.id;

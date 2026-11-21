@@ -127,7 +127,8 @@ import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { backTarget, liveFrom } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
-import { shownTags } from "./edit-link.js";
+import { EDIT_MAX_TAG_TEXT } from "./edit-dialog.js";
+import { editDataPairs, shownTags } from "./edit-link.js";
 import { FONTS, fontHeaders } from "./fonts.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
@@ -365,6 +366,9 @@ const optional =
   (value): value is T | undefined =>
     value === undefined || check(value);
 const isOne: Check<"1"> = (value) => value === "1";
+/** The tag names the Save dialog sends: texts no longer than the dialog's own limit. */
+const isTagNames: Check<string[]> = (value): value is string[] =>
+  Array.isArray(value) && value.every((n) => isText(n) && n.length <= EDIT_MAX_TAG_TEXT);
 
 /**
  * Takes the edit form, a `multipart/form-data` body under `EDIT_BODY_LIMIT`, and sets `edit`
@@ -448,12 +452,15 @@ async function homeAction(
 
 /**
  * The Save dialog's answer: the link as saved, with the title and initials its row shows, its date
- * in the page's words and who gave its why (an inferred one shows as a guess).
+ * in the page's words and who gave its why (an inferred one shows as a guess), and the typed tags
+ * it added and the ones it already had.
  */
-const savedJson = ({ link, created, whyKept }: SavedPage, now: Date) => ({
+const savedJson = ({ link, created, whyKept, tagsAdded, tagsHad }: SavedPage, now: Date) => ({
   id: link.id,
   created,
   whyKept,
+  tagsAdded,
+  tagsHad,
   state: link.state,
   savedAt: link.savedAt.toISOString(),
   savedOn: savedOn(link.savedAt, now),
@@ -1316,15 +1323,40 @@ export function webApp({
 
   // The Save page's Save (#129). The why is the owner's own, so core records it as "asked", and
   // the link is saved by the session's caller. A repeat save answers the link already saved.
-  const saveBody = { url: isString, title: isStringOrNull, why: isStringOrNull };
+  // The typed tags are the owner's, stated. A repeat save also answers the card as the page's list
+  // reads it (`within`, `own`, as an edit sends them) and the link's edit data, so the dialog can
+  // redraw the page's cards and open Edit link on it.
+  const saveBody = {
+    url: isString,
+    title: isStringOrNull,
+    why: isStringOrNull,
+    tags: optional(isTagNames),
+    within: optional(isString),
+    own: optional(isOne),
+  };
   app.post(SAVE_PATH, jsonBody(saveBody), session, (c) =>
     homeAction(
       c,
       async () => {
         const { owner, savedBy } = c.get("caller");
-        const { url, title, why } = c.get("body");
-        const saved = await savePage(deps, owner, { url, title, why, savedBy });
-        return c.json(savedJson(saved, deps.now()), 200, NO_STORE);
+        const { url, title, why, tags, within, own } = c.get("body");
+        const saved = await savePage(deps, owner, {
+          url,
+          title,
+          why,
+          ...(tags !== undefined && { tags }),
+          savedBy,
+        });
+        const answer = savedJson(saved, deps.now());
+        if (saved.created) return c.json(answer, 200, NO_STORE);
+        const id = saved.link.id;
+        const view: View = { ...(within !== undefined && { within }), ...(own && { own: true }) };
+        const [shown, info] = await Promise.all([
+          deps.images.imageVersions(owner, [id]),
+          deps.images.pictureInfo(owner, [id]),
+        ]);
+        const edit = Object.fromEntries(editDataPairs(saved.link, shown.get(id), info.get(id)));
+        return c.json({ ...answer, edit, card: await cardState(owner, id, view) }, 200, NO_STORE);
       },
       SAVE_REFUSALS,
     ),

@@ -130,7 +130,7 @@ const intentName = intentSet.querySelector("[data-intent-name]");
 // good, so its choice is hidden.
 let openedIntent = { intent: "explore", source: null };
 let intentTouched = false;
-const keptTool = (el) => !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
+const keptTool = (el) => el.dataset.keptTool === "1" || !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
 const readIntent = (d) => {
   openedIntent = { intent: d.intent === "keep" ? "keep" : "explore", source: d.intentSource || null };
   intentTouched = false;

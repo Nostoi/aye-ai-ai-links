@@ -13,6 +13,7 @@ import {
 } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import { record } from "../core/snapshot-store-contract.js";
+import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -245,6 +246,17 @@ describe("POST /save", () => {
     expect(JSON.parse(body.edit.tags ?? "")).toEqual(now);
   });
 
+  it("a repeat save of a link kept handy answers keptHandy true, and false otherwise", async () => {
+    const { world, browser } = await signedIn();
+    const deps = linkDeps(world);
+    const { link } = await saveLink(deps, A, { url: NEW, savedBy: "claude" });
+    const plain = await save(browser, { url: NEW, title: null, why: null });
+    expect(plain.body).toMatchObject({ keptHandy: false });
+    await keepHandy(deps, A, link.id, "stated");
+    const kept = await save(browser, { url: NEW, title: null, why: null });
+    expect(kept.body).toMatchObject({ keptHandy: true });
+  });
+
   it("answers the card as the page's list reads it: a pinned tag gives its space and its line", async () => {
     const { world, browser } = await signedIn();
     const deps = linkDeps(world);
@@ -330,6 +342,7 @@ describe("POST /save", () => {
       initials: "SB",
       tagsAdded: [],
       tagsHad: [],
+      keptHandy: false,
       edit: expect.objectContaining({ title: "Saved before", why: "", tags: "[]" }),
       card: expect.objectContaining({ shown: "Saved before", tags: [], space: null }),
     });

@@ -434,6 +434,24 @@ describe("with the Ask AI panel on", () => {
   });
 });
 
+describe("the intent choice in Edit link opened from the found view", () => {
+  const intentSet = (p: Page) => p.$("#edit-link .edit-intent");
+  const openEdit = async (body: unknown) => {
+    const p = start(body);
+    await p.open();
+    p.fill();
+    await p.save();
+    p.dispatch(p.$s("[data-save=edit]"), "click");
+    await p.settle();
+    return p;
+  };
+
+  it("is hidden for a link kept handy, as on a real card, and shown otherwise", async () => {
+    expect(intentSet(await openEdit({ ...FOUND, keptHandy: true })).hidden).toBe(true);
+    expect(intentSet(await openEdit({ ...FOUND, keptHandy: false })).hidden).toBe(false);
+  });
+});
+
 describe("Delete link in Edit link opened from the found view", () => {
   it("is hidden there, and shows again when Edit is opened from a card", async () => {
     const p = start(FOUND);

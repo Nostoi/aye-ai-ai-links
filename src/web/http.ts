@@ -1356,7 +1356,12 @@ export function webApp({
           deps.images.pictureInfo(owner, [id]),
         ]);
         const edit = Object.fromEntries(editDataPairs(saved.link, shown.get(id), info.get(id)));
-        return c.json({ ...answer, edit, card: await cardState(owner, id, view) }, 200, NO_STORE);
+        const keptHandy = (await handyOf(deps, owner, saved.link))?.status === "kept";
+        return c.json(
+          { ...answer, edit, keptHandy, card: await cardState(owner, id, view) },
+          200,
+          NO_STORE,
+        );
       },
       SAVE_REFUSALS,
     ),

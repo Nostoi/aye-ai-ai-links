@@ -1618,7 +1618,7 @@ editIt.addEventListener("click", () => {
   if (!shown || !shown.edit) return;
   const space = shown.card && shown.card.space ? shown.card.space.color : null;
   closeNow();
-  document.dispatchEvent(new CustomEvent("aye-edit-link", { detail: { data: { ...shown.edit, id: shown.id }, space } }));
+  document.dispatchEvent(new CustomEvent("aye-edit-link", { detail: { data: { ...shown.edit, id: shown.id, ...(shown.keptHandy && { "kept-tool": "1" }) }, space } }));
 });
 closeIt.addEventListener("click", leave);
 if (onPage) open();

@@ -157,7 +157,13 @@ export class SqliteStore
         const have = new Set(link.tags.map((t) => t.key));
         const missing = tags.filter((t) => !have.has(t.key) && have.add(t.key));
         if (missing.length === 0) return { link, added: [] };
-        attachTags(this.db, owner, n, missing, link.tags.length);
+        const next = this.db
+          .prepare(
+            "SELECT COALESCE(MAX(position) + 1, 0) FROM link_tags WHERE link_id = ? AND owner_id = ?",
+          )
+          .pluck()
+          .get(n, owner) as number;
+        attachTags(this.db, owner, n, missing, next);
         return { link: this.mustRead(owner, n), added: missing.map((t) => t.key) };
       })
       .immediate();

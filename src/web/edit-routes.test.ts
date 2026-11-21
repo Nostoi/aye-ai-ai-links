@@ -42,6 +42,8 @@ describe("POST /links/edit", () => {
       tags: [],
       intent: "explore",
       intentSource: null,
+      why: null,
+      summary: null,
       space: null,
       lineSpace: null,
       editId: expect.any(String),
@@ -150,6 +152,8 @@ describe("POST /links/edit/undo", () => {
       tags: [],
       intent: "explore",
       intentSource: null,
+      why: null,
+      summary: null,
       space: null,
       lineSpace: null,
     });

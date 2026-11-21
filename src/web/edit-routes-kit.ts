@@ -72,6 +72,8 @@ export type Answer = {
   fit: "cover" | "contain" | null;
   picture: { own: boolean; pageVersion: string | null; pageFit: "cover" | "contain" | null };
   tags: { key: string; name: string; source: string }[];
+  why: { text: string; source: string } | null;
+  summary: string | null;
   space: { color: string } | null;
   lineSpace: { name: string } | null;
   editId?: string | null;

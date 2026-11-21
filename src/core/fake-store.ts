@@ -77,6 +77,7 @@ import type {
   Link,
   LinkEventKind,
   LinkPatch,
+  LinkTag,
   NewLink,
   OwnerId,
   SnapshotStatus,
@@ -682,6 +683,16 @@ export class FakeStore
     const after = coveredOf(link);
     const changed = changedFields(before, after);
     return { link, editId: this.recordReceipt(owner, id, changed, before, after, extend) };
+  }
+
+  async addTags(owner: OwnerId, id: string, tags: LinkTag[]) {
+    const found = this.owned(owner).get(id);
+    if (!found) return null;
+    const have = new Set(found.tags.map((t) => t.key));
+    const missing = tags.filter((t) => !have.has(t.key) && have.add(t.key));
+    this.ensureTags(owner, missing);
+    found.tags.push(...structuredClone(missing));
+    return { link: this.view(owner, found), added: missing.map((t) => t.key) };
   }
 
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {

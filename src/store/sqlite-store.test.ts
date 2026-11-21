@@ -543,3 +543,39 @@ describe("SqliteStore atomicity", () => {
     expect(before[1]).toEqual([]);
   });
 });
+
+describe("addTags after a gap in the link's tag positions", () => {
+  it("attaches the new tag last, whichever tag left the gap", async () => {
+    const s = setup();
+    await s.h.addOwner("a");
+    await saveLink(s.deps, "a", { url: "https://ex.com/0", savedBy: "x", tags: tag("early") });
+    const { link } = await saveLink(s.deps, "a", {
+      url: "https://ex.com/1",
+      savedBy: "x",
+      tags: [
+        { name: "a", source: "stated" },
+        { name: "b", source: "stated" },
+        { name: "c", source: "stated" },
+      ],
+    });
+    s.db
+      .prepare(
+        "DELETE FROM link_tags WHERE link_id = ? AND tag_id = (SELECT id FROM tags WHERE owner_id = 'a' AND key = 'a')",
+      )
+      .run(Number(link.id));
+    const early = {
+      key: "early",
+      name: "early",
+      source: "stated" as const,
+      kind: "topic" as const,
+      kindSource: "inferred" as const,
+    };
+    const result = await s.h.store.addTags("a", link.id, [early]);
+    expect(result?.link.tags.map((t) => t.key)).toEqual(["b", "c", "early"]);
+    expect((await s.h.store.get("a", link.id))?.tags.map((t) => t.key)).toEqual([
+      "b",
+      "c",
+      "early",
+    ]);
+  });
+});

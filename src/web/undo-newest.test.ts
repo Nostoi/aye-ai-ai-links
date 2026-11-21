@@ -185,7 +185,8 @@ describe("the Undo bar keeps the newest action's Undo (#324)", () => {
     g.open();
     await p.settle();
     expect(p.$("#undo-bar").hidden).toBe(true);
-    expect(p.focused().slice(focusedBefore)).not.toContain(p.$("#undo-bar button"));
+    // Compared as a boolean: chai builds its message by inspecting the element, which overflows the stack on a page this size.
+    expect(p.focused().slice(focusedBefore).includes(p.$("#undo-bar button"))).toBe(false);
     await pressUndo(p);
     expect(undos(p)).toEqual(["/tools/undo 2"]);
   });

@@ -140,6 +140,16 @@ describe("FtsSearch filters", () => {
     expect(await s.find("", { tagKey: "solar" })).toEqual([tagged]);
   });
 
+  it("finds a link by a tag added with addTags, in a query and by the filter", async () => {
+    const s = setup();
+    const id = await s.save("a", { title: "quokka" });
+    await s.deps.store.addTags("a", id, [
+      { key: "solar", name: "Solar", source: "stated", kind: "topic", kindSource: "inferred" },
+    ]);
+    expect(await s.find("solar")).toEqual([id]);
+    expect(await s.find("quokka", { tagKey: "solar" })).toEqual([id]);
+  });
+
   it("matches the project filter only for project-kind tags", async () => {
     const s = setup();
     const topicLink = await s.save("a", { title: "quokka", tags: ["alpha"] });

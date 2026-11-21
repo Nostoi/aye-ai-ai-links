@@ -5,6 +5,7 @@ import type {
   LinkEventKind,
   LinkPatch,
   LinkState,
+  LinkTag,
   NewLink,
   OwnerId,
   Source,
@@ -98,6 +99,20 @@ export interface LinkStore {
     at: Date,
     extend?: string,
   ): Promise<{ link: Link; editId: string | null } | null>;
+
+  /**
+   * In one atomic step, attaches each of `tags` whose key the link does not have, after the tags
+   * it has, in the order given, each once. A tag the link has is left as it is (name, source and
+   * kind), and a catalog tag that exists keeps its name, kind, colour and pin, as in
+   * `insertIfAbsent`. No edit receipt is written, so a receipt already there stays. Returns the
+   * link as it is afterwards and the keys this call attached, in order (empty when none was
+   * missing; then nothing is written), or null when absent or foreign; then nothing is written.
+   */
+  addTags(
+    owner: OwnerId,
+    id: string,
+    tags: LinkTag[],
+  ): Promise<{ link: Link; added: string[] } | null>;
 
   /**
    * The owner's whole tag catalog, ordered by key. Another owner's tags never

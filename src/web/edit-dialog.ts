@@ -1,12 +1,9 @@
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { INTENT_VIEW } from "./intent.js";
+import { TAG_PICKER, tagFieldset } from "./tag-picker.js";
 import { NO_WHY, WHY_GUESS, WHY_LABEL, WHY_PLAIN } from "./tell-why.js";
 
 const CLOSE = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
-const REMOVE_TAG = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
-/** The longest tag name or key an edit carries: the dialog's limit and the door's cap. */
-export const EDIT_MAX_TAG_TEXT = 200;
-const SUGGESTIONS_MAX = 6;
 const PICTURE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8.5 8.5"/></svg>`;
 
 /**
@@ -31,13 +28,7 @@ export const editDialog =
 <label for="edit-why" class="edit-why-label">Why you saved it <span class="edit-why-guess" data-why-guess hidden>(a guess)</span></label>
 <textarea id="edit-why" class="edit-why" name="why" rows="3"></textarea>
 <p class="edit-why-hint" data-why-hint hidden>An AI guessed this. Change it to make it yours.</p>
-<fieldset class="edit-tags">
-<legend>Tags</legend>
-<ul class="edit-chips"></ul>
-<label for="edit-tag-input">Add a tag</label>
-<input id="edit-tag-input" class="edit-tag-input" autocomplete="off" maxlength="${EDIT_MAX_TAG_TEXT}" enterkeyhint="done">
-<ul class="edit-suggest" hidden></ul>
-</fieldset>
+${tagFieldset("edit-tag-input", "Tags")}
 <fieldset class="edit-intent">
 <legend>What is it for?</legend>
 <label class="edit-intent-choice"><input type="radio" name="edit-intent" value="explore"> To explore</label>
@@ -92,6 +83,9 @@ export const SHRINK_SIDE = 1600;
  *   dialog alone, and a refusal that comes then shows in the page's alert.
  * - With `panel` (the AI on) the page's one instance is built without a list or alert when the page
  *   has none, and its dialog is the page's body child, so every menu page has the same one.
+ * - The Save dialog's found link opens it through "aye-edit-link" on document, { data, space }: the
+ *   link's edit data stands in for a card, and its Save or Undo draws the page's own cards of that
+ *   link too. "aye-card", { id, answer } draws the page's cards of a link from a card's state.
  * - Focus goes back to the card's ⋯ when the dialog closes.
  * - Delete link drops the unsaved change, closes the dialog and calls `deleteLinkScript`'s
  *   `deleteCard`, so the page's script includes that too. It is off while a Save is answered.
@@ -117,14 +111,16 @@ const fileField = dialog.querySelector("[data-edit=file]");
 const removeButton = dialog.querySelector("[data-edit=remove]");
 const useTitle = dialog.querySelector("[data-edit=use-title]");
 const deleteButton = dialog.querySelector("[data-edit=delete]");
+const deleteRow = dialog.querySelector(".edit-delete-row");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
 const whyField = dialog.querySelector("#edit-why");
 const whyGuess = dialog.querySelector("[data-why-guess]");
 const whyHint = dialog.querySelector("[data-why-hint]");
-const tagList = dialog.querySelector(".edit-chips");
-const tagField = dialog.querySelector("#edit-tag-input");
-const suggestList = dialog.querySelector(".edit-suggest");
+${TAG_PICKER}
+const picker = tagPicker(dialog.querySelector(".edit-tags"), () => {
+  editError.textContent = "";
+});
 ${INTENT_VIEW}
 const intentSet = dialog.querySelector(".edit-intent");
 const intentRadios = [...intentSet.querySelectorAll("input")];
@@ -134,7 +130,7 @@ const intentName = intentSet.querySelector("[data-intent-name]");
 // good, so its choice is hidden.
 let openedIntent = { intent: "explore", source: null };
 let intentTouched = false;
-const keptTool = (el) => !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
+const keptTool = (el) => el.dataset.keptTool === "1" || !!el.querySelector(".card-menu button[data-act=not-handy]:not([hidden])");
 const readIntent = (d) => {
   openedIntent = { intent: d.intent === "keep" ? "keep" : "explore", source: d.intentSource || null };
   intentTouched = false;
@@ -162,13 +158,6 @@ const readWhy = (d) => {
   showGuess();
 };
 whyField.addEventListener("input", showGuess);
-// tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
-// "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
-// open are dropped.
-let tags = [];
-let openedTags = [];
-let catalog = [];
-let namesTurn = 0;
 let card = null;
 let opener = null;
 let openedTitle = "";
@@ -186,93 +175,15 @@ const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   titleField.toggleAttribute("readonly", saving);
   whyField.toggleAttribute("readonly", saving);
-  for (const c of [chooseButton, removeButton, useTitle, deleteButton, tagField]) c.disabled = saving;
-  for (const c of dialog.querySelectorAll(".edit-tag-remove, .edit-suggest-item")) c.disabled = saving;
-};
-const keyOf = (name) => name.trim().replace(/\\s+/g, " ").toLowerCase();
-const clear = (list) => {
-  while (list.firstChild) list.removeChild(list.firstChild);
-};
-const listItem = (list, child) => {
-  const item = document.createElement("li");
-  item.append(child);
-  list.append(item);
-  return item;
-};
-const renderTags = () => {
-  clear(tagList);
-  for (const t of tags) {
-    const name = document.createElement("span");
-    name.textContent = t.name;
-    const item = listItem(tagList, name);
-    item.className = "edit-tag";
-    if (t.source === "inferred") {
-      const guess = document.createElement("span");
-      guess.className = "edit-tag-guess";
-      guess.textContent = " (a guess)";
-      item.append(guess);
-    }
-    const remove = document.createElement("button");
-    remove.setAttribute("type", "button");
-    remove.className = "edit-tag-remove";
-    remove.setAttribute("aria-label", "Remove " + t.name);
-    remove.setAttribute("data-key", t.key);
-    remove.innerHTML = ${JSON.stringify(REMOVE_TAG)};
-    remove.disabled = saving;
-    item.append(remove);
-  }
-};
-// Up to ${SUGGESTIONS_MAX} catalog names containing the typed text and not on the link yet, those that start with it first.
-const showSuggestions = () => {
-  clear(suggestList);
-  const text = keyOf(tagField.value);
-  const have = new Set(tags.map((t) => t.key));
-  const hits = text === "" ? [] : catalog.filter((n) => keyOf(n).includes(text) && !have.has(keyOf(n)));
-  const first = hits.filter((n) => keyOf(n).startsWith(text));
-  const rest = hits.filter((n) => !keyOf(n).startsWith(text));
-  for (const name of [...first, ...rest].slice(0, ${SUGGESTIONS_MAX})) {
-    const button = document.createElement("button");
-    button.setAttribute("type", "button");
-    button.className = "edit-suggest-item";
-    button.textContent = name;
-    button.disabled = saving;
-    listItem(suggestList, button);
-  }
-  suggestList.hidden = !suggestList.firstChild;
-};
-// Adds the typed name, unless its key is already there. A tag the card opened with comes back as
-// it was, so a guess stays a guess.
-const addTag = (raw) => {
-  const name = raw.trim().replace(/\\s+/g, " ");
-  const key = keyOf(name);
-  if (name === "" || tags.some((t) => t.key === key)) {
-    tagField.value = "";
-    return;
-  }
-  const before = openedTags.find((t) => t.key === key);
-  const known = catalog.find((n) => keyOf(n) === key);
-  tags.push(before ? { ...before } : { key, name: known || name, source: "stated" });
-  tagField.value = "";
-};
-const loadNames = async () => {
-  const turn = ++namesTurn;
-  const res = await fetch("/tags/names", { redirect: "manual" }).catch(() => null);
-  const got = res && res.status === 200 ? await res.json().catch(() => null) : null;
-  if (turn !== namesTurn) return;
-  catalog = got && Array.isArray(got.names) ? got.names.filter((n) => typeof n === "string") : [];
-  showSuggestions();
+  for (const c of [chooseButton, removeButton, useTitle, deleteButton]) c.disabled = saving;
+  picker.disable(saving);
 };
 const readTags = (d) => {
   let held = [];
   try {
     held = JSON.parse(d.tags || "[]");
   } catch {}
-  openedTags = Array.isArray(held) ? held : [];
-  tags = openedTags.map((t) => ({ ...t }));
-  tagField.value = "";
-  catalog = [];
-  renderTags();
-  showSuggestions();
+  picker.load(held);
 };
 const imageUrl = (id, version, page) =>
   "/images/" + encodeURIComponent(id) + "?" + (page ? "page=1&" : "") + "v=" + encodeURIComponent(version);
@@ -490,7 +401,8 @@ const finish = () => {
 };
 const open = (from, menu) => {
   card = from;
-  opener = menu.querySelector("summary");
+  if (offCard.has(from)) deleteRow.hidden = true;
+  opener = menu ? menu.querySelector("summary") : null;
   saveTurn++;
   saving = false;
   dropPick();
@@ -502,7 +414,7 @@ const open = (from, menu) => {
   readWhy(d);
   readTags(d);
   readIntent(d);
-  loadNames();
+  picker.loadNames();
   const page = d.pageTitle.trim();
   pageTitle.textContent = page;
   pageLine.hidden = page === "" || page === d.title.trim();
@@ -513,6 +425,33 @@ const open = (from, menu) => {
   ${panel ? "if (!dialog.open) " : ""}dialog.showModal();
   titleField.focus();
 };
+// A link the Save dialog found is not a card in the list: its edit data stands in for one (offCard),
+// and a Save or Undo of it draws the page's own cards of that link as well.
+const offCard = new WeakSet();
+const redrawLinked = (id, answer, except) => {
+  if (!editRoot) return;
+  for (const c of editRoot.querySelectorAll("[data-id][data-title]")) {
+    if (c !== except && c.getAttribute("data-id") === id) showCard(c, answer);
+  }
+};
+const shownCard = (target, answer) => {
+  showCard(target, answer);
+  if (offCard.has(target)) redrawLinked(target.dataset.id, answer, target);
+};
+dialog.setAttribute("data-wired", "");
+document.addEventListener("aye-edit-link", (event) => {
+  const { data, space } = event.detail;
+  const from = document.createElement("div");
+  for (const [name, value] of Object.entries(data)) from.setAttribute("data-" + name, value);
+  if (space) from.classList.add("space-" + space);
+  offCard.add(from);
+  open(from, null);
+});
+document.addEventListener("aye-card", (event) => {
+  const { id, answer } = event.detail;
+  redrawLinked(id, answer, null);
+  ${panel ? 'document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id } }));' : ""}
+});
 ${panel ? "if (editRoot) " : ""}editRoot.addEventListener("click", (event) => {
   const item = event.target.closest(".card-menu button[data-act=edit]");
   if (!item) return;
@@ -522,6 +461,7 @@ ${panel ? "if (editRoot) " : ""}editRoot.addEventListener("click", (event) => {
 });
 // Esc closes the dialog natively; focus goes back to the ⋯ unless something else already took it.
 dialog.addEventListener("close", () => {
+  deleteRow.hidden = false;
   saveTurn++;
   saving = false;
   dropPick();
@@ -540,38 +480,6 @@ deleteButton.addEventListener("click", () => {
   dropPick();
   dialog.close();
   deleteCard(target);
-});
-tagList.addEventListener("click", (event) => {
-  const remove = event.target.closest(".edit-tag-remove");
-  if (!remove || remove.disabled) return;
-  tags = tags.filter((t) => t.key !== remove.getAttribute("data-key"));
-  renderTags();
-  showSuggestions();
-  tagField.focus();
-});
-suggestList.addEventListener("click", (event) => {
-  const item = event.target.closest(".edit-suggest-item");
-  if (!item || item.disabled) return;
-  editError.textContent = "";
-  addTag(item.textContent);
-  renderTags();
-  showSuggestions();
-  tagField.focus();
-});
-tagField.addEventListener("input", showSuggestions);
-// Enter adds the typed name; it does not send the form.
-tagField.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  if (saving || event.isComposing) return;
-  editError.textContent = "";
-  addTag(tagField.value);
-  renderTags();
-  showSuggestions();
-});
-// On a phone the keyboard covers the sheet's lower half: bring the field into view.
-tagField.addEventListener("focus", () => {
-  if (tagField.scrollIntoView) tagField.scrollIntoView({ block: "center" });
 });
 useTitle.addEventListener("click", () => {
   titleField.value = pageTitle.textContent;
@@ -641,17 +549,16 @@ form.addEventListener("submit", async (event) => {
   // Text left in the tag field is a tag too. The names go with the tags the dialog opened with, so
   // the server writes them only while the link still holds those; and only when the keys' order differs.
   editError.textContent = "";
-  addTag(tagField.value);
-  renderTags();
+  picker.flush();
   if (whyChanged()) {
     body.append("why", whyField.value);
     body.append("whySeen", JSON.stringify(openedWhy.source ? openedWhy : null));
     changed = true;
   }
   const keys = (list) => JSON.stringify(list.map((t) => t.key));
-  if (keys(tags) !== keys(openedTags)) {
-    body.append("tags", JSON.stringify(tags.map((t) => t.name)));
-    body.append("seen", JSON.stringify(openedTags.map((t) => ({ key: t.key, source: t.source }))));
+  if (keys(picker.tags) !== keys(picker.opened)) {
+    body.append("tags", JSON.stringify(picker.tags.map((t) => t.name)));
+    body.append("seen", JSON.stringify(picker.opened.map((t) => ({ key: t.key, source: t.source }))));
     changed = true;
   }
   if (intentTouched && !intentSet.hidden) {
@@ -692,10 +599,10 @@ form.addEventListener("submit", async (event) => {
     else ${panel ? "tell(target, refused)" : "editAlert.textContent = refused"};
     return;
   }
-  ${panel ? "shown" : "showCard"}(target, answer);
+  ${panel ? "shown" : "shownCard"}(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => ${panel ? "(target.isConnected || linked(target.dataset.id))" : "target.isConnected"} && showUndo(ticket, ${JSON.stringify("Link updated")}, async () => {
+  const offer = () => ${panel ? "(target.isConnected || offCard.has(target) || linked(target.dataset.id))" : "(target.isConnected || offCard.has(target))"} && showUndo(ticket, ${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", {
       id: target.dataset.id,
       editId: answer.editId,
@@ -703,7 +610,7 @@ form.addEventListener("submit", async (event) => {
       ...(listView.own === "1" && { own: "1" }),
     });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
-    if (undone) ${panel ? "shown" : "showCard"}(target, undone);
+    if (undone) ${panel ? "shown" : "shownCard"}(target, undone);
     else ${panel ? "tell(target, await failure(back))" : "editAlert.textContent = await failure(back)"};
   });
   heldUndo = dialog.open ? offer : null;
@@ -725,16 +632,11 @@ form.addEventListener("submit", async (event) => {
  */
 const PANEL_BLOCK = `
 const notes = new WeakMap();
-const deleteRow = dialog.querySelector(".edit-delete-row");
 const linked = (id) => [...document.querySelectorAll("[data-id][data-title]")].some((c) => c.getAttribute("data-id") === id);
 const shown = (target, answer) => {
   const id = target.dataset.id;
   if (!notes.has(target)) showCard(target, answer);
-  if (editRoot) {
-    for (const c of editRoot.querySelectorAll("[data-id][data-title]")) {
-      if (c !== target && c.getAttribute("data-id") === id) showCard(c, answer);
-    }
-  }
+  redrawLinked(id, answer, target);
   document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id, note: notes.get(target) } }));
 };
 const tell = (target, message) => {
@@ -753,7 +655,7 @@ document.addEventListener("aye-edit", async (event) => {
   picture = null;
   dragDepth = 0;
   titleField.value = "";
-  namesTurn++;
+  picker.dropNames();
   readWhy({});
   readTags({});
   pageLine.hidden = true;

@@ -13,6 +13,7 @@ import {
 } from "../auth/oauth-test-kit.js";
 import { saveLink, updateLink } from "../core/links.js";
 import { record } from "../core/snapshot-store-contract.js";
+import { keepHandy } from "../core/tools.js";
 import { createDeps } from "../deps.js";
 import { FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
@@ -198,7 +199,122 @@ describe("POST /save", () => {
       why: "for the trip",
       whySource: "asked",
       initials: "AS",
+      tagsAdded: [],
+      tagsHad: [],
     });
+  });
+
+  const tagRows = (world: World, owner: string) =>
+    world.links
+      .prepare(
+        `SELECT t.key AS key, lt.source AS source FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
+         WHERE lt.owner_id = ? ORDER BY lt.link_id, lt.position`,
+      )
+      .all(owner);
+
+  it("saves a new link's typed tags as stated and answers them as added", async () => {
+    const { world, browser } = await signedIn();
+    const res = await save(browser, { url: NEW, title: null, why: null, tags: ["Solar", "wind"] });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ created: true, tagsAdded: ["Solar", "wind"], tagsHad: [] });
+    expect(res.body).not.toHaveProperty("card");
+    expect(tagRows(world, A)).toEqual([
+      { key: "solar", source: "stated" },
+      { key: "wind", source: "stated" },
+    ]);
+  });
+
+  it("a repeat save adds the tags the link lacks, answers which it had, and keeps its own tags", async () => {
+    const { world, browser } = await signedIn();
+    await saveLink(linkDeps(world), A, {
+      url: NEW,
+      savedBy: "claude",
+      tags: [{ name: "Had", source: "inferred" }],
+    });
+    const res = await save(browser, { url: NEW, title: null, why: null, tags: ["had", "New"] });
+    expect(res.body).toMatchObject({ created: false, tagsAdded: ["New"], tagsHad: ["Had"] });
+    expect(tagRows(world, A)).toEqual([
+      { key: "had", source: "inferred" },
+      { key: "new", source: "stated" },
+    ]);
+    const body = res.body as { edit: Record<string, string>; card: { tags: unknown } };
+    const now = [
+      { key: "had", name: "Had", source: "inferred" },
+      { key: "new", name: "New", source: "stated" },
+    ];
+    expect(body.card.tags).toEqual(now);
+    expect(JSON.parse(body.edit.tags ?? "")).toEqual(now);
+  });
+
+  it("a repeat save of a link kept handy answers keptHandy true, and false otherwise", async () => {
+    const { world, browser } = await signedIn();
+    const deps = linkDeps(world);
+    const { link } = await saveLink(deps, A, { url: NEW, savedBy: "claude" });
+    const plain = await save(browser, { url: NEW, title: null, why: null });
+    expect(plain.body).toMatchObject({ keptHandy: false });
+    await keepHandy(deps, A, link.id, "stated");
+    const kept = await save(browser, { url: NEW, title: null, why: null });
+    expect(kept.body).toMatchObject({ keptHandy: true });
+  });
+
+  it("answers the card as the page's list reads it: a pinned tag gives its space and its line", async () => {
+    const { world, browser } = await signedIn();
+    const deps = linkDeps(world);
+    await saveLink(deps, A, {
+      url: NEW,
+      savedBy: "claude",
+      tags: [{ name: "Kitchen", source: "stated" }],
+    });
+    await deps.store.pinTag(A, "kitchen", { pinned: true, color: "clay" });
+    const within = await save(browser, {
+      url: NEW,
+      title: null,
+      why: null,
+      tags: ["Kitchen"],
+      within: "kitchen",
+      own: "1",
+    });
+    expect(within.body).toMatchObject({ card: { space: { color: "clay" }, lineSpace: null } });
+    const plain = await save(browser, { url: NEW, title: null, why: null, tags: ["kitchen"] });
+    expect(plain.body).toMatchObject({
+      card: { space: { color: "clay" }, lineSpace: { name: "Kitchen" } },
+    });
+  });
+
+  it("adds no tag to another owner's link: B saving A's address with tags gets its own link", async () => {
+    const { world } = await signedIn();
+    await saveLink(linkDeps(world), A, { url: NEW, savedBy: "claude" });
+    const bBrowser = await addSecondUser(world);
+    const res = await save(bBrowser, { url: NEW, title: null, why: null, tags: ["mine"] });
+    expect(res.body).toMatchObject({ created: true, tagsAdded: ["mine"] });
+    expect(tagRows(world, A)).toEqual([]);
+    expect(tagRows(world, SECOND_USER.id)).toEqual([{ key: "mine", source: "stated" }]);
+  });
+
+  it.each([
+    ["tags that is not a list", { tags: "a" }],
+    ["tags that is null", { tags: null }],
+    ["a tag that is a number", { tags: ["a", 3] }],
+    ["a tag over 200 characters", { tags: ["a".repeat(201)] }],
+    ["a within that is a number", { tags: ["a"], within: 3 }],
+    ["an own that is not 1", { tags: ["a"], own: "0" }],
+  ])("refuses a body with %s with 400, and writes nothing", async (_, extra) => {
+    const { world, browser } = await signedIn();
+    const before = allRows(world);
+    const res = await save(browser, { url: NEW, title: null, why: null, ...extra });
+    expect(res.status).toBe(400);
+    expect((res.body as { code?: unknown }).code).toBe("BAD_REQUEST");
+    expect(allRows(world)).toEqual(before);
+  });
+
+  it("refuses a blank tag on a repeat save and writes neither its why nor its tags", async () => {
+    const { world, browser } = await signedIn();
+    await saveLink(linkDeps(world), A, { url: NEW, savedBy: "claude" });
+    const before = allRows(world);
+    const res = await save(browser, { url: NEW, title: null, why: "mine", tags: ["ok", "  "] });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: "invalid_input" });
+    expect(allRows(world)).toEqual(before);
   });
 
   it("a repeat save answers the link already saved, with its date, state and title, and keeps them", async () => {
@@ -224,6 +340,11 @@ describe("POST /save", () => {
       why: null,
       whySource: null,
       initials: "SB",
+      tagsAdded: [],
+      tagsHad: [],
+      keptHandy: false,
+      edit: expect.objectContaining({ title: "Saved before", why: "", tags: "[]" }),
+      card: expect.objectContaining({ shown: "Saved before", tags: [], space: null }),
     });
     expect(linkRow(world, A)).toMatchObject([
       { title: "Saved before", saved_by: "claude", state: "archived" },

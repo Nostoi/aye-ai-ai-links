@@ -87,8 +87,19 @@ export function editData(
   picture: ShownPicture | undefined,
   info: PictureInfo | undefined,
 ): string {
+  return editDataPairs(link, picture, info)
+    .map(([name, value]) => ` data-${name}="${escapeHtml(value)}"`)
+    .join("");
+}
+
+/** `editData`'s attributes as name and value pairs, the name without its `data-`. */
+export function editDataPairs(
+  link: Link,
+  picture: ShownPicture | undefined,
+  info: PictureInfo | undefined,
+): [string, string][] {
   const page = link.snapshot?.title ?? "";
-  const data: [string, string][] = [
+  return [
     ["title", link.title ?? ""],
     ["page-title", titleFits(page) ? page : ""],
     ["version", picture?.version ?? ""],
@@ -103,7 +114,6 @@ export function editData(
     ["why", link.why?.text ?? ""],
     ["why-source", link.why?.source ?? ""],
   ];
-  return data.map(([name, value]) => ` data-${name}="${escapeHtml(value)}"`).join("");
 }
 
 export {

@@ -147,6 +147,28 @@ export class SqliteStore
       .immediate();
   }
 
+  async addTags(owner: OwnerId, id: string, tags: LinkTag[]) {
+    const n = parseId(id);
+    if (n === null) return null;
+    return this.db
+      .transaction(() => {
+        const link = this.read(owner, n);
+        if (!link) return null;
+        const have = new Set(link.tags.map((t) => t.key));
+        const missing = tags.filter((t) => !have.has(t.key) && have.add(t.key));
+        if (missing.length === 0) return { link, added: [] };
+        const next = this.db
+          .prepare(
+            "SELECT COALESCE(MAX(position) + 1, 0) FROM link_tags WHERE link_id = ? AND owner_id = ?",
+          )
+          .pluck()
+          .get(n, owner) as number;
+        attachTags(this.db, owner, n, missing, next);
+        return { link: this.mustRead(owner, n), added: missing.map((t) => t.key) };
+      })
+      .immediate();
+  }
+
   async fillWhyIfMissing(owner: OwnerId, id: string, why: Labelled) {
     const n = parseId(id);
     return n === null ? null : this.db.transaction(() => this.fillSync(owner, n, why)).immediate();

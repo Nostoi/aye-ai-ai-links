@@ -67,6 +67,21 @@ describe("why in POST /links/edit and its Undo", () => {
     expect((res.body as WhyAnswer).why).toEqual({ text: "a guess", source: "inferred" });
   });
 
+  it("a why with a line break, sent as multipart, can be changed by the next Save, whose whySeen has the LF form", async () => {
+    const { world, browser, id } = await edited();
+    expect((await edit(browser, { id, why: "line one\nline two", whySeen: NONE })).status).toBe(
+      200,
+    );
+    expect(whyOf(world, id)).toEqual({ why_text: "line one\nline two", why_source: "stated" });
+    const res = await edit(browser, {
+      id,
+      why: "changed",
+      whySeen: seenOf("line one\nline two", "stated"),
+    });
+    expect(res.status).toBe(200);
+    expect(whyOf(world, id)).toEqual({ why_text: "changed", why_source: "stated" });
+  });
+
   it("refuses a stale whySeen with a 409 and WHY_CONFLICT, writing nothing, title included", async () => {
     const { world, browser, id } = await edited();
     seed(world, id, "now", "asked");

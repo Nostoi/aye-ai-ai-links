@@ -84,14 +84,14 @@ function intentEdit({
   };
 }
 
-/** The owner's words are stated, trimmed; blank removes the why. What the dialog opened with is checked as the store compares it. */
+/** The owner's words are stated, trimmed, with every line break as LF (a form posts CRLF); blank removes the why. What the dialog opened with is checked as the store compares it. */
 function whyEdit({ text, seen }: NonNullable<EditInput["why"]>): NonNullable<LinkEdit["why"]> {
   if (seen && !isSource(seen.source)) {
     throw new CoreError("invalid_input", `A why's source is "${seen.source}", which is not one.`);
   }
   return {
     expected: seen && { text: seen.text, source: seen.source as Source },
-    set: cleanWhy({ text, source: "stated" }),
+    set: cleanWhy({ text: text.replace(/\r\n?/g, "\n"), source: "stated" }),
   };
 }
 

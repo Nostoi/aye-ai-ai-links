@@ -232,6 +232,16 @@ describe("editLink why", () => {
     expect((await store.get("a", id))?.why).toEqual(seenAsked);
   });
 
+  it("stores line breaks as LF, so a later Save's seen text, which the page gives back as LF, still matches", async () => {
+    const { store, deps, id } = await setup();
+    await editLink(deps, "a", id, { why: { text: "a\r\nb\rc", seen: null } });
+    expect((await store.get("a", id))?.why?.text).toBe("a\nb\nc");
+    await editLink(deps, "a", id, {
+      why: { text: "changed", seen: { text: "a\nb\nc", source: "stated" } },
+    });
+    expect((await store.get("a", id))?.why?.text).toBe("changed");
+  });
+
   it("refuses a seen source that is not a source", async () => {
     const { deps, id } = await setup();
     await expect(

@@ -646,13 +646,13 @@ describe("startServer", () => {
     });
 
     /** Gives the owner a web login before the server starts. */
-    const ownerLogin = async () => {
+    const ownerLogin = async (id = "owner", name = "Owner") => {
       const auth = openAuthDatabase(authPath());
       const options = authOptions({ db: auth, secret: SECRET, baseUrl: BASE });
       await migrateAuth(options);
       await setOwnerLogin(createAuth(options).auth, {
-        id: "owner",
-        name: "Owner",
+        id,
+        name,
         email: "you@example.com",
         password: "Correct-horse-battery-1",
       });
@@ -682,6 +682,157 @@ describe("startServer", () => {
       expect(await home.text()).toContain("https://example.com/served-home");
       await stop();
       expect(authRows("SELECT userId FROM session")).toEqual([{ userId: "owner" }]);
+    });
+
+    describe("the owner's row in the links database (#330)", () => {
+      const freshPath = () => join(dir, "fresh.db");
+      const startFresh = async () => {
+        const s = await startServer(cfg(freshPath(), 0), {
+          ...fakePipeline(),
+          settleMs: 200,
+          requestLog: () => {},
+        });
+        started.push(s);
+        return s;
+      };
+      const cookieOf = async (port: number) =>
+        ((await signIn(port)).headers.getSetCookie()[0] ?? "").split(";")[0] ?? "";
+      const webPost = (port: number, path: string, cookie: string, body: unknown) =>
+        fetch(`http://127.0.0.1:${port}${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: BASE, cookie },
+          body: JSON.stringify(body),
+        });
+      const usersIn = (path: string) => {
+        const db = new Database(path, { readonly: true });
+        try {
+          return db.prepare("SELECT id, display_name, created_at FROM users ORDER BY id").all();
+        } finally {
+          db.close();
+        }
+      };
+      const linksOf = (path: string) => {
+        const db = new Database(path, { readonly: true });
+        try {
+          return db.prepare("SELECT owner_id, url FROM links").all();
+        } finally {
+          db.close();
+        }
+      };
+
+      it("lets the signed-in owner save before any agent key exists", async () => {
+        await ownerLogin();
+        const { port } = await startFresh();
+        const res = await webPost(port, "/save", await cookieOf(port), {
+          url: "https://example.com/first",
+          title: null,
+          why: null,
+        });
+        expect(res.status).toBe(200);
+        expect(linksOf(freshPath())).toEqual([
+          { owner_id: "owner", url: "https://example.com/first" },
+        ]);
+      });
+
+      it("gives a login with its own id and name a row of its own, not a hard-coded owner", async () => {
+        await ownerLogin("reader-42", "Reader");
+        const { port } = await startFresh();
+        const res = await webPost(port, "/save", await cookieOf(port), {
+          url: "https://example.com/second",
+          title: null,
+          why: null,
+        });
+        expect(res.status).toBe(200);
+        expect(usersIn(freshPath())).toEqual([
+          { id: "reader-42", display_name: "Reader", created_at: expect.any(Number) },
+        ]);
+        expect(linksOf(freshPath())).toEqual([
+          { owner_id: "reader-42", url: "https://example.com/second" },
+        ]);
+      });
+
+      it("lets the signed-in owner add a profile note before any save or key", async () => {
+        await ownerLogin();
+        const { port } = await startFresh();
+        const res = await webPost(port, "/profile/notes/add", await cookieOf(port), {
+          text: "Works on boats",
+        });
+        expect(res.status).toBeLessThan(300);
+        const db = new Database(freshPath(), { readonly: true });
+        try {
+          expect(db.prepare("SELECT owner_id FROM profile_notes").all()).toEqual([
+            { owner_id: "owner" },
+          ]);
+        } finally {
+          db.close();
+        }
+      });
+
+      it("repairs an install whose links database has other owners but not the login's", async () => {
+        await ownerLogin();
+        const other = openDatabase(freshPath());
+        createAgentKey(new SqliteKeyStore(other), {
+          owner: "someone-else",
+          ownerName: "Else",
+          agent: "codex",
+        });
+        other.close();
+        const before = usersIn(freshPath());
+        const { port } = await startFresh();
+        const res = await webPost(port, "/save", await cookieOf(port), {
+          url: "https://example.com/repaired",
+          title: null,
+          why: null,
+        });
+        expect(res.status).toBe(200);
+        expect(usersIn(freshPath())).toEqual([
+          { id: "owner", display_name: "Owner", created_at: expect.any(Number) },
+          ...before,
+        ]);
+      });
+
+      it("changes nothing on a later start, and leaves a key-made row's name and time alone", async () => {
+        await ownerLogin("owner", "Login Name");
+        const before = usersIn(dbPath);
+        expect(before).toEqual([
+          { id: "owner", display_name: "Owner", created_at: expect.any(Number) },
+        ]);
+        await (await start()).stop();
+        await (await start()).stop();
+        expect(usersIn(dbPath)).toEqual(before);
+      });
+
+      it("refuses the start, listening on nothing and closing everything, when the row cannot be written", async () => {
+        await ownerLogin();
+        const links = openDatabase(freshPath());
+        links.exec(
+          "CREATE TRIGGER no_users BEFORE INSERT ON users BEGIN SELECT RAISE(ABORT, 'no owner rows'); END",
+        );
+        links.close();
+        const pipeline = fakePipeline();
+        const port = await new Promise<number>((resolve) => {
+          const s = net.createServer().listen(0, "127.0.0.1", () => {
+            const { port: p } = s.address() as net.AddressInfo;
+            s.close(() => resolve(p));
+          });
+        });
+        await expect(startServer(cfg(freshPath(), port), pipeline)).rejects.toThrow(
+          /no owner rows/,
+        );
+        expect(
+          await new Promise<boolean>((resolve) => {
+            const c = net.connect(port, "127.0.0.1");
+            c.once("connect", () => {
+              c.destroy();
+              resolve(true);
+            });
+            c.once("error", () => resolve(false));
+          }),
+        ).toBe(false);
+        expect(pipeline.closed).toEqual({ fetcher: 1, extractor: 1 });
+        expect(() => authRows("SELECT 1")).not.toThrow();
+        expect(existsSync(`${freshPath()}-wal`)).toBe(false);
+      });
     });
 
     it("stopping the server aborts a turn waiting on the model, before the drain", async () => {

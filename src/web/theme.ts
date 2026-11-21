@@ -638,6 +638,7 @@ ${spaceClasses}
 .save-dialog .edit-head h2{font-family:"Fraunces Question", "Open Runde", serif;font-size:var(--text-9);font-weight:760;letter-spacing:-.01em}
 .save-fields label{margin-top:var(--space-3)}
 .save-fields label:first-child{margin-top:0}
+.save-fields .edit-tags label{margin-top:0;font-weight:400;color:var(--soft);font-size:var(--text-2)}
 .save-optional{font-weight:400;color:var(--soft)}
 .save-address{position:relative;margin-top:6px}
 .save-address input{margin-top:0;padding-left:52px;font-size:var(--text-7)}

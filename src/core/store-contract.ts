@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CoreError } from "./errors.js";
 import { filingContext } from "./filing-context.js";
+import { linkSpace } from "./link-space.js";
 import { getLink, saveLink, updateLink, updateLinkWithReceipt } from "./links.js";
 import { setProjectStatus } from "./project-status.js";
 import { type SavePageInput, savePage } from "./save-page.js";
@@ -12,6 +13,7 @@ import type {
   Link,
   LinkEventKind,
   LinkTag,
+  Source,
   SummarySource,
   Tag,
   TagKind,
@@ -635,9 +637,15 @@ export function describeStoreContract(
         expect(again.created).toBe(false);
         expect(keys(again.link)).toEqual(["alpha", "beta"]);
         expect(keys(await getLink(deps(), A, saved.link.id))).toEqual(["alpha", "beta"]);
-        const reversed = await updateLink(deps(), A, saved.link.id, { tags: [...both].reverse() });
+        const reversed = await updateLink(deps(), A, saved.link.id, {
+          tags: [...both].reverse(),
+          tagsSource: "stated",
+        });
         expect(keys(reversed)).toEqual(["beta", "alpha"]);
-        const reset = await updateLink(deps(), A, saved.link.id, { tags: both });
+        const reset = await updateLink(deps(), A, saved.link.id, {
+          tags: both,
+          tagsSource: "stated",
+        });
         expect(keys(reset)).toEqual(["alpha", "beta"]);
       });
 
@@ -1811,7 +1819,7 @@ export function describeStoreContract(
     });
 
     describe("updateLink", () => {
-      it("replaces the tag set, normalized", async () => {
+      it("the owner's say replaces the tag set, normalized", async () => {
         const { link } = await saveLink(deps(), A, {
           url: "https://ex.com/a",
           savedBy: "agent",
@@ -1819,6 +1827,7 @@ export function describeStoreContract(
         });
         const updated = await updateLink(deps(), A, link.id, {
           tags: [{ name: " New  Tag ", source: "inferred" }],
+          tagsSource: "stated",
         });
         expect(updated.tags).toEqual([
           {
@@ -1830,6 +1839,135 @@ export function describeStoreContract(
           },
         ]);
         expect((await h.all(A))[0]?.tags).toEqual(updated.tags);
+      });
+
+      describe("a guessed tag set", () => {
+        type In = { name: string; source: Source; kind?: TagKind };
+        let n = 0;
+        const owned = async (...tags: In[]) =>
+          (await saveLink(deps(), A, { url: `https://ex.com/g${++n}`, savedBy: "agent", tags }))
+            .link;
+        const guess = (name: string): In => ({ name, source: "inferred" });
+        const stated = (name: string): In => ({ name, source: "stated" });
+        const shown = (l: Link) => l.tags.map((t) => `${t.key}:${t.source}`);
+
+        it("adds guesses after the owner's tags and leaves each owner tag stated", async () => {
+          const link = await owned(stated("meetings"), guess("old"));
+          const updated = await updateLink(deps(), A, link.id, { tags: [guess("productivity")] });
+          expect(shown(updated)).toEqual(["meetings:stated", "productivity:inferred"]);
+          expect(shown((await h.store.get(A, link.id)) as Link)).toEqual(shown(updated));
+        });
+
+        it("an empty guess drops the guesses and keeps the owner's tags", async () => {
+          const link = await owned(stated("a"), { name: "b", source: "asked" }, guess("c"));
+          const updated = await updateLink(deps(), A, link.id, { tags: [] });
+          expect(shown(updated)).toEqual(["a:stated", "b:asked"]);
+        });
+
+        it("tagsSource inferred is a guess too", async () => {
+          const link = await owned(stated("a"));
+          const updated = await updateLink(deps(), A, link.id, {
+            tags: [guess("b")],
+            tagsSource: "inferred",
+          });
+          expect(shown(updated)).toEqual(["a:stated", "b:inferred"]);
+        });
+
+        it("the owner's say (stated or asked) replaces the whole set", async () => {
+          for (const tagsSource of ["stated", "asked"] as const) {
+            const link = await owned(stated("meetings"), guess("old"));
+            const updated = await updateLink(deps(), A, link.id, {
+              tags: [guess("productivity")],
+              tagsSource,
+            });
+            expect(shown(updated), tagsSource).toEqual(["productivity:inferred"]);
+            const cleared = await updateLink(deps(), A, link.id, { tags: [], tagsSource });
+            expect(shown(cleared), tagsSource).toEqual([]);
+          }
+        });
+
+        it("a relabel as inferred keeps the owner tag stated, even on the owner's say", async () => {
+          const link = await owned(stated("a"));
+          const said = await updateLink(deps(), A, link.id, {
+            tags: [guess("a"), guess("b")],
+            tagsSource: "stated",
+          });
+          expect(shown(said)).toEqual(["a:stated", "b:inferred"]);
+          expect(shown(await updateLink(deps(), A, link.id, { tags: [] }))).toEqual(["a:stated"]);
+        });
+
+        it("a guessed tag sent as stated becomes stated", async () => {
+          const link = await owned(guess("a"));
+          const updated = await updateLink(deps(), A, link.id, { tags: [stated("a")] });
+          expect(shown(updated)).toEqual(["a:stated"]);
+        });
+
+        it("a guess never moves the owner's pinned space", async () => {
+          const link = await owned(stated("home"), guess("work"));
+          await setTagPinned(deps(), A, { name: "home", pinned: true });
+          await setTagPinned(deps(), A, { name: "work", pinned: true });
+          const updated = await updateLink(deps(), A, link.id, {
+            tags: [guess("work"), guess("home")],
+          });
+          expect(shown(updated)).toEqual(["home:stated", "work:inferred"]);
+          expect(linkSpace(updated, await h.catalog(A))?.key).toBe("home");
+        });
+
+        it("keeps an owner tag added between core's call and the write", async () => {
+          const link = await owned(guess("a"));
+          const late: LinkTag = {
+            key: "late",
+            name: "late",
+            source: "stated",
+            kind: "topic",
+            kindSource: "inferred",
+          };
+          const racing: LinkStore = {
+            ...h.store,
+            update: async (owner, id, patch, events) => {
+              await h.store.addTags(owner, id, [late]);
+              return h.store.update(owner, id, patch, events);
+            },
+          };
+          const updated = await updateLink({ ...deps(), store: racing }, A, link.id, {
+            tags: [guess("b")],
+          });
+          expect(shown(updated)).toEqual(["late:stated", "b:inferred"]);
+        });
+
+        it("holds through updateIf, and a guess that repeats the owner's tags is no change", async () => {
+          const link = await owned(stated("a"));
+          const viaIf = await updateLink(deps(), A, link.id, {
+            intent: "explore",
+            intentSource: "stated",
+            tags: [guess("b")],
+          });
+          expect(shown(viaIf)).toEqual(["a:stated", "b:inferred"]);
+          const repeat = await updateLinkWithReceipt(deps(), A, link.id, {
+            tags: [guess("a"), guess("b")],
+          });
+          expect(repeat.editId).toBeNull();
+          expect(shown(repeat.link)).toEqual(["a:stated", "b:inferred"]);
+        });
+
+        it("the receipt keeps the owner's tags and records the guess's change", async () => {
+          const link = await owned(stated("a"), guess("old"));
+          const result = await updateLinkWithReceipt(deps(), A, link.id, { tags: [guess("new")] });
+          expect(shown(result.link)).toEqual(["a:stated", "new:inferred"]);
+          expect(result.editId).not.toBeNull();
+        });
+
+        it("refuses a tagsSource that is not a source, or one with no tags, and writes nothing", async () => {
+          const link = await owned(stated("a"));
+          const bad = { tags: [guess("b")], tagsSource: "bogus" as unknown as Source };
+          for (const input of [bad, { tagsSource: "stated" as const }, { title: "T", ...bad }]) {
+            await expect(updateLink(deps(), A, link.id, input)).rejects.toMatchObject({
+              code: "invalid_input",
+            });
+          }
+          const after = (await h.store.get(A, link.id)) as Link;
+          expect([shown(after), after.title]).toEqual([["a:stated"], link.title]);
+        });
       });
 
       describe("an inferred why", () => {

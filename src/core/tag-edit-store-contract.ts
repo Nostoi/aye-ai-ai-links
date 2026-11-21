@@ -424,7 +424,7 @@ export function describeTagEditStoreContract(
       it("a receipt link's ordered tags changed", async () => {
         const id = await save(A, [mention("x"), mention("q")]);
         const { changeId } = await merge("x", "q");
-        await h.links.update(A, id, { tags: [mention("q", "asked")] });
+        await h.links.update(A, id, { tags: [mention("q"), mention("z")] });
         await refused(changeId, [id], () => h.links.update(A, id, { tags: [mention("q")] }));
       });
 

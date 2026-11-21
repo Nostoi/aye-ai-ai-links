@@ -64,10 +64,19 @@ type SummaryInput = string | Labelled;
 
 export type UpdateLinkInput = Omit<
   LinkPatch,
-  "tags" | "lastOpenedAt" | "summary" | "summarySource" | "summaryOver" | "intentOver" | "whyOver"
+  | "tags"
+  | "tagsGuess"
+  | "lastOpenedAt"
+  | "summary"
+  | "summarySource"
+  | "summaryOver"
+  | "intentOver"
+  | "whyOver"
 > & {
   summary?: SummaryInput | null;
   tags?: TagInput;
+  /** Who decided this tag set. Absent or inferred is a guess, which keeps the owner's tags; stated or asked replaces the set. */
+  tagsSource?: Source;
   opened?: true;
 };
 
@@ -91,6 +100,17 @@ function checkSources(why: Labelled | null | undefined, tags: TagInput | undefin
     if (t.kind !== undefined && !isTagKind(t.kind)) {
       throw invalid(`The kind "${t.kind}" on tag "${t.name}" is not valid. Use topic or project.`);
     }
+  }
+}
+
+/** A `tagsSource` must be a source and say who decided tags that are sent with it. */
+export function checkTagsSource(tags: unknown, tagsSource: string | undefined): void {
+  if (tagsSource === undefined) return;
+  if (!isSource(tagsSource)) {
+    throw invalid(`The tagsSource "${tagsSource}" is not valid. Use stated, asked or inferred.`);
+  }
+  if (tags === undefined) {
+    throw invalid("tagsSource says who decided the tags; send tags with it, or leave it out.");
   }
 }
 
@@ -277,6 +297,7 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
     throw invalid("snoozedUntil is not a valid date. Pass a date, or null to clear the snooze.");
   }
   checkSources(why, tags);
+  checkTagsSource(tags, input.tagsSource);
   const patch: LinkPatch = {};
   if (title !== undefined) patch.title = normalizeTitle(title);
   const cleaned = cleanSummary(summary);
@@ -295,7 +316,11 @@ function buildPatch(now: () => Date, input: UpdateLinkInput): LinkPatch {
   if (state !== undefined) patch.state = state;
   if (snoozedUntil !== undefined) patch.snoozedUntil = snoozedUntil;
   if (opened === true) patch.lastOpenedAt = now();
-  if (tags !== undefined) patch.tags = normalizeTags(tags);
+  if (tags !== undefined) {
+    patch.tags = normalizeTags(tags);
+    // Only the owner's say replaces tags they gave; a guess leaves them. The store decides that atomically.
+    if (input.tagsSource === undefined || input.tagsSource === "inferred") patch.tagsGuess = true;
+  }
   if (why !== undefined) {
     patch.why = cleanWhy(why);
     // Only the owner's own words (stated or asked) change or clear a why they gave; a guess or a bare null touches only a gap or another guess. The store decides that atomically.

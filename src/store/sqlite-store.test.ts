@@ -121,9 +121,12 @@ describe("SqliteStore on a file database", () => {
       savedBy: "x",
       tags: both,
     });
-    const flipped = await updateLink(first.deps, "a", link.id, { tags: [...both].reverse() });
+    const flipped = await updateLink(first.deps, "a", link.id, {
+      tags: [...both].reverse(),
+      tagsSource: "stated",
+    });
     expect(flipped.tags.map((t) => t.key)).toEqual(["beta", "alpha"]);
-    await updateLink(first.deps, "a", link.id, { tags: both });
+    await updateLink(first.deps, "a", link.id, { tags: both, tagsSource: "stated" });
     const before = await first.h.all("a");
     first.db.close();
 

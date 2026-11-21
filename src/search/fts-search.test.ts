@@ -303,7 +303,10 @@ describe("FtsSearch index upkeep", () => {
   it("follows tag replacement", async () => {
     const s = setup();
     const id = await s.save("a", { tags: ["wombat"] });
-    await updateLink(s.deps, "a", id, { tags: [{ name: "numbat", source: "stated" }] });
+    await updateLink(s.deps, "a", id, {
+      tags: [{ name: "numbat", source: "stated" }],
+      tagsSource: "stated",
+    });
     expect(await s.find("wombat")).toEqual([]);
     expect(await s.find("numbat")).toEqual([id]);
   });
@@ -362,14 +365,17 @@ describe("FtsSearch index upkeep", () => {
   it("forgets a tag when the link loses all its tags", async () => {
     const s = setup();
     const id = await s.save("a", { tags: ["wombat"] });
-    await updateLink(s.deps, "a", id, { tags: [] });
+    await updateLink(s.deps, "a", id, { tags: [], tagsSource: "stated" });
     expect(await s.find("wombat")).toEqual([]);
   });
 
   it("forgets only the dropped tag when a link keeps another", async () => {
     const s = setup();
     const id = await s.save("a", { tags: ["wombat", "numbat"] });
-    await updateLink(s.deps, "a", id, { tags: [{ name: "numbat", source: "stated" }] });
+    await updateLink(s.deps, "a", id, {
+      tags: [{ name: "numbat", source: "stated" }],
+      tagsSource: "stated",
+    });
     expect(await s.find("wombat")).toEqual([]);
     expect(await s.find("numbat")).toEqual([id]);
   });

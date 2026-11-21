@@ -47,3 +47,23 @@ export function normalizeTags(
   }
   return [...byKey.values()];
 }
+
+/**
+ * The tag set a write leaves on a link, given the tags it has now and the set sent. A tag in both
+ * keeps whichever side's source is stronger, so an owner's tag never turns into a guess. A guess
+ * also keeps the owner's tags it leaves out and the current order; the owner's say replaces the
+ * set in the order sent.
+ */
+export function mergeTags(current: LinkTag[], sent: LinkTag[], guess: boolean): LinkTag[] {
+  const have = new Map(current.map((t) => [t.key, t]));
+  const settle = (t: LinkTag): LinkTag => {
+    const was = have.get(t.key);
+    return was && strength[was.source] > strength[t.source] ? was : t;
+  };
+  if (!guess) return sent.map(settle);
+  const sentByKey = new Map(sent.map((t) => [t.key, t]));
+  const kept = current
+    .filter((t) => t.source !== "inferred" || sentByKey.has(t.key))
+    .map((t) => settle(sentByKey.get(t.key) ?? t));
+  return [...kept, ...sent.filter((t) => !have.has(t.key))];
+}

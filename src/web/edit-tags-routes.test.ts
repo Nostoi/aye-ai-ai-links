@@ -65,7 +65,10 @@ describe("tags in POST /links/edit and its Undo", () => {
   it("answers the card's space from the new tags: the first pinned one, or the list's within space", async () => {
     const { world, browser, id } = await tagged();
     const deps = linkDeps(world);
-    await updateLink(deps, A, id, { tags: [{ name: "Garden", source: "stated" }] });
+    await updateLink(deps, A, id, {
+      tags: [{ name: "Garden", source: "stated" }],
+      tagsSource: "stated",
+    });
     await deps.store.pinTag(A, "garden", { pinned: true, color: "green" });
     const garden = [{ key: "garden", source: "stated" }];
     const first = await edit(browser, { id, ...tagFields(["Kitchen", "Garden"], garden) });

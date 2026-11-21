@@ -913,7 +913,7 @@ export function describeLinkEditStoreContract(
         expect((await h.links.get(A, id))?.tags).toEqual(original);
 
         const source = await editId(
-          receipt(A, id, { tags: [tag("a", "inferred"), tag("b", "inferred")] }),
+          receipt(A, id, { tags: [tag("a", "stated"), tag("b", "stated")] }),
         );
         expect(await h.edits.undoEdit(A, id, source)).toBe("undone");
         expect((await h.links.get(A, id))?.tags).toEqual(original);

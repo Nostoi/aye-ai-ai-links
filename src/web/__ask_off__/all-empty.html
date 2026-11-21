@@ -1424,7 +1424,7 @@ const finish = () => {
 };
 const open = (from, menu) => {
   card = from;
-  opener = menu.querySelector("summary");
+  opener = menu ? menu.querySelector("summary") : null;
   saveTurn++;
   saving = false;
   dropPick();
@@ -1447,6 +1447,32 @@ const open = (from, menu) => {
   dialog.showModal();
   titleField.focus();
 };
+// A link the Save dialog found is not a card in the list: its edit data stands in for one (offCard),
+// and a Save or Undo of it draws the page's own cards of that link as well.
+const offCard = new WeakSet();
+const redrawLinked = (id, answer, except) => {
+  if (!editRoot) return;
+  for (const c of editRoot.querySelectorAll("[data-id][data-title]")) {
+    if (c !== except && c.getAttribute("data-id") === id) showCard(c, answer);
+  }
+};
+const shownCard = (target, answer) => {
+  showCard(target, answer);
+  if (offCard.has(target)) redrawLinked(target.dataset.id, answer, target);
+};
+document.addEventListener("aye-edit-link", (event) => {
+  const { data, space } = event.detail;
+  const from = document.createElement("div");
+  for (const [name, value] of Object.entries(data)) from.setAttribute("data-" + name, value);
+  if (space) from.classList.add("space-" + space);
+  offCard.add(from);
+  open(from, null);
+});
+document.addEventListener("aye-card", (event) => {
+  const { id, answer } = event.detail;
+  redrawLinked(id, answer, null);
+  
+});
 editRoot.addEventListener("click", (event) => {
   const item = event.target.closest(".card-menu button[data-act=edit]");
   if (!item) return;
@@ -1593,10 +1619,10 @@ form.addEventListener("submit", async (event) => {
     else editAlert.textContent = refused;
     return;
   }
-  showCard(target, answer);
+  shownCard(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => target.isConnected && showUndo(ticket, "Link updated", async () => {
+  const offer = () => (target.isConnected || offCard.has(target)) && showUndo(ticket, "Link updated", async () => {
     const back = await post("/links/edit/undo", {
       id: target.dataset.id,
       editId: answer.editId,
@@ -1604,7 +1630,7 @@ form.addEventListener("submit", async (event) => {
       ...(listView.own === "1" && { own: "1" }),
     });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
-    if (undone) showCard(target, undone);
+    if (undone) shownCard(target, undone);
     else editAlert.textContent = await failure(back);
   });
   heldUndo = dialog.open ? offer : null;
@@ -1789,6 +1815,7 @@ if (openRoot) {
 <p class="save-tags-note" hidden></p>
 <div class="save-found-acts">
 <button type="button" data-save="bring-back" hidden>Bring it back</button>
+<button type="button" data-save="edit" hidden>Edit link…</button>
 <a class="button primary" data-save="open">Open it</a>
 <button type="button" class="primary" data-save="close" hidden>Close</button>
 </div>
@@ -2214,6 +2241,7 @@ const picker = tagPicker(q(".edit-tags"), () => {
 });
 const bringBack = q("[data-save=bring-back]");
 const openIt = q("[data-save=open]");
+const editIt = q("[data-save=edit]");
 const closeIt = q("[data-save=close]");
 const foot = q(".edit-foot");
 const topCancel = q(".edit-top[data-save=cancel]");
@@ -2382,6 +2410,7 @@ const showFound = (data, typedWhy) => {
     openIt.setAttribute("data-open", "");
   }
   openIt.hidden = data.created;
+  editIt.hidden = data.created || !data.edit || !document.querySelector("#edit-link");
   closeIt.hidden = !data.created && !onPage;
   heading.textContent = data.created ? "Saved" : HEADING;
   if (data.created) dialog.setAttribute("data-saved", "");
@@ -2452,6 +2481,9 @@ form.addEventListener("submit", (event) => {
         answer();
         const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!data || typeof data.id !== "string" || typeof data.created !== "boolean") return await refuse(res);
+        if (data.card) {
+          document.dispatchEvent(new CustomEvent("aye-card", { detail: { id: data.id, answer: data.card } }));
+        }
         if (data.created && !onPage) return await savedNew(data, ticket, mine);
         if (mine === turn) showFound(data, typedWhy);
       } finally {
@@ -2480,6 +2512,12 @@ bringBack.addEventListener("click", () =>
     { button: bringBack, word: "Bringing back…" },
   ),
 );
+editIt.addEventListener("click", () => {
+  if (!shown || !shown.edit) return;
+  const space = shown.card && shown.card.space ? shown.card.space.color : null;
+  closeNow();
+  document.dispatchEvent(new CustomEvent("aye-edit-link", { detail: { data: { ...shown.edit, id: shown.id }, space } }));
+});
 closeIt.addEventListener("click", leave);
 if (onPage) open();
 }

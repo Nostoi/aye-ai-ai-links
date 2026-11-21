@@ -83,6 +83,9 @@ export const SHRINK_SIDE = 1600;
  *   dialog alone, and a refusal that comes then shows in the page's alert.
  * - With `panel` (the AI on) the page's one instance is built without a list or alert when the page
  *   has none, and its dialog is the page's body child, so every menu page has the same one.
+ * - The Save dialog's found link opens it through "aye-edit-link" on document, { data, space }: the
+ *   link's edit data stands in for a card, and its Save or Undo draws the page's own cards of that
+ *   link too. "aye-card", { id, answer } draws the page's cards of a link from a card's state.
  * - Focus goes back to the card's ⋯ when the dialog closes.
  * - Delete link drops the unsaved change, closes the dialog and calls `deleteLinkScript`'s
  *   `deleteCard`, so the page's script includes that too. It is off while a Save is answered.
@@ -397,7 +400,7 @@ const finish = () => {
 };
 const open = (from, menu) => {
   card = from;
-  opener = menu.querySelector("summary");
+  opener = menu ? menu.querySelector("summary") : null;
   saveTurn++;
   saving = false;
   dropPick();
@@ -420,6 +423,32 @@ const open = (from, menu) => {
   ${panel ? "if (!dialog.open) " : ""}dialog.showModal();
   titleField.focus();
 };
+// A link the Save dialog found is not a card in the list: its edit data stands in for one (offCard),
+// and a Save or Undo of it draws the page's own cards of that link as well.
+const offCard = new WeakSet();
+const redrawLinked = (id, answer, except) => {
+  if (!editRoot) return;
+  for (const c of editRoot.querySelectorAll("[data-id][data-title]")) {
+    if (c !== except && c.getAttribute("data-id") === id) showCard(c, answer);
+  }
+};
+const shownCard = (target, answer) => {
+  showCard(target, answer);
+  if (offCard.has(target)) redrawLinked(target.dataset.id, answer, target);
+};
+document.addEventListener("aye-edit-link", (event) => {
+  const { data, space } = event.detail;
+  const from = document.createElement("div");
+  for (const [name, value] of Object.entries(data)) from.setAttribute("data-" + name, value);
+  if (space) from.classList.add("space-" + space);
+  offCard.add(from);
+  open(from, null);
+});
+document.addEventListener("aye-card", (event) => {
+  const { id, answer } = event.detail;
+  redrawLinked(id, answer, null);
+  ${panel ? 'document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id } }));' : ""}
+});
 ${panel ? "if (editRoot) " : ""}editRoot.addEventListener("click", (event) => {
   const item = event.target.closest(".card-menu button[data-act=edit]");
   if (!item) return;
@@ -566,10 +595,10 @@ form.addEventListener("submit", async (event) => {
     else ${panel ? "tell(target, refused)" : "editAlert.textContent = refused"};
     return;
   }
-  ${panel ? "shown" : "showCard"}(target, answer);
+  ${panel ? "shown" : "shownCard"}(target, answer);
   if (current) finish();
   if (!answer.editId) return;
-  const offer = () => ${panel ? "(target.isConnected || linked(target.dataset.id))" : "target.isConnected"} && showUndo(ticket, ${JSON.stringify("Link updated")}, async () => {
+  const offer = () => ${panel ? "(target.isConnected || offCard.has(target) || linked(target.dataset.id))" : "(target.isConnected || offCard.has(target))"} && showUndo(ticket, ${JSON.stringify("Link updated")}, async () => {
     const back = await post("/links/edit/undo", {
       id: target.dataset.id,
       editId: answer.editId,
@@ -577,7 +606,7 @@ form.addEventListener("submit", async (event) => {
       ...(listView.own === "1" && { own: "1" }),
     });
     const undone = back && back.status === 200 ? await back.json().catch(() => null) : null;
-    if (undone) ${panel ? "shown" : "showCard"}(target, undone);
+    if (undone) ${panel ? "shown" : "shownCard"}(target, undone);
     else ${panel ? "tell(target, await failure(back))" : "editAlert.textContent = await failure(back)"};
   });
   heldUndo = dialog.open ? offer : null;
@@ -604,11 +633,7 @@ const linked = (id) => [...document.querySelectorAll("[data-id][data-title]")].s
 const shown = (target, answer) => {
   const id = target.dataset.id;
   if (!notes.has(target)) showCard(target, answer);
-  if (editRoot) {
-    for (const c of editRoot.querySelectorAll("[data-id][data-title]")) {
-      if (c !== target && c.getAttribute("data-id") === id) showCard(c, answer);
-    }
-  }
+  redrawLinked(id, answer, target);
   document.dispatchEvent(new CustomEvent("aye-edited", { detail: { id, note: notes.get(target) } }));
 };
 const tell = (target, message) => {

@@ -67,6 +67,7 @@ ${tagFieldset("save-tag-input", 'Tags <span class="save-optional">(optional)</sp
 <p class="save-tags-note" hidden></p>
 <div class="save-found-acts">
 <button type="button" data-save="bring-back" hidden>Bring it back</button>
+<button type="button" data-save="edit" hidden>Edit link…</button>
 <a class="button primary" data-save="open">Open it</a>
 <button type="button" class="primary" data-save="close" hidden>Close</button>
 </div>
@@ -99,6 +100,11 @@ ${tagFieldset("save-tag-input", 'Tags <span class="save-optional">(optional)</sp
  *   on each open, Save sends the chips and the text left in the field as `tags` only when there are
  *   any, and the page's list view (`[data-within]`, `data-own`) with them. A repeat save's note
  *   names the tags it added and the ones the link already had.
+ * - Edit link… on that view (only on a page with the Edit dialog, and not on the `/save` page) closes
+ *   this dialog and sends "aye-edit-link" on document, { data, space }: the link's edit data, which the
+ *   edit script opens Edit link on as it would from the link's card. After a repeat save it sends
+ *   "aye-card", { id, answer }: the card as the page's list reads it, which the edit script draws on
+ *   every card of that link in its list.
  * - A refusal shows under its field; a sign-out, no answer or any other failure in the dialog's
  *   alert. What was typed is kept.
  * - An answer that comes after the dialog was closed (Chrome closes a modal on a second Escape)
@@ -133,6 +139,7 @@ const picker = tagPicker(q(".edit-tags"), () => {
 });
 const bringBack = q("[data-save=bring-back]");
 const openIt = q("[data-save=open]");
+const editIt = q("[data-save=edit]");
 const closeIt = q("[data-save=close]");
 const foot = q(".edit-foot");
 const topCancel = q(".edit-top[data-save=cancel]");
@@ -301,6 +308,7 @@ const showFound = (data, typedWhy) => {
     openIt.setAttribute("data-open", "");
   }
   openIt.hidden = data.created;
+  editIt.hidden = data.created || !data.edit || !document.querySelector("#edit-link");
   closeIt.hidden = !data.created && !onPage;
   heading.textContent = data.created ? "Saved" : HEADING;
   if (data.created) dialog.setAttribute("data-saved", "");
@@ -371,6 +379,9 @@ form.addEventListener("submit", (event) => {
         answer();
         const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!data || typeof data.id !== "string" || typeof data.created !== "boolean") return await refuse(res);
+        if (data.card) {
+          document.dispatchEvent(new CustomEvent("aye-card", { detail: { id: data.id, answer: data.card } }));
+        }
         if (data.created && !onPage) return await savedNew(data, ticket, mine);
         if (mine === turn) showFound(data, typedWhy);
       } finally {
@@ -399,6 +410,12 @@ bringBack.addEventListener("click", () =>
     { button: bringBack, word: ${JSON.stringify(BRING_BACK_WORKING)} },
   ),
 );
+editIt.addEventListener("click", () => {
+  if (!shown || !shown.edit) return;
+  const space = shown.card && shown.card.space ? shown.card.space.color : null;
+  closeNow();
+  document.dispatchEvent(new CustomEvent("aye-edit-link", { detail: { data: { ...shown.edit, id: shown.id }, space } }));
+});
 closeIt.addEventListener("click", leave);
 if (onPage) open();
 }

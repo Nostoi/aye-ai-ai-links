@@ -916,6 +916,7 @@ endRoot.addEventListener("click", (event) => {
 <p class="save-tags-note" hidden></p>
 <div class="save-found-acts">
 <button type="button" data-save="bring-back" hidden>Bring it back</button>
+<button type="button" data-save="edit" hidden>Edit link…</button>
 <a class="button primary" data-save="open">Open it</a>
 <button type="button" class="primary" data-save="close" hidden>Close</button>
 </div>
@@ -1341,6 +1342,7 @@ const picker = tagPicker(q(".edit-tags"), () => {
 });
 const bringBack = q("[data-save=bring-back]");
 const openIt = q("[data-save=open]");
+const editIt = q("[data-save=edit]");
 const closeIt = q("[data-save=close]");
 const foot = q(".edit-foot");
 const topCancel = q(".edit-top[data-save=cancel]");
@@ -1509,6 +1511,7 @@ const showFound = (data, typedWhy) => {
     openIt.setAttribute("data-open", "");
   }
   openIt.hidden = data.created;
+  editIt.hidden = data.created || !data.edit || !document.querySelector("#edit-link");
   closeIt.hidden = !data.created && !onPage;
   heading.textContent = data.created ? "Saved" : HEADING;
   if (data.created) dialog.setAttribute("data-saved", "");
@@ -1579,6 +1582,9 @@ form.addEventListener("submit", (event) => {
         answer();
         const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!data || typeof data.id !== "string" || typeof data.created !== "boolean") return await refuse(res);
+        if (data.card) {
+          document.dispatchEvent(new CustomEvent("aye-card", { detail: { id: data.id, answer: data.card } }));
+        }
         if (data.created && !onPage) return await savedNew(data, ticket, mine);
         if (mine === turn) showFound(data, typedWhy);
       } finally {
@@ -1607,6 +1613,12 @@ bringBack.addEventListener("click", () =>
     { button: bringBack, word: "Bringing back…" },
   ),
 );
+editIt.addEventListener("click", () => {
+  if (!shown || !shown.edit) return;
+  const space = shown.card && shown.card.space ? shown.card.space.color : null;
+  closeNow();
+  document.dispatchEvent(new CustomEvent("aye-edit-link", { detail: { data: { ...shown.edit, id: shown.id }, space } }));
+});
 closeIt.addEventListener("click", leave);
 if (onPage) open();
 }

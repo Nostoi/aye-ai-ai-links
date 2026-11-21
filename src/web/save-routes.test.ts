@@ -270,7 +270,7 @@ describe("POST /save", () => {
   });
 
   it("adds no tag to another owner's link: B saving A's address with tags gets its own link", async () => {
-    const { world, browser } = await signedIn();
+    const { world } = await signedIn();
     await saveLink(linkDeps(world), A, { url: NEW, savedBy: "claude" });
     const bBrowser = await addSecondUser(world);
     const res = await save(bBrowser, { url: NEW, title: null, why: null, tags: ["mine"] });

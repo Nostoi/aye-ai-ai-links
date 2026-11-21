@@ -127,7 +127,6 @@ import { type ConnectionRow, connectionsPage } from "./connections-page.js";
 import { backTarget, liveFrom } from "./copy-from.js";
 import { COPY_HEADERS, copyNotFoundPage, copyPage } from "./copy-page.js";
 import { displayTitle } from "./display-title.js";
-import { EDIT_MAX_TAG_TEXT } from "./edit-dialog.js";
 import { editDataPairs, shownTags } from "./edit-link.js";
 import { FONTS, fontHeaders } from "./fonts.js";
 import { handyShelf } from "./handy-shelf.js";
@@ -142,6 +141,7 @@ import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
 import { SPACE_RESTART, spaceHref, spaceMissingPage, spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
+import { EDIT_MAX_TAG_TEXT } from "./tag-picker.js";
 import { tagsPage } from "./tags-page.js";
 
 /** How many links a space page or All links shows at a time. */

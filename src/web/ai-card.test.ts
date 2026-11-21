@@ -49,7 +49,7 @@ describe("renderCard", () => {
       undefined,
       [],
     );
-    expect(said).toContain('<p class="ask-why">x</p>');
+    expect(said).toContain('<p class="ask-why" data-card-why="text">x</p>');
     expect(said).not.toContain("(a guess)");
     const asked = renderCard(
       link({ why: { text: "x", source: "asked" } }),
@@ -57,10 +57,10 @@ describe("renderCard", () => {
       undefined,
       [],
     );
-    expect(asked).toContain('<p class="ask-why">x</p>');
+    expect(asked).toContain('<p class="ask-why" data-card-why="text">x</p>');
     expect(
       renderCard(link({ why: { text: "x", source: "inferred" } }), undefined, undefined, []),
-    ).toContain('<p class="ask-why">Why (a guess): x</p>');
+    ).toContain('<p class="ask-why" data-card-why="text">Why (a guess): x</p>');
   });
 
   const tagline = (tags: Link["tags"], catalog: Tag[] = []) =>

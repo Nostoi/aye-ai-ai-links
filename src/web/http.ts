@@ -287,6 +287,7 @@ type EditForm = View & {
   picture?: Uint8Array | "page";
   tags?: { names: string[]; seen: { key: string; source: string }[] };
   intent?: { value: string; seen: { intent: string; source: string | null } };
+  why?: { text: string; seen: { text: string; source: string } | null };
 };
 
 const isText = (value: unknown): value is string => typeof value === "string";
@@ -338,6 +339,26 @@ function takeIntent(intent: unknown, seen: unknown): EditForm["intent"] | null |
   return { value: intent, seen: { intent: was, source } };
 }
 
+/**
+ * The `why` and `whySeen` form fields, sent together or not at all: `undefined` when neither was
+ * sent, `null` when `whySeen` is not JSON of `{ text, source }` (two texts) or `null`, the link
+ * having had no why. Whether the source is one is core's to say.
+ */
+function takeWhy(why: unknown, seen: unknown): EditForm["why"] | null | undefined {
+  if (why === null && seen === null) return undefined;
+  if (typeof why !== "string" || typeof seen !== "string") return null;
+  let mark: unknown;
+  try {
+    mark = JSON.parse(seen);
+  } catch {
+    return null;
+  }
+  if (mark === null) return { text: why, seen: null };
+  const { text, source } = (mark ?? {}) as { text?: unknown; source?: unknown };
+  if (typeof mark !== "object" || !isText(text) || !isText(source)) return null;
+  return { text: why, seen: { text, source } };
+}
+
 /** An optional JSON member: absent, or passing `check`. */
 const optional =
   <T>(check: Check<T>): Check<T | undefined> =>
@@ -386,10 +407,13 @@ const editForm = createMiddleware<{ Variables: { edit: EditForm } }>(async (c, n
   if (tags === null) return bad();
   const intent = takeIntent(form.get("intent"), form.get("intentSeen"));
   if (intent === null) return bad();
+  const why = takeWhy(form.get("why"), form.get("whySeen"));
+  if (why === null) return bad();
   const edit: EditForm = { id };
   if (title !== null) edit.title = title;
   if (tags) edit.tags = tags;
   if (intent) edit.intent = intent;
+  if (why) edit.why = why;
   if (within !== null) edit.within = within;
   if (own !== null) edit.own = true;
   if (picture instanceof Blob) edit.picture = new Uint8Array(await picture.arrayBuffer());
@@ -858,7 +882,7 @@ export function webApp({
 
   /**
    * What a card shows after an edit or its Undo, read after the write: its title and picture, its
-   * tags, and its space (the color of the card, and the name its grey line shows) as the list the
+   * tags, why and summary, and its space (the color of the card, and the name its grey line shows) as the list the
    * card is on reads it (`view`).
    */
   const cardState = async (owner: OwnerId, id: string, asked: View) => {
@@ -893,6 +917,8 @@ export function webApp({
       tags: shownTags(link.tags),
       intent: link.intent,
       intentSource: link.intentSource,
+      why: link.why && { text: link.why.text, source: link.why.source },
+      summary: link.summary,
       space: space && { color: space.color },
       lineSpace: line && { name: line.name },
     };
@@ -1365,12 +1391,13 @@ export function webApp({
   app.post("/links/edit", session, editForm, (c) =>
     homeAction(c, async () => {
       const { owner } = c.get("caller");
-      const { id, title, picture, tags, intent, within, own } = c.get("edit");
+      const { id, title, picture, tags, intent, why, within, own } = c.get("edit");
       const editId = await editLink(deps, owner, id, {
         ...(title !== undefined && { title }),
         ...(picture !== undefined && { picture }),
         ...(tags !== undefined && { tags }),
         ...(intent !== undefined && { intent }),
+        ...(why !== undefined && { why }),
       });
       const view: View = { ...(within !== undefined && { within }), ...(own && { own }) };
       return c.json({ ...(await cardState(owner, id, view)), editId }, 200, NO_STORE);

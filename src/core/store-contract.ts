@@ -1905,6 +1905,21 @@ export function describeStoreContract(
           ]);
         });
 
+        it("stores a why's line breaks as LF and reports it kept, on a new link and over a guess", async () => {
+          const fresh = await savePage(deps(), A, page({ why: "a\r\nb" }));
+          expect(fresh.link.why).toEqual({ text: "a\nb", source: "asked" });
+          expect(fresh.whyKept).toBe(true);
+          const other = "https://ex.com/guessed";
+          await saveLink(deps(), A, {
+            url: other,
+            savedBy: "agent",
+            why: { text: "guess", source: "inferred" },
+          });
+          const over = await savePage(deps(), A, page({ url: other, why: "c\r\nd" }));
+          expect(over.link.why).toEqual({ text: "c\nd", source: "asked" });
+          expect(over.whyKept).toBe(true);
+        });
+
         it("stores no why for a blank one, and no title for a blank one", async () => {
           const { link, whyKept } = await savePage(deps(), A, page({ why: "   ", title: "  " }));
           expect(link.why).toBeNull();

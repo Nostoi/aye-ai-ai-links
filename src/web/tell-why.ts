@@ -2,11 +2,14 @@ import { escapeHtml } from "../core/escape-html.js";
 import type { Link } from "../core/types.js";
 import { BAND_COLLAPSE } from "./band-collapse.js";
 
-/** The amber "needs you" ask on a card with no why, with the field that opens on Tell me why. */
-export const askWhy = (link: Link) =>
-  link.why
+/**
+ * The amber "needs you" ask on a card with no why, with the field that opens on Tell me why. With
+ * `always`, a card with a why has it too, hidden, for the edit dialog to bring back.
+ */
+export const askWhy = (link: Link, { always = false }: { always?: boolean } = {}) =>
+  link.why && !always
     ? ""
-    : `<div class="ask">
+    : `<div class="ask"${link.why ? " hidden" : ""}>
 <p class="small">Why did you save this?</p>
 <button class="tell-why" type="button" data-act="why">Tell me why</button>
 <form class="why-form" hidden>
@@ -19,12 +22,19 @@ export const askWhy = (link: Link) =>
 /** The small grey label above a featured card's stated or asked why. */
 export const WHY_LABEL = "You saved it for";
 
+/** How a card words a why that is a guess, and how a search result words any why or none. */
+export const WHY_GUESS = "Why (a guess): ";
+export const WHY_PLAIN = "Why: ";
+export const NO_WHY = "No why yet";
+
 /**
- * Where a saved answer is shown as plain text; hidden until then. With a `label`, the answer is
- * that label on its own line above the text.
+ * Where a card's why is shown as plain text, which Tell me why and the edit dialog both fill
+ * (`data-card-why` is the card's wording: `feature` for a label above the text, else `text`).
+ * `said` is the why already as HTML; with none, it is hidden. With a `label`, the answer is that
+ * label on its own line above the text.
  */
-export const whyAnswer = (tag: "p" | "span", className?: string, label?: string) =>
-  `<${tag}${className ? ` class="${className}"` : ""} data-why-answer${label ? ` data-label="${escapeHtml(label)}"` : ""} hidden></${tag}>`;
+export const whyAnswer = (tag: "p" | "span", className?: string, label?: string, said = "") =>
+  `<${tag}${className ? ` class="${className}"` : ""} data-why-answer data-card-why="${label ? "feature" : "text"}"${label ? ` data-label="${escapeHtml(label)}"` : ""}${said === "" ? " hidden" : ""}>${said}</${tag}>`;
 
 /** How long an action may stay unanswered before its busy look shows (owner, 2026-11-15, #314). */
 const BUSY_LOOK_MS = 300;
@@ -153,8 +163,14 @@ if (whyRoot) {
       answer.replaceChildren(label, text);
     } else answer.textContent = text;
     answer.hidden = false;
-    card.querySelector(".ask").remove();
-    card.querySelector(".row-about")?.remove();
+    card.dataset.why = text;
+    card.dataset.whySource = "asked";
+    const ask = card.querySelector(".ask");
+    ask.hidden = true;
+    form.hidden = true;
+    input.value = "";
+    const about = card.querySelector("[data-card-summary]");
+    if (about) about.hidden = true;
     card.classList.remove("needs-you");
   });
 }

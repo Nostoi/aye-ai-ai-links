@@ -17,7 +17,7 @@ import { intentLinkScript } from "./intent.js";
 import { handyControl, keepHandyScript } from "./keep-handy.js";
 import { linkTitle, openedScript, searchReportScript } from "./open-link.js";
 import { escapeHtml, page, savedOn } from "./page.js";
-import { CARD_FETCH } from "./tell-why.js";
+import { CARD_FETCH, NO_WHY, WHY_GUESS, WHY_PLAIN } from "./tell-why.js";
 
 /**
  * The sign-in form. Its script posts JSON to better-auth's own sign-in route and, when the page
@@ -129,9 +129,8 @@ export const oauthErrorPage = (message: string) =>
 
 /** The why as every link card reads it; an inferred one is a guess. */
 export function whyLine(why: Link["why"]): string {
-  if (!why) return "No why yet";
-  const text = escapeHtml(why.text);
-  return why.source === "inferred" ? `Why (a guess): ${text}` : `Why: ${text}`;
+  if (!why) return NO_WHY;
+  return `${why.source === "inferred" ? WHY_GUESS : WHY_PLAIN}${escapeHtml(why.text)}`;
 }
 
 /** The address `FAVICON_ROUTE` (`http.ts`) serves a link's stored site favicon at; `version` busts the cache. */
@@ -176,7 +175,7 @@ ${tile(link, picture)}
 <div class="result-body">
 ${editMenu(link, { copy, handy: view })}
 <h2 data-card-title>${linkTitle(link)}</h2>
-${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from, intent: true })}${link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : ""}<p class="small">${whyLine(link.why)}</p>
+${cardLine(link, { space, copy, saved: savedOn(link.savedAt, now), from, intent: true })}${link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : ""}<p class="small" data-card-why="line">${whyLine(link.why)}</p>
 ${keep ? handyControl(link, view) : ""}${goneLine(link, gone)}</div>
 </li>`;
 }

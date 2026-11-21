@@ -139,7 +139,7 @@ describe("the All links page", () => {
     });
     const [plain, colored] = [...dom(html).querySelectorAll(".link-row")];
     expect(plain?.querySelector(".row-why")?.textContent).toBe("because 1");
-    expect(colored?.querySelector(".row-why")).toBeNull();
+    expect(colored?.querySelector(".row-why:not([hidden])")).toBeNull();
     expect(plain?.className).not.toMatch(/space-/);
     expect(plain?.querySelector(".line-space:not([hidden]) .dot")).toBeNull();
     const parts = (card: Element | undefined) =>

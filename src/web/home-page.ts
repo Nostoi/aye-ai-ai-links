@@ -82,6 +82,12 @@ function opening(classes: string, link: Link, cards: WorthCards): string {
 const openedLine = (link: Link, className: string) =>
   `<p class="${className}" data-opened${link.lastOpenedAt === null ? " hidden" : ""}><b>Opened.</b> Keep it or archive it?</p>\n`;
 
+/** The featured card's why: a stated or asked one under its label, a guess as a guess. */
+const featuredWhy = (why: NonNullable<Link["why"]>) =>
+  why.source === "inferred"
+    ? whyText(why)
+    : `<span class="why-label">${WHY_LABEL}</span>${escapeHtml(why.text)}`;
+
 /**
  * The featured card: a small picture on the left, the title, the why (or Tell me why, in amber),
  * the grey line ending with the reason and Saved copy, the opened line, then Open it (the page's one
@@ -94,9 +100,7 @@ function featured(d: DigestLink, cards: WorthCards): string {
   const open = isWebUrl(link.url)
     ? `<div class="feature-open">${openLink(link, "Open it", "button primary")}</div>\n`
     : "";
-  const said = link.why
-    ? `<p>${link.why.source === "inferred" ? whyText(link.why) : `<span class="why-label">${WHY_LABEL}</span>${escapeHtml(link.why.text)}`}</p>`
-    : `${askWhy(link)}\n${whyAnswer("p", undefined, WHY_LABEL)}`;
+  const said = `${whyAnswer("p", undefined, WHY_LABEL, link.why ? featuredWhy(link.why) : "")}\n${askWhy(link, { always: true })}`;
   return `${opening(`worth-card worth-feature${link.why ? "" : " needs-you"}`, link, cards)}
 <h3 data-card-title>${linkTitle(link)}</h3>
 <div class="feature-why">${said}</div>
@@ -133,9 +137,7 @@ const pickRow = (link: Link, cards: WorthCards) =>
   row(
     link,
     cards,
-    (link.why
-      ? `<p class="also-why">${whyText(link.why)}</p>\n`
-      : cardLine(link, { saved: savedOn(link.savedAt, cards.now) })) +
+    `<p class="also-why" data-card-why="text"${link.why ? "" : " hidden"}>${link.why ? whyText(link.why) : ""}</p>\n<div data-card-fallback${link.why ? " hidden" : ""}>${cardLine(link, { saved: savedOn(link.savedAt, cards.now) })}</div>\n` +
       openedLine(link, "also-open"),
   );
 

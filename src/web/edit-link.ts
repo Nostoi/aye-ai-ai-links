@@ -78,7 +78,8 @@ export const shownTags = (tags: LinkTag[]) =>
  * What the edit dialog reads from a card, as data attributes: the title ("" for none), the page's
  * own title, the version of the picture that shows, whether it is the owner's, the fetched
  * picture's version, the initials a picture-less preview shows, and the tags as JSON
- * (`shownTags`), and the link's intent and who said so ("" for nobody). The one helper for
+ * (`shownTags`), and the link's intent and who said so ("" for nobody), and its why and who said so ("" for none).
+ * The one helper for
  * every card builder.
  */
 export function editData(
@@ -99,6 +100,8 @@ export function editData(
     ["tags", JSON.stringify(shownTags(link.tags))],
     ["intent", link.intent],
     ["intent-source", link.intentSource ?? ""],
+    ["why", link.why?.text ?? ""],
+    ["why-source", link.why?.source ?? ""],
   ];
   return data.map(([name, value]) => ` data-${name}="${escapeHtml(value)}"`).join("");
 }

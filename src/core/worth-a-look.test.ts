@@ -566,6 +566,12 @@ describe("tellWhy", () => {
     expect((await get(l.id)).why).toEqual({ text: "to compare quotes", source: "asked" });
   });
 
+  it("stores line breaks as LF", async () => {
+    const l = await link();
+    const updated = await tellWhy(deps(), A, l.id, "a\r\nb");
+    expect(updated.why).toEqual({ text: "a\nb", source: "asked" });
+  });
+
   it("replaces an agent's guess", async () => {
     const l = await link(A, { why: { text: "a guess", source: "inferred" } });
     await tellWhy(deps(), A, l.id, "the real reason");

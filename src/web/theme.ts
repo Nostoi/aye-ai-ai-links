@@ -657,7 +657,7 @@ ${spaceClasses}
 .save-found-title{display:block;font-weight:700}
 .save-found-line{display:block;font-size:var(--text-2);color:var(--soft)}
 .save-found-why{margin:12px 2px 0;font-size:var(--text-4);color:var(--about);overflow-wrap:anywhere}
-.save-kept{margin:12px 0 0;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:var(--text-3);overflow-wrap:anywhere}
+.save-kept,.save-tags-note{margin:12px 0 0;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:var(--text-3);overflow-wrap:anywhere}
 .save-found-acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px}
 .save-found-acts button{min-height:44px}
 .page-alert{position:fixed;right:0;bottom:88px;left:0;z-index:var(--layer-undo);width:fit-content;max-width:calc(100% - 32px);margin:0 auto;box-shadow:var(--shadow-menu);font-size:var(--text-4)}

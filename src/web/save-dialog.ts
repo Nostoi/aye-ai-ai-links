@@ -2,6 +2,7 @@ import { SAVE_PATH } from "../auth/login-return.js";
 import { escapeHtml } from "../core/escape-html.js";
 import { ARCHIVED, BRING_BACK_WORKING } from "./done-link.js";
 import { hostOf } from "./host.js";
+import { TAG_PICKER, tagFieldset } from "./tag-picker.js";
 import { CARD_FETCH, WHY_LABEL } from "./tell-why.js";
 
 /** What the dialog says when Save was sent to sign in (#329, from the approved mockup). */
@@ -57,11 +58,13 @@ export const saveDialog = (fill?: { url: string; title: string }) => {
 <p class="save-field-error" id="title-error" role="alert"></p>
 <label for="save-why">Why are you saving it? <span class="save-optional">(optional)</span></label>
 <textarea id="save-why" name="why" rows="3"></textarea>
+${tagFieldset("save-tag-input", 'Tags <span class="save-optional">(optional)</span>')}
 </div>
 <div class="save-found" data-save-part="found" hidden>
 <div class="save-found-card"><span class="save-found-pic" aria-hidden="true"></span><div><span class="save-found-title"></span><span class="save-found-line"></span></div></div>
 <p class="save-found-why" hidden></p>
 <p class="save-kept" hidden></p>
+<p class="save-tags-note" hidden></p>
 <div class="save-found-acts">
 <button type="button" data-save="bring-back" hidden>Bring it back</button>
 <a class="button primary" data-save="open">Open it</a>
@@ -92,6 +95,10 @@ export const saveDialog = (fill?: { url: string; title: string }) => {
  *   head's Close and Escape do the same.
  * - An address already saved shows that link in the dialog: its line, its why, Open it (recorded as
  *   an opening) and, for an archived link, Bring it back, which works in place.
+ * - Tags (optional) is the Edit link dialog's picker (`TAG_PICKER`): the owner's tag names are read
+ *   on each open, Save sends the chips and the text left in the field as `tags` only when there are
+ *   any, and the page's list view (`[data-within]`, `data-own`) with them. A repeat save's note
+ *   names the tags it added and the ones the link already had.
  * - A refusal shows under its field; a sign-out, no answer or any other failure in the dialog's
  *   alert. What was typed is kept.
  * - An answer that comes after the dialog was closed (Chrome closes a modal on a second Escape)
@@ -119,6 +126,11 @@ const foundTitle = q(".save-found-title");
 const foundLine = q(".save-found-line");
 const foundWhy = q(".save-found-why");
 const kept = q(".save-kept");
+const tagsNote = q(".save-tags-note");
+${TAG_PICKER}
+const picker = tagPicker(q(".edit-tags"), () => {
+  saveError.textContent = "";
+});
 const bringBack = q("[data-save=bring-back]");
 const openIt = q("[data-save=open]");
 const closeIt = q("[data-save=close]");
@@ -165,6 +177,7 @@ const reset = () => {
   urlField.value = "";
   titleField.value = "";
   whyField.value = "";
+  picker.load([]);
   for (const e of [urlError, titleError, saveError]) e.textContent = "";
   heading.textContent = HEADING;
   dialog.removeAttribute("data-saved");
@@ -180,6 +193,7 @@ const giveFocusBack = () => {
   if (opener && opener.isConnected) opener.focus();
 };
 const open = () => {
+  picker.loadNames();
   dialog.showModal();
   urlField.focus();
 };
@@ -235,6 +249,30 @@ const drawLine = (data, marker) => {
   const parts = [data.created ? "" : "Already saved on " + data.savedOn, hostName(data.url), marker];
   foundLine.textContent = parts.filter(Boolean).join(" · ");
 };
+// What a repeat save did with the typed tags: the ones it added, then the ones the link had.
+const drawTagsNote = (data) => {
+  const added = data.created ? [] : data.tagsAdded || [];
+  const had = data.created ? [] : data.tagsHad || [];
+  const names = (list) =>
+    list.forEach((name, i) => {
+      if (i) tagsNote.append(", ");
+      const b = document.createElement("b");
+      b.textContent = name;
+      tagsNote.append(b);
+    });
+  tagsNote.replaceChildren();
+  if (added.length) {
+    tagsNote.append("Added your tags: ");
+    names(added);
+    tagsNote.append(".");
+  }
+  if (had.length) {
+    tagsNote.append((added.length ? " " : "") + "It already had ");
+    names(had);
+    tagsNote.append(".");
+  }
+  tagsNote.hidden = !tagsNote.firstChild;
+};
 const showFound = (data, typedWhy) => {
   answered = true;
   shown = data;
@@ -254,6 +292,7 @@ const showFound = (data, typedWhy) => {
   foundWhy.hidden = !data.why;
   kept.textContent = data.whyKept ? "" : "It already had a reason, so yours wasn't saved: “" + typedWhy + "”";
   kept.hidden = data.whyKept;
+  drawTagsNote(data);
   bringBack.hidden = data.state !== "archived";
   if (!data.created) {
     openIt.setAttribute("href", data.url);
@@ -314,10 +353,21 @@ form.addEventListener("submit", (event) => {
       const mine = turn;
       const typedWhy = whyField.value;
       saving = true;
+      picker.flush();
+      picker.disable(true);
       for (const e of [urlError, titleError, saveError]) e.textContent = "";
       if (pageAlert) pageAlert.textContent = "";
       try {
-        const res = await post(${JSON.stringify(SAVE_PATH)}, { url: urlField.value, title: titleField.value, why: typedWhy });
+        const names = picker.tags.map((t) => t.name);
+        const list = document.querySelector("[data-within]");
+        const res = await post(${JSON.stringify(SAVE_PATH)}, {
+          url: urlField.value,
+          title: titleField.value,
+          why: typedWhy,
+          ...(names.length > 0 && { tags: names }),
+          ...(list && { within: list.dataset.within }),
+          ...(list && list.dataset.own === "1" && { own: "1" }),
+        });
         answer();
         const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!data || typeof data.id !== "string" || typeof data.created !== "boolean") return await refuse(res);
@@ -325,6 +375,7 @@ form.addEventListener("submit", (event) => {
         if (mine === turn) showFound(data, typedWhy);
       } finally {
         saving = false;
+        picker.disable(false);
       }
     },
     { button, word: ${JSON.stringify(SAVING_WORKING)}, el: form },

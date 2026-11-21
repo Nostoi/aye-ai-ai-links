@@ -544,7 +544,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .save-found-title{display:block;font-weight:700}
 .save-found-line{display:block;font-size:var(--text-2);color:var(--soft)}
 .save-found-why{margin:12px 2px 0;font-size:var(--text-4);color:var(--about);overflow-wrap:anywhere}
-.save-kept{margin:12px 0 0;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:var(--text-3);overflow-wrap:anywhere}
+.save-kept,.save-tags-note{margin:12px 0 0;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:var(--text-3);overflow-wrap:anywhere}
 .save-found-acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px}
 .save-found-acts button{min-height:44px}
 .page-alert{position:fixed;right:0;bottom:88px;left:0;z-index:var(--layer-undo);width:fit-content;max-width:calc(100% - 32px);margin:0 auto;box-shadow:var(--shadow-menu);font-size:var(--text-4)}
@@ -1140,11 +1140,19 @@ document.addEventListener("aye-tags-changed", () => location.reload());
 <p class="save-field-error" id="title-error" role="alert"></p>
 <label for="save-why">Why are you saving it? <span class="save-optional">(optional)</span></label>
 <textarea id="save-why" name="why" rows="3"></textarea>
+<fieldset class="edit-tags">
+<legend>Tags <span class="save-optional">(optional)</span></legend>
+<ul class="edit-chips"></ul>
+<label for="save-tag-input">Add a tag</label>
+<input id="save-tag-input" class="edit-tag-input" autocomplete="off" maxlength="200" enterkeyhint="done">
+<ul class="edit-suggest" hidden></ul>
+</fieldset>
 </div>
 <div class="save-found" data-save-part="found" hidden>
 <div class="save-found-card"><span class="save-found-pic" aria-hidden="true"></span><div><span class="save-found-title"></span><span class="save-found-line"></span></div></div>
 <p class="save-found-why" hidden></p>
 <p class="save-kept" hidden></p>
+<p class="save-tags-note" hidden></p>
 <div class="save-found-acts">
 <button type="button" data-save="bring-back" hidden>Bring it back</button>
 <a class="button primary" data-save="open">Open it</a>
@@ -1423,6 +1431,153 @@ const foundTitle = q(".save-found-title");
 const foundLine = q(".save-found-line");
 const foundWhy = q(".save-found-why");
 const kept = q(".save-kept");
+const tagsNote = q(".save-tags-note");
+const tagPicker = (fieldset, clearError) => {
+  const tagList = fieldset.querySelector(".edit-chips");
+  const tagField = fieldset.querySelector(".edit-tag-input");
+  const suggestList = fieldset.querySelector(".edit-suggest");
+  let tags = [];
+  let openedTags = [];
+  let catalog = [];
+  let namesTurn = 0;
+  let disabled = false;
+  const keyOf = (name) => name.trim().replace(/\s+/g, " ").toLowerCase();
+  const clear = (list) => {
+    while (list.firstChild) list.removeChild(list.firstChild);
+  };
+  const listItem = (list, child) => {
+    const item = document.createElement("li");
+    item.append(child);
+    list.append(item);
+    return item;
+  };
+  const renderTags = () => {
+    clear(tagList);
+    for (const t of tags) {
+      const name = document.createElement("span");
+      name.textContent = t.name;
+      const item = listItem(tagList, name);
+      item.className = "edit-tag";
+      if (t.source === "inferred") {
+        const guess = document.createElement("span");
+        guess.className = "edit-tag-guess";
+        guess.textContent = " (a guess)";
+        item.append(guess);
+      }
+      const remove = document.createElement("button");
+      remove.setAttribute("type", "button");
+      remove.className = "edit-tag-remove";
+      remove.setAttribute("aria-label", "Remove " + t.name);
+      remove.setAttribute("data-key", t.key);
+      remove.innerHTML = "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg>";
+      remove.disabled = disabled;
+      item.append(remove);
+    }
+  };
+  // Up to 6 catalog names containing the typed text and not on the link yet, those that start with it first.
+  const showSuggestions = () => {
+    clear(suggestList);
+    const text = keyOf(tagField.value);
+    const have = new Set(tags.map((t) => t.key));
+    const hits = text === "" ? [] : catalog.filter((n) => keyOf(n).includes(text) && !have.has(keyOf(n)));
+    const first = hits.filter((n) => keyOf(n).startsWith(text));
+    const rest = hits.filter((n) => !keyOf(n).startsWith(text));
+    for (const name of [...first, ...rest].slice(0, 6)) {
+      const button = document.createElement("button");
+      button.setAttribute("type", "button");
+      button.className = "edit-suggest-item";
+      button.textContent = name;
+      button.disabled = disabled;
+      listItem(suggestList, button);
+    }
+    suggestList.hidden = !suggestList.firstChild;
+  };
+  // Adds the typed name, unless its key is already there. A tag the card opened with comes back as
+  // it was, so a guess stays a guess.
+  const addTag = (raw) => {
+    const name = raw.trim().replace(/\s+/g, " ");
+    const key = keyOf(name);
+    if (name === "" || tags.some((t) => t.key === key)) {
+      tagField.value = "";
+      return;
+    }
+    const before = openedTags.find((t) => t.key === key);
+    const known = catalog.find((n) => keyOf(n) === key);
+    tags.push(before ? { ...before } : { key, name: known || name, source: "stated" });
+    tagField.value = "";
+  };
+  tagList.addEventListener("click", (event) => {
+    const remove = event.target.closest(".edit-tag-remove");
+    if (!remove || remove.disabled) return;
+    tags = tags.filter((t) => t.key !== remove.getAttribute("data-key"));
+    renderTags();
+    showSuggestions();
+    tagField.focus();
+  });
+  suggestList.addEventListener("click", (event) => {
+    const item = event.target.closest(".edit-suggest-item");
+    if (!item || item.disabled) return;
+    clearError();
+    addTag(item.textContent);
+    renderTags();
+    showSuggestions();
+    tagField.focus();
+  });
+  tagField.addEventListener("input", showSuggestions);
+  // Enter adds the typed name; it does not send the form.
+  tagField.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (disabled || event.isComposing) return;
+    clearError();
+    addTag(tagField.value);
+    renderTags();
+    showSuggestions();
+  });
+  // On a phone the keyboard covers the sheet's lower half: bring the field into view.
+  tagField.addEventListener("focus", () => {
+    if (tagField.scrollIntoView) tagField.scrollIntoView({ block: "center" });
+  });
+  return {
+    get tags() {
+      return tags;
+    },
+    get opened() {
+      return openedTags;
+    },
+    load(held) {
+      openedTags = Array.isArray(held) ? held : [];
+      tags = openedTags.map((t) => ({ ...t }));
+      tagField.value = "";
+      catalog = [];
+      renderTags();
+      showSuggestions();
+    },
+    async loadNames() {
+      const turn = ++namesTurn;
+      const res = await fetch("/tags/names", { redirect: "manual" }).catch(() => null);
+      const got = res && res.status === 200 ? await res.json().catch(() => null) : null;
+      if (turn !== namesTurn) return;
+      catalog = got && Array.isArray(got.names) ? got.names.filter((n) => typeof n === "string") : [];
+      showSuggestions();
+    },
+    dropNames() {
+      namesTurn++;
+    },
+    flush() {
+      addTag(tagField.value);
+      renderTags();
+    },
+    disable(off) {
+      disabled = off;
+      tagField.disabled = off;
+      for (const c of fieldset.querySelectorAll(".edit-tag-remove, .edit-suggest-item")) c.disabled = off;
+    },
+  };
+};
+const picker = tagPicker(q(".edit-tags"), () => {
+  saveError.textContent = "";
+});
 const bringBack = q("[data-save=bring-back]");
 const openIt = q("[data-save=open]");
 const closeIt = q("[data-save=close]");
@@ -1469,6 +1624,7 @@ const reset = () => {
   urlField.value = "";
   titleField.value = "";
   whyField.value = "";
+  picker.load([]);
   for (const e of [urlError, titleError, saveError]) e.textContent = "";
   heading.textContent = HEADING;
   dialog.removeAttribute("data-saved");
@@ -1484,6 +1640,7 @@ const giveFocusBack = () => {
   if (opener && opener.isConnected) opener.focus();
 };
 const open = () => {
+  picker.loadNames();
   dialog.showModal();
   urlField.focus();
 };
@@ -1539,6 +1696,30 @@ const drawLine = (data, marker) => {
   const parts = [data.created ? "" : "Already saved on " + data.savedOn, hostName(data.url), marker];
   foundLine.textContent = parts.filter(Boolean).join(" · ");
 };
+// What a repeat save did with the typed tags: the ones it added, then the ones the link had.
+const drawTagsNote = (data) => {
+  const added = data.created ? [] : data.tagsAdded || [];
+  const had = data.created ? [] : data.tagsHad || [];
+  const names = (list) =>
+    list.forEach((name, i) => {
+      if (i) tagsNote.append(", ");
+      const b = document.createElement("b");
+      b.textContent = name;
+      tagsNote.append(b);
+    });
+  tagsNote.replaceChildren();
+  if (added.length) {
+    tagsNote.append("Added your tags: ");
+    names(added);
+    tagsNote.append(".");
+  }
+  if (had.length) {
+    tagsNote.append((added.length ? " " : "") + "It already had ");
+    names(had);
+    tagsNote.append(".");
+  }
+  tagsNote.hidden = !tagsNote.firstChild;
+};
 const showFound = (data, typedWhy) => {
   answered = true;
   shown = data;
@@ -1558,6 +1739,7 @@ const showFound = (data, typedWhy) => {
   foundWhy.hidden = !data.why;
   kept.textContent = data.whyKept ? "" : "It already had a reason, so yours wasn't saved: “" + typedWhy + "”";
   kept.hidden = data.whyKept;
+  drawTagsNote(data);
   bringBack.hidden = data.state !== "archived";
   if (!data.created) {
     openIt.setAttribute("href", data.url);
@@ -1618,10 +1800,21 @@ form.addEventListener("submit", (event) => {
       const mine = turn;
       const typedWhy = whyField.value;
       saving = true;
+      picker.flush();
+      picker.disable(true);
       for (const e of [urlError, titleError, saveError]) e.textContent = "";
       if (pageAlert) pageAlert.textContent = "";
       try {
-        const res = await post("/save", { url: urlField.value, title: titleField.value, why: typedWhy });
+        const names = picker.tags.map((t) => t.name);
+        const list = document.querySelector("[data-within]");
+        const res = await post("/save", {
+          url: urlField.value,
+          title: titleField.value,
+          why: typedWhy,
+          ...(names.length > 0 && { tags: names }),
+          ...(list && { within: list.dataset.within }),
+          ...(list && list.dataset.own === "1" && { own: "1" }),
+        });
         answer();
         const data = res && res.status === 200 ? await res.json().catch(() => null) : null;
         if (!data || typeof data.id !== "string" || typeof data.created !== "boolean") return await refuse(res);
@@ -1629,6 +1822,7 @@ form.addEventListener("submit", (event) => {
         if (mine === turn) showFound(data, typedWhy);
       } finally {
         saving = false;
+        picker.disable(false);
       }
     },
     { button, word: "Saving…", el: form },

@@ -536,7 +536,7 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .save-found-title{display:block;font-weight:700}
 .save-found-line{display:block;font-size:13.5px;color:var(--soft)}
 .save-found-why{margin:12px 2px 0;font-size:15px;color:var(--about);overflow-wrap:anywhere}
-.save-kept{margin:12px 0 0;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;overflow-wrap:anywhere}
+.save-kept,.save-tags-note{margin:12px 0 0;padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;overflow-wrap:anywhere}
 .save-found-acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px}
 .save-found-acts button{min-height:44px}
 .page-alert{position:fixed;right:0;bottom:88px;left:0;z-index:31;width:fit-content;max-width:calc(100% - 32px);margin:0 auto;box-shadow:0 12px 32px rgb(0 0 0 / .16),0 2px 6px rgb(0 0 0 / .06);font-size:15px}

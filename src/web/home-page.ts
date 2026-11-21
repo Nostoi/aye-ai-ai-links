@@ -137,9 +137,7 @@ const pickRow = (link: Link, cards: WorthCards) =>
   row(
     link,
     cards,
-    (link.why
-      ? `<p class="also-why" data-card-why="text">${whyText(link.why)}</p>\n`
-      : `<p class="also-why" data-card-why="text" hidden></p>\n${cardLine(link, { saved: savedOn(link.savedAt, cards.now) })}`) +
+    `<p class="also-why" data-card-why="text"${link.why ? "" : " hidden"}>${link.why ? whyText(link.why) : ""}</p>\n<div data-card-fallback${link.why ? " hidden" : ""}>${cardLine(link, { saved: savedOn(link.savedAt, cards.now) })}</div>\n` +
       openedLine(link, "also-open"),
   );
 

@@ -1297,7 +1297,7 @@ describe("the opened line (#340)", () => {
     const body = [...(d.querySelector(".worth-row .also-body")?.children ?? [])].map(
       (e) => e.className,
     );
-    expect(body).toEqual(["", "also-why", "also-open"]);
+    expect(body).toEqual(["", "also-why", "", "also-open"]);
   });
 
   it("is shown the moment the link is opened from the page, before any answer, on that card only", async () => {

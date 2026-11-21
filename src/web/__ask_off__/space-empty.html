@@ -1340,7 +1340,7 @@ const pick = async (file) => {
 };
 // The card's why in the card's own wording (data-card-why): "text" the words, "line" a search
 // result's "Why: ...", "feature" the featured card's label above them; a guess says so. Its
-// summary shows only while there is no why; a card's ask for one and its amber outline come back
+// summary and a pick row's site-and-date line show only while there is no why; a card's ask for one and its amber outline come back
 // with no why.
 const showWhy = (target, why, summary) => {
   const guess = !!why && why.source === "inferred";
@@ -1367,6 +1367,8 @@ const showWhy = (target, why, summary) => {
     about.textContent = summary || "";
     about.hidden = !!why || !summary;
   }
+  const fallback = target.querySelector("[data-card-fallback]");
+  if (fallback) fallback.hidden = !!why;
   const ask = target.querySelector(".ask");
   if (ask) {
     ask.hidden = !!why;

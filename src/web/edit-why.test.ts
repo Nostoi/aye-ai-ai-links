@@ -76,9 +76,9 @@ ${deleteLinkScript("cards", "cards-error")}
     { menu: true, undo: true },
   );
 const search = (l: Link) => searchPage({ query: "", links: [l], now: NOW });
-const home = (l: Link) => {
+const home = (l: Link, ...picks: Link[]) => {
   const worth: WorthCards = {
-    links: [{ link: l, reasons: [] }],
+    links: [l, ...picks].map((link) => ({ link, reasons: [] })),
     images: new Map(),
     now: NOW,
     catalog: [],
@@ -91,10 +91,11 @@ type Page = ReturnType<typeof runPage>;
 async function open(
   html: string,
   reply: (sent: Post) => Answer = () => ({ status: 200, body: saved(STATED) }),
+  id = "1",
 ) {
   const p = runPage(html, reply);
   stubDialog(p);
-  p.dispatch(p.$('[data-id="1"] button[data-act=edit]'), "click");
+  p.dispatch(p.$(`[data-id="${id}"] button[data-act=edit]`), "click");
   await p.settle();
   return p;
 }
@@ -315,5 +316,35 @@ describe("Home's featured card", () => {
       text: "to plan the trip",
       source: "asked",
     });
+  });
+});
+
+describe("Home's More to explore rows", () => {
+  const pick = (why: Why) => home(link({ id: "1", why: STATED }), link({ id: "2", why }));
+  const parts = (p: Page) => ({
+    why: p.$('[data-id="2"] .also-why') as HTMLElement,
+    line: p.$('[data-id="2"] [data-card-fallback]') as HTMLElement,
+  });
+  const run = async (before: Why, after: Why) => {
+    const p = await open(pick(before), answers(before, after), "2");
+    type(p, "changed");
+    await submit(p);
+    return p;
+  };
+
+  it("brings back the site-and-date line when the why is removed; Undo reverses it", async () => {
+    const p = await run(STATED, null);
+    expect([parts(p).why.hidden, parts(p).line.hidden]).toEqual([true, false]);
+    await undoLast(p);
+    expect([parts(p).why.hidden, parts(p).line.hidden]).toEqual([false, true]);
+    expect(parts(p).why.textContent).toBe(STATED.text);
+  });
+
+  it("hides the line when a why is added; Undo reverses it", async () => {
+    const p = await run(null, GUESS);
+    expect([parts(p).why.hidden, parts(p).line.hidden]).toEqual([false, true]);
+    expect(parts(p).why.textContent).toBe(`Why (a guess): ${GUESS.text}`);
+    await undoLast(p);
+    expect([parts(p).why.hidden, parts(p).line.hidden]).toEqual([true, false]);
   });
 });

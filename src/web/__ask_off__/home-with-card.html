@@ -1242,8 +1242,9 @@ intentSet.addEventListener("click", (event) => {
 // openedWhy is what the card held when the dialog opened (the Save's "seen"); the why is sent only
 // when the box's text differs from it. An AI's guess is called one until the text changes.
 let openedWhy = { text: "", source: null };
+const whyChanged = () => whyField.value.trim() !== openedWhy.text.trim();
 const showGuess = () => {
-  const guess = openedWhy.source === "inferred" && whyField.value === openedWhy.text;
+  const guess = openedWhy.source === "inferred" && !whyChanged();
   whyGuess.hidden = !guess;
   whyHint.hidden = !guess;
 };
@@ -1730,7 +1731,7 @@ form.addEventListener("submit", async (event) => {
   editError.textContent = "";
   addTag(tagField.value);
   renderTags();
-  if (whyField.value !== openedWhy.text) {
+  if (whyChanged()) {
     body.append("why", whyField.value);
     body.append("whySeen", JSON.stringify(openedWhy.source ? openedWhy : null));
     changed = true;

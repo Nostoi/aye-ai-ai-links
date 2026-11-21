@@ -164,6 +164,17 @@ describe("the edit dialog's why box (#351)", () => {
     expect(body?.whySeen).toBeUndefined();
   });
 
+  it("treats a whitespace-only change to a guess as no change: nothing sent, still labelled a guess", async () => {
+    const p = await open(rows(link({ why: GUESS })));
+    type(p, `  ${GUESS.text} `);
+    expect((p.$("#edit-link [data-why-guess]") as HTMLElement).hidden).toBe(false);
+    expect((p.$("#edit-link [data-why-hint]") as HTMLElement).hidden).toBe(false);
+    (p.$("#edit-title") as HTMLInputElement).value = "Renamed";
+    await submit(p);
+    expect(sent(p)?.why).toBeUndefined();
+    expect(sent(p)?.whySeen).toBeUndefined();
+  });
+
   it("sends why and whySeen once changed, and an emptied box sends an empty why", async () => {
     const guess = await open(rows(link({ why: GUESS })));
     type(guess, "  mine now ");

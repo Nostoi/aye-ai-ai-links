@@ -259,6 +259,7 @@ describe("the vector indexer on createDeps' index store", () => {
       summary: null,
       why: { text: "", source: "stated" },
       tags: [],
+      tagsSource: "stated",
     });
     expect((await h.sweep()).embedded).toEqual([["1"]]);
     const row = h.vector(a.id);

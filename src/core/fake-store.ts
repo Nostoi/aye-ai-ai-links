@@ -64,7 +64,7 @@ import type {
 import type { LoggedEvent } from "./store-contract.js";
 import { receiptsMeet, type TagEditStore, type TagSettings } from "./tag-edit-store.js";
 import type { TagSuggestStore } from "./tag-suggest-store.js";
-import { strongerSource } from "./tags.js";
+import { mergeTags, strongerSource } from "./tags.js";
 import {
   type IntentWith,
   sameTool,
@@ -553,7 +553,8 @@ export class FakeStore
     if (patch.intent === "explore" && this.keptTool(owner, id)) return null;
     const settled = this.settleEvents(owner, found, events);
     this.checkEventKinds(settled);
-    const { summaryOver, intentOver, whyOver, ...fields } = structuredClone(patch);
+    const { summaryOver, intentOver, whyOver, tagsGuess, ...fields } = structuredClone(patch);
+    if (fields.tags) fields.tags = mergeTags(found.tags, fields.tags, tagsGuess === true);
     if (whyOver && !whyOver.includes(found.why?.source ?? null)) delete fields.why;
     if (fields.intent !== undefined || fields.intentSource !== undefined) {
       fields.intentSource ??= null;

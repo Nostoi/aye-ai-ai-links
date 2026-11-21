@@ -17,6 +17,7 @@ import type {
   SummaryCandidate,
   SummaryCandidates,
 } from "../core/store.js";
+import { mergeTags } from "../core/tags.js";
 import {
   type IntentWith,
   sameTool,
@@ -823,8 +824,9 @@ export class SqliteStore
     if (!matched) return null;
     this.writeEvents(owner, id, settled);
     if (patch.tags !== undefined) {
+      const merged = mergeTags(this.mustRead(owner, id).tags, patch.tags, patch.tagsGuess === true);
       this.db.prepare("DELETE FROM link_tags WHERE link_id = ? AND owner_id = ?").run(id, owner);
-      this.attachTags(owner, id, patch.tags);
+      this.attachTags(owner, id, merged);
     }
     return this.read(owner, id);
   }

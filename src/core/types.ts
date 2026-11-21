@@ -100,6 +100,8 @@ export type NewLink = Omit<Link, "id" | "snapshot">;
  * the same write; the rest of the patch is written either way. `intent` and `intentSource` are
  * one pair, written together (a missing source is null), and `intentOver` guards it the same way.
  * `whyOver` guards the why's text and source the same way, against the why's own source.
+ * `tags` replaces the link's tag set; with `tagsGuess` the store instead keeps every stated or
+ * asked tag the set leaves out. Either way a tag the link has never loses a stronger source.
  */
 export type LinkPatch = Partial<
   Pick<
@@ -119,6 +121,7 @@ export type LinkPatch = Partial<
   summaryOver?: (SummarySource | null)[];
   intentOver?: (Source | null)[];
   whyOver?: (Source | null)[];
+  tagsGuess?: true;
 };
 
 /** A note about the owner. `source` says how the writer learned it. */

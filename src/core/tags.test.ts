@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTags } from "./tags.js";
-import type { Source, TagKind } from "./types.js";
+import { mergeTags, normalizeTags } from "./tags.js";
+import type { LinkTag, Source, TagKind } from "./types.js";
 
 describe("normalizeTags", () => {
   it("trims, collapses whitespace and lower-cases the key", () => {
@@ -110,5 +110,63 @@ describe("normalizeTags: who decided the kind", () => {
       kind: "topic",
       kindSource: "inferred",
     });
+  });
+});
+
+describe("mergeTags", () => {
+  const tag = (key: string, source: Source, kind: TagKind = "topic"): LinkTag => ({
+    key,
+    name: key,
+    source,
+    kind,
+    kindSource: source,
+  });
+  const brief = (tags: LinkTag[]) => tags.map((t) => `${t.key}:${t.source}`);
+
+  it("a guess keeps every stated or asked tag it leaves out, in place", () => {
+    const current = [tag("a", "stated"), tag("b", "asked"), tag("c", "inferred")];
+    const merged = mergeTags(current, [tag("d", "inferred")], true);
+    expect(brief(merged)).toEqual(["a:stated", "b:asked", "d:inferred"]);
+  });
+
+  it("a guess never turns an owner tag into a guess", () => {
+    const current = [tag("a", "stated", "project")];
+    expect(mergeTags(current, [tag("a", "inferred")], true)).toEqual(current);
+  });
+
+  it("a guess removes inferred tags it leaves out and keeps ones it repeats", () => {
+    const current = [tag("a", "inferred"), tag("b", "inferred")];
+    expect(brief(mergeTags(current, [tag("b", "inferred")], true))).toEqual(["b:inferred"]);
+    expect(mergeTags(current, [], true)).toEqual([]);
+  });
+
+  it("a guess keeps the current order and adds new tags after it, in the guess's order", () => {
+    const current = [tag("a", "stated"), tag("b", "inferred")];
+    const sent = [tag("z", "inferred"), tag("b", "inferred"), tag("y", "inferred")];
+    expect(brief(mergeTags(current, sent, true))).toEqual([
+      "a:stated",
+      "b:inferred",
+      "z:inferred",
+      "y:inferred",
+    ]);
+  });
+
+  it("an inferred tag the guess sends as stated becomes stated", () => {
+    expect(brief(mergeTags([tag("a", "inferred")], [tag("a", "stated")], true))).toEqual([
+      "a:stated",
+    ]);
+  });
+
+  it("the owner's say replaces the set in its own order", () => {
+    const current = [tag("a", "stated"), tag("b", "inferred")];
+    const sent = [tag("c", "stated"), tag("b", "inferred")];
+    expect(brief(mergeTags(current, sent, false))).toEqual(["c:stated", "b:inferred"]);
+    expect(mergeTags(current, [], false)).toEqual([]);
+  });
+
+  it("the owner's say still never turns an owner tag into a guess", () => {
+    expect(brief(mergeTags([tag("a", "stated")], [tag("a", "inferred")], false))).toEqual([
+      "a:stated",
+    ]);
   });
 });

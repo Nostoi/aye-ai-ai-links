@@ -148,7 +148,10 @@ describe("editLink with tags", () => {
 
   it("answers a link whose tags changed since the dialog opened as a conflict, writing nothing", async () => {
     const { store, deps, id, seen } = await tagged();
-    await updateLink(deps, "a", id, { tags: [{ name: "agent", source: "inferred" }] });
+    await updateLink(deps, "a", id, {
+      tags: [{ name: "agent", source: "inferred" }],
+      tagsSource: "stated",
+    });
     await expect(
       editLink(deps, "a", id, { title: "Changed", tags: { names: ["Guess", "z"], seen } }),
     ).rejects.toMatchObject({

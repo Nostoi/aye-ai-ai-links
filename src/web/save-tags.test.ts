@@ -3,6 +3,7 @@ import type { Link } from "../core/types.js";
 import { allPage } from "./all-page.js";
 import { type Answer, type Post, runAskPage, runPage } from "./opened-test-kit.js";
 import { page } from "./page.js";
+import { searchPage } from "./pages.js";
 
 /** The Save dialog's Tags field (#352), with the page's real scripts running in linkedom. */
 
@@ -370,6 +371,13 @@ describe("Edit link… on the already-saved view", () => {
     const bare = page("Bare", "<p>hi</p>", { menu: true, undo: true });
     const p = await found(FOUND, bare);
     expect(p.document.getElementById("edit-link")).toBeNull();
+    expect(button(p).hidden).toBe(true);
+  });
+
+  it("is hidden on an empty search page, whose edit script has no list to run on", async () => {
+    const empty = searchPage({ query: "", links: [], now: NOW });
+    const p = await found(FOUND, empty);
+    expect(p.document.getElementById("edit-link")).not.toBeNull();
     expect(button(p).hidden).toBe(true);
   });
 

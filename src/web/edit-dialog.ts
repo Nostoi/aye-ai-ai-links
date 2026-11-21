@@ -438,6 +438,7 @@ const shownCard = (target, answer) => {
   showCard(target, answer);
   if (offCard.has(target)) redrawLinked(target.dataset.id, answer, target);
 };
+dialog.setAttribute("data-wired", "");
 document.addEventListener("aye-edit-link", (event) => {
   const { data, space } = event.detail;
   const from = document.createElement("div");

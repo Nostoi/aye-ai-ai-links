@@ -1319,6 +1319,7 @@ const shownCard = (target, answer) => {
   showCard(target, answer);
   if (offCard.has(target)) redrawLinked(target.dataset.id, answer, target);
 };
+dialog.setAttribute("data-wired", "");
 document.addEventListener("aye-edit-link", (event) => {
   const { data, space } = event.detail;
   const from = document.createElement("div");
@@ -2239,7 +2240,7 @@ const showFound = (data, typedWhy) => {
     openIt.setAttribute("data-open", "");
   }
   openIt.hidden = data.created;
-  editIt.hidden = data.created || !data.edit || !document.querySelector("#edit-link");
+  editIt.hidden = data.created || !data.edit || !document.querySelector("#edit-link[data-wired]");
   closeIt.hidden = !data.created && !onPage;
   heading.textContent = data.created ? "Saved" : HEADING;
   if (data.created) dialog.setAttribute("data-saved", "");

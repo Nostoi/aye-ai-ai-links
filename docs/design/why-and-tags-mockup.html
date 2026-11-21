@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why in Edit, tags in Save (#351, #352)</title>
+<style>
+/* Mockup only. Tokens are copied from src/web/theme.ts; fonts load by relative path from assets/fonts. No outside requests. */
+@font-face{font-family:"Open Runde";font-weight:400;src:url(../../assets/fonts/open-runde-400.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:500;src:url(../../assets/fonts/open-runde-500.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:600;src:url(../../assets/fonts/open-runde-600.woff2) format("woff2")}
+@font-face{font-family:"Open Runde";font-weight:700 800;src:url(../../assets/fonts/open-runde-700.woff2) format("woff2")}
+@font-face{font-family:"Fraunces Question";font-weight:760;src:url(../../assets/fonts/fraunces-question.woff2) format("woff2")}
+:root{--bg:#F6F4EF;--surface:#FFFFFF;--ink:#26262B;--soft:#6E6B66;--about:#57534D;--line:#E7E3DA;--field:#8F8A82;--blue:#3A6FD8;--pic:#F2F2F2;--fill:#EDEAE3;
+--text-1:12px;--text-2:13.5px;--text-3:14px;--text-4:15px;--text-5:16px;--text-6:17px;--text-7:18px;--text-9:22px;--text-11:30px;--radius-card:18px;--radius-pill:999px}
+:root[data-theme=dark]{--bg:#1C1C20;--surface:#26262B;--ink:#EDEBE6;--soft:#A8A49D;--about:#C9C5BE;--line:#3A3A40;--field:#77736D;--blue:#7099EA;--pic:#323236;--fill:#34343A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Open Runde",ui-rounded,system-ui,sans-serif;font-size:var(--text-6);line-height:1.5}
+.doc{max-width:1240px;margin:0 auto;padding:32px 16px 96px}
+.doc>h1{font-size:var(--text-11);margin:0 0 8px}
+.doc>p{color:var(--about);max-width:70ch;margin:0 0 12px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:20px 0 8px}
+.controls button{font:inherit;font-size:var(--text-4);min-height:40px;padding:0 16px;border-radius:var(--radius-pill);border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.controls button[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+h2{font-size:var(--text-9);margin:48px 0 4px}
+.sub{color:var(--about);margin:0 0 16px;max-width:72ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,540px),1fr));gap:28px;align-items:start}
+.phone .cards{grid-template-columns:repeat(auto-fill,minmax(min(100%,390px),1fr))}
+.card>h3{font-size:var(--text-7);margin:0 0 2px}
+.card>p{font-size:var(--text-3);color:var(--about);margin:0 0 10px}
+.card>p b{color:var(--ink)}
+.rec{display:inline-block;font-size:var(--text-1);font-weight:700;padding:2px 8px;border-radius:var(--radius-pill);background:var(--ink);color:var(--surface);margin-left:6px;vertical-align:2px}
+
+/* A dialog, drawn open and still */
+.dlg{background:var(--surface);border-radius:22px;box-shadow:0 0 0 1px var(--line),0 18px 48px rgb(0 0 0 / .12);padding:18px 24px 20px;max-width:520px}
+.phone .dlg{max-width:390px;border-radius:22px 22px 0 0;padding:0 16px 24px}
+.grab{display:none;width:40px;height:5px;margin:8px auto 4px;border-radius:3px;background:var(--line)}
+.phone .grab{display:block}
+.head{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}
+.head h4{font-family:"Fraunces Question","Open Runde",serif;font-weight:760;font-size:24px;margin:0}
+.x{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--soft);font-size:22px}
+.top{display:none;font-size:var(--text-5);min-height:44px;align-items:center}
+.phone .head{display:grid;grid-template-columns:1fr auto 1fr}
+.phone .head h4{font-family:inherit;font-size:var(--text-6);font-weight:700}
+.phone .head .x{display:none}
+.phone .top{display:inline-flex}
+.top.save{justify-self:end;font-weight:700}
+.top.cancel{color:var(--about)}
+label,.legend{display:block;font-size:var(--text-3);font-weight:600;margin:14px 0 6px}
+label .opt,.legend .opt{font-weight:400;color:var(--soft)}
+.in{font-size:var(--text-6);min-height:48px;padding:11px 18px;border-radius:var(--radius-pill);box-shadow:0 0 0 1.5px var(--field);color:var(--ink);overflow-wrap:anywhere}
+.in.empty{color:var(--soft)}
+.ta{border-radius:16px;padding:12px 16px;min-height:76px}
+.in.focus{box-shadow:0 0 0 1.5px var(--field),0 0 0 4px color-mix(in srgb,var(--blue) 35%,transparent)}
+.addr{display:flex;gap:10px;align-items:center;font-size:var(--text-7);min-height:56px}
+.fav{flex:none;width:26px;height:26px;border-radius:7px;background:var(--pic);display:grid;place-items:center;font-size:var(--text-1);font-weight:700;color:var(--soft)}
+.hint{font-size:var(--text-2);color:var(--soft);margin:4px 0 0 4px}
+.hint b{color:var(--ink);font-weight:600}
+.guess-tag{font-weight:400;color:var(--soft)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.chip{display:inline-flex;align-items:center;min-height:44px;padding:0 0 0 14px;border:1.5px solid var(--line);border-radius:var(--radius-pill);font-size:var(--text-4)}
+.chip i{font-style:normal;color:var(--soft);display:inline-grid;place-items:center;width:44px;height:44px;font-size:18px}
+.chip small{margin-left:4px;font-size:var(--text-2);color:var(--soft)}
+.tagin{min-height:46px;padding:11px 14px;border-radius:12px;box-shadow:0 0 0 1.5px var(--field);color:var(--soft);font-size:var(--text-6)}
+.suggest{margin:6px 0 0;padding:6px;border-radius:12px;box-shadow:0 0 0 1px var(--line);background:var(--surface)}
+.suggest div{min-height:40px;display:flex;align-items:center;padding:0 10px;border-radius:10px;font-size:var(--text-4)}
+.suggest div:first-child{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.addtags{display:inline-flex;align-items:center;gap:6px;min-height:44px;margin-top:6px;font-size:var(--text-4);font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.radio{display:flex;align-items:center;gap:10px;min-height:40px;font-size:var(--text-5)}
+.radio span{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--field)}
+.radio span.on{box-shadow:inset 0 0 0 5px var(--ink)}
+.pic{display:flex;gap:14px;align-items:center}
+.pic .p{width:84px;height:84px;border-radius:14px;background:var(--pic)}
+.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:var(--radius-pill);border:1px solid var(--line);font-size:var(--text-4);font-weight:600}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.foot{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.phone .foot{display:none}
+.found{display:grid;grid-template-columns:56px minmax(0,1fr);gap:12px;align-items:center;padding:14px;border-radius:var(--radius-card);background:var(--bg);margin:4px 0 6px}
+.found .p{width:56px;height:56px;border-radius:12px;background:var(--pic);display:grid;place-items:center;font-weight:700;color:var(--soft)}
+.found b{display:block}
+.found span{font-size:var(--text-2);color:var(--soft)}
+.note{display:flex;gap:8px;font-size:var(--text-3);margin:8px 0 0;padding:10px 14px;border-radius:12px;border:1.5px solid var(--line)}
+.note i{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;font-style:normal;font-weight:700;font-size:12px;margin-top:1px}
+.fade{opacity:.45}
+.undo{display:inline-flex;gap:16px;align-items:center;background:var(--ink);color:var(--surface);padding:10px 10px 10px 18px;border-radius:14px;font-size:var(--text-4);margin-top:14px}
+.undo b{padding:6px 14px;border-radius:10px;background:color-mix(in srgb,var(--surface) 14%,transparent)}
+.notes{margin-top:56px;max-width:76ch}
+.notes li{margin:0 0 8px;color:var(--about)}
+</style>
+</head>
+<body>
+<div class="doc">
+<h1>Your why in Edit link, tags in Save</h1>
+<p>Two small additions to the dialogs you already use. <b>#351</b> lets you change or remove a link's why in <b>Edit link…</b>. <b>#352</b> lets you add tags while you save. Each card changes one thing from the one before it. Faded parts are unchanged from today.</p>
+<div class="controls">
+<button id="phone" aria-pressed="false">Phone width</button>
+<button id="theme" aria-pressed="false">Dark</button>
+</div>
+
+<h2>Edit link: where the why goes (#351)</h2>
+<p class="sub">Today the dialog is Title, Tags, What is it for?, Picture. The why is the part you'd most often fix, so both options put it near the top.</p>
+<div class="cards">
+<div class="card"><h3>E1 · Under the title <span class="rec">Recommended</span></h3><p>Title, then <b>Why you saved it</b>, then Tags. The two things that are your words sit together.</p><div class="dlg" data-edit="title-why"></div></div>
+<div class="card"><h3>E2 · Under the tags</h3><p>Same field, moved below Tags. Keeps today's top of the dialog as it is.</p><div class="dlg" data-edit="tags-why"></div></div>
+</div>
+
+<h2>Edit link: a why an AI guessed</h2>
+<p class="sub">Most whys are yours. When an AI guessed one, the dialog has to show it's a guess, and say what Save does with it.</p>
+<div class="cards">
+<div class="card"><h3>G1 · The guess in the box <span class="rec">Recommended</span></h3><p>The guess is filled in, and the label says <b>(a guess)</b>. Change the words and it becomes yours. Leave it alone and it stays a guess, the way the To keep guess works today.</p><div class="dlg" data-edit="guess-box"></div></div>
+<div class="card"><h3>G2 · The guess beside an empty box</h3><p>The box starts empty. The guess shows under it with <b>Use it</b>, like the page's own title under Title. An empty box leaves the guess alone.</p><div class="dlg" data-edit="guess-use"></div></div>
+<div class="card"><h3>Removing a why</h3><p>Empty the box and press Save. The why is gone, and the Undo bar can bring it back. The same bar covers everything else Save changed.</p><div class="dlg" data-edit="cleared"></div><div class="undo">Saved changes to “The quiet cost of meetings”. <b>Undo</b></div></div>
+</div>
+
+<h2>Save: where tags go (#352)</h2>
+<p class="sub">The same tag picker as Edit link: your tags are suggested as you type, Enter adds one, x removes it. Tags added here are yours, not guesses.</p>
+<div class="cards">
+<div class="card"><h3>S1 · Under the why <span class="rec">Recommended</span></h3><p>Address, Title, Why, then <b>Tags</b>. The order goes from what you must give to what's nice to have.</p><div class="dlg" data-save="under"></div></div>
+<div class="card"><h3>S2 · Above the why</h3><p>Same field, moved above Why, next to the title.</p><div class="dlg" data-save="above"></div></div>
+<div class="card"><h3>S3 · Behind “Add tags”</h3><p>The dialog stays three fields long. <b>Add tags</b> under Why opens the field when you want it.</p><div class="dlg" data-save="link"></div></div>
+<div class="card"><h3>S1 while typing</h3><p>Typing shows matching tags you already use. Enter or a click adds one.</p><div class="dlg" data-save="typing"></div></div>
+</div>
+
+<h2>Save: a page you saved before</h2>
+<p class="sub">Your answer: the tags are added to the link you already have, and the dialog says so.</p>
+<div class="cards">
+<div class="card"><h3>Already saved, tags added</h3><p>Tags the link already had stay. Only new ones are added, and the note names them.</p><div class="dlg" data-save="already"></div></div>
+</div>
+
+<div class="notes">
+<h2>What stays the same either way</h2>
+<ul>
+<li>Your why and tags in these dialogs are recorded as yours. An AI's later guess can't replace them (#342).</li>
+<li>Edit link's Save sends only what you changed. If an AI changed the why or the tags after you opened the dialog, Save is refused with nothing saved, and you reload, as it already works for tags.</li>
+<li>After Save, every card for the link shows the new why and its space and color at once: Home, All links, your spaces and search.</li>
+<li>Controls stay at least 44px tall, and errors show in the dialog's message box in plain words, never in amber.</li>
+</ul>
+</div>
+</div>
+
+<script>
+const T = { title: "The quiet cost of meetings", why: "Ideas for fewer status meetings", guess: "An article about how meetings eat focus time" };
+const head = (h) => `<div class="grab"></div><div class="head"><span class="top cancel">Cancel</span><h4>${h}</h4><span class="top save">Save</span><span class="x">×</span></div>`;
+const foot = `<div class="foot"><span class="btn">Cancel</span><span class="btn primary">Save</span></div>`;
+const chips = (list) => `<div class="chips">${list.map(([n, g]) => `<span class="chip">${n}${g ? "<small>(a guess)</small>" : ""}<i>×</i></span>`).join("")}</div>`;
+const tagsField = (list, typing) => `<span class="legend">Tags</span>${chips(list)}<label style="margin-top:0;font-weight:400;color:var(--soft);font-size:var(--text-2)">Add a tag</label><div class="tagin">${typing ? '<span style="color:var(--ink)">wor</span>' : ""}</div>${typing ? '<div class="suggest"><div>work habits</div><div>workplace</div></div>' : ""}`;
+const title = `<label>Title</label><div class="in">${T.title}</div>`;
+const why = (text, opts = {}) => `<label>Why you saved it ${opts.guess ? '<span class="guess-tag">(a guess)</span>' : ""}</label><div class="in ta ${text ? "" : "empty"} ${opts.focus ? "focus" : ""}">${text || (opts.ph || "")}</div>${opts.hint || ""}`;
+const rest = `<div class="fade"><span class="legend">What is it for?</span><div class="radio"><span class="on"></span>To explore</div><div class="radio"><span></span>To keep</div><span class="legend">Picture</span><div class="pic"><div class="p"></div><span class="btn">Choose a picture…</span></div></div>`;
+const tagsFaded = `<div class="fade">${tagsField([["Work"], ["meetings"]])}</div>`;
+const edit = {
+  "title-why": head("Edit link") + `<div class="fade">${title}</div>` + why(T.why) + tagsFaded + rest + foot,
+  "tags-why": head("Edit link") + `<div class="fade">${title}</div>` + tagsFaded + why(T.why) + rest + foot,
+  "guess-box": head("Edit link") + `<div class="fade">${title}</div>` + why(T.guess, { guess: true, hint: '<p class="hint">An AI guessed this. Change it to make it yours.</p>' }) + tagsFaded + rest + foot,
+  "guess-use": head("Edit link") + `<div class="fade">${title}</div>` + why("", { ph: "Say why, in your words", hint: `<p class="hint">An AI guessed: “${T.guess}” <b style="text-decoration:underline">Use it</b></p>` }) + tagsFaded + rest + foot,
+  "cleared": head("Edit link") + `<div class="fade">${title}</div>` + why("", { focus: true, ph: "No reason given", hint: '<p class="hint">Save will remove the why.</p>' }) + tagsFaded + rest + foot,
+};
+const addr = `<label>Address</label><div class="in addr"><span class="fav">H</span>https://hbr.org/2026/03/the-quiet-cost-of-meetings</div><p class="hint">Saving a page from hbr.org</p>`;
+const sTitle = `<label>Title <span class="opt">(optional)</span></label><div class="in">${T.title}</div>`;
+const sWhy = `<label>Why are you saving it? <span class="opt">(optional)</span></label><div class="in ta">For the team retro on Thursday</div>`;
+const sTags = (typing) => `<span class="legend">Tags <span class="opt">(optional)</span></span>${chips([["Work"]])}<label style="margin-top:0;font-weight:400;color:var(--soft);font-size:var(--text-2)">Add a tag</label><div class="tagin">${typing ? '<span style="color:var(--ink)">wor</span>' : ""}</div>${typing ? '<div class="suggest"><div>work habits</div><div>workplace</div></div>' : ""}`;
+const save = {
+  under: head("Save a link") + `<div class="fade">${addr}${sTitle}${sWhy}</div>` + sTags() + foot,
+  above: head("Save a link") + `<div class="fade">${addr}${sTitle}</div>` + sTags() + `<div class="fade">${sWhy}</div>` + foot,
+  link: head("Save a link") + `<div class="fade">${addr}${sTitle}${sWhy}</div><span class="addtags">＋ Add tags</span>` + foot,
+  typing: head("Save a link") + `<div class="fade">${addr}${sTitle}${sWhy}</div>` + sTags(true) + foot,
+  already: head("Save a link") + `<div class="found"><div class="p">HB</div><div><b>${T.title}</b><span>Already saved on Oct 3 · hbr.org</span></div></div><p class="note"><i>i</i><span>Added your tags: <b>meetings</b>, <b>team retro</b>. It already had <b>Work</b>.</span></p><div class="foot"><span class="btn">Edit link…</span><span class="btn primary">Open it</span></div>`,
+};
+for (const el of document.querySelectorAll("[data-edit]")) el.innerHTML = edit[el.dataset.edit];
+for (const el of document.querySelectorAll("[data-save]")) el.innerHTML = save[el.dataset.save];
+const toggle = (id, on) => document.getElementById(id).addEventListener("click", (e) => { const v = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", v); on(v); });
+toggle("phone", (v) => document.body.classList.toggle("phone", v));
+toggle("theme", (v) => { document.documentElement.dataset.theme = v ? "dark" : "light"; });
+</script>
+</body>
+</html>

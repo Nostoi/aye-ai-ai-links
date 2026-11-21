@@ -10,6 +10,7 @@ import { createApp } from "./app.js";
 import { keyIdentify } from "./auth/agent-keys.js";
 import { openAuthDatabase } from "./auth/better-auth.js";
 import { buildAuth } from "./auth/build-auth.js";
+import { loginOwners } from "./auth/login-owners.js";
 import type { MetadataRefresher } from "./auth/metadata-refresher.js";
 import type { JsonFetch } from "./auth/metadata-stash.js";
 import { modelRoot, type ServerConfig } from "./config.js";
@@ -41,6 +42,7 @@ import { MODEL_KEY, revisionDir } from "./search/model.js";
 import { loadTransformersEmbedder } from "./search/transformers-embedder.js";
 import { openDatabase } from "./store/database.js";
 import { SqliteKeyStore } from "./store/key-store.js";
+import { SqliteStore } from "./store/sqlite-store.js";
 
 const DRAIN_MS = 10_000;
 /** The drain, this wait and the closes must end inside launchd's 20 s `ExitTimeOut`. */
@@ -112,7 +114,7 @@ export type StartOptions = {
  * folder beside the database and deletes the exports and temporary files builds left there (a
  * symlink or non-directory refuses the start), opens the auth
  * database, builds the auth side (migrations,
- * internal client, and the client metadata of every connected OAuth client) and serves on
+ * internal client, and the client metadata of every connected OAuth client), ensures a links-database owner row for every login and serves on
  * loopback; Tailscale Serve reaches it from the tailnet and a Cloudflare Tunnel from the internet.
  * The auth database stays locked against every other process until it closes, so the owner CLI
  * runs only while the server is stopped.
@@ -352,6 +354,9 @@ export async function startServer(
       refresherOptions: { intervalMs: refresherIntervalMs },
     });
     refresher = auth.refresher;
+    // Sign-up is closed, so every login exists before the server starts; each needs its row here to save or write a note.
+    const store = new SqliteStore(db);
+    for (const { id, name } of loginOwners(authDb)) store.ensureUser(id, name);
     const built = createApp({
       deps: {
         ...deps,

@@ -103,7 +103,7 @@ const menuRows = (el: Element | null) =>
 /** Buttons a card shows outside its ⋯ menu. */
 const shownButtons = (el: Element | null) =>
   [...(el?.querySelectorAll("button") ?? [])]
-    .filter((b) => !b.closest("details.card-menu") && !b.closest("form"))
+    .filter((b) => !b.closest("details.card-menu") && !b.closest("form") && !b.closest("[hidden]"))
     .map((b) => `${(b as HTMLElement).dataset.act} ${b.textContent}`);
 
 describe("Explore", () => {
@@ -399,10 +399,14 @@ describe("Explore", () => {
   it("shows the featured why under a You saved it for label without quotes, as a guess when inferred, with the reason ending the grey line", () => {
     const said = dom(render([card([{ kind: "not_opened_recently" }])]));
     expect(said.querySelector(".feature-why .why-label")?.textContent).toBe("You saved it for");
-    expect(said.querySelector(".feature-why")?.textContent).toBe("You saved it forto compare");
+    expect(said.querySelector(".feature-why [data-card-why]")?.textContent).toBe(
+      "You saved it forto compare",
+    );
     expect(lineParts(said.toString())).toEqual(["example.com", "saved over a month ago"]);
     const plain = dom(render([card([], { why: { text: "maybe solar", source: "inferred" } })]));
-    expect(plain.querySelector(".feature-why")?.textContent).toBe("Why (a guess): maybe solar");
+    expect(plain.querySelector(".feature-why [data-card-why]")?.textContent).toBe(
+      "Why (a guess): maybe solar",
+    );
     expect(plain.querySelector(".feature-why .why-label")).toBeNull();
     expect(lineParts(plain.toString())).toEqual(["example.com", "saved March 12"]);
   });
@@ -419,7 +423,7 @@ describe("Explore", () => {
     const rows = [...d.querySelectorAll(".worth-row")];
     expect(rows[0]?.querySelector(".also-why")?.textContent).toBe("Why (a guess): x");
     expect(rows[1]?.querySelector(".also-why")?.textContent).toBe("y");
-    expect(rows[2]?.querySelector(".also-why")).toBeNull();
+    expect(rows[2]?.querySelector(".also-why:not([hidden])")).toBeNull();
     expect(
       [...(rows[2]?.querySelectorAll(".card-line > *") ?? [])].map((p) => p.textContent),
     ).toEqual(["example.com", "saved March 12"]);
@@ -936,7 +940,7 @@ describe("the home page's script", () => {
     ]);
     const article = p.$(`[data-id="${id}"]`);
     expect(article.classList.contains("needs-you")).toBe(false);
-    expect(article.querySelector(".ask")).toBeNull();
+    expect(article.querySelector(".ask")?.hasAttribute("hidden")).toBe(true);
     const answer = article.querySelector(".feature-why [data-why-answer]") as HTMLElement;
     expect(answer.hidden).toBe(false);
     expect(answer.querySelector(".why-label")?.textContent).toBe("You saved it for");

@@ -426,7 +426,7 @@ describe("a space's archived links", () => {
     expect(card?.className).toContain("faded");
     expect(card?.querySelector("h3")?.textContent?.trim()).toBe("Link 1");
     expect(card?.querySelector(".ask, button[data-act=why], form.why-form")).toBeNull();
-    expect(card?.querySelector(".row-why")).toBeNull();
+    expect(card?.querySelector(".row-why:not([hidden])")).toBeNull();
     expect(card?.outerHTML).not.toMatch(/amber|needs/);
     expect(html).not.toContain("/home/why");
   });
@@ -555,7 +555,7 @@ describe("Tell me why on a space card", () => {
       { url: "/home/why", body: { id: "7", text: "  for the <attic>  " }, redirect: "manual" },
     ]);
     const card = r.document.querySelector('[data-id="7"]') as HTMLElement;
-    expect(card.querySelector(".ask")).toBeNull();
+    expect(card.querySelector(".ask")?.hasAttribute("hidden")).toBe(true);
     const why = card.querySelector(".row-why") as HTMLElement;
     expect(why.hidden).toBe(false);
     expect(why.textContent).toBe("for the <attic>");
@@ -570,7 +570,7 @@ describe("Tell me why on a space card", () => {
     ).not.toBeNull();
     const r = await answerWhy(withSummary, { status: 204 }, "for the attic");
     const card = r.document.querySelector('[data-id="7"]') as HTMLElement;
-    expect(card.querySelector(".row-about")).toBeNull();
+    expect(card.querySelector(".row-about")?.hasAttribute("hidden")).toBe(true);
     expect(card.querySelector(".row-why")?.textContent).toBe("for the attic");
   });
 
@@ -640,7 +640,7 @@ describe("Show older links", () => {
     fire(card.querySelector("form.why-form"), "submit");
     await settle();
     expect(posted).toEqual(["/home/why"]);
-    expect(card.querySelector(".ask")).toBeNull();
+    expect(card.querySelector(".ask")?.hasAttribute("hidden")).toBe(true);
     expect(card.querySelector(".row-why[data-why-answer]")?.textContent).toBe("for the shed");
   });
 

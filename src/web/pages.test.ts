@@ -432,7 +432,7 @@ describe("the search page's cards", () => {
     );
     const none = results([link()]);
     expect(none).toContain("No why yet");
-    expect(none).toContain('<p class="small">No why yet</p>');
+    expect(none).toContain('<p class="small" data-card-why="line">No why yet</p>');
   });
 
   it("shows a non-web URL as text, not a link", () => {

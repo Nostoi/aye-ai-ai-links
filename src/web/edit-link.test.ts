@@ -265,6 +265,8 @@ describe("the card menu and the card data", () => {
         "data-tags": KITCHEN_TAGS,
         "data-intent": "explore",
         "data-intent-source": "",
+        "data-why": "",
+        "data-why-source": "",
       });
       expect(data(second)).toEqual({
         "data-id": "2",
@@ -279,6 +281,8 @@ describe("the card menu and the card data", () => {
         "data-tags": KITCHEN_TAGS,
         "data-intent": "explore",
         "data-intent-source": "",
+        "data-why": "",
+        "data-why-source": "",
       });
     },
   );

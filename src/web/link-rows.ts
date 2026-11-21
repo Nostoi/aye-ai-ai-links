@@ -12,7 +12,7 @@ import { goneLine } from "./gone-line.js";
 import { linkTitle } from "./open-link.js";
 import { escapeHtml } from "./page.js";
 import { spaceClass, tile } from "./pages.js";
-import { askWhy, whyAnswer } from "./tell-why.js";
+import { askWhy, WHY_GUESS, whyAnswer } from "./tell-why.js";
 
 /** How All links and space pages show their links: a quiet list, or the grid of pictures. */
 export type View = "list" | "pictures";
@@ -29,7 +29,7 @@ export const viewOf = (value: string | undefined): View =>
  * Explore's cards read it the same way.
  */
 export const whyText = (why: NonNullable<Link["why"]>) =>
-  why.source === "inferred" ? `Why (a guess): ${escapeHtml(why.text)}` : escapeHtml(why.text);
+  why.source === "inferred" ? `${WHY_GUESS}${escapeHtml(why.text)}` : escapeHtml(why.text);
 
 /**
  * One link as a row of the list, which the Pictures view draws as a card: `tile()`'s picture, the
@@ -64,13 +64,10 @@ export function linkRow(
     from?: string | undefined;
   },
 ): string {
-  const about =
-    !link.why && link.summary ? `<p class="row-about">${escapeHtml(link.summary)}</p>\n` : "";
-  const why = link.why
-    ? `<p class="row-why">${whyText(link.why)}</p>\n`
-    : ask
-      ? `${whyAnswer("p", "row-why")}\n${askWhy(link)}\n`
-      : "";
+  const about = link.summary
+    ? `<p class="row-about" data-card-summary${link.why ? " hidden" : ""}>${escapeHtml(link.summary)}</p>\n`
+    : "";
+  const why = `${whyAnswer("p", "row-why", undefined, link.why ? whyText(link.why) : "")}\n${ask ? `${askWhy(link)}\n` : ""}`;
   const warning = goneLine(link, gone);
   return `<li class="link-row${spaceClass(space)}${faded ? " faded" : ""}" data-id="${escapeHtml(link.id)}"${editData(link, picture, info)}>
 ${tile(link, picture, "row-pic")}

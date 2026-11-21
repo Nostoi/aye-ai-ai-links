@@ -22,7 +22,7 @@ export function renderCard(
   info: PictureInfo | undefined,
   catalog: Tag[],
 ): string {
-  const why = link.why ? `<p class="ask-why">${whyText(link.why)}</p>\n` : "";
+  const why = `<p class="ask-why" data-card-why="text"${link.why ? "" : " hidden"}>${link.why ? whyText(link.why) : ""}</p>\n`;
   const space = linkSpace(link, catalog);
   const name = (t: Link["tags"][number]) =>
     `${t.key === space?.key ? DOT : ""}${escapeHtml(t.name)}`;

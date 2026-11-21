@@ -63,7 +63,7 @@ describe("a link row", () => {
   });
 
   it("shows no why line without a why, unless it asks Tell me why with a slot for the answer", () => {
-    expect(row(link()).querySelector(".row-why, .ask")).toBeNull();
+    expect(row(link()).querySelector(".row-why:not([hidden]), .ask")).toBeNull();
     const asked = row(link(), { ask: true });
     expect(asked.querySelector("button[data-act=why]")?.textContent).toBe("Tell me why");
     const answer = asked.querySelector("[data-why-answer]");
@@ -80,6 +80,7 @@ describe("a link row", () => {
     expect([...(body?.children ?? [])].map((e) => e.className || e.tagName)).toEqual([
       "H3",
       "row-about",
+      "row-why",
       "card-line",
     ]);
     expect(d.querySelector(".row-about")?.innerHTML).toBe("&lt;b&gt;x&lt;/b&gt;");
@@ -88,11 +89,11 @@ describe("a link row", () => {
 
   it("shows no summary on a row with a why, and none on a row with neither", () => {
     const withWhy = row(link({ summary: "A summary", why: { text: "w", source: "stated" } }));
-    expect(withWhy.querySelector(".row-about")).toBeNull();
+    expect(withWhy.querySelector(".row-about")?.hasAttribute("hidden")).toBe(true);
     expect(withWhy.querySelector(".row-why")?.textContent).toBe("w");
     expect(row(link()).querySelector(".row-about")).toBeNull();
     const guess = row(link({ summary: "A summary", why: { text: "w", source: "inferred" } }));
-    expect(guess.querySelector(".row-about")).toBeNull();
+    expect(guess.querySelector(".row-about")?.hasAttribute("hidden")).toBe(true);
     expect(guess.querySelector(".row-why")?.textContent).toBe("Why (a guess): w");
   });
 

@@ -1,5 +1,6 @@
 import { MAX_IMAGE_BYTES } from "../core/image-type.js";
 import { INTENT_VIEW } from "./intent.js";
+import { NO_WHY, WHY_GUESS, WHY_LABEL, WHY_PLAIN } from "./tell-why.js";
 
 const CLOSE = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 const REMOVE_TAG = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
@@ -27,6 +28,9 @@ export const editDialog =
 <label for="edit-title">Title</label>
 <input id="edit-title" class="edit-title" name="title" autocomplete="off">
 <p class="edit-page-title" hidden><span>Page's title: “<span data-page-title></span>”</span><button type="button" class="edit-use" data-edit="use-title">Use it</button></p>
+<label for="edit-why" class="edit-why-label">Why you saved it <span class="edit-why-guess" data-why-guess hidden>(a guess)</span></label>
+<textarea id="edit-why" class="edit-why" name="why" rows="3"></textarea>
+<p class="edit-why-hint" data-why-hint hidden>An AI guessed this. Change it to make it yours.</p>
 <fieldset class="edit-tags">
 <legend>Tags</legend>
 <ul class="edit-chips"></ul>
@@ -71,11 +75,14 @@ export const SHRINK_SIDE = 1600;
  * `showUndo`).
  * - The card's menu opens the dialog, filled from the card's data attributes (`editData`).
  * - A Save or Undo shows its answer in the card's `[data-card-title]` and `tile()`'s `[data-pic]`
- *   box, whatever their classes; a card without one of them skips it.
+ *   box, whatever their classes; a card without one of them skips it. The same for its why, in
+ *   each `[data-card-why]` in that card's own wording (`showWhy`), and its `[data-card-summary]`.
  * - A picked, pasted or dropped picture is sent as chosen when it is one of the four types, at most
  *   2 MiB and at most SHRINK_SIDE px on its longest side. Otherwise it is re-encoded as WebP (or
  *   whatever kept type the browser gives) at most SHRINK_SIDE px, stepping down until it fits. The
  *   latest pick wins (`pickTurn`); Save waits while one is prepared.
+ * - The why box opens on the card's why (`data-why`, `data-why-source`); a guess is labelled until
+ *   its text changes, and the why is sent, with the one the dialog opened with, only once it differs.
  * - Save sends only what changed, as a form. The card shows the server's answer, not what was
  *   sent, and Undo shows its own answer. A refusal stays in the dialog; an Undo that does not
  *   succeed (such as a conflict) shows in `#error`, the page's alert, as Keep handy's Undo does.
@@ -112,6 +119,9 @@ const useTitle = dialog.querySelector("[data-edit=use-title]");
 const deleteButton = dialog.querySelector("[data-edit=delete]");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
+const whyField = dialog.querySelector("#edit-why");
+const whyGuess = dialog.querySelector("[data-why-guess]");
+const whyHint = dialog.querySelector("[data-why-hint]");
 const tagList = dialog.querySelector(".edit-chips");
 const tagField = dialog.querySelector("#edit-tag-input");
 const suggestList = dialog.querySelector(".edit-suggest");
@@ -137,6 +147,20 @@ intentSet.addEventListener("click", (event) => {
   intentTouched = true;
   intentName.textContent = "To keep";
 });
+// openedWhy is what the card held when the dialog opened (the Save's "seen"); the why is sent only
+// when the box's text differs from it. An AI's guess is called one until the text changes.
+let openedWhy = { text: "", source: null };
+const showGuess = () => {
+  const guess = openedWhy.source === "inferred" && whyField.value === openedWhy.text;
+  whyGuess.hidden = !guess;
+  whyHint.hidden = !guess;
+};
+const readWhy = (d) => {
+  openedWhy = { text: d.why || "", source: d.whySource || null };
+  whyField.value = openedWhy.text;
+  showGuess();
+};
+whyField.addEventListener("input", showGuess);
 // tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
 // "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
 // open are dropped.
@@ -160,6 +184,7 @@ let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   titleField.toggleAttribute("readonly", saving);
+  whyField.toggleAttribute("readonly", saving);
   for (const c of [chooseButton, removeButton, useTitle, deleteButton, tagField]) c.disabled = saving;
   for (const c of dialog.querySelectorAll(".edit-tag-remove, .edit-suggest-item")) c.disabled = saving;
 };
@@ -343,6 +368,43 @@ const pick = async (file) => {
   picture = { kind: "file", blob: ready };
   render();
 };
+// The card's why in the card's own wording (data-card-why): "text" the words, "line" a search
+// result's "Why: ...", "feature" the featured card's label above them; a guess says so. Its
+// summary shows only while there is no why; a card's ask for one and its amber outline come back
+// with no why.
+const showWhy = (target, why, summary) => {
+  const guess = !!why && why.source === "inferred";
+  target.dataset.why = why ? why.text : "";
+  target.dataset.whySource = why ? why.source : "";
+  for (const el of target.querySelectorAll("[data-card-why]")) {
+    const kind = el.dataset.cardWhy;
+    el.replaceChildren();
+    if (kind === "line") {
+      el.textContent = !why ? ${JSON.stringify(NO_WHY)} : (guess ? ${JSON.stringify(WHY_GUESS)} : ${JSON.stringify(WHY_PLAIN)}) + why.text;
+      continue;
+    }
+    el.hidden = !why;
+    if (!why) continue;
+    if (kind === "feature" && !guess) {
+      const label = document.createElement("span");
+      label.className = "why-label";
+      label.textContent = ${JSON.stringify(WHY_LABEL)};
+      el.append(label, why.text);
+    } else el.textContent = (guess ? ${JSON.stringify(WHY_GUESS)} : "") + why.text;
+  }
+  const about = target.querySelector("[data-card-summary]");
+  if (about) {
+    about.textContent = summary || "";
+    about.hidden = !!why || !summary;
+  }
+  const ask = target.querySelector(".ask");
+  if (ask) {
+    ask.hidden = !!why;
+    const askForm = ask.querySelector("form.why-form");
+    if (askForm) askForm.hidden = true;
+  }
+  if (target.classList.contains("worth-feature")) target.classList.toggle("needs-you", !why);
+};
 const showCard = (target, answer) => {
   const d = target.dataset;
   d.title = answer.title === null ? "" : answer.title;
@@ -354,6 +416,7 @@ const showCard = (target, answer) => {
   d.initials = answer.initials;
   d.tags = JSON.stringify(answer.tags);
   showIntent(target, answer.intent, answer.intentSource, keptTool(target));
+  showWhy(target, answer.why || null, answer.summary || null);
   // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
   // which a Home card has none of.
   for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
@@ -433,6 +496,7 @@ const open = (from, menu) => {
   const d = card.dataset;
   titleField.value = d.title;
   openedTitle = titleField.value;
+  readWhy(d);
   readTags(d);
   readIntent(d);
   loadNames();
@@ -576,6 +640,11 @@ form.addEventListener("submit", async (event) => {
   editError.textContent = "";
   addTag(tagField.value);
   renderTags();
+  if (whyField.value !== openedWhy.text) {
+    body.append("why", whyField.value);
+    body.append("whySeen", JSON.stringify(openedWhy.source ? openedWhy : null));
+    changed = true;
+  }
   const keys = (list) => JSON.stringify(list.map((t) => t.key));
   if (keys(tags) !== keys(openedTags)) {
     body.append("tags", JSON.stringify(tags.map((t) => t.name)));
@@ -682,6 +751,7 @@ document.addEventListener("aye-edit", async (event) => {
   dragDepth = 0;
   titleField.value = "";
   namesTurn++;
+  readWhy({});
   readTags({});
   pageLine.hidden = true;
   for (const old of preview.querySelectorAll("img, .edit-initials")) old.remove();

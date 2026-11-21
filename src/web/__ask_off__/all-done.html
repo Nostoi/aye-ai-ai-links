@@ -431,7 +431,9 @@ img.row-pic{display:block}
 .edit-close svg,.edit-choose svg{flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .edit-link label,.edit-picture legend{font-size:var(--text-3);font-weight:600}
 .edit-title{height:46px;padding:0 14px;border-radius:12px}
-.edit-page-title{display:flex;flex-wrap:wrap;align-items:center;gap:0 4px;margin:4px 0 0;font-size:var(--text-2);color:var(--soft);overflow-wrap:anywhere}
+.edit-page-title,.edit-why-hint{display:flex;flex-wrap:wrap;align-items:center;gap:0 4px;margin:4px 0 0;font-size:var(--text-2);color:var(--soft);overflow-wrap:anywhere}
+.edit-why-label{display:block;margin-top:16px}
+.edit-why-guess{font-weight:400;color:var(--soft)}
 .edit-use{min-height:44px;padding:0 4px;border:0;background:none;color:var(--ink);font-size:var(--text-2);font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .edit-picture{min-width:0;margin:16px 0 0;padding:0;border:0}
 .edit-picture legend{padding:0;margin:0 0 8px}
@@ -635,11 +637,12 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <section class="month" data-month="2026-03">
 <h2>March</h2>
 <ul class="link-rows">
-<li class="link-row space-clay faded" data-id="4" data-title="Title 4" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T4" data-tags="[{&quot;key&quot;:&quot;kitchen&quot;,&quot;name&quot;:&quot;Kitchen&quot;,&quot;source&quot;:&quot;stated&quot;}]" data-intent="explore" data-intent-source="">
+<li class="link-row space-clay faded" data-id="4" data-title="Title 4" data-page-title="" data-version="" data-fit="" data-own="0" data-page-version="" data-page-fit="" data-initials="T4" data-tags="[{&quot;key&quot;:&quot;kitchen&quot;,&quot;name&quot;:&quot;Kitchen&quot;,&quot;source&quot;:&quot;stated&quot;}]" data-intent="explore" data-intent-source="" data-why="to compare" data-why-source="stated">
 <div class="row-pic initials-box" data-pic aria-hidden="true"><span class="pic-initials">T4</span></div>
 <div class="row-body">
 <h3 data-card-title><a href="https://example.com/4" target="_blank" rel="noopener noreferrer" data-open>Title 4</a></h3>
-<p class="row-why">to compare</p>
+<p class="row-about" data-card-summary hidden>A summary</p>
+<p class="row-why" data-why-answer data-card-why="text">to compare</p>
 <p class="card-line"><span class="line-space"><span class="dot" aria-hidden="true"></span><span data-space-name>Kitchen</span></span><span>example.com</span><span data-intent-line hidden></span><span>Archived</span></p>
 </div>
 <details class="card-menu" name="menu">
@@ -664,6 +667,9 @@ button.primary:active:not(:disabled),a.button.primary:active{background:color-mi
 <label for="edit-title">Title</label>
 <input id="edit-title" class="edit-title" name="title" autocomplete="off">
 <p class="edit-page-title" hidden><span>Page's title: “<span data-page-title></span>”</span><button type="button" class="edit-use" data-edit="use-title">Use it</button></p>
+<label for="edit-why" class="edit-why-label">Why you saved it <span class="edit-why-guess" data-why-guess hidden>(a guess)</span></label>
+<textarea id="edit-why" class="edit-why" name="why" rows="3"></textarea>
+<p class="edit-why-hint" data-why-hint hidden>An AI guessed this. Change it to make it yours.</p>
 <fieldset class="edit-tags">
 <legend>Tags</legend>
 <ul class="edit-chips"></ul>
@@ -849,6 +855,9 @@ const useTitle = dialog.querySelector("[data-edit=use-title]");
 const deleteButton = dialog.querySelector("[data-edit=delete]");
 const editError = dialog.querySelector("#edit-error");
 const saves = [...dialog.querySelectorAll("[data-edit=save]")];
+const whyField = dialog.querySelector("#edit-why");
+const whyGuess = dialog.querySelector("[data-why-guess]");
+const whyHint = dialog.querySelector("[data-why-hint]");
 const tagList = dialog.querySelector(".edit-chips");
 const tagField = dialog.querySelector("#edit-tag-input");
 const suggestList = dialog.querySelector(".edit-suggest");
@@ -884,6 +893,20 @@ intentSet.addEventListener("click", (event) => {
   intentTouched = true;
   intentName.textContent = "To keep";
 });
+// openedWhy is what the card held when the dialog opened (the Save's "seen"); the why is sent only
+// when the box's text differs from it. An AI's guess is called one until the text changes.
+let openedWhy = { text: "", source: null };
+const showGuess = () => {
+  const guess = openedWhy.source === "inferred" && whyField.value === openedWhy.text;
+  whyGuess.hidden = !guess;
+  whyHint.hidden = !guess;
+};
+const readWhy = (d) => {
+  openedWhy = { text: d.why || "", source: d.whySource || null };
+  whyField.value = openedWhy.text;
+  showGuess();
+};
+whyField.addEventListener("input", showGuess);
 // tags is what the dialog shows now, openedTags what the card held when it opened (the Save's
 // "seen"), catalog the owner's tag names. namesTurn moves on each open, so the names of an earlier
 // open are dropped.
@@ -907,6 +930,7 @@ let heldUndo = null;
 const syncBusy = () => {
   for (const b of saves) b.disabled = preparing || saving;
   titleField.toggleAttribute("readonly", saving);
+  whyField.toggleAttribute("readonly", saving);
   for (const c of [chooseButton, removeButton, useTitle, deleteButton, tagField]) c.disabled = saving;
   for (const c of dialog.querySelectorAll(".edit-tag-remove, .edit-suggest-item")) c.disabled = saving;
 };
@@ -1090,6 +1114,43 @@ const pick = async (file) => {
   picture = { kind: "file", blob: ready };
   render();
 };
+// The card's why in the card's own wording (data-card-why): "text" the words, "line" a search
+// result's "Why: ...", "feature" the featured card's label above them; a guess says so. Its
+// summary shows only while there is no why; a card's ask for one and its amber outline come back
+// with no why.
+const showWhy = (target, why, summary) => {
+  const guess = !!why && why.source === "inferred";
+  target.dataset.why = why ? why.text : "";
+  target.dataset.whySource = why ? why.source : "";
+  for (const el of target.querySelectorAll("[data-card-why]")) {
+    const kind = el.dataset.cardWhy;
+    el.replaceChildren();
+    if (kind === "line") {
+      el.textContent = !why ? "No why yet" : (guess ? "Why (a guess): " : "Why: ") + why.text;
+      continue;
+    }
+    el.hidden = !why;
+    if (!why) continue;
+    if (kind === "feature" && !guess) {
+      const label = document.createElement("span");
+      label.className = "why-label";
+      label.textContent = "You saved it for";
+      el.append(label, why.text);
+    } else el.textContent = (guess ? "Why (a guess): " : "") + why.text;
+  }
+  const about = target.querySelector("[data-card-summary]");
+  if (about) {
+    about.textContent = summary || "";
+    about.hidden = !!why || !summary;
+  }
+  const ask = target.querySelector(".ask");
+  if (ask) {
+    ask.hidden = !!why;
+    const askForm = ask.querySelector("form.why-form");
+    if (askForm) askForm.hidden = true;
+  }
+  if (target.classList.contains("worth-feature")) target.classList.toggle("needs-you", !why);
+};
 const showCard = (target, answer) => {
   const d = target.dataset;
   d.title = answer.title === null ? "" : answer.title;
@@ -1101,6 +1162,7 @@ const showCard = (target, answer) => {
   d.initials = answer.initials;
   d.tags = JSON.stringify(answer.tags);
   showIntent(target, answer.intent, answer.intentSource, keptTool(target));
+  showWhy(target, answer.why || null, answer.summary || null);
   // The card's colour is its space's; its grey line names the space in its hidden slot (cardLine),
   // which a Home card has none of.
   for (const c of [...target.classList]) if (c.startsWith("space-")) target.classList.remove(c);
@@ -1176,6 +1238,7 @@ const open = (from, menu) => {
   const d = card.dataset;
   titleField.value = d.title;
   openedTitle = titleField.value;
+  readWhy(d);
   readTags(d);
   readIntent(d);
   loadNames();
@@ -1319,6 +1382,11 @@ form.addEventListener("submit", async (event) => {
   editError.textContent = "";
   addTag(tagField.value);
   renderTags();
+  if (whyField.value !== openedWhy.text) {
+    body.append("why", whyField.value);
+    body.append("whySeen", JSON.stringify(openedWhy.source ? openedWhy : null));
+    changed = true;
+  }
   const keys = (list) => JSON.stringify(list.map((t) => t.key));
   if (keys(tags) !== keys(openedTags)) {
     body.append("tags", JSON.stringify(tags.map((t) => t.name)));

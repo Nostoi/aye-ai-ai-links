@@ -431,7 +431,9 @@ img.row-pic{display:block}
 .edit-close svg,.edit-choose svg{flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .edit-link label,.edit-picture legend{font-size:var(--text-3);font-weight:600}
 .edit-title{height:46px;padding:0 14px;border-radius:12px}
-.edit-page-title{display:flex;flex-wrap:wrap;align-items:center;gap:0 4px;margin:4px 0 0;font-size:var(--text-2);color:var(--soft);overflow-wrap:anywhere}
+.edit-page-title,.edit-why-hint{display:flex;flex-wrap:wrap;align-items:center;gap:0 4px;margin:4px 0 0;font-size:var(--text-2);color:var(--soft);overflow-wrap:anywhere}
+.edit-why-label{display:block;margin-top:16px}
+.edit-why-guess{font-weight:400;color:var(--soft)}
 .edit-use{min-height:44px;padding:0 4px;border:0;background:none;color:var(--ink);font-size:var(--text-2);font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .edit-picture{min-width:0;margin:16px 0 0;padding:0;border:0}
 .edit-picture legend{padding:0;margin:0 0 8px}
@@ -912,8 +914,14 @@ if (whyRoot) {
       answer.replaceChildren(label, text);
     } else answer.textContent = text;
     answer.hidden = false;
-    card.querySelector(".ask").remove();
-    card.querySelector(".row-about")?.remove();
+    card.dataset.why = text;
+    card.dataset.whySource = "asked";
+    const ask = card.querySelector(".ask");
+    ask.hidden = true;
+    form.hidden = true;
+    input.value = "";
+    const about = card.querySelector("[data-card-summary]");
+    if (about) about.hidden = true;
     card.classList.remove("needs-you");
   });
 }

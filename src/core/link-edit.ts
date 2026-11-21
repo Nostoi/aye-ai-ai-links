@@ -91,7 +91,7 @@ function whyEdit({ text, seen }: NonNullable<EditInput["why"]>): NonNullable<Lin
   }
   return {
     expected: seen && { text: seen.text, source: seen.source as Source },
-    set: cleanWhy({ text: text.replace(/\r\n?/g, "\n"), source: "stated" }),
+    set: cleanWhy({ text, source: "stated" }),
   };
 }
 

@@ -497,6 +497,22 @@ describe("recordOpening", () => {
   });
 });
 
+describe("a why's line breaks", () => {
+  it("are stored as LF by saveLink and updateLink, whatever the writer sent", async () => {
+    const deps = { store: new FakeStore(), now: () => T0 };
+    const { link } = await saveLink(deps, "a", {
+      url: "https://ex.com/breaks",
+      savedBy: "agent",
+      why: { text: "a\r\nb\rc", source: "stated" },
+    });
+    expect(link.why?.text).toBe("a\nb\nc");
+    const updated = await updateLink(deps, "a", link.id, {
+      why: { text: "d\r\ne", source: "stated" },
+    });
+    expect(updated.why?.text).toBe("d\ne");
+  });
+});
+
 describe("saveLink's whyFilled", () => {
   it("is true for the repeat save that filled a missing why, and false for the same save again", async () => {
     const deps = { store: new FakeStore(), now: () => T0 };

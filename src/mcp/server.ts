@@ -12,6 +12,7 @@ import { filingContext } from "../core/filing-context.js";
 import { checkIntent } from "../core/intent.js";
 import type { LinkCheckStore } from "../core/link-check-store.js";
 import {
+  checkTagsSource,
   getLinkWithText,
   normalizeTitle,
   saveLink,
@@ -189,6 +190,11 @@ const updateLinkFields = {
   summary: summary.nullable().optional(),
   why: why.nullable().optional(),
   tags: tags.optional(),
+  tagsSource: source
+    .optional()
+    .describe(
+      'Who decided this tag set. Leave it out or send "inferred" for your own guess, which keeps the owner\'s tags. Send "stated" or "asked" only when the owner told you to change their tags: then the set replaces theirs.',
+    ),
   handy: handy.optional(),
   ...intentFields,
   state: z.enum(STATES).optional(),
@@ -414,10 +420,11 @@ export function buildMcpServer(
       const now = deps.now();
       const at = { ...deps, now: () => now };
       // handy first, so a refused handy writes nothing. Past the schema, updateLink refuses only a
-      // blank tag name (normalizeTags), a title over the limit (normalizeTitle) or a missing link,
-      // so check the tags and the title before handy too.
+      // blank tag name (normalizeTags), a tagsSource without tags (checkTagsSource), a title over
+      // the limit (normalizeTitle) or a missing link, so check those before handy too.
       if (handy) {
         if (rest.tags) normalizeTags(rest.tags);
+        checkTagsSource(rest.tags, rest.tagsSource);
         if (rest.title !== undefined) normalizeTitle(rest.title);
         checkIntent(rest.intent, rest.intentSource);
         checkIntentWithHandy(handy, rest.intent);

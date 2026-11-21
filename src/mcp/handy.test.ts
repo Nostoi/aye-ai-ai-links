@@ -239,6 +239,23 @@ describe("update_link's handy, every action and source", () => {
     expect(row("1")).toBeUndefined();
   });
 
+  it.each([
+    ["tagsSource with no tags", { tagsSource: "stated" }, /send tags with it/],
+    ["a tagsSource that is not a source", { tags: [], tagsSource: "bogus" }, /tagsSource/],
+  ])("%s refuses the whole call before handy writes anything", async (_name, extra, message) => {
+    await call("save_link", { url: "https://example.com/t" });
+
+    const res = await call("update_link", {
+      id: "1",
+      ...extra,
+      handy: { action: "keep", source: "stated" },
+    });
+
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(message);
+    expect(row("1")).toBeUndefined();
+  });
+
   it("a 201-character title refuses the whole call before handy writes anything", async () => {
     await call("save_link", { url: "https://example.com/t", title: "Before" });
 

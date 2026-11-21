@@ -850,25 +850,47 @@ describe("MCP door over HTTP", () => {
     expect(res.body.result.content[0].text).toContain("not valid");
   });
 
-  it("update_link replaces the tag set and clears with null", async () => {
-    await call(app, "key-a", "save_link", {
-      url: "https://example.com/u",
-      summary: "keep?",
-      why: { text: "w", source: "stated" },
-      tags: [
-        { name: "one", source: "stated" },
-        { name: "two", source: "stated" },
-      ],
+  describe("update_link tags", () => {
+    const keysOf = (res: Json) =>
+      res.body.result.structuredContent.link.tags.map((t: Json) => `${t.key}:${t.source}`);
+    beforeEach(async () => {
+      await call(app, "key-a", "save_link", {
+        url: "https://example.com/u",
+        summary: "keep?",
+        why: { text: "w", source: "stated" },
+        tags: [
+          { name: "one", source: "stated" },
+          { name: "two", source: "inferred" },
+        ],
+      });
     });
-    const res = await call(app, "key-a", "update_link", {
-      id: "1",
-      tags: [{ name: "three", source: "asked" }],
-      summary: null,
+
+    it("an inferred set keeps the owner's tags and drops only guesses", async () => {
+      const res = await call(app, "key-a", "update_link", {
+        id: "1",
+        tags: [{ name: "three", source: "inferred" }],
+        summary: null,
+      });
+      expect(keysOf(res)).toEqual(["one:stated", "three:inferred"]);
+      const link = res.body.result.structuredContent.link;
+      expect(link.summary).toBeNull();
+      expect(link.why).toEqual({ text: "w", source: "stated" });
     });
-    const link = res.body.result.structuredContent.link;
-    expect(link.tags.map((t: Json) => t.key)).toEqual(["three"]);
-    expect(link.summary).toBeNull();
-    expect(link.why).toEqual({ text: "w", source: "stated" });
+
+    it("tagsSource stated replaces the whole set, and [] clears it", async () => {
+      const res = await call(app, "key-a", "update_link", {
+        id: "1",
+        tags: [{ name: "three", source: "asked" }],
+        tagsSource: "stated",
+      });
+      expect(keysOf(res)).toEqual(["three:asked"]);
+      const cleared = await call(app, "key-a", "update_link", {
+        id: "1",
+        tags: [],
+        tagsSource: "asked",
+      });
+      expect(keysOf(cleared)).toEqual([]);
+    });
   });
 
   it("update_link sets and clears the title, and leaves it alone when omitted", async () => {

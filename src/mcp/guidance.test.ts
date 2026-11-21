@@ -115,6 +115,15 @@ describe("summary guidance", () => {
   });
 });
 
+describe("update_link tag guidance", () => {
+  it("says a guessed tag set keeps the owner's tags and how to change them at the owner's request", () => {
+    expect(UPDATE_LINK).toContain("Tags you send never remove the owner's");
+    expect(UPDATE_LINK).toContain('tagsSource: "stated" (or "asked")');
+    expect(UPDATE_LINK).not.toContain("tags REPLACES the whole set");
+    expect(UPDATE_LINK).not.toContain("tags: [] removes them all");
+  });
+});
+
 describe("get_digest guidance", () => {
   it("names every reason, and the cautions that go with focus words and openings", () => {
     for (const kind of ["focus_words", "no_why", "not_opened_recently", "still_using_check"]) {

@@ -140,7 +140,7 @@ The server runs as a per-user macOS LaunchAgent on `127.0.0.1`. [Tailscale Serve
 
    This builds and tests the commit, then downloads and checks the meaning-search model (about 35 MB, into `~/.aye-links/models`; only missing files are fetched) before it stops the service. It then backs up both databases, switches to the new release and starts it. It prints `Deployed <sha>.` when it has succeeded, and only then exits 0. A failed build, test or model check leaves the running install alone, and a failure while switching rolls back to the previous release.
 
-   To skip the tests, for a commit that has already passed them elsewhere (on a busy Mac they can time out), run `AYE_DEPLOY_SKIP_TESTS=1 deploy/deploy.sh main`. The build and every other check still run. A later deploy of the same commit without the setting runs the tests before it stops anything.
+   To skip the tests, for a commit that has already passed them elsewhere (on a busy Mac they can time out), run `AYE_DEPLOY_SKIP_TESTS=1 deploy/deploy.sh main`. The build and every other check still run. A later deploy of the same commit without the setting builds and tests it again before it stops anything; while that commit is the one running, it refuses instead.
 
    <details>
    <summary>Exactly what happens when a deploy fails</summary>

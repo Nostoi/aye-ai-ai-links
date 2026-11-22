@@ -9,7 +9,7 @@
 # The version (from `deploy/release.sh next`) goes in the release's VERSION file, which the server
 # reports; without one the server reports `dev`.
 # AYE_DEPLOY_SKIP_TESTS=1 builds without running the tests and marks the release .untested; a
-# later deploy of that commit without it runs the tests before stopping anything.
+# later deploy of that commit without it builds and tests it again before stopping anything.
 # Run it from the source checkout, or set AYE_SOURCE to one. Run deploys, key commands and owner commands one at a time.
 set -eEuo pipefail
 
@@ -50,6 +50,16 @@ fi
 
 mkdir -p "$home/releases" "$home/data/backups" "$home/logs" "$HOME/Library/LaunchAgents"
 
+# A release built without its tests is built again with them. The tests build into the release
+# folder, so they never run in one that is already installed.
+if [ -e "$release/.untested" ] && [ "$skip_tests" != 1 ]; then
+  if [ "$(readlink "$home/current" || true)" = "$release" ]; then
+    echo "$sha is running and was deployed without its tests. Deploy it with AYE_DEPLOY_SKIP_TESTS=1, or deploy a different commit. Nothing was changed." >&2
+    exit 1
+  fi
+  rm -f "$release/.ready"
+fi
+
 # A release is complete only once .ready exists; a leftover without it is a failed build.
 if [ ! -e "$release/.ready" ]; then
   rm -rf "$release"
@@ -68,17 +78,7 @@ if [ ! -e "$release/.ready" ]; then
     exit 1
   fi
 fi
-if [ -e "$release/.untested" ]; then
-  if [ "$skip_tests" = 1 ]; then
-    echo "Tests were not run for $sha (AYE_DEPLOY_SKIP_TESTS=1)." >&2
-  else
-    if ! (cd "$release" && npm test); then
-      echo "Tests failed for $sha. The running install was not changed." >&2
-      exit 1
-    fi
-    rm -f "$release/.untested"
-  fi
-fi
+[ ! -e "$release/.untested" ] || echo "Tests were not run for $sha (AYE_DEPLOY_SKIP_TESTS=1)." >&2
 
 # Runs on every deploy, since the model lives outside the release. No --env-file: stop_and_wait
 # looks for that argument, and the check needs no settings.

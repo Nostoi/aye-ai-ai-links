@@ -17,7 +17,7 @@ const CROSS = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true
  * The field is the combobox of the WAI-ARIA pattern; the answer the script fetches goes into
  * `#find-body`, where its `listbox` is. The form is a plain search form (`/search`, with the space
  * as `tag` while it is kept), so Enter with no row to open still goes to the full results. On a
- * space page `space` adds the removable "in <space>" chip, hidden until the script opens the dialog.
+ * On a space page `space` adds the removable "in <space>" chip, hidden until the script opens the dialog.
  */
 export const findDialog = (space?: FindSpace) =>
   `<dialog class="find-dialog" id="find-dialog" aria-label="Find a link"${space ? ` data-space="${escapeHtml(space.key)}"` : ""}>
@@ -51,7 +51,7 @@ ${space ? `<span class="find-chip${escapeHtml(space.className)}" hidden><span cl
  *   its answer's receipt (`openedScript` reads the nearest `[data-receipt]`).
  * - The first row is highlighted. Up and down move the highlight (the pointer too), Enter clicks
  *   the highlighted link, so the opening is recorded, and closes the dialog. With no current
- *   answer to open, Enter submits the form: the full results.
+ *   answer to open, Enter goes to the full results (the form, submitted by script).
  * - Cancel, Escape and a click on the backdrop close it; so does opening a row, and Ask AI, whose
  *   panel would sit behind a modal.
  */
@@ -200,6 +200,13 @@ if (chip) {
   });
 }
 dialog.querySelector(".find-cancel").addEventListener("click", closeNow);
+// The form is submitted by script: the saved-copy page's CSP allows no form action.
+dialog.querySelector(".find-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const query = new URLSearchParams({ q: input.value });
+  if (scoped) query.set("tag", spaceKey);
+  location.href = "/search?" + query;
+});
 dialog.addEventListener("pointerdown", (event) => {
   downOnBackdrop = event.target === dialog;
 });

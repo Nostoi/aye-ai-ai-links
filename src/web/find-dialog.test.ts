@@ -599,3 +599,27 @@ function spaceInput() {
     done: false,
   };
 }
+
+describe("Enter that goes to the full results (the copy page's CSP refuses form posts)", () => {
+  const submit = (s: ReturnType<typeof start>) => s.p.dispatch(s.p.$(".find-form"), "submit");
+
+  it("prevents the form's own submit and goes to /search with the words", () => {
+    const s = start();
+    s.open();
+    s.type("solar roof");
+    expect(submit(s).defaultPrevented).toBe(true);
+    expect(s.p.location.href).toBe("/search?q=solar+roof");
+  });
+
+  it("keeps the space while the chip is kept, and drops it once the chip is removed", async () => {
+    const s = start({ html: spacePage({ ...spaceInput() }) });
+    s.open();
+    s.type("solar");
+    submit(s);
+    expect(s.p.location.href).toBe("/search?q=solar&tag=kitchen");
+    s.p.dispatch(s.p.$(".find-chip-x"), "click");
+    await s.p.settle();
+    submit(s);
+    expect(s.p.location.href).toBe("/search?q=solar");
+  });
+});

@@ -2379,6 +2379,13 @@ if (chip) {
   });
 }
 dialog.querySelector(".find-cancel").addEventListener("click", closeNow);
+// The form is submitted by script: the saved-copy page's CSP allows no form action.
+dialog.querySelector(".find-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const query = new URLSearchParams({ q: input.value });
+  if (scoped) query.set("tag", spaceKey);
+  location.href = "/search?" + query;
+});
 dialog.addEventListener("pointerdown", (event) => {
   downOnBackdrop = event.target === dialog;
 });

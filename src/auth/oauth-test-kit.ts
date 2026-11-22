@@ -9,6 +9,7 @@ import {
 import type Database from "better-sqlite3";
 import type { ChatModel } from "../ai/model.js";
 import { createApp } from "../app.js";
+import type { LinkSearch } from "../core/search.js";
 import type { SearchReceipts } from "../core/search-receipts.js";
 import type { NameVectors } from "../core/tag-suggest.js";
 import { createDeps } from "../deps.js";
@@ -238,6 +239,7 @@ export async function oauthWorld({
   tagSuggestWaitMs,
   embedder = new FakeEmbedder(DIMS),
   receipts,
+  search,
 }: {
   now?: () => number;
   rateLimit?: { limit: number; now: () => number };
@@ -262,6 +264,8 @@ export async function oauthWorld({
   embedder?: Embedder;
   /** Replaces the web door's pending search receipts, for a fixed clock and tokens. */
   receipts?: SearchReceipts;
+  /** Replaces the web door's search, to fix a ranking the real index would not give. */
+  search?: LinkSearch;
 } = {}) {
   const links = openDatabase(":memory:");
   const keyStore = new SqliteKeyStore(links);
@@ -286,6 +290,7 @@ export async function oauthWorld({
       ai,
       ...(names && { names }),
       ...(receipts && { receipts }),
+      ...(search && { search }),
       tagSuggestWaitMs,
     },
     identify: auth.identify,

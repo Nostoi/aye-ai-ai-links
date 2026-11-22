@@ -211,9 +211,9 @@ const askLabel = (query: string) => {
  * The Ask AI button of a search that found nothing, in its own `<p>`, or nothing for a blank query
  * or one longer than the Ask box takes. The caller shows it only while the AI is set up.
  */
-export const askAbout = (query: string) =>
+export const askAbout = (query: string, attrs = "") =>
   query.trim() !== "" && query.length <= MAX_TEXT_CHARS
-    ? `<p><button type="button" data-ask-text="${escapeHtml(query)}">Ask AI about “${escapeHtml(askLabel(query))}”</button></p>\n`
+    ? `<p><button type="button"${attrs} data-ask-text="${escapeHtml(query)}">Ask AI about “${escapeHtml(askLabel(query))}”</button></p>\n`
     : "";
 
 /** The example in the search fields on Home and on the results page. */

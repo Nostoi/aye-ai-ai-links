@@ -78,7 +78,7 @@ export function quickFind({
     return `<div class="find-answer find-nothing"${mark}>
 <p class="find-nothing-title">Nothing matched.</p>
 <p class="find-nothing-hint">${NOTHING}</p>
-${ask ? askAbout(query) : ""}</div>`;
+${ask ? askAbout(query, " data-find-close") : ""}</div>`;
   }
   const within = space ? { within: space.key } : {};
   const rows = shown.map((l, i) =>

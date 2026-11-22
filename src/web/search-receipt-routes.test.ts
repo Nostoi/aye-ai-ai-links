@@ -6,6 +6,7 @@ import { SearchReceipts } from "../core/search-receipts.js";
 import { createDeps } from "../deps.js";
 import { type Embedder, FakeEmbedder } from "../search/embedder.js";
 import { DIMS } from "../search/model.js";
+import { searchReportScript } from "./open-link.js";
 
 const A = "owner";
 const post = (json: unknown) => ({ method: "POST", json });
@@ -82,12 +83,14 @@ describe("GET /search receipts", () => {
   it("the page reports the search and sends the receipt with a click; other pages do neither", async () => {
     const { browser } = await setup();
     const html = String((await browser.send("/search?q=solar")).body);
-    expect(html).toContain('fetch("/search/log"');
+    expect(html).toContain(searchReportScript);
     expect(html).toContain("JSON.stringify({ id: card.dataset.id, receipt })");
+    // Every menu page also carries the quick-find dialog (#360), whose own script reports the
+    // searches it shows. The other pages must not carry the results page's report or a receipt.
     for (const path of ["/all", "/search?q=solar&keep=1", "/search?q="]) {
       const other = String((await browser.send(path)).body);
-      expect(other, path).not.toContain("/search/log");
-      expect(other, path).not.toContain("receipt");
+      expect(other, path).not.toContain(searchReportScript);
+      expect(other, path).not.toContain("data-receipt=");
     }
   });
 

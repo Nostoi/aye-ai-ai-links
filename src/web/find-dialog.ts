@@ -175,7 +175,7 @@ input.addEventListener("keydown", (event) => {
     highlight((highlighted() + (event.key === "ArrowDown" ? 1 : -1) + all.length) % all.length);
   } else if (event.key === "Enter") {
     const row = options()[highlighted()];
-    if (!current || !row) return;
+    if (!current || !row || !row.matches("a[data-open]")) return;
     event.preventDefault();
     row.click();
     closeNow();
@@ -232,7 +232,7 @@ export const findCss = `.find-dialog{width:min(640px,calc(100% - 32px));max-heig
 .find-chip-x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-8px -6px -8px -4px;padding:0;border:0;background:none;color:var(--soft)}
 .find-chip-x svg{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
 .find-cancel{display:none;min-height:44px;padding:0 8px;border:0;background:none}
-.find-error{margin:0;padding:var(--space-2) 26px var(--space-4);font-size:var(--text-3)}
+.find-error{margin:0;padding:var(--space-2) 26px var(--space-4);font-size:var(--text-3)}.find-error:empty{display:none}
 .find-body{min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .find-list{list-style:none;margin:0;padding:var(--space-1) var(--space-2) var(--space-2)}
 .find-row{display:flex;align-items:center;gap:14px;padding:10px 12px;border-radius:14px;color:var(--ink);text-decoration:none}

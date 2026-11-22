@@ -432,6 +432,26 @@ describe("the keyboard", () => {
     expect(dialog.open).toBe(true);
   });
 
+  it("leaves Enter to the form on a highlighted row that is not a web link, and stays open", async () => {
+    const mail = { ...link(1), url: "mailto:a@b.c", urlKey: "mailto:a@b.c" };
+    const text = quickFind({
+      query: "ann",
+      links: [mail],
+      images: new Map(),
+      catalog: [],
+      ask: false,
+      receipt: "rcpt",
+    });
+    const s = start({ answer: () => ({ status: 200, text }) });
+    s.open();
+    s.type("ann");
+    s.p.timers.fire();
+    await s.p.settle();
+    expect(s.key("Enter").defaultPrevented).toBe(false);
+    await s.p.settle();
+    expect(s.dialog.open).toBe(true);
+  });
+
   it("leaves Enter to the form when nothing matched, and while composing", async () => {
     const empty = quickFind({ query: "zz", links: [], images: new Map(), catalog: [], ask: false });
     const s = start({ answer: () => ({ status: 200, text: empty }) });

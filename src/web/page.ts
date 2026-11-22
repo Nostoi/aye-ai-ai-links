@@ -332,7 +332,7 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${menu ? `${saveDialog(saveFill)}\n${findDialog(options.find)}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.save === null ? "" : `\n${scriptTag(scripts.save)}`}${scripts.find === null ? "" : `\n${scriptTag(scripts.find)}`}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
+${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${menu ? `${saveDialog(saveFill)}\n${findDialog(options.find, ask !== undefined)}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.save === null ? "" : `\n${scriptTag(scripts.save)}`}${scripts.find === null ? "" : `\n${scriptTag(scripts.find)}`}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
 </body>
 </html>
 `;

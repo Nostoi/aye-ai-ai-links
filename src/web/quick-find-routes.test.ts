@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { scriptedModel } from "../ai/model-test-kit.js";
 import { addSecondUser, oauthWorld, type World } from "../auth/oauth-test-kit.js";
 import { saveLink } from "../core/links.js";
 import type { LinkSearch } from "../core/search.js";
@@ -286,3 +287,26 @@ const embedder: Embedder = {
   embedQuery: async () => new Float32Array([1, 0]),
   embedDocuments: async () => [],
 };
+
+describe("GET /search/quick offers Ask AI", () => {
+  const nothing = async (world: World, extra: string) => {
+    await save(world, "Solar roof");
+    const browser = await signedIn(world);
+    return String((await browser.send(`/search/quick?q=zzqxv${extra}`)).body);
+  };
+
+  it("when the AI is on and the dialog says its page has the panel", async () => {
+    const world = await oauthWorld({ ai: scriptedModel("Fake", []) });
+    expect(await nothing(world, "&assist=1")).toContain("data-ask-text");
+  });
+
+  it("not without the flag, even with the AI on", async () => {
+    const world = await oauthWorld({ ai: scriptedModel("Fake", []) });
+    expect(await nothing(world, "")).not.toContain("data-ask-text");
+  });
+
+  it("not with the AI off, flag or not", async () => {
+    const world = await oauthWorld();
+    expect(await nothing(world, "&assist=1")).not.toContain("data-ask-text");
+  });
+});

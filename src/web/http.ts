@@ -1083,7 +1083,7 @@ export function webApp({
         images,
         catalog,
         receipt: receiptFor(c, entry),
-        ask: askOn(c, "Search") !== undefined,
+        ask: askOn(c, "Search") !== undefined && c.req.query("assist") === "1",
       }),
       200,
       NO_STORE,

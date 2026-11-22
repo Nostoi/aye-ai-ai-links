@@ -1502,6 +1502,7 @@ const fail = () => {
 const ask = async (mine) => {
   const query = new URLSearchParams({ q: input.value });
   if (scoped) query.set("tag", spaceKey);
+  if (dialog.hasAttribute("data-assist")) query.set("assist", "1");
   let res = null;
   try {
     res = await fetch("/search/quick?" + query, { redirect: "manual" });

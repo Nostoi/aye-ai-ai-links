@@ -17,10 +17,11 @@ const CROSS = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true
  * The field is the combobox of the WAI-ARIA pattern; the answer the script fetches goes into
  * `#find-body`, where its `listbox` is. The form is a plain search form (`/search`, with the space
  * as `tag` while it is kept), so Enter with no row to open still goes to the full results. On a
- * On a space page `space` adds the removable "in <space>" chip, hidden until the script opens the dialog.
+ * `assist` marks a page that has the Ask AI panel, so the server may offer Ask AI in the nothing-matched
+ * answer. On a space page `space` adds the removable "in <space>" chip, hidden until the script opens the dialog.
  */
-export const findDialog = (space?: FindSpace) =>
-  `<dialog class="find-dialog" id="find-dialog" aria-label="Find a link"${space ? ` data-space="${escapeHtml(space.key)}"` : ""}>
+export const findDialog = (space?: FindSpace, assist = false) =>
+  `<dialog class="find-dialog" id="find-dialog" aria-label="Find a link"${assist ? " data-assist" : ""}${space ? ` data-space="${escapeHtml(space.key)}"` : ""}>
 <form class="find-form" action="/search" method="get" role="search">
 <div class="find-bar">
 ${MAGNIFIER}
@@ -120,6 +121,7 @@ const fail = () => {
 const ask = async (mine) => {
   const query = new URLSearchParams({ q: input.value });
   if (scoped) query.set("tag", spaceKey);
+  if (dialog.hasAttribute("data-assist")) query.set("assist", "1");
   let res = null;
   try {
     res = await fetch("/search/quick?" + query, { redirect: "manual" });

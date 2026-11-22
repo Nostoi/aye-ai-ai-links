@@ -623,3 +623,30 @@ describe("Enter that goes to the full results (the copy page's CSP refuses form 
     expect(s.p.location.href).toBe("/search?q=solar");
   });
 });
+
+describe("offering Ask AI", () => {
+  const ASK = { ai: "Fake", place: "Home", owner: "owner-a" };
+
+  it("marks the dialog only on a page that has the Ask AI panel", () => {
+    const withAsk = page("t", "<main></main>", { menu: true, undo: true, ask: ASK });
+    expect(dom(withAsk).querySelector("#find-dialog")?.hasAttribute("data-assist")).toBe(true);
+    expect(dom(plain()).querySelector("#find-dialog")?.hasAttribute("data-assist")).toBe(false);
+  });
+
+  it("asks with the flag from a marked dialog, and without it from an unmarked one", async () => {
+    const marked = start({
+      html: page("t", "<main></main>", { menu: true, undo: true, ask: ASK }),
+    });
+    marked.open();
+    marked.type("solar");
+    marked.p.timers.fire();
+    await marked.p.settle();
+    expect(marked.asked.map((a) => a.url)).toEqual(["/search/quick?q=solar&assist=1"]);
+    const bare = start();
+    bare.open();
+    bare.type("solar");
+    bare.p.timers.fire();
+    await bare.p.settle();
+    expect(bare.asked.map((a) => a.url)).toEqual(["/search/quick?q=solar"]);
+  });
+});

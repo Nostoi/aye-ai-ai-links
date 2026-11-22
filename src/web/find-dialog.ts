@@ -223,6 +223,8 @@ export const findCss = `.find-dialog{width:min(640px,calc(100% - 32px));max-heig
 .find-bar>svg{flex:none;fill:none;stroke:var(--soft);stroke-width:2;stroke-linecap:round}
 .find-bar input{flex:1;min-width:0;width:auto;margin:0;padding:10px 0;border:0;border-radius:0;background:transparent;font-size:var(--text-6)}
 .find-bar input::placeholder{color:var(--soft)}
+.find-bar input:focus-visible{outline:none}
+.find-bar:has(input:focus-visible){outline:3px solid var(--blue);outline-offset:2px}
 .find-esc{flex:none}
 .find-chip{flex:none;display:inline-flex;align-items:center;gap:6px;padding:2px 2px 2px 10px;border-radius:var(--radius-pill);background:var(--bg);font-size:var(--text-4);font-weight:600}
 .find-chip[hidden]{display:none}

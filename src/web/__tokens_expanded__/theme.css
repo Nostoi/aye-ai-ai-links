@@ -590,6 +590,8 @@ div.icon-box,div.initials-box{display:flex;align-items:center;justify-content:ce
 .find-bar>svg{flex:none;fill:none;stroke:var(--soft);stroke-width:2;stroke-linecap:round}
 .find-bar input{flex:1;min-width:0;width:auto;margin:0;padding:10px 0;border:0;border-radius:0;background:transparent;font-size:17px}
 .find-bar input::placeholder{color:var(--soft)}
+.find-bar input:focus-visible{outline:none}
+.find-bar:has(input:focus-visible){outline:3px solid var(--blue);outline-offset:2px}
 .find-esc{flex:none}
 .find-chip{flex:none;display:inline-flex;align-items:center;gap:6px;padding:2px 2px 2px 10px;border-radius:999px;background:var(--bg);font-size:15px;font-weight:600}
 .find-chip[hidden]{display:none}

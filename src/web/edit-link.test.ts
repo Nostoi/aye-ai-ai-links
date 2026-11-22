@@ -794,7 +794,8 @@ describe("the edit dialog's script", () => {
     expect(card.getAttribute("data-title")).toBe(HOSTILE);
     expect(card.getAttribute("data-own")).toBe("1");
     expect(p.dialog.open).toBe(false);
-    expect(p.focused()).toContain(card.querySelector(".card-menu summary"));
+    // `includes`, not `toContain`: vitest compares elements deeply, walking the whole document.
+    expect(p.focused().includes(card.querySelector(".card-menu summary") as Element)).toBe(true);
     expect(p.$("#undo-bar").hidden).toBe(false);
     expect(p.$("#undo-bar span").textContent).toBe("Link updated");
     p.dispatch(p.$("#undo-bar button"), "click");

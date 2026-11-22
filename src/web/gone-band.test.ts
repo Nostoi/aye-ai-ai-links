@@ -291,7 +291,8 @@ describe("the band's slide-away", () => {
     const p = load(() => WORKS);
     await click(p, "button[data-act=still-works]");
     await ended(p);
-    expect(p.focused()).toContain(p.$("li[data-id] .card-menu summary"));
+    // `includes`, not `toContain`: vitest compares elements deeply, walking the whole document.
+    expect(p.focused().includes(p.$("li[data-id] .card-menu summary"))).toBe(true);
   });
 
   it("Undo brings the band back with its collapse cleared, and a late callback never hides it", async () => {

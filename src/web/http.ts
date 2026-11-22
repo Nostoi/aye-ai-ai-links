@@ -136,6 +136,7 @@ import { VIEW_COOKIE, viewOf } from "./link-rows.js";
 import { savedOn } from "./page.js";
 import { consentExpiredPage, consentPage, loginPage, oauthErrorPage, searchPage } from "./pages.js";
 import { profilePage } from "./profile-page.js";
+import { QUICK_ROWS, quickFind } from "./quick-find.js";
 import { requireSession, type SessionEnv } from "./require-session.js";
 import { saveForm } from "./save-form.js";
 import { olderInvalidPage } from "./show-older.js";
@@ -881,11 +882,53 @@ export function webApp({
   /** A renamed or merged tag's old address: 303 to the same page at the tag's live key, or null when `name` is not one. */
   const oldAddress = async (c: Context<SessionEnv>, name: string): Promise<Response | null> => {
     const current = await addressOf(c.get("caller").owner, name);
-    if (current === null || current === tagKey(name)) return null;
+    return current === null || current === tagKey(name) ? null : movedTo(c, current);
+  };
+
+  /** The same request at the tag's live key, as a 303. */
+  const movedTo = (c: Context<SessionEnv>, key: string): Response => {
     const url = new URL(c.req.url);
-    url.searchParams.set("tag", current);
+    url.searchParams.set("tag", key);
     return c.redirect(`${url.pathname}${url.search}`, 303);
   };
+
+  /**
+   * The space a search's `tag` limits it to, the one rule for `/search` and `/search/quick`: a blank
+   * one is no space, and one the owner lacks is `missing`. A renamed or merged tag's old address is
+   * `moved` to its live key, which a fetch (`follow`) goes on to read as that space.
+   */
+  const searchSpace = async (
+    c: Context<SessionEnv>,
+    catalog: Tag[],
+    { follow }: { follow: boolean },
+  ): Promise<
+    | { kind: "none" }
+    | { kind: "missing" }
+    | { kind: "moved"; response: Response }
+    | { kind: "space"; space: Tag }
+  > => {
+    const name = c.req.query("tag") ?? "";
+    if (name.trim() === "") return { kind: "none" };
+    try {
+      const current = await addressOf(c.get("caller").owner, name);
+      const live = current === null || current === tagKey(name) ? name : current;
+      if (live !== name && !follow) return { kind: "moved", response: movedTo(c, live) };
+      return { kind: "space", space: findSpaceTag(catalog, live) };
+    } catch (error) {
+      if (error instanceof CoreError && error.code === "not_found") return { kind: "missing" };
+      throw error;
+    }
+  };
+
+  /** A word search's receipt, as the results page and quick find issue it; none for keep mode or another site's request. */
+  const receiptFor = (
+    c: Context<SessionEnv>,
+    entry: Parameters<typeof receipts.issue>[1] | undefined,
+    keep = false,
+  ) =>
+    entry && !keep && fromOwnPage(c.req.header("sec-fetch-site"))
+      ? receipts.issue(c.get("caller").owner, entry)
+      : undefined;
 
   /**
    * What a card shows after an edit or its Undo, read after the write: its title and picture, its
@@ -1010,6 +1053,43 @@ export function webApp({
   // Tidy up opens in place on Home (#332); the old page's address lands there.
   app.get("/tidy", session, (c) => c.redirect("/", 303));
 
+  // The quick-find dialog's answer (#360): the search `/search` would run for the same words and
+  // space, as an HTML fragment of its first five links. It runs the page's own search, so the five
+  // are the page's top five; a blank query runs none. Like `/search` it writes nothing: the dialog
+  // reports the search it shows (`POST /search/log`). A moved space is read as the space it became.
+  app.get("/search/quick", session, async (c) => {
+    const { owner } = c.get("caller");
+    const query = c.req.query("q") ?? "";
+    if (query.trim() === "") return c.html("", 200, NO_STORE);
+    const catalog = await deps.store.listTags(owner);
+    const found = await searchSpace(c, catalog, { follow: true });
+    if (found.kind === "missing") {
+      return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);
+    }
+    const space = found.kind === "space" ? found.space : undefined;
+    const { links, entry } = await runSearch(deps, owner, {
+      query,
+      ...(space ? { tag: space.key } : {}),
+    });
+    const images = await deps.images.imageVersions(
+      owner,
+      links.slice(0, QUICK_ROWS).map((l) => l.id),
+    );
+    return c.html(
+      quickFind({
+        query,
+        space,
+        links,
+        images,
+        catalog,
+        receipt: receiptFor(c, entry),
+        ask: askOn(c, "Search") !== undefined && c.req.query("assist") === "1",
+      }),
+      200,
+      NO_STORE,
+    );
+  });
+
   app.get("/search", session, async (c) => {
     const caller = c.get("caller");
     const query = c.req.query("q") ?? "";
@@ -1017,20 +1097,12 @@ export function webApp({
     // `tag` limits the search to one of the owner's tags, as a space page's Search this space does;
     // a blank one is no tag, and one the owner lacks gets the space page's 404.
     const catalog = await deps.store.listTags(caller.owner);
-    const tagName = c.req.query("tag") ?? "";
-    let space: Tag | undefined;
-    if (tagName.trim() !== "") {
-      try {
-        const moved = await oldAddress(c, tagName);
-        if (moved) return moved;
-        space = findSpaceTag(catalog, tagName);
-      } catch (error) {
-        if (error instanceof CoreError && error.code === "not_found") {
-          return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);
-        }
-        throw error;
-      }
+    const found = await searchSpace(c, catalog, { follow: false });
+    if (found.kind === "moved") return found.response;
+    if (found.kind === "missing") {
+      return c.html(spaceMissingPage(askOn(c, "this page")), 404, NO_STORE);
     }
+    const space = found.kind === "space" ? found.space : undefined;
     // Keep mode lists only links that can go on the shelf.
     const input = {
       query,
@@ -1039,10 +1111,7 @@ export function webApp({
     };
     // The page's own report logs the search (POST /search/log), so a GET writes nothing (#95).
     const { links, entry } = await runSearch(deps, caller.owner, input);
-    const receipt =
-      entry && !keep && fromOwnPage(c.req.header("sec-fetch-site"))
-        ? receipts.issue(caller.owner, entry)
-        : undefined;
+    const receipt = receiptFor(c, entry, keep);
     const images = await deps.images.imageVersions(
       caller.owner,
       links.map((l) => l.id),

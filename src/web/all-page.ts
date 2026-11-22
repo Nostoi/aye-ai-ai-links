@@ -146,7 +146,7 @@ export function allPage(input: Input): string {
     `<main class="all" data-view="${view}">
 <div class="all-head">
 <h1>${done ? ARCHIVED : "All links"}</h1>
-<div class="all-tools">${orderSelect(order, { action: done ? "/all/done" : "/all", hidden: {} })}${viewSwitch(view)}<a class="search-instead" href="/search">Search instead</a></div>
+<div class="all-tools">${orderSelect(order, { action: done ? "/all/done" : "/all", hidden: {} })}${viewSwitch(view)}</div>
 </div>
 ${orderNav(order, (o) => allHref(o, { done }))}
 <p id="all-error" role="alert"></p>

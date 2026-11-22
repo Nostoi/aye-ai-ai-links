@@ -290,11 +290,11 @@ describe("pageScripts", () => {
     expect(pageScripts(options)).toEqual(written.map((m) => m[1]));
   });
 
-  it("has only the touch script for a bare page; the menu brings the Undo bar's and the Save dialog's (#329); the Ask scripts only with ask", () => {
+  it("has only the touch script for a bare page; the menu brings the Undo bar's, the Save dialog's (#329) and quick find's (#360); the Ask scripts only with ask", () => {
     expect(pageScripts({})).toHaveLength(1);
-    expect(pageScripts({ menu: true })).toHaveLength(4);
+    expect(pageScripts({ menu: true })).toHaveLength(5);
     expect(pageScripts({ undo: true })).toHaveLength(2);
-    expect(pageScripts({ menu: true, ask })).toHaveLength(7);
+    expect(pageScripts({ menu: true, ask })).toHaveLength(8);
   });
 
   it("starts every page's scripts with one passive, empty touchstart listener on the document (#314)", () => {

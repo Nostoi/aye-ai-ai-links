@@ -1,6 +1,7 @@
 import { escapeHtml } from "../core/escape-html.js";
 import { ASK_BUTTON, ASK_SCRIPT, type Ask, askPanel } from "./ask-panel.js";
 import { editDialog, editLinkScript } from "./edit-dialog.js";
+import { type FindSpace, findDialog, findDialogScript } from "./find-dialog.js";
 import { faviconHref, inlineLogo } from "./logo.js";
 import { openedScript } from "./open-link.js";
 import { saveDialog, saveDialogScript } from "./save-dialog.js";
@@ -27,7 +28,7 @@ const brand = `${inlineLogo(`role="img" aria-label="${NAME}"`)}<span>${NAME}</sp
 const PERSON = `<span class="icon-wide"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/></svg></span>`;
 const BARS = `<span class="icon-phone"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 8h14M5 12h14M5 16h14"/></svg></span>`;
 
-const MAGNIFIER = `<a class="menu-search" href="/search" aria-label="Search"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></a>`;
+const MAGNIFIER = `<a class="menu-search" href="/search" aria-label="Search" data-find-open><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></a>`;
 
 /** The menu section a page belongs to: it marks that section's link as the current page. */
 export type Here = "home" | "all" | "tags";
@@ -62,7 +63,8 @@ const menuHtml = (withAsk: boolean, here: Here | undefined) => {
 
 /**
  * Ends the session, then goes to the sign-in page. The / key focuses the page's search field, else
- * goes to /search, unless a modifier is held, the key is typed into a field or editable element, a
+ * opens the quick-find dialog (#360; it sends "aye-find-open", which the dialog's script hears),
+ * unless a modifier is held, the key is typed into a field or editable element, a
  * dialog is open or a side panel is open (#264: the Ask AI panel marks the body `data-panel`,
  * since a page with no AI carries no mention of that panel). It also closes the page's ⋯ menus, the account
  * menu and every card menu, through document-level handlers, so a card added later is covered.
@@ -85,7 +87,7 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
   const field = document.getElementById("q");
   if (field) field.focus();
-  else location.href = "/search";
+  else document.dispatchEvent(new CustomEvent("aye-find-open"));
 });
 {
   const bar = document.querySelector("nav.menu");
@@ -240,6 +242,8 @@ type ScriptOptions = {
   undo?: boolean;
   ask?: Ask | undefined;
   edits?: { root: string; error: string };
+  /** A space page's own space: the quick-find dialog starts inside it (#360). */
+  find?: FindSpace;
 };
 
 const scriptTag = (js: string) => `<script>${js}</script>`;
@@ -262,6 +266,9 @@ const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
   save: menu
     ? `${saveDialogScript}\n${scriptText(openedScript("save-dialog", "/links/opened"))}`
     : null,
+  find: menu
+    ? `${findDialogScript}\n${scriptText(openedScript("find-dialog", "/links/opened", true))}`
+    : null,
   ask: ask
     ? [
         scriptText(ASK_SCRIPT),
@@ -277,8 +284,8 @@ const scriptsFor = ({ menu, undo, ask, edits }: ScriptOptions) => ({
  * CSP hashes this list, so the two cannot drift. None reads request data.
  */
 export const pageScripts = (options: ScriptOptions): string[] => {
-  const { touch, undo, menu, save, ask } = scriptsFor(options);
-  return [touch, undo, menu, save, ...(ask ?? [])].filter((js): js is string => js !== null);
+  const { touch, undo, menu, save, find, ask } = scriptsFor(options);
+  return [touch, undo, menu, save, find, ...(ask ?? [])].filter((js): js is string => js !== null);
 };
 
 /**
@@ -325,7 +332,7 @@ ${ask ? `<style>\n${askCss}\n</style>\n` : ""}</head>
 <div class="column">
 ${body}
 </div>
-${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${menu ? `${saveDialog(saveFill)}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.save === null ? "" : `\n${scriptTag(scripts.save)}`}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
+${ask ? `${askPanel(ask)}\n${editDialog()}\n` : ""}${menu ? `${saveDialog(saveFill)}\n${findDialog(options.find, ask !== undefined)}\n` : ""}${scriptTag(scripts.touch)}\n${scripts.undo === null ? "" : `${UNDO_BAR}\n${scriptTag(scripts.undo)}\n`}${scripts.menu === null ? "" : scriptTag(scripts.menu)}${scripts.save === null ? "" : `\n${scriptTag(scripts.save)}`}${scripts.find === null ? "" : `\n${scriptTag(scripts.find)}`}${scripts.ask === null ? "" : `\n${scripts.ask.map(scriptTag).join("\n")}`}
 </body>
 </html>
 `;

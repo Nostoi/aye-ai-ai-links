@@ -71,6 +71,7 @@ const CHECKED_PAGES = [
   "/consent",
   "/connections",
   "/search",
+  "/search/quick",
   "/search/log",
   "/spaces",
   "/spaces/done",

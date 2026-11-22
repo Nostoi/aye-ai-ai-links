@@ -650,6 +650,7 @@ describe("owner isolation coverage", () => {
       marker: () => ["Quokka habitat notes", A_TAG_NAME, A_TOOL_TITLE, TIDY_TRAY, A_TIDY_TITLE],
     },
     "GET /search": { request: "/search?q=quokka", marker: () => A_URL },
+    "GET /search/quick": { request: "/search/quick?q=quokka", marker: () => A_URL },
     "GET /tidy": { noOwnerData: "redirects to Home, whose Tidy up tray the GET / entry covers" },
     "GET /spaces": {
       request: `/spaces?tag=${encodeURIComponent(A_TAG_NAME)}`,

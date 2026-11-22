@@ -6,6 +6,7 @@ import { allPage } from "./all-page.js";
 import { handyShelf } from "./handy-shelf.js";
 import { homePage } from "./home-page.js";
 import { searchPage } from "./pages.js";
+import { quickFind } from "./quick-find.js";
 import { spacePage } from "./space-page.js";
 import { spacesSection } from "./spaces-section.js";
 
@@ -209,5 +210,27 @@ describe("a link with no title", () => {
     expect(document.querySelector(".card-menu summary .visually-hidden")?.textContent).toBe(
       "More for <img src=x onerror=alert(1)> — example.com",
     );
+  });
+});
+
+describe("quick find's rows (#360)", () => {
+  const quick = (ls: Link[]) =>
+    quickFind({ query: "x", links: ls, images: new Map(), catalog: [KITCHEN], ask: false });
+
+  it("shows a readable title, and the row opens the real address", () => {
+    const row = parseHTML(quick([link()])).document.querySelector("li[data-id] a");
+    expect(row?.querySelector(".find-title")?.textContent).toBe("Post by @alice");
+    expect(row?.getAttribute("href")).toBe(POST);
+    expect(quick([link()])).not.toMatch(/>https?:\/\//);
+  });
+
+  it("does the same when the stored title is the address itself", () => {
+    const { document } = parseHTML(quick([link({ title: POST })]));
+    expect(document.querySelector(".find-title")?.textContent).toBe("Post by @alice");
+  });
+
+  it("leaves a real title alone", () => {
+    const { document } = parseHTML(quick([link({ title: "My own title" })]));
+    expect(document.querySelector(".find-title")?.textContent).toBe("My own title");
   });
 });

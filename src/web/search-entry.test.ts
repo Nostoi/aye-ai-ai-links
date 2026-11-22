@@ -134,11 +134,19 @@ describe("the / key", () => {
     expect(p.location.href).toBe("https://links.example/");
   });
 
-  it("goes to /search on a page with no search field", () => {
+  it("opens the quick-find dialog on a page with no search field, and does not leave the page (#360)", () => {
     const p = start(noQ);
+    const dialog = p.$("#find-dialog") as HTMLElement & { open?: boolean };
     expect(press(p).defaultPrevented).toBe(true);
-    expect(p.location.href).toBe("/search");
-    expect(p.focused()).toEqual([]);
+    expect(dialog.open).toBe(true);
+    expect(p.focused().at(-1)).toBe(p.$("#find-q"));
+    expect(p.location.href).toBe("https://links.example/");
+  });
+
+  it("does not open the dialog on a page that has a search field", () => {
+    const p = start(withQ);
+    press(p);
+    expect((p.$("#find-dialog") as HTMLElement & { open?: boolean }).open).toBeFalsy();
   });
 
   it.each([["ctrlKey"], ["metaKey"], ["altKey"]])("ignores it with %s held", (mod) => {

@@ -187,7 +187,7 @@ ${orderNav(order, (o) => spaceHref(tag.key, { order: o }))}
 <div class="page-actions">
 ${orderSelect(order, { action: "/spaces", hidden: { tag: tag.key } })}
 ${viewSwitch(view)}
-<a class="search-instead" href="${escapeHtml(searchHref("", { tag: tag.key }))}">Search this space</a>
+<a class="search-instead" href="${escapeHtml(searchHref("", { tag: tag.key }))}" data-find-open>Search this space</a>
 </div>
 </div>`;
   // The first page always holds the empty card and the switch; the theme shows one and hides the
@@ -214,6 +214,7 @@ ${input.ask ? "" : `${editDialog()}\n`}${(done ? archivedScript : cardsScript)(i
       undo: true,
       ask: input.ask,
       edits: { root: "space-links", error: "space-error" },
+      find: { key: tag.key, name: tag.name, className: tagSpaceClass(tag) },
     },
   );
 }
